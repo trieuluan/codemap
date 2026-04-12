@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { relations } from "drizzle-orm";
 import {
   index,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -112,6 +113,35 @@ export const projectImport = pgTable(
   ],
 );
 
+export const projectMapSnapshot = pgTable(
+  "project_map_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    importId: text("import_id")
+      .notNull()
+      .references(() => projectImport.id, { onDelete: "cascade" }),
+    treeJson: jsonb("tree_json").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_map_snapshot_import_id_unique").on(table.importId),
+    index("project_map_snapshot_project_id_idx").on(table.projectId),
+    index("project_map_snapshot_project_id_created_at_idx").on(
+      table.projectId,
+      table.createdAt,
+    ),
+  ],
+);
+
 // `relations(...)` does not create DB columns.
 // It teaches Drizzle how tables connect so relation-aware queries work cleanly.
 export const projectRelations = relations(project, ({ one, many }) => ({
@@ -120,6 +150,7 @@ export const projectRelations = relations(project, ({ one, many }) => ({
     references: [user.id],
   }),
   imports: many(projectImport),
+  mapSnapshots: many(projectMapSnapshot),
 }));
 
 export const projectImportRelations = relations(projectImport, ({ one }) => ({
@@ -131,4 +162,22 @@ export const projectImportRelations = relations(projectImport, ({ one }) => ({
     fields: [projectImport.triggeredByUserId],
     references: [user.id],
   }),
+  mapSnapshot: one(projectMapSnapshot, {
+    fields: [projectImport.id],
+    references: [projectMapSnapshot.importId],
+  }),
 }));
+
+export const projectMapSnapshotRelations = relations(
+  projectMapSnapshot,
+  ({ one }) => ({
+    project: one(project, {
+      fields: [projectMapSnapshot.projectId],
+      references: [project.id],
+    }),
+    importRecord: one(projectImport, {
+      fields: [projectMapSnapshot.importId],
+      references: [projectImport.id],
+    }),
+  }),
+);

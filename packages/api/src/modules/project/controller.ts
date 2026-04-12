@@ -1,9 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { enqueueProjectImportJob } from "../../lib/project-import-queue";
+import {
+  enqueueProjectImportJob,
+  getProjectImportJob,
+} from "../../lib/project-import-queue";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
   createProjectImportBodySchema,
+  projectImportParamsSchema,
   projectParamsSchema,
   updateProjectBodySchema,
 } from "./schema";
@@ -113,12 +117,9 @@ export function createProjectController(fastify: FastifyInstance) {
       }
 
       try {
-        await enqueueProjectImportJob({
+        await enqueueProjectImportJob(fastify.redis, {
           importId: createdImport.id,
-          projectId: createdImport.projectId,
         });
-        const queuedImport = await service.markImportAsQueued(createdImport.id);
-        createdImport = queuedImport ?? createdImport;
       } catch (error) {
         request.log.error(error, "Failed to enqueue project import job");
 
@@ -135,6 +136,83 @@ export function createProjectController(fastify: FastifyInstance) {
       return reply.success(createdImport, 201);
     },
 
+    retryImport: async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId, importId } = projectImportParamsSchema.parse(
+        request.params,
+      );
+
+      const existingImport = await service.getImportById(projectId, importId, userId);
+
+      if (!existingImport) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      if (
+        existingImport.importRecord.status === "pending" ||
+        existingImport.importRecord.status === "running"
+      ) {
+        const existingJob = await getProjectImportJob(fastify.redis, importId);
+        const existingJobState = existingJob ? await existingJob.getState() : null;
+
+        if (
+          existingJobState &&
+          ["waiting", "active", "delayed", "prioritized"].includes(
+            existingJobState,
+          )
+        ) {
+          throw fastify.httpErrors.conflict(
+            "This import job is still active and cannot be restarted yet",
+          );
+        }
+
+        await service.markImportAsFailed(
+          importId,
+          "Import was restarted after the previous job stopped unexpectedly",
+        );
+      }
+
+      let retriedImport;
+
+      try {
+        retriedImport = await service.retryImport(projectId, importId, userId);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "An import is already queued or running for this project",
+          );
+        }
+
+        throw error;
+      }
+
+      if (!retriedImport?.createdImport) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      try {
+        await enqueueProjectImportJob(fastify.redis, {
+          importId: retriedImport.createdImport.id,
+        });
+      } catch (error) {
+        request.log.error(error, "Failed to enqueue retried project import job");
+
+        await service.markImportAsFailed(
+          retriedImport.createdImport.id,
+          "Unable to restart import job",
+        );
+
+        throw fastify.httpErrors.internalServerError(
+          "Unable to restart import job",
+        );
+      }
+
+      return reply.success(retriedImport.createdImport, 201);
+    },
+
     listImports: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
@@ -147,6 +225,25 @@ export function createProjectController(fastify: FastifyInstance) {
 
       return reply.success(imports, 200, {
         count: imports.length,
+      });
+    },
+
+    getProjectMap: async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const latestMap = await service.getLatestProjectMap(projectId, userId);
+
+      if (!latestMap) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      return reply.success({
+        id: latestMap.id,
+        projectId: latestMap.projectId,
+        importId: latestMap.importId,
+        tree: latestMap.treeJson,
+        createdAt: latestMap.createdAt,
+        updatedAt: latestMap.updatedAt,
       });
     },
   };

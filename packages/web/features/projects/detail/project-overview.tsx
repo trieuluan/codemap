@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import { useTransition } from "react";
 import { ArrowUpRight, GitBranch, Pencil, RefreshCcw, Workflow } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
+  getProject,
+  getProjectImports,
   ProjectsApiError,
   triggerProjectImport,
   type Project,
@@ -16,25 +18,66 @@ import {
 import { ProjectStatusBadge } from "../shared/project-status-badge";
 import { ProjectVisibilityBadge } from "../shared/project-visibility-badge";
 import {
-  formatLastImportedAt,
   getLatestProjectImport,
   getProjectRepositoryLabel,
 } from "../shared/project-helpers";
+import { LocalProjectDate } from "../shared/local-project-date";
 import { EditProjectDialog } from "./edit-project-dialog";
 import { ProjectImportHistory } from "./project-import-history";
 
 export function ProjectOverview({
-  project,
-  imports,
+  initialProject,
+  initialImports,
 }: {
-  project: Project;
-  imports: ProjectImport[];
+  initialProject: Project;
+  initialImports: ProjectImport[];
 }) {
-  const router = useRouter();
   const { toast } = useToast();
   const [isImportPending, startImportTransition] = useTransition();
+  const projectId = initialProject.id;
+  const swrOptions = {
+    revalidateOnFocus: false,
+    refreshWhenHidden: false,
+    refreshWhenOffline: false,
+    revalidateOnMount: false,
+    revalidateIfStale: false,
+    revalidateOnReconnect: true,
+    dedupingInterval: 3000,
+  } as const;
+
+  const { data: project, mutate: mutateProject } = useSWR(
+    ["project", projectId],
+    () => getProject(projectId),
+    {
+      ...swrOptions,
+      fallbackData: initialProject,
+      refreshInterval: (currentProject?: Project) =>
+        currentProject?.status === "importing" ? 3000 : 0,
+    },
+  );
+
+  const { data: imports, mutate: mutateImports } = useSWR(
+    ["project-imports", projectId],
+    () => getProjectImports(projectId),
+    {
+      ...swrOptions,
+      fallbackData: initialImports,
+      refreshInterval: (currentImports?: ProjectImport[]) => {
+        const latestImport = currentImports?.[0];
+        return latestImport?.status === "pending" ||
+          latestImport?.status === "running"
+          ? 3000
+          : 0;
+      },
+    },
+  );
+
   const latestImport = getLatestProjectImport(imports);
   const canImport = Boolean(project.repositoryUrl);
+
+  async function revalidateProjectDetail() {
+    await Promise.all([mutateProject(), mutateImports()]);
+  }
 
   function handleImport() {
     if (!canImport) {
@@ -52,12 +95,12 @@ export function ProjectOverview({
         await triggerProjectImport(project.id, {
           branch: project.defaultBranch ?? undefined,
         });
+        await revalidateProjectDetail();
 
         toast({
           title: "Import started",
           description: "We started a new repository import for this project.",
         });
-        router.refresh();
       } catch (error) {
         toast({
           title: "Unable to start import",
@@ -113,7 +156,7 @@ export function ProjectOverview({
               </Button>
               <EditProjectDialog
                 project={project}
-                onUpdated={() => router.refresh()}
+                onUpdated={revalidateProjectDetail}
                 trigger={
                   <Button variant="outline">
                     <Pencil className="size-4" />
@@ -149,7 +192,11 @@ export function ProjectOverview({
               </p>
               <p className="mt-2 text-sm">{project.defaultBranch || "Not set"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Last imported {formatLastImportedAt(project.lastImportedAt)}
+                Last imported{" "}
+                <LocalProjectDate
+                  value={project.lastImportedAt}
+                  emptyLabel="Never imported"
+                />
               </p>
             </div>
 
@@ -176,7 +223,11 @@ export function ProjectOverview({
           </CardContent>
         </Card>
 
-        <ProjectImportHistory imports={imports} />
+        <ProjectImportHistory
+          projectId={project.id}
+          imports={imports}
+          onImportChanged={revalidateProjectDetail}
+        />
       </div>
 
       <Card className="h-fit">

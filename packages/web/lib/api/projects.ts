@@ -223,3 +223,12 @@ export async function triggerProjectImport(
     body: input ?? {},
   });
 }
+
+export async function retryProjectImport(projectId: string, importId: string) {
+  return requestProjectsApi<ProjectImport>(
+    `/projects/${projectId}/imports/${importId}/retry`,
+    {
+      method: "POST",
+    },
+  );
+}

@@ -14,9 +14,9 @@ import {
 import type { Project } from "@/lib/api/projects";
 import { ProjectStatusBadge } from "../shared/project-status-badge";
 import {
-  formatLastImportedAt,
   getProjectRepositoryLabel,
 } from "../shared/project-helpers";
+import { LocalProjectDate } from "../shared/local-project-date";
 
 export function ProjectListCard({
   project,
@@ -84,7 +84,12 @@ export function ProjectListCard({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Last imported
           </p>
-          <p className="mt-1 text-sm">{formatLastImportedAt(project.lastImportedAt)}</p>
+          <p className="mt-1 text-sm">
+            <LocalProjectDate
+              value={project.lastImportedAt}
+              emptyLabel="Never imported"
+            />
+          </p>
         </div>
       </CardContent>
 

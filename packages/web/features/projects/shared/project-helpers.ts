@@ -5,7 +5,10 @@ import type {
   ProjectVisibility,
 } from "@/lib/api/projects";
 
-export function formatProjectDate(value?: string | null) {
+export function formatProjectDate(
+  value?: string | null,
+  options?: Intl.DateTimeFormatOptions,
+) {
   if (!value) {
     return "Not available";
   }
@@ -13,6 +16,7 @@ export function formatProjectDate(value?: string | null) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+    ...options,
   }).format(new Date(value));
 }
 

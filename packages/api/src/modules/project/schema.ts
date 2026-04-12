@@ -1,11 +1,12 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { project, projectImport } from "../../db/schema";
+import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 
 export const projectSelectSchema = createSelectSchema(project);
 export const projectInsertSchema = createInsertSchema(project);
 export const projectImportSelectSchema = createSelectSchema(projectImport);
 export const projectImportInsertSchema = createInsertSchema(projectImport);
+export const projectMapSnapshotSelectSchema = createSelectSchema(projectMapSnapshot);
 
 export const projectVisibilitySchema = projectSelectSchema.shape.visibility;
 export const projectStatusSchema = projectSelectSchema.shape.status;
@@ -28,6 +29,10 @@ const nullableShortString = z
 
 export const projectParamsSchema = z.object({
   projectId: z.uuid(),
+});
+
+export const projectImportParamsSchema = projectParamsSchema.extend({
+  importId: z.uuid(),
 });
 
 export const createProjectBodySchema = projectInsertSchema
@@ -71,4 +76,5 @@ export const createProjectImportBodySchema = projectImportInsertSchema
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
+export type ProjectImportParams = z.infer<typeof projectImportParamsSchema>;
 export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySchema>;

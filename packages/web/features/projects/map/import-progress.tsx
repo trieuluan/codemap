@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import type { Project, ProjectImport } from "@/lib/api/projects";
-import { formatProjectDate } from "../shared/project-helpers";
+import { LocalProjectDate } from "../shared/local-project-date";
 
 interface ImportProgressProps {
   project: Project;
@@ -24,7 +24,11 @@ export function ImportProgress({
           ? "complete"
           : "pending",
       details: latestImport?.startedAt
-        ? `Queued ${formatProjectDate(latestImport.startedAt)}`
+        ? (
+            <>
+              Queued <LocalProjectDate value={latestImport.startedAt} />
+            </>
+          )
         : undefined,
     },
     {
@@ -44,9 +48,14 @@ export function ImportProgress({
       status: latestImport?.status === "completed" ? "complete" : "pending",
       details:
         latestImport?.status === "completed"
-          ? `Finished ${formatProjectDate(
-              latestImport.completedAt || latestImport.updatedAt,
-            )}`
+          ? (
+              <>
+                Finished{" "}
+                <LocalProjectDate
+                  value={latestImport.completedAt || latestImport.updatedAt}
+                />
+              </>
+            )
           : "Waiting for a completed import before map generation.",
     },
   ] as const;

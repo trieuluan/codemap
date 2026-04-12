@@ -1,36 +1,23 @@
 import { Queue } from "bullmq";
-import IORedis from "ioredis";
+import type IORedis from "ioredis";
 
 export interface ProjectImportJobPayload {
   importId: string;
-  projectId: string;
 }
+
+export const PROJECT_IMPORT_JOB_NAME = "project-import";
 
 let queueInstance: Queue<ProjectImportJobPayload> | null = null;
-let connectionInstance: IORedis | null = null;
-
-function getRedisConnection() {
-  if (!connectionInstance) {
-    connectionInstance = new IORedis(
-      process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
-      {
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-      },
-    );
-  }
-
-  return connectionInstance;
-}
+let queueConnection: IORedis | null = null;
 
 export function getProjectImportQueueName() {
   return process.env.IMPORT_QUEUE_NAME ?? "project-imports";
 }
 
-export function getProjectImportQueue() {
-  if (!queueInstance) {
+export function getProjectImportQueue(connection: IORedis) {
+  if (!queueInstance || queueConnection !== connection) {
     queueInstance = new Queue<ProjectImportJobPayload>(getProjectImportQueueName(), {
-      connection: getRedisConnection(),
+      connection,
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -41,23 +28,30 @@ export function getProjectImportQueue() {
         removeOnFail: 100,
       },
     });
+    queueConnection = connection;
   }
 
   return queueInstance;
 }
 
-export async function enqueueProjectImportJob(payload: ProjectImportJobPayload) {
-  return getProjectImportQueue().add("project-import", payload, {
+export async function enqueueProjectImportJob(
+  connection: IORedis,
+  payload: ProjectImportJobPayload,
+) {
+  return getProjectImportQueue(connection).add(PROJECT_IMPORT_JOB_NAME, payload, {
     jobId: payload.importId,
   });
+}
+
+export async function getProjectImportJob(
+  connection: IORedis,
+  importId: string,
+) {
+  return getProjectImportQueue(connection).getJob(importId);
 }
 
 export async function closeProjectImportQueue() {
   await queueInstance?.close();
   queueInstance = null;
-
-  if (connectionInstance) {
-    await connectionInstance.quit();
-    connectionInstance = null;
-  }
+  queueConnection = null;
 }

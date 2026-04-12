@@ -29,6 +29,13 @@
       "when": 1776009630449,
       "tag": "0003_daily_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776020878909,
+      "tag": "0004_lean_mauler",
+      "breakpoints": true
     }
   ]
 }

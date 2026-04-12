@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { db } from "../../db";
-import { project, projectImport } from "../../db/schema";
+import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
   CreateProjectBody,
   CreateProjectImportBody,
@@ -47,8 +47,39 @@ export function createProjectService(database: Database) {
 
   async function getOwnedProject(projectId: string, ownerUserId: string) {
     return database.query.project.findFirst({
-      where: and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)),
+      where: and(
+        eq(project.id, projectId),
+        eq(project.ownerUserId, ownerUserId),
+      ),
     });
+  }
+
+  async function getOwnedImport(
+    projectId: string,
+    projectImportId: string,
+    ownerUserId: string,
+  ) {
+    const existingProject = await getOwnedProject(projectId, ownerUserId);
+
+    if (!existingProject) {
+      return null;
+    }
+
+    const existingImport = await database.query.projectImport.findFirst({
+      where: and(
+        eq(projectImport.id, projectImportId),
+        eq(projectImport.projectId, projectId),
+      ),
+    });
+
+    if (!existingImport) {
+      return null;
+    }
+
+    return {
+      project: existingProject,
+      importRecord: existingImport,
+    };
   }
 
   return {
@@ -103,7 +134,8 @@ export function createProjectService(database: Database) {
       const values: Partial<typeof project.$inferInsert> = {};
 
       if (input.name !== undefined) values.name = input.name;
-      if (input.description !== undefined) values.description = input.description;
+      if (input.description !== undefined)
+        values.description = input.description;
       if (input.visibility !== undefined) values.visibility = input.visibility;
       if (input.defaultBranch !== undefined)
         values.defaultBranch = input.defaultBranch;
@@ -126,16 +158,43 @@ export function createProjectService(database: Database) {
       const [updatedProject] = await database
         .update(project)
         .set(values)
-        .where(and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)))
+        .where(
+          and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)),
+        )
         .returning();
 
       return updatedProject;
     },
 
+    async setProjectDefaultBranchIfMissing(projectId: string, branch: string) {
+      const normalizedBranch = branch.trim();
+
+      if (!normalizedBranch) {
+        return null;
+      }
+
+      const [updatedProject] = await database
+        .update(project)
+        .set({
+          defaultBranch: normalizedBranch,
+        })
+        .where(
+          and(
+            eq(project.id, projectId),
+            isNull(project.defaultBranch),
+          ),
+        )
+        .returning();
+
+      return updatedProject ?? null;
+    },
+
     async deleteProject(projectId: string, ownerUserId: string) {
       const [deletedProject] = await database
         .delete(project)
-        .where(and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)))
+        .where(
+          and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)),
+        )
         .returning({
           id: project.id,
         });
@@ -154,7 +213,8 @@ export function createProjectService(database: Database) {
         return null;
       }
 
-      const importBranch = input.branch ?? existingProject.defaultBranch ?? null;
+      const importBranch =
+        input.branch ?? existingProject.defaultBranch ?? null;
       const startedAt = new Date();
       const activeImport = await database.query.projectImport.findFirst({
         where: and(
@@ -196,24 +256,38 @@ export function createProjectService(database: Database) {
       return createdImport;
     },
 
-    async markImportAsQueued(projectImportId: string) {
-      const [queuedImport] = await database
-        .update(projectImport)
-        .set({
-          status: "pending",
-          errorMessage: null,
-        })
-        .where(eq(projectImport.id, projectImportId))
-        .returning();
+    async retryImport(
+      projectId: string,
+      projectImportId: string,
+      ownerUserId: string,
+    ) {
+      const ownedImport = await getOwnedImport(
+        projectId,
+        projectImportId,
+        ownerUserId,
+      );
 
-      return queuedImport ?? null;
+      if (!ownedImport) {
+        return null;
+      }
+
+      return {
+        sourceImport: ownedImport.importRecord,
+        createdImport: await this.createImport(projectId, ownerUserId, {
+          branch: ownedImport.importRecord.branch ?? undefined,
+        }),
+      };
     },
 
-    async markImportAsRunning(projectImportId: string) {
+    async markImportAsRunning(
+      projectImportId: string,
+      options?: { branch?: string | null },
+    ) {
       const [runningImport] = await database
         .update(projectImport)
         .set({
           status: "running",
+          branch: options?.branch ?? undefined,
           errorMessage: null,
         })
         .where(eq(projectImport.id, projectImportId))
@@ -285,6 +359,14 @@ export function createProjectService(database: Database) {
       return failedImport;
     },
 
+    async getImportById(
+      projectId: string,
+      projectImportId: string,
+      ownerUserId: string,
+    ) {
+      return getOwnedImport(projectId, projectImportId, ownerUserId);
+    },
+
     async listImports(projectId: string, ownerUserId: string) {
       const existingProject = await getOwnedProject(projectId, ownerUserId);
 
@@ -298,6 +380,25 @@ export function createProjectService(database: Database) {
       });
 
       return imports;
+    },
+
+    async getLatestProjectMap(projectId: string, ownerUserId: string) {
+      const existingProject = await getOwnedProject(projectId, ownerUserId);
+
+      if (!existingProject) {
+        return null;
+      }
+
+      const latestMap = await database.query.projectMapSnapshot.findFirst({
+        where: eq(projectMapSnapshot.projectId, projectId),
+        orderBy: [desc(projectMapSnapshot.createdAt)],
+      });
+
+      if (!latestMap) {
+        return null;
+      }
+
+      return latestMap;
     },
 
     async getImportWithProject(projectImportId: string) {

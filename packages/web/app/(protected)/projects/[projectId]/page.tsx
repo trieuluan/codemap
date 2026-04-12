@@ -46,7 +46,7 @@ export default async function ProjectDetailPage({
           </BreadcrumbList>
         </Breadcrumb>
 
-        <ProjectOverview project={project} imports={imports} />
+        <ProjectOverview initialProject={project} initialImports={imports} />
       </div>
     );
   } catch (error) {
