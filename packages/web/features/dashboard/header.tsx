@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { Bell, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Bell, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,19 +10,43 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MobileSidebar } from "./mobile-sidebar"
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MobileSidebar } from "./mobile-sidebar";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
+import { useToast } from "@/components/ui/use-toast";
 
 interface DashboardHeaderProps {
-  title?: string
+  title?: string;
 }
 
 export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const signOut = async () => {
+    // Placeholder for sign out logic
+    // In production, this would call your auth API to sign out the user
+    try {
+      const response = await authClient.signOut();
+      if (!response.error) {
+        router.push("/auth");
+        router.refresh();
+      }
+    } catch (error) {
+      toast({
+        title: "Error signing out",
+        description:
+          "An error occurred while trying to sign out. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-background px-4 lg:px-6">
       <MobileSidebar />
-      
+
       <h1 className="text-lg font-semibold">{title}</h1>
 
       <div className="ml-auto flex items-center gap-3">
@@ -67,12 +91,12 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuItem>Billing</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem onClick={signOut} className="text-destructive">
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }

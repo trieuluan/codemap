@@ -1,6 +1,4 @@
 import { Metadata } from "next";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LoginForm } from "@/features/auth/login-form";
 import { Logo } from "@/components/logo";
@@ -10,42 +8,7 @@ export const metadata: Metadata = {
   description: "Sign in to your CodeMap account",
 };
 
-async function hasValidSession() {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore.toString();
-
-  if (!cookieHeader) {
-    return false;
-  }
-
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-  try {
-    const response = await fetch(`${apiBaseUrl}/auth/me`, {
-      headers: {
-        cookie: cookieHeader,
-      },
-      cache: "no-store",
-    });
-
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-export default async function AuthPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ redirect?: string }>;
-}) {
-  const authenticated = await hasValidSession();
-
-  if (authenticated) {
-    const resolvedSearchParams = searchParams ? await searchParams : undefined;
-    redirect(resolvedSearchParams?.redirect || "/dashboard");
-  }
-
+export default function AuthPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">

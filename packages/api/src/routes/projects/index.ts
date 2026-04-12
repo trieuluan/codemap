@@ -1,0 +1,16 @@
+import { FastifyPluginAsync } from "fastify";
+import { createProjectController } from "../../modules/project/controller";
+
+const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
+  const controller = createProjectController(fastify);
+
+  fastify.post("/", controller.createProject);
+  fastify.get("/", controller.listProjects);
+  fastify.get("/:projectId", controller.getProjectById);
+  fastify.patch("/:projectId", controller.updateProject);
+  fastify.delete("/:projectId", controller.deleteProject);
+  fastify.post("/:projectId/import", controller.createImport);
+  fastify.get("/:projectId/imports", controller.listImports);
+};
+
+export default projectRoutes;

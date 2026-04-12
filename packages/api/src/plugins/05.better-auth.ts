@@ -6,7 +6,7 @@ import { auth } from "../lib/auth";
 export default fp(async function betterAuthPlugin(fastify: FastifyInstance) {
   fastify.route({
     method: ["GET", "POST"],
-    url: "/api/auth/*",
+    url: "/auth/*",
     async handler(request, reply) {
       try {
         const origin =

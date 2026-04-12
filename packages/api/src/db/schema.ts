@@ -1,2 +1,2 @@
 export * from "./schema/auth-schema";
-// export * from "./relations";
+export * from "./schema/project-schema";

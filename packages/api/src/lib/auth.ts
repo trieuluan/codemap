@@ -8,6 +8,7 @@ export const auth = betterAuth({
   }),
 
   baseURL: process.env.BETTER_AUTH_URL,
+  basePath: "/auth",
 
   trustedOrigins: [
     ...(process.env.CORS_ORIGINS?.split(",").map((origin) => origin.trim()) || [

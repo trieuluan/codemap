@@ -3,11 +3,11 @@ import { DashboardSidebar } from "@/features/dashboard/sidebar";
 import { DashboardHeader } from "@/features/dashboard/header";
 
 export const metadata: Metadata = {
-  title: "Dashboard",
-  description: "CodeMap dashboard - manage your projects and API",
+  title: "Projects",
+  description: "CodeMap projects - import and analyze your repositories",
 };
 
-export default function DashboardLayout({
+export default function ProjectsLayout({
   children,
 }: {
   children: React.ReactNode;

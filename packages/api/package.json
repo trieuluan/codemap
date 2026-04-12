@@ -25,6 +25,7 @@
     "argon2": "^0.44.0",
     "better-auth": "^1.6.1",
     "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
     "fastify": "^5.0.0",
     "fastify-cli": "^7.4.1",
     "fastify-plugin": "^5.0.0",
