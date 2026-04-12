@@ -7,8 +7,8 @@ export type ProjectStatus =
   | "archived";
 export type ProjectProvider = "github";
 export type ProjectImportStatus =
-  | "queued"
-  | "importing"
+  | "pending"
+  | "running"
   | "completed"
   | "failed";
 
@@ -45,6 +45,8 @@ export interface ProjectImport {
 export interface CreateProjectInput {
   name: string;
   description?: string | null;
+  defaultBranch?: string | null;
+  repositoryUrl?: string | null;
 }
 
 export interface UpdateProjectInput {
@@ -116,11 +118,12 @@ function getApiBaseUrl() {
 }
 
 async function parseApiResponse<T>(response: Response) {
-  const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+  const payload = (await response
+    .json()
+    .catch(() => null)) as ApiResponse<T> | null;
 
   if (!response.ok || !payload?.success) {
-    const apiError =
-      payload && !payload.success ? payload.error : undefined;
+    const apiError = payload && !payload.success ? payload.error : undefined;
 
     throw new ProjectsApiError(
       apiError?.message || "Request failed",
@@ -149,7 +152,7 @@ async function requestProjectsApi<T>(
   if (isServer && options.cookieHeader) {
     headers.set("cookie", options.cookieHeader);
   }
-
+  console.log(`${getApiBaseUrl()}${path}`);
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: options.method ?? "GET",
     headers,

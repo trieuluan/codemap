@@ -106,8 +106,8 @@ export function ProjectList({ initialProjects }: { initialProjects: Project[] })
             </EmptyMedia>
             <EmptyTitle>No projects yet</EmptyTitle>
             <EmptyDescription>
-              Start by creating a project. You can attach repository metadata and
-              trigger imports from the project detail screen.
+              Start by creating a project with its repository URL and default
+              branch so the first import can be triggered right away.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

@@ -7,6 +7,8 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production"]).default("development"),
   CORS_ORIGIN: z.string().default("*"),
   DATABASE_URL: z.url(),
+  REDIS_URL: z.string().trim().min(1).default("redis://127.0.0.1:6379"),
+  IMPORT_QUEUE_NAME: z.string().trim().min(1).default("project-imports"),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
 });

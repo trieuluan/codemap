@@ -10,7 +10,7 @@ export default fp(async (fastify: FastifyInstance) => {
       : CORS_ORIGIN.split(",").map((item) => item.trim());
   await fastify.register(cors, {
     origin: origin,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   });

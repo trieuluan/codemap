@@ -34,8 +34,19 @@ export function ProjectOverview({
   const { toast } = useToast();
   const [isImportPending, startImportTransition] = useTransition();
   const latestImport = getLatestProjectImport(imports);
+  const canImport = Boolean(project.repositoryUrl);
 
   function handleImport() {
+    if (!canImport) {
+      toast({
+        title: "Repository URL required",
+        description:
+          "Add a repository URL before starting the first import for this project.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     startImportTransition(async () => {
       try {
         await triggerProjectImport(project.id, {
@@ -81,14 +92,18 @@ export function ProjectOverview({
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={handleImport}
-                disabled={isImportPending || project.status === "importing"}
+                disabled={
+                  isImportPending || project.status === "importing" || !canImport
+                }
               >
                 <RefreshCcw className="size-4" />
                 {project.status === "importing"
                   ? "Importing..."
+                  : !canImport
+                    ? "Repository required"
                   : isImportPending
-                    ? "Starting..."
-                    : "Import repository"}
+                      ? "Starting..."
+                      : "Import repository"}
               </Button>
               <Button variant="outline" asChild>
                 <Link href={`/projects/${project.id}/map`}>
@@ -150,7 +165,7 @@ export function ProjectOverview({
                 Latest import status
               </p>
               <p className="mt-2 text-sm capitalize">
-                {latestImport?.status || "No imports yet"}
+                {latestImport?.status ?? "No imports yet"}
               </p>
               {latestImport?.errorMessage ? (
                 <p className="mt-1 text-xs text-destructive">
@@ -169,9 +184,13 @@ export function ProjectOverview({
           <CardTitle>Quick actions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button className="w-full justify-start" onClick={handleImport}>
+          <Button
+            className="w-full justify-start"
+            onClick={handleImport}
+            disabled={isImportPending || project.status === "importing" || !canImport}
+          >
             <RefreshCcw className="size-4" />
-            Start a new import
+            {canImport ? "Start a new import" : "Add repository metadata first"}
           </Button>
           <Button variant="outline" className="w-full justify-start" asChild>
             <Link href={`/projects/${project.id}/map`}>
@@ -180,8 +199,9 @@ export function ProjectOverview({
             </Link>
           </Button>
           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Imports are tracked immediately, but the code structure explorer on
-            the mapping page is still mock data for this iteration.
+            Imports are tracked immediately. Once a completed import exists, the
+            mapping page will switch from the empty processing states into the
+            placeholder explorer workspace.
           </div>
           {project.externalRepoId ? (
             <div className="rounded-lg border border-border/70 bg-background/70 p-4">

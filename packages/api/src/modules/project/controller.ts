@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
@@ -90,10 +91,45 @@ export function createProjectController(fastify: FastifyInstance) {
       const { projectId } = projectParamsSchema.parse(request.params);
       const body = createProjectImportBodySchema.parse(request.body ?? {});
 
-      const createdImport = await service.createImport(projectId, userId, body);
+      let createdImport;
+
+      try {
+        createdImport = await service.createImport(projectId, userId, body);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "An import is already queued or running for this project",
+          );
+        }
+
+        throw error;
+      }
 
       if (!createdImport) {
         throw fastify.httpErrors.notFound("Project not found");
+      }
+
+      try {
+        await enqueueProjectImportJob({
+          importId: createdImport.id,
+          projectId: createdImport.projectId,
+        });
+        const queuedImport = await service.markImportAsQueued(createdImport.id);
+        createdImport = queuedImport ?? createdImport;
+      } catch (error) {
+        request.log.error(error, "Failed to enqueue project import job");
+
+        await service.markImportAsFailed(
+          createdImport.id,
+          "Unable to enqueue import job",
+        );
+
+        throw fastify.httpErrors.internalServerError(
+          "Unable to start import job",
+        );
       }
 
       return reply.success(createdImport, 201);

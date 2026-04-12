@@ -12,12 +12,17 @@ export function ProjectMapStatusBanner({
   imports: ProjectImport[];
 }) {
   const latestImport = getLatestProjectImport(imports);
+  const hasCompletedImport = imports.some((item) => item.status === "completed");
 
-  if (project.status === "importing") {
+  if (
+    project.status === "importing" ||
+    latestImport?.status === "running" ||
+    latestImport?.status === "pending"
+  ) {
     return <ImportProgress project={project} latestImport={latestImport} />;
   }
 
-  if (project.status === "failed") {
+  if (latestImport?.status === "failed" || project.status === "failed") {
     return (
       <Alert variant="destructive">
         <AlertCircle />
@@ -30,14 +35,14 @@ export function ProjectMapStatusBanner({
     );
   }
 
-  if (project.status === "draft") {
+  if (!hasCompletedImport) {
     return (
       <Alert>
-        <Loader2 className="animate-spin" />
-        <AlertTitle>Project is not imported yet</AlertTitle>
+        <Loader2 />
+        <AlertTitle>No code map available yet</AlertTitle>
         <AlertDescription>
-          The map below is still mock data. Trigger a repository import from the
-          project overview page to start processing real repository metadata.
+          Run an import to generate the first project map. Until then, this
+          workspace will stay in an empty placeholder state.
         </AlertDescription>
       </Alert>
     );

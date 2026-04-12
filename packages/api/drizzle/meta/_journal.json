@@ -22,6 +22,13 @@
       "when": 1776004506504,
       "tag": "0002_shallow_randall",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776009630449,
+      "tag": "0003_daily_ikaris",
+      "breakpoints": true
     }
   ]
 }

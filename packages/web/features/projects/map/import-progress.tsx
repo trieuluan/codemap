@@ -16,10 +16,10 @@ export function ImportProgress({
 }: ImportProgressProps) {
   const steps = [
     {
-      label: "Queued",
+      label: "Import queued",
       status:
-        latestImport?.status === "queued" ||
-        latestImport?.status === "importing" ||
+        latestImport?.status === "pending" ||
+        latestImport?.status === "running" ||
         latestImport?.status === "completed"
           ? "complete"
           : "pending",
@@ -30,9 +30,9 @@ export function ImportProgress({
     {
       label: "Repository import",
       status:
-        latestImport?.status === "importing"
+        latestImport?.status === "running"
           ? "loading"
-          : latestImport?.status === "completed"
+        : latestImport?.status === "completed"
             ? "complete"
             : "pending",
       details: latestImport?.branch

@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import type { db } from "../../db";
 import { project, projectImport } from "../../db/schema";
 import type {
@@ -55,6 +55,10 @@ export function createProjectService(database: Database) {
     async createProject(ownerUserId: string, input: CreateProjectBody) {
       const baseSlug = slugifyProjectName(input.slug ?? input.name);
       const slug = await ensureUniqueSlug(baseSlug);
+      const hasRepositoryUrl = Boolean(input.repositoryUrl);
+      const provider = hasRepositoryUrl
+        ? (input.provider ?? "github")
+        : (input.provider ?? null);
 
       const [createdProject] = await database
         .insert(project)
@@ -66,7 +70,7 @@ export function createProjectService(database: Database) {
           visibility: input.visibility ?? "private",
           defaultBranch: input.defaultBranch ?? null,
           repositoryUrl: input.repositoryUrl ?? null,
-          provider: input.provider ?? null,
+          provider,
           externalRepoId: input.externalRepoId ?? null,
         })
         .returning();
@@ -103,9 +107,14 @@ export function createProjectService(database: Database) {
       if (input.visibility !== undefined) values.visibility = input.visibility;
       if (input.defaultBranch !== undefined)
         values.defaultBranch = input.defaultBranch;
-      if (input.repositoryUrl !== undefined)
+      if (input.repositoryUrl !== undefined) {
         values.repositoryUrl = input.repositoryUrl;
-      if (input.provider !== undefined) values.provider = input.provider;
+        values.provider = input.repositoryUrl
+          ? (input.provider ?? existingProject.provider ?? "github")
+          : (input.provider ?? null);
+      } else if (input.provider !== undefined) {
+        values.provider = input.provider;
+      }
       if (input.externalRepoId !== undefined)
         values.externalRepoId = input.externalRepoId;
 
@@ -146,6 +155,20 @@ export function createProjectService(database: Database) {
       }
 
       const importBranch = input.branch ?? existingProject.defaultBranch ?? null;
+      const startedAt = new Date();
+      const activeImport = await database.query.projectImport.findFirst({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          inArray(projectImport.status, ["pending", "running"]),
+        ),
+        columns: {
+          id: true,
+        },
+      });
+
+      if (activeImport) {
+        throw new Error("PROJECT_IMPORT_ALREADY_IN_PROGRESS");
+      }
 
       const [createdImport] = await database.transaction(async (tx) => {
         const [newImport] = await tx
@@ -153,8 +176,9 @@ export function createProjectService(database: Database) {
           .values({
             projectId,
             triggeredByUserId: ownerUserId,
-            status: "importing",
+            status: "pending",
             branch: importBranch,
+            startedAt,
           })
           .returning();
 
@@ -162,6 +186,7 @@ export function createProjectService(database: Database) {
           .update(project)
           .set({
             status: "importing",
+            lastImportedAt: startedAt,
           })
           .where(eq(project.id, projectId));
 
@@ -169,6 +194,95 @@ export function createProjectService(database: Database) {
       });
 
       return createdImport;
+    },
+
+    async markImportAsQueued(projectImportId: string) {
+      const [queuedImport] = await database
+        .update(projectImport)
+        .set({
+          status: "pending",
+          errorMessage: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return queuedImport ?? null;
+    },
+
+    async markImportAsRunning(projectImportId: string) {
+      const [runningImport] = await database
+        .update(projectImport)
+        .set({
+          status: "running",
+          errorMessage: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return runningImport ?? null;
+    },
+
+    async markImportAsCompleted(projectImportId: string) {
+      const completedAt = new Date();
+
+      const [completedImport] = await database.transaction(async (tx) => {
+        const [updatedImport] = await tx
+          .update(projectImport)
+          .set({
+            status: "completed",
+            completedAt,
+            errorMessage: null,
+          })
+          .where(eq(projectImport.id, projectImportId))
+          .returning();
+
+        if (!updatedImport) {
+          return [null];
+        }
+
+        await tx
+          .update(project)
+          .set({
+            status: "ready",
+            lastImportedAt: completedAt,
+          })
+          .where(eq(project.id, updatedImport.projectId));
+
+        return [updatedImport];
+      });
+
+      return completedImport;
+    },
+
+    async markImportAsFailed(projectImportId: string, errorMessage: string) {
+      const completedAt = new Date();
+
+      const [failedImport] = await database.transaction(async (tx) => {
+        const [updatedImport] = await tx
+          .update(projectImport)
+          .set({
+            status: "failed",
+            completedAt,
+            errorMessage,
+          })
+          .where(eq(projectImport.id, projectImportId))
+          .returning();
+
+        if (!updatedImport) {
+          return [null];
+        }
+
+        await tx
+          .update(project)
+          .set({
+            status: "failed",
+          })
+          .where(eq(project.id, updatedImport.projectId));
+
+        return [updatedImport];
+      });
+
+      return failedImport;
     },
 
     async listImports(projectId: string, ownerUserId: string) {
@@ -184,6 +298,29 @@ export function createProjectService(database: Database) {
       });
 
       return imports;
+    },
+
+    async getImportWithProject(projectImportId: string) {
+      const importRecord = await database.query.projectImport.findFirst({
+        where: eq(projectImport.id, projectImportId),
+      });
+
+      if (!importRecord) {
+        return null;
+      }
+
+      const projectRecord = await database.query.project.findFirst({
+        where: eq(project.id, importRecord.projectId),
+      });
+
+      if (!projectRecord) {
+        return null;
+      }
+
+      return {
+        importRecord,
+        projectRecord,
+      };
     },
   };
 }

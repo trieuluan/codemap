@@ -28,8 +28,8 @@ export const projectStatusEnum = pgEnum("project_status", [
 export const projectProviderEnum = pgEnum("project_provider", ["github"]);
 
 export const projectImportStatusEnum = pgEnum("project_import_status", [
-  "queued",
-  "importing",
+  "pending",
+  "running",
   "completed",
   "failed",
 ]);
@@ -94,7 +94,7 @@ export const projectImport = pgTable(
     triggeredByUserId: text("triggered_by_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    status: projectImportStatusEnum("status").default("queued").notNull(),
+    status: projectImportStatusEnum("status").default("pending").notNull(),
     branch: text("branch"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
