@@ -2,6 +2,12 @@
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
+[sandbox_workspace_write]
+# bật khi thật sự cần command có network
+network_access = false
+# nếu Codex cần sửa thêm ngoài cwd hiện tại, khai báo rõ
+writable_roots = ["/workspace"]
+
 [mcp_servers.openai_docs]
 transport = "streamable_http"
 url = "https://developers.openai.com/mcp"

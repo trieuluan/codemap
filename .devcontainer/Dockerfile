@@ -1,7 +1,7 @@
 FROM node:24-bookworm
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash git openssh-client ca-certificates curl \
+  && apt-get install -y --no-install-recommends bubblewrap bash git openssh-client ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

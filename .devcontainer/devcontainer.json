@@ -15,7 +15,8 @@
         "ms-azuretools.vscode-docker",
         "eamodio.gitlens",
         "streetsidesoftware.code-spell-checker",
-        "cweijan.vscode-database-client2"
+        "cweijan.vscode-database-client2",
+        "openai.chatgpt"
       ],
       "settings": {
         "editor.formatOnSave": true,
