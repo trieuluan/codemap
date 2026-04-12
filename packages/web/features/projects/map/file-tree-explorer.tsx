@@ -1,15 +1,21 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen } from 'lucide-react'
+import { useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileCode,
+  Folder,
+  FolderOpen,
+} from "lucide-react";
 
-interface FileNode {
-  id: string
-  name: string
-  type: 'file' | 'folder'
-  children?: FileNode[]
-  language?: string
-  size?: number
+export interface FileNode {
+  id: string;
+  name: string;
+  type: "file" | "folder";
+  children?: FileNode[];
+  language?: string;
+  size?: number;
 }
 
 const MOCK_FILE_TREE: FileNode[] = [
@@ -72,27 +78,27 @@ const MOCK_FILE_TREE: FileNode[] = [
   { id: 'tsconfig.json', name: 'tsconfig.json', type: 'file', language: 'JSON', size: 800 },
   { id: '.env.example', name: '.env.example', type: 'file', language: 'Text', size: 340 },
   { id: 'README.md', name: 'README.md', type: 'file', language: 'Markdown', size: 5600 },
-]
+];
 
 interface FileTreeProps {
-  onSelectFile: (file: FileNode) => void
-  selectedFileId?: string
+  onSelectFile: (file: FileNode) => void;
+  selectedFileId?: string;
 }
 
-function FileTreeItem({ 
-  node, 
-  level = 0, 
+function FileTreeItem({
+  node,
+  level = 0,
   onSelectFile,
-  selectedFileId
-}: { 
-  node: FileNode
-  level?: number
-  onSelectFile: (file: FileNode) => void
-  selectedFileId?: string
+  selectedFileId,
+}: {
+  node: FileNode;
+  level?: number;
+  onSelectFile: (file: FileNode) => void;
+  selectedFileId?: string;
 }) {
-  const [isOpen, setIsOpen] = useState(level < 2)
-  const isFolder = node.type === 'folder'
-  const isSelected = selectedFileId === node.id
+  const [isOpen, setIsOpen] = useState(level < 2);
+  const isFolder = node.type === "folder";
+  const isSelected = selectedFileId === node.id;
 
   return (
     <div>
@@ -105,9 +111,9 @@ function FileTreeItem({
           }
         }}
         className={`flex items-center gap-1 px-2 py-1 cursor-pointer rounded transition-colors ${
-          isSelected 
-            ? 'bg-sidebar-accent text-sidebar-foreground' 
-            : 'hover:bg-sidebar-accent/30 text-sidebar-foreground'
+          isSelected
+            ? "bg-sidebar-accent text-sidebar-foreground"
+            : "hover:bg-sidebar-accent/30 text-sidebar-foreground"
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
@@ -140,7 +146,7 @@ function FileTreeItem({
 
       {isFolder && isOpen && node.children && (
         <div>
-          {node.children.map(child => (
+          {node.children.map((child) => (
             <FileTreeItem
               key={child.id}
               node={child}
@@ -152,7 +158,7 @@ function FileTreeItem({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export function FileTreeExplorer({ onSelectFile, selectedFileId }: FileTreeProps) {
@@ -163,7 +169,7 @@ export function FileTreeExplorer({ onSelectFile, selectedFileId }: FileTreeProps
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="py-2">
-          {MOCK_FILE_TREE.map(node => (
+          {MOCK_FILE_TREE.map((node) => (
             <FileTreeItem
               key={node.id}
               node={node}
@@ -174,5 +180,5 @@ export function FileTreeExplorer({ onSelectFile, selectedFileId }: FileTreeProps
         </div>
       </div>
     </div>
-  )
+  );
 }

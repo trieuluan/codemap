@@ -16,7 +16,7 @@ export default function ProjectsLayout({
     <div className="min-h-screen bg-background">
       <DashboardSidebar />
       <div className="lg:pl-64">
-        <DashboardHeader />
+        <DashboardHeader title="Projects" />
         <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>
