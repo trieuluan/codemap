@@ -1,0 +1,20 @@
+# .codex/config.toml
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[mcp_servers.openai_docs]
+transport = "streamable_http"
+url = "https://developers.openai.com/mcp"
+
+# Placeholder examples below.
+# Replace these with the actual command/config for the MCP servers you install.
+
+[mcp_servers.postgres]
+transport = "stdio"
+command = "your-postgres-mcp-server"
+args = ["--connection-string", "postgresql://app:123456@codemap_pg:5432/codemap_mvp"]
+
+[mcp_servers.api]
+transport = "stdio"
+command = "your-http-mcp-server"
+args = ["--base-url", "http://localhost:3001"]
