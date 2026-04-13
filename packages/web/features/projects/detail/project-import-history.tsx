@@ -108,6 +108,9 @@ export function ProjectImportHistory({
                       <ImportStatusIcon status={item.status} />
                       <ProjectImportStatusBadge status={item.status} />
                       {index === 0 ? <Badge variant="secondary">Latest</Badge> : null}
+                      {item.sourceAvailable ? (
+                        <Badge variant="secondary">Preview ready</Badge>
+                      ) : null}
                     </div>
                     <div className="space-y-1 text-xs text-muted-foreground">
                       <p>

@@ -35,6 +35,10 @@ export interface ProjectImport {
   triggeredByUserId: string;
   status: ProjectImportStatus;
   branch: string | null;
+  commitSha: string | null;
+  sourceStorageKey: string | null;
+  sourceWorkspacePath: string | null;
+  sourceAvailable: boolean;
   startedAt: string;
   completedAt: string | null;
   errorMessage: string | null;
@@ -63,6 +67,25 @@ export interface ProjectMapSnapshot {
   tree: ProjectMapTreeNode;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ProjectFileContentStatus =
+  | "ready"
+  | "binary"
+  | "too_large"
+  | "unsupported"
+  | "unavailable";
+
+export interface ProjectFileContent {
+  path: string;
+  name: string;
+  type: "file" | "directory";
+  extension: string | null;
+  language: string | null;
+  status: ProjectFileContentStatus;
+  content: string | null;
+  sizeBytes: number | null;
+  reason: string | null;
 }
 
 export interface CreateProjectInput {
@@ -175,7 +198,6 @@ async function requestProjectsApi<T>(
   if (isServer && options.cookieHeader) {
     headers.set("cookie", options.cookieHeader);
   }
-  console.log(`${getApiBaseUrl()}${path}`);
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: options.method ?? "GET",
     headers,
@@ -225,6 +247,19 @@ export async function getProjectMap(
   return requestProjectsApi<ProjectMapSnapshot>(`/projects/${projectId}/map`, {
     cookieHeader: options?.cookieHeader,
   });
+}
+
+export async function getProjectFileContent(
+  projectId: string,
+  filePath: string,
+  options?: { cookieHeader?: string },
+) {
+  return requestProjectsApi<ProjectFileContent>(
+    `/projects/${projectId}/map/files/content?path=${encodeURIComponent(filePath)}`,
+    {
+      cookieHeader: options?.cookieHeader,
+    },
+  );
 }
 
 export async function createProject(input: CreateProjectInput) {

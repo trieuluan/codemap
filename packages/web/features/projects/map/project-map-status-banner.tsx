@@ -13,6 +13,9 @@ export function ProjectMapStatusBanner({
 }) {
   const latestImport = getLatestProjectImport(imports);
   const hasCompletedImport = imports.some((item) => item.status === "completed");
+  const hasPreviewableSource = imports.some(
+    (item) => item.status === "completed" && item.sourceAvailable,
+  );
 
   if (
     project.status === "importing" ||
@@ -43,6 +46,20 @@ export function ProjectMapStatusBanner({
         <AlertDescription>
           Run an import to generate the first project map. Until then, this
           workspace will stay in an empty placeholder state.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!hasPreviewableSource) {
+    return (
+      <Alert>
+        <Loader2 />
+        <AlertTitle>Repository preview needs a fresh import</AlertTitle>
+        <AlertDescription>
+          This project has a completed map snapshot, but retained source is not
+          available for file preview. Start a new import to enable file content
+          browsing in this workspace.
         </AlertDescription>
       </Alert>
     );

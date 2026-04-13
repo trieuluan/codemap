@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { Search, X } from "lucide-react";
 import {
   Empty,
@@ -21,9 +22,11 @@ import {
 import type { FileKind } from "@/lib/file-types";
 import type {
   Project,
+  ProjectFileContent,
   ProjectImport,
   ProjectMapSnapshot,
 } from "@/lib/api/projects";
+import { getProjectFileContent } from "@/lib/api/projects";
 import { DetailPanel } from "./detail-panel";
 import {
   collectFolderNodeIds,
@@ -38,6 +41,7 @@ import {
   type RepositoryTreeNode,
 } from "./file-tree-model";
 import { FileTree } from "./file-tree-explorer";
+import { ProjectFileViewer } from "./project-file-viewer";
 import { ProjectMapStatusBanner } from "./project-map-status-banner";
 
 function areNodeIdListsEqual(currentIds: string[], nextIds: string[]) {
@@ -101,6 +105,25 @@ export function ProjectMapShell({
     () => findRepositoryNodeById(filteredTree, selectedNodeId),
     [filteredTree, selectedNodeId],
   );
+  const selectedFileNode =
+    selectedNode?.type === "file" && selectedNode.path ? selectedNode : null;
+  const {
+    data: selectedFileContent,
+    error: selectedFileContentError,
+    isLoading: isSelectedFileContentLoading,
+    mutate: mutateSelectedFileContent,
+  } = useSWR<ProjectFileContent>(
+    selectedFileNode && mapSnapshot?.importId
+      ? ["project-file-content", project.id, mapSnapshot.importId, selectedFileNode.path]
+      : null,
+    ([, currentProjectId, , filePath]) =>
+      getProjectFileContent(currentProjectId as string, filePath as string),
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      keepPreviousData: false,
+    },
+  );
 
   useEffect(() => {
     if (!filteredTree.length) {
@@ -143,7 +166,7 @@ export function ProjectMapShell({
 
       {hasMapSnapshot ? (
         <div className="rounded-lg border border-border/70 bg-card">
-          <div className="grid h-[680px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="grid h-[760px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
             <div className="flex min-h-0 flex-col border-r border-border/70 bg-sidebar">
               <div className="space-y-3 border-b border-sidebar-border px-4 py-4">
                 <div className="relative">
@@ -253,33 +276,46 @@ export function ProjectMapShell({
                 )}
               </div>
             </div>
-            <div className="min-w-0">
-              {selectedNode ? (
-                <DetailPanel file={selectedNode} />
-              ) : (
-                <Empty className="h-full rounded-none border-0 bg-transparent p-10">
-                  <EmptyHeader>
-                    <EmptyTitle>No file selected</EmptyTitle>
-                    <EmptyDescription>
-                      No repository nodes match the current search or filter.
-                      Reset the filters or search for another file to inspect its
-                      details.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setQuery("");
-                        setKindFilter("all");
-                        setLanguageFilter("all");
-                      }}
-                    >
-                      Reset filters
-                    </Button>
-                  </EmptyContent>
-                </Empty>
-              )}
+            <div className="grid min-h-0 grid-rows-[minmax(0,1.2fr)_minmax(0,0.95fr)] border-t border-border/70 lg:border-t-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:grid-rows-1">
+              <div className="min-w-0 border-b border-border/70 xl:border-r xl:border-b-0">
+                <ProjectFileViewer
+                  selectedNode={selectedNode}
+                  fileContent={selectedFileContent}
+                  isLoading={isSelectedFileContentLoading}
+                  error={selectedFileContentError}
+                  onRetry={() => {
+                    void mutateSelectedFileContent();
+                  }}
+                />
+              </div>
+              <div className="min-w-0">
+                {selectedNode ? (
+                  <DetailPanel file={selectedNode} />
+                ) : (
+                  <Empty className="h-full rounded-none border-0 bg-transparent p-10">
+                    <EmptyHeader>
+                      <EmptyTitle>No file selected</EmptyTitle>
+                      <EmptyDescription>
+                        No repository nodes match the current search or filter.
+                        Reset the filters or search for another file to inspect its
+                        details.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setQuery("");
+                          setKindFilter("all");
+                          setLanguageFilter("all");
+                        }}
+                      >
+                        Reset filters
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                )}
+              </div>
             </div>
           </div>
         </div>

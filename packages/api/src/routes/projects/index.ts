@@ -7,6 +7,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.post("/", controller.createProject);
   fastify.get("/", controller.listProjects);
   fastify.get("/:projectId", controller.getProjectById);
+  fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);
   fastify.get("/:projectId/map", controller.getProjectMap);
   fastify.patch("/:projectId", controller.updateProject);
   fastify.delete("/:projectId", controller.deleteProject);

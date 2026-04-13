@@ -20,6 +20,25 @@ export interface ProjectTreeNode {
   children?: ProjectTreeNode[];
 }
 
+export function findProjectTreeNodeByPath(
+  tree: ProjectTreeNode,
+  targetPath: string,
+): ProjectTreeNode | null {
+  if (tree.path === targetPath) {
+    return tree;
+  }
+
+  for (const child of tree.children ?? []) {
+    const match = findProjectTreeNodeByPath(child, targetPath);
+
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
 function toRelativePath(rootPath: string, targetPath: string) {
   const relativePath = path.relative(rootPath, targetPath);
   return relativePath ? relativePath.split(path.sep).join("/") : "";
@@ -33,7 +52,10 @@ function compareTreeNodes(left: ProjectTreeNode, right: ProjectTreeNode) {
   return left.name.localeCompare(right.name);
 }
 
-async function buildNode(rootPath: string, absolutePath: string): Promise<ProjectTreeNode | null> {
+async function buildNode(
+  rootPath: string,
+  absolutePath: string,
+): Promise<ProjectTreeNode | null> {
   const stats = await lstat(absolutePath);
 
   if (stats.isSymbolicLink()) {
@@ -51,7 +73,9 @@ async function buildNode(rootPath: string, absolutePath: string): Promise<Projec
     const entries = await readdir(absolutePath, { withFileTypes: true });
     const children = (
       await Promise.all(
-        entries.map((entry) => buildNode(rootPath, path.join(absolutePath, entry.name))),
+        entries.map((entry) =>
+          buildNode(rootPath, path.join(absolutePath, entry.name)),
+        ),
       )
     )
       .filter((node): node is ProjectTreeNode => node !== null)

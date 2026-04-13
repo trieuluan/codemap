@@ -36,6 +36,10 @@ export const projectImportParamsSchema = projectParamsSchema.extend({
   importId: z.uuid(),
 });
 
+export const projectFileContentQuerySchema = z.object({
+  path: z.string().trim().min(1).max(2000),
+});
+
 function parseIncludeQueryValue(value: unknown) {
   if (Array.isArray(value)) {
     return value
@@ -106,3 +110,4 @@ export type ProjectImportParams = z.infer<typeof projectImportParamsSchema>;
 export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySchema>;
 export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
+export type ProjectFileContentQuery = z.infer<typeof projectFileContentQuerySchema>;

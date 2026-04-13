@@ -3,12 +3,22 @@ import {
   enqueueProjectImportJob,
   getProjectImportJob,
 } from "../../lib/project-import-queue";
+import {
+  buildUnavailableFilePreview,
+  getProjectFilePreview,
+  normalizeRepositoryFilePath,
+} from "../project-import/file-preview";
 import { createRepositoryWorkspaceService } from "../project-import/repository-workspace";
+import {
+  findProjectTreeNodeByPath,
+  type ProjectTreeNode,
+} from "../project-import/tree-builder";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
+  projectFileContentQuerySchema,
   projectImportParamsSchema,
   projectParamsSchema,
   updateProjectBodySchema,
@@ -165,7 +175,11 @@ export function createProjectController(fastify: FastifyInstance) {
         request.params,
       );
 
-      const existingImport = await service.getImportById(projectId, importId, userId);
+      const existingImport = await service.getImportById(
+        projectId,
+        importId,
+        userId,
+      );
 
       if (!existingImport) {
         throw fastify.httpErrors.notFound("Project import not found");
@@ -176,7 +190,9 @@ export function createProjectController(fastify: FastifyInstance) {
         existingImport.importRecord.status === "running"
       ) {
         const existingJob = await getProjectImportJob(fastify.redis, importId);
-        const existingJobState = existingJob ? await existingJob.getState() : null;
+        const existingJobState = existingJob
+          ? await existingJob.getState()
+          : null;
 
         if (
           existingJobState &&
@@ -221,7 +237,10 @@ export function createProjectController(fastify: FastifyInstance) {
           importId: retriedImport.createdImport.id,
         });
       } catch (error) {
-        request.log.error(error, "Failed to enqueue retried project import job");
+        request.log.error(
+          error,
+          "Failed to enqueue retried project import job",
+        );
 
         await service.markImportAsFailed(
           retriedImport.createdImport.id,
@@ -268,6 +287,71 @@ export function createProjectController(fastify: FastifyInstance) {
         createdAt: latestMap.createdAt,
         updatedAt: latestMap.updatedAt,
       });
+    },
+
+    getProjectFileContent: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectFileContentQuerySchema.parse(request.query ?? {});
+
+      let normalizedPath: string;
+
+      try {
+        normalizedPath = normalizeRepositoryFilePath(query.path);
+      } catch (error) {
+        throw fastify.httpErrors.badRequest(
+          error instanceof Error ? error.message : "Invalid file path",
+        );
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const treeNode = findProjectTreeNodeByPath(
+        latestMapWithSource.mapSnapshot.treeJson as ProjectTreeNode,
+        normalizedPath,
+      );
+
+      if (!treeNode) {
+        return reply.success(
+          buildUnavailableFilePreview({
+            path: normalizedPath,
+            reason:
+              "This file is not present in the latest project map snapshot.",
+          }),
+        );
+      }
+
+      if (
+        !latestMapWithSource.importRecord?.sourceAvailable ||
+        !latestMapWithSource.importRecord.sourceWorkspacePath
+      ) {
+        return reply.success(
+          buildUnavailableFilePreview({
+            path: normalizedPath,
+            name: treeNode.name,
+            extension: treeNode.extension,
+            reason:
+              "Retained source is not available for the latest successful import.",
+          }),
+        );
+      }
+
+      const preview = await getProjectFilePreview({
+        workspacePath: latestMapWithSource.importRecord.sourceWorkspacePath,
+        treeNode,
+      });
+
+      return reply.success(preview);
     },
   };
 }

@@ -485,6 +485,33 @@ export function createProjectService(database: Database) {
       return latestMap;
     },
 
+    async getLatestProjectMapWithSource(projectId: string, ownerUserId: string) {
+      const existingProject = await getOwnedProject(projectId, ownerUserId);
+
+      if (!existingProject) {
+        return null;
+      }
+
+      const latestMap = await database.query.projectMapSnapshot.findFirst({
+        where: eq(projectMapSnapshot.projectId, projectId),
+        orderBy: [desc(projectMapSnapshot.createdAt)],
+      });
+
+      if (!latestMap) {
+        return null;
+      }
+
+      const importRecord = await database.query.projectImport.findFirst({
+        where: eq(projectImport.id, latestMap.importId),
+      });
+
+      return {
+        project: existingProject,
+        mapSnapshot: latestMap,
+        importRecord: importRecord ?? null,
+      };
+    },
+
     async getImportWithProject(projectImportId: string) {
       const importRecord = await database.query.projectImport.findFirst({
         where: eq(projectImport.id, projectImportId),

@@ -224,11 +224,7 @@ export function filterRepositoryTree(
       normalizedLanguage === "all" || node.language === normalizedLanguage;
 
     if (node.type === "folder") {
-      if (!normalizedQuery) {
-        return false;
-      }
-
-      return matchesQuery;
+      return matchesQuery && matchesKind && normalizedLanguage === "all";
     }
 
     return matchesQuery && matchesKind && matchesLanguage;

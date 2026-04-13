@@ -204,6 +204,9 @@ export function ProjectOverview({
                         {latestImport.branch ? (
                           <Badge variant="secondary">{latestImport.branch}</Badge>
                         ) : null}
+                        {latestImport.sourceAvailable ? (
+                          <Badge variant="secondary">Preview ready</Badge>
+                        ) : null}
                       </>
                     ) : (
                       <Badge variant="outline">No imports yet</Badge>
