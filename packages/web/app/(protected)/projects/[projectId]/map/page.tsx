@@ -14,6 +14,7 @@ import { ArrowLeft } from "lucide-react";
 import { ProjectMapShell } from "@/features/projects/map/project-map-shell";
 import { ProjectStatusBadge } from "@/features/projects/shared/project-status-badge";
 import {
+  getProjectMap,
   getProject,
   getProjectImports,
   ProjectsApiError,
@@ -28,9 +29,16 @@ export default async function ProjectMapPage({
   const cookieHeader = (await cookies()).toString();
 
   try {
-    const [project, imports] = await Promise.all([
+    const [project, imports, mapSnapshot] = await Promise.all([
       getProject(projectId, { cookieHeader }),
       getProjectImports(projectId, { cookieHeader }),
+      getProjectMap(projectId, { cookieHeader }).catch((error) => {
+        if (error instanceof ProjectsApiError && error.statusCode === 404) {
+          return null;
+        }
+
+        throw error;
+      }),
     ]);
 
     return (
@@ -79,7 +87,11 @@ export default async function ProjectMapPage({
           </div>
         </div>
 
-        <ProjectMapShell project={project} imports={imports} />
+        <ProjectMapShell
+          project={project}
+          imports={imports}
+          mapSnapshot={mapSnapshot}
+        />
       </div>
     );
   } catch (error) {

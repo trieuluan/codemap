@@ -7,6 +7,7 @@ import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
   createProjectImportBodySchema,
+  listProjectsQuerySchema,
   projectImportParamsSchema,
   projectParamsSchema,
   updateProjectBodySchema,
@@ -40,7 +41,10 @@ export function createProjectController(fastify: FastifyInstance) {
 
     listProjects: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
-      const projects = await service.listProjects(userId);
+      const query = listProjectsQuerySchema.parse(request.query ?? {});
+      const projects = await service.listProjects(userId, {
+        include: query.include,
+      });
 
       return reply.success(projects, 200, {
         count: projects.length,

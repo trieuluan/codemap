@@ -19,7 +19,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import type { Project, ProjectStatus } from "@/lib/api/projects";
+import type { ProjectListItem, ProjectStatus } from "@/lib/api/projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import { DeleteProjectDialog } from "./delete-project-dialog";
 import { ProjectListCard } from "./project-list-card";
@@ -33,11 +33,17 @@ const statusOptions: Array<{ label: string; value: ProjectStatus | "all" }> = [
   { label: "Archived", value: "archived" },
 ];
 
-export function ProjectList({ initialProjects }: { initialProjects: Project[] }) {
+export function ProjectList({
+  initialProjects,
+}: {
+  initialProjects: ProjectListItem[];
+}) {
   const [projects, setProjects] = useState(initialProjects);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ProjectStatus | "all">("all");
-  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectListItem | null>(
+    null,
+  );
 
   const filteredProjects = projects.filter((project) => {
     const matchesQuery =

@@ -3,6 +3,8 @@ import { SignupForm } from "@/features/auth/signup-form";
 import { Logo } from "@/components/logo";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Sign Up",
   description: "Create your CodeMap account",

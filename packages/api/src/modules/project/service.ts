@@ -4,6 +4,7 @@ import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
   CreateProjectBody,
   CreateProjectImportBody,
+  ProjectListInclude,
   UpdateProjectBody,
 } from "./schema";
 
@@ -109,11 +110,39 @@ export function createProjectService(database: Database) {
       return createdProject;
     },
 
-    async listProjects(ownerUserId: string) {
-      return database.query.project.findMany({
+    async listProjects(
+      ownerUserId: string,
+      options?: { include?: ProjectListInclude[] },
+    ) {
+      const projects = await database.query.project.findMany({
         where: eq(project.ownerUserId, ownerUserId),
         orderBy: [desc(project.updatedAt), desc(project.createdAt)],
       });
+
+      if (!options?.include?.includes("latestImport") || projects.length === 0) {
+        return projects;
+      }
+
+      const latestImports = await database.query.projectImport.findMany({
+        where: inArray(
+          projectImport.projectId,
+          projects.map((projectItem) => projectItem.id),
+        ),
+        orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
+      });
+
+      const latestImportByProjectId = new Map<string, (typeof latestImports)[number]>();
+
+      for (const importItem of latestImports) {
+        if (!latestImportByProjectId.has(importItem.projectId)) {
+          latestImportByProjectId.set(importItem.projectId, importItem);
+        }
+      }
+
+      return projects.map((projectItem) => ({
+        ...projectItem,
+        latestImport: latestImportByProjectId.get(projectItem.id) ?? null,
+      }));
     },
 
     async getProjectById(projectId: string, ownerUserId: string) {

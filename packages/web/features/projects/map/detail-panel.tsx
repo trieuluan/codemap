@@ -1,10 +1,10 @@
 "use client";
 
 import { Code2, GitBranch, ListTree, Route } from "lucide-react";
-import type { FileNode } from "./file-tree-explorer";
+import type { RepositoryTreeNode } from "./file-tree-model";
 
 interface DetailPanelProps {
-  file: FileNode;
+  file: RepositoryTreeNode;
   activeView: "structure" | "dependencies" | "entry-points";
 }
 
@@ -29,7 +29,12 @@ const mockEntryPoints = [
 ];
 
 export function DetailPanel({ file, activeView }: DetailPanelProps) {
-  const fileExtension = file.name.split(".").pop()?.toUpperCase() || "FILE";
+  const fileExtension =
+    file.type === "folder"
+      ? "DIRECTORY"
+      : file.extension?.toUpperCase() ||
+        file.name.split(".").pop()?.toUpperCase() ||
+        "FILE";
 
   return (
     <div className="flex h-full flex-col">
@@ -54,6 +59,11 @@ export function DetailPanel({ file, activeView }: DetailPanelProps) {
             Type
           </p>
           <p className="mt-2 text-sm capitalize">{file.type}</p>
+          {file.path ? (
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              {file.path}
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-lg border border-border/70 bg-background/70 p-4">
@@ -65,7 +75,7 @@ export function DetailPanel({ file, activeView }: DetailPanelProps) {
               {file.language || "Unknown"}
             </span>
             <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">
-              {file.type === "folder" ? "Group" : "Module"}
+              {file.type === "folder" ? "Directory" : "Module"}
             </span>
           </div>
         </div>

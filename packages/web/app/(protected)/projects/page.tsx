@@ -4,7 +4,10 @@ import { getProjects } from "@/lib/api/projects";
 
 export default async function ProjectsPage() {
   const cookieHeader = (await cookies()).toString();
-  const projects = await getProjects({ cookieHeader });
+  const projects = await getProjects({
+    cookieHeader,
+    include: ["latestImport"],
+  });
 
   return <ProjectList initialProjects={projects} />;
 }

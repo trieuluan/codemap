@@ -3,6 +3,8 @@ import { ForgotPasswordForm } from "@/features/auth/forgot-password-form";
 import { Logo } from "@/components/logo";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Forgot Password",
   description: "Reset your CodeMap password",

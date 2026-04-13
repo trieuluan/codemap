@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { LoginForm } from "@/features/auth/login-form";
 import { Logo } from "@/components/logo";
@@ -24,7 +25,13 @@ export default function AuthPage() {
           </p>
         </div>
 
-        <LoginForm />
+        <Suspense
+          fallback={
+            <div className="h-9 rounded-md border border-border bg-secondary/40" />
+          }
+        >
+          <LoginForm />
+        </Suspense>
 
         <p className="text-center text-sm text-muted-foreground">
           {"Don't have an account? "}

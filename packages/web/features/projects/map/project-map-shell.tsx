@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Empty,
   EmptyDescription,
@@ -8,41 +8,102 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Project, ProjectImport } from "@/lib/api/projects";
+import type {
+  Project,
+  ProjectImport,
+  ProjectMapSnapshot,
+} from "@/lib/api/projects";
 import { DetailPanel } from "./detail-panel";
-import { FileTreeExplorer, type FileNode } from "./file-tree-explorer";
+import {
+  findRepositoryNodeById,
+  getAncestorNodeIds,
+  getFirstSelectableRepositoryNode,
+  mapProjectTreeToRepositoryNodes,
+  pruneExpandedNodeIds,
+  type RepositoryTreeNode,
+} from "./file-tree-model";
+import { FileTree } from "./file-tree-explorer";
 import { ProjectMapStatusBanner } from "./project-map-status-banner";
 
 type MapView = "structure" | "dependencies" | "entry-points";
 
-const initialSelectedFile: FileNode = {
-  id: "src",
-  name: "src",
-  type: "folder",
-  language: "TypeScript",
-};
+function areNodeIdListsEqual(currentIds: string[], nextIds: string[]) {
+  if (currentIds.length !== nextIds.length) {
+    return false;
+  }
+
+  return currentIds.every((id, index) => id === nextIds[index]);
+}
 
 export function ProjectMapShell({
   project,
   imports,
+  mapSnapshot,
 }: {
   project: Project;
   imports: ProjectImport[];
+  mapSnapshot: ProjectMapSnapshot | null;
 }) {
   const [activeView, setActiveView] = useState<MapView>("structure");
-  const [selectedFile, setSelectedFile] = useState<FileNode>(initialSelectedFile);
+  const fileTree = useMemo(
+    () => mapProjectTreeToRepositoryNodes(mapSnapshot?.tree),
+    [mapSnapshot?.tree],
+  );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(
+    getFirstSelectableRepositoryNode(fileTree)?.id,
+  );
+  const [expandedNodeIds, setExpandedNodeIds] = useState<string[]>(
+    getAncestorNodeIds(fileTree, getFirstSelectableRepositoryNode(fileTree)?.id),
+  );
   const latestImport = imports[0] ?? null;
-  const hasCompletedImport = imports.some((item) => item.status === "completed");
+  const hasMapSnapshot = Boolean(mapSnapshot);
   const isImportProcessing =
     project.status === "importing" ||
     latestImport?.status === "pending" ||
     latestImport?.status === "running";
+  const selectedNode = useMemo(
+    () => findRepositoryNodeById(fileTree, selectedNodeId),
+    [fileTree, selectedNodeId],
+  );
+
+  useEffect(() => {
+    if (!fileTree.length) {
+      if (selectedNodeId !== undefined) {
+        setSelectedNodeId(undefined);
+      }
+
+      if (expandedNodeIds.length > 0) {
+        setExpandedNodeIds([]);
+      }
+
+      return;
+    }
+
+    const fallbackSelectionId = getFirstSelectableRepositoryNode(fileTree)?.id;
+    const nextSelectedNodeId =
+      selectedNodeId && findRepositoryNodeById(fileTree, selectedNodeId)
+        ? selectedNodeId
+        : fallbackSelectionId;
+    const nextExpandedNodeIds = pruneExpandedNodeIds(fileTree, expandedNodeIds);
+    const resolvedExpandedNodeIds =
+      nextExpandedNodeIds.length > 0
+        ? nextExpandedNodeIds
+        : getAncestorNodeIds(fileTree, nextSelectedNodeId);
+
+    if (nextSelectedNodeId !== selectedNodeId) {
+      setSelectedNodeId(nextSelectedNodeId);
+    }
+
+    if (!areNodeIdListsEqual(expandedNodeIds, resolvedExpandedNodeIds)) {
+      setExpandedNodeIds(resolvedExpandedNodeIds);
+    }
+  }, [expandedNodeIds, fileTree, selectedNodeId]);
 
   return (
     <div className="space-y-6">
       <ProjectMapStatusBanner project={project} imports={imports} />
 
-      {hasCompletedImport ? (
+      {hasMapSnapshot && selectedNode ? (
         <div className="rounded-lg border border-border/70 bg-card">
           <div className="border-b border-border/70 px-4 py-4">
             <Tabs
@@ -60,13 +121,18 @@ export function ProjectMapShell({
 
           <div className="grid h-[680px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
             <div className="border-r border-border/70 bg-sidebar">
-              <FileTreeExplorer
-                onSelectFile={setSelectedFile}
-                selectedFileId={selectedFile.id}
+              <FileTree
+                tree={fileTree}
+                selectedNodeId={selectedNode.id}
+                expandedNodeIds={expandedNodeIds}
+                onSelectNode={(node: RepositoryTreeNode) => {
+                  setSelectedNodeId(node.id);
+                }}
+                onExpandedChange={setExpandedNodeIds}
               />
             </div>
             <div className="min-w-0">
-              <DetailPanel file={selectedFile} activeView={activeView} />
+              <DetailPanel file={selectedNode} activeView={activeView} />
             </div>
           </div>
         </div>
@@ -81,7 +147,7 @@ export function ProjectMapShell({
             <EmptyDescription>
               {isImportProcessing
                 ? "The first import has started. Once an import completes, this page will unlock the structure explorer."
-                : "Run an import from the project overview to generate the first project map."}
+                : "Run an import from the project overview to generate the first project map snapshot."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

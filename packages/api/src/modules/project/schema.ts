@@ -12,6 +12,7 @@ export const projectVisibilitySchema = projectSelectSchema.shape.visibility;
 export const projectStatusSchema = projectSelectSchema.shape.status;
 export const projectProviderSchema = projectSelectSchema.shape.provider;
 export const projectImportStatusSchema = projectImportSelectSchema.shape.status;
+export const projectListIncludeSchema = z.enum(["latestImport"]);
 
 const nullableTrimmedString = z
   .string()
@@ -33,6 +34,31 @@ export const projectParamsSchema = z.object({
 
 export const projectImportParamsSchema = projectParamsSchema.extend({
   importId: z.uuid(),
+});
+
+function parseIncludeQueryValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => `${item}`.split(","))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+export const listProjectsQuerySchema = z.object({
+  include: z.preprocess(
+    parseIncludeQueryValue,
+    z.array(projectListIncludeSchema).default([]),
+  ),
 });
 
 export const createProjectBodySchema = projectInsertSchema
@@ -78,3 +104,5 @@ export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
 export type ProjectImportParams = z.infer<typeof projectImportParamsSchema>;
 export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySchema>;
+export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
+export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;

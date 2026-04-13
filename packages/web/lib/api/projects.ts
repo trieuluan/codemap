@@ -42,6 +42,29 @@ export interface ProjectImport {
   updatedAt: string;
 }
 
+export type ProjectListInclude = "latestImport";
+
+export interface ProjectListItem extends Project {
+  latestImport?: ProjectImport | null;
+}
+
+export interface ProjectMapTreeNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  extension?: string | null;
+  children?: ProjectMapTreeNode[];
+}
+
+export interface ProjectMapSnapshot {
+  id: string;
+  projectId: string;
+  importId: string;
+  tree: ProjectMapTreeNode;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreateProjectInput {
   name: string;
   description?: string | null;
@@ -164,8 +187,15 @@ async function requestProjectsApi<T>(
   return parseApiResponse<T>(response);
 }
 
-export async function getProjects(options?: { cookieHeader?: string }) {
-  return requestProjectsApi<Project[]>("/projects", {
+export async function getProjects(options?: {
+  cookieHeader?: string;
+  include?: ProjectListInclude[];
+}) {
+  const includeQuery = options?.include?.length
+    ? `?include=${options.include.join(",")}`
+    : "";
+
+  return requestProjectsApi<ProjectListItem[]>(`/projects${includeQuery}`, {
     cookieHeader: options?.cookieHeader,
   });
 }
@@ -184,6 +214,15 @@ export async function getProjectImports(
   options?: { cookieHeader?: string },
 ) {
   return requestProjectsApi<ProjectImport[]>(`/projects/${projectId}/imports`, {
+    cookieHeader: options?.cookieHeader,
+  });
+}
+
+export async function getProjectMap(
+  projectId: string,
+  options?: { cookieHeader?: string },
+) {
+  return requestProjectsApi<ProjectMapSnapshot>(`/projects/${projectId}/map`, {
     cookieHeader: options?.cookieHeader,
   });
 }

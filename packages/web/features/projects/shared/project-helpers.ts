@@ -1,6 +1,7 @@
 import type {
   Project,
   ProjectImport,
+  ProjectImportStatus,
   ProjectStatus,
   ProjectVisibility,
 } from "@/lib/api/projects";
@@ -58,7 +59,9 @@ export function getProjectVisibilityLabel(visibility: ProjectVisibility) {
   }
 }
 
-export function getProjectRepositoryLabel(project: Pick<Project, "provider" | "repositoryUrl">) {
+export function getProjectRepositoryLabel(
+  project: Pick<Project, "provider" | "repositoryUrl">,
+) {
   if (!project.repositoryUrl) {
     return "Repository not connected";
   }
@@ -75,4 +78,19 @@ export function getProjectRepositoryLabel(project: Pick<Project, "provider" | "r
 
 export function getLatestProjectImport(imports: ProjectImport[]) {
   return imports[0] ?? null;
+}
+
+export function getProjectImportStatusLabel(status: ProjectImportStatus) {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    default:
+      return status;
+  }
 }

@@ -1,8 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { MoreHorizontal, GitBranch, FolderKanban, Trash2, ArrowUpRight } from "lucide-react";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import {
+  MoreHorizontal,
+  GitBranch,
+  FolderKanban,
+  Trash2,
+  ArrowUpRight,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,26 +22,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Project } from "@/lib/api/projects";
+import type { ProjectListItem } from "@/lib/api/projects";
+import { ProjectImportStatusBadge } from "../shared/project-import-status-badge";
 import { ProjectStatusBadge } from "../shared/project-status-badge";
-import {
-  getProjectRepositoryLabel,
-} from "../shared/project-helpers";
+import { getProjectRepositoryLabel } from "../shared/project-helpers";
 import { LocalProjectDate } from "../shared/local-project-date";
 
 export function ProjectListCard({
   project,
   onDelete,
 }: {
-  project: Project;
-  onDelete: (project: Project) => void;
+  project: ProjectListItem;
+  onDelete: (project: ProjectListItem) => void;
 }) {
+  const latestImport = project.latestImport ?? null;
+
   return (
     <Card className="border-border/80 bg-card">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold tracking-tight">{project.name}</h2>
+            <h2 className="text-lg font-semibold tracking-tight">
+              {project.name}
+            </h2>
             <ProjectStatusBadge status={project.status} />
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
@@ -84,11 +98,23 @@ export function ProjectListCard({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Last imported
           </p>
+          <div className="mt-2">
+            {latestImport ? (
+              <ProjectImportStatusBadge status={latestImport.status} />
+            ) : (
+              <p className="text-sm text-muted-foreground">No imports yet</p>
+            )}
+          </div>
           <p className="mt-1 text-sm">
             <LocalProjectDate
               value={project.lastImportedAt}
               emptyLabel="Never imported"
             />
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {latestImport?.branch
+              ? `Branch ${latestImport.branch}`
+              : "No branch"}
           </p>
         </div>
       </CardContent>

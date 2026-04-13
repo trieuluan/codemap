@@ -1,184 +1,272 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ChevronDown,
   ChevronRight,
-  FileCode,
-  Folder,
-  FolderOpen,
 } from "lucide-react";
-
-export interface FileNode {
-  id: string;
-  name: string;
-  type: "file" | "folder";
-  children?: FileNode[];
-  language?: string;
-  size?: number;
-}
-
-const MOCK_FILE_TREE: FileNode[] = [
-  {
-    id: 'src',
-    name: 'src',
-    type: 'folder',
-    children: [
-      {
-        id: 'components',
-        name: 'components',
-        type: 'folder',
-        children: [
-          { id: 'Button.tsx', name: 'Button.tsx', type: 'file', language: 'TypeScript', size: 2400 },
-          { id: 'Card.tsx', name: 'Card.tsx', type: 'file', language: 'TypeScript', size: 1800 },
-          { id: 'Modal.tsx', name: 'Modal.tsx', type: 'file', language: 'TypeScript', size: 3200 },
-          {
-            id: 'ui',
-            name: 'ui',
-            type: 'folder',
-            children: [
-              { id: 'badge.tsx', name: 'badge.tsx', type: 'file', language: 'TypeScript', size: 1200 },
-              { id: 'avatar.tsx', name: 'avatar.tsx', type: 'file', language: 'TypeScript', size: 1400 },
-            ]
-          }
-        ]
-      },
-      {
-        id: 'hooks',
-        name: 'hooks',
-        type: 'folder',
-        children: [
-          { id: 'useAuth.ts', name: 'useAuth.ts', type: 'file', language: 'TypeScript', size: 2800 },
-          { id: 'useTheme.ts', name: 'useTheme.ts', type: 'file', language: 'TypeScript', size: 1600 },
-        ]
-      },
-      {
-        id: 'utils',
-        name: 'utils',
-        type: 'folder',
-        children: [
-          { id: 'cn.ts', name: 'cn.ts', type: 'file', language: 'TypeScript', size: 400 },
-          { id: 'helpers.ts', name: 'helpers.ts', type: 'file', language: 'TypeScript', size: 3100 },
-        ]
-      },
-      { id: 'App.tsx', name: 'App.tsx', type: 'file', language: 'TypeScript', size: 1200 },
-      { id: 'index.ts', name: 'index.ts', type: 'file', language: 'TypeScript', size: 300 },
-    ]
-  },
-  {
-    id: 'public',
-    name: 'public',
-    type: 'folder',
-    children: [
-      { id: 'logo.svg', name: 'logo.svg', type: 'file', language: 'SVG', size: 4200 },
-      { id: 'favicon.ico', name: 'favicon.ico', type: 'file', language: 'Image', size: 15000 },
-    ]
-  },
-  { id: 'package.json', name: 'package.json', type: 'file', language: 'JSON', size: 2100 },
-  { id: 'tsconfig.json', name: 'tsconfig.json', type: 'file', language: 'JSON', size: 800 },
-  { id: '.env.example', name: '.env.example', type: 'file', language: 'Text', size: 340 },
-  { id: 'README.md', name: 'README.md', type: 'file', language: 'Markdown', size: 5600 },
-];
+import type {
+  NodeRendererProps,
+  RowRendererProps,
+  TreeApi,
+} from "react-arborist";
+import { Tree } from "react-arborist";
+import { getFileIconMeta } from "@/lib/file-icons";
+import { cn } from "@/lib/utils";
+import {
+  buildOpenState,
+  collectFolderNodeIds,
+  type RepositoryTreeNode,
+} from "./file-tree-model";
 
 interface FileTreeProps {
-  onSelectFile: (file: FileNode) => void;
-  selectedFileId?: string;
+  tree: RepositoryTreeNode[];
+  selectedNodeId?: string;
+  expandedNodeIds: string[];
+  onSelectNode: (node: RepositoryTreeNode) => void;
+  onExpandedChange: (ids: string[]) => void;
 }
 
-function FileTreeItem({
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = ref.current;
+
+    if (!element) {
+      return;
+    }
+
+    const updateSize = () => {
+      const { width, height } = element.getBoundingClientRect();
+      setSize({ width, height });
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+
+      if (!entry) {
+        return;
+      }
+
+      const { width, height } = entry.contentRect;
+      setSize({ width, height });
+    });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return {
+    ref,
+    width: Math.floor(size.width),
+    height: Math.floor(size.height),
+  };
+}
+
+function FileTreeRow({
   node,
-  level = 0,
-  onSelectFile,
-  selectedFileId,
-}: {
-  node: FileNode;
-  level?: number;
-  onSelectFile: (file: FileNode) => void;
-  selectedFileId?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(level < 2);
-  const isFolder = node.type === "folder";
-  const isSelected = selectedFileId === node.id;
-
+  attrs,
+  innerRef,
+  children,
+}: RowRendererProps<RepositoryTreeNode>) {
   return (
-    <div>
-      <div
-        onClick={() => {
-          if (isFolder) {
-            setIsOpen(!isOpen)
-          } else {
-            onSelectFile(node)
-          }
-        }}
-        className={`flex items-center gap-1 px-2 py-1 cursor-pointer rounded transition-colors ${
-          isSelected
-            ? "bg-sidebar-accent text-sidebar-foreground"
-            : "hover:bg-sidebar-accent/30 text-sidebar-foreground"
-        }`}
-        style={{ paddingLeft: `${level * 16 + 8}px` }}
-      >
-        {isFolder ? (
-          <>
-            {isOpen ? (
-              <ChevronDown className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-4 w-4 flex-shrink-0" />
-            )}
-            {isOpen ? (
-              <FolderOpen className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <Folder className="h-4 w-4 flex-shrink-0" />
-            )}
-          </>
-        ) : (
-          <>
-            <div className="w-4" />
-            <FileCode className="h-4 w-4 flex-shrink-0" />
-          </>
-        )}
-        <span className="text-sm truncate flex-1">{node.name}</span>
-        {!isFolder && node.size && (
-          <span className="text-xs text-muted-foreground ml-2">
-            {(node.size / 1024).toFixed(1)}kb
-          </span>
-        )}
-      </div>
-
-      {isFolder && isOpen && node.children && (
-        <div>
-          {node.children.map((child) => (
-            <FileTreeItem
-              key={child.id}
-              node={child}
-              level={level + 1}
-              onSelectFile={onSelectFile}
-              selectedFileId={selectedFileId}
-            />
-          ))}
-        </div>
-      )}
+    <div
+      {...attrs}
+      ref={innerRef}
+      onClick={() => {
+        node.select();
+        node.focus();
+      }}
+      onDoubleClick={() => {
+        if (node.data.type === "folder") {
+          node.toggle();
+        }
+      }}
+      className={cn("outline-hidden", attrs.className)}
+    >
+      {children}
     </div>
   );
 }
 
-export function FileTreeExplorer({ onSelectFile, selectedFileId }: FileTreeProps) {
+function FileTreeNode({ node, style }: NodeRendererProps<RepositoryTreeNode>) {
+  const isFolder = node.data.type === "folder";
+  const iconClassName = "h-4 w-4 flex-shrink-0";
+  const { Icon, className: iconColorClassName } = getFileIconMeta({
+    name: node.data.name,
+    extension: node.data.extension,
+    isDirectory: isFolder,
+    isOpen: node.isOpen,
+  });
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-sidebar-border">
-        <h3 className="text-sm font-semibold text-foreground">Files</h3>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        <div className="py-2">
-          {MOCK_FILE_TREE.map((node) => (
-            <FileTreeItem
-              key={node.id}
-              node={node}
-              onSelectFile={onSelectFile}
-              selectedFileId={selectedFileId}
-            />
-          ))}
-        </div>
-      </div>
+    <div
+      style={style}
+      className={cn(
+        "mx-2 flex h-8 min-w-0 items-center gap-1 rounded-md px-2 text-sm transition-colors",
+        node.isSelected
+          ? "bg-sidebar-border ring-1 ring-sidebar-ring ring-inset text-sidebar-accent-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/30",
+        node.isFocused && "ring-2 ring-sidebar-ring ring-inset",
+      )}
+    >
+      {isFolder ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={node.isOpen ? "Collapse folder" : "Expand folder"}
+          className="flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          onClick={(event) => {
+            event.stopPropagation();
+            node.toggle();
+          }}
+        >
+          {node.isOpen ? (
+            <ChevronDown className={iconClassName} />
+          ) : (
+            <ChevronRight className={iconClassName} />
+          )}
+        </button>
+      ) : (
+        <span className="w-5 flex-shrink-0" aria-hidden="true" />
+      )}
+      <Icon className={cn(iconClassName, iconColorClassName)} />
+      <span className="min-w-0 flex-1 truncate">{node.data.name}</span>
+      {!isFolder && node.data.size ? (
+        <span className="ml-2 text-xs text-muted-foreground">
+          {(node.data.size / 1024).toFixed(1)}kb
+        </span>
+      ) : null}
     </div>
+  );
+}
+
+export function FileTree({
+  tree,
+  selectedNodeId,
+  expandedNodeIds,
+  onSelectNode,
+  onExpandedChange,
+}: FileTreeProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const { ref, width, height } = useElementSize<HTMLDivElement>();
+  const treeRef = useRef<TreeApi<RepositoryTreeNode> | null>(null);
+  const isSyncingOpenStateRef = useRef(false);
+  const folderNodeIds = useMemo(() => collectFolderNodeIds(tree), [tree]);
+  const initialOpenState = useMemo(
+    () => buildOpenState(expandedNodeIds),
+    [expandedNodeIds],
+  );
+
+  const handleToggle = useCallback(
+    (nodeId: string) => {
+      if (isSyncingOpenStateRef.current) {
+        return;
+      }
+
+      const treeApi = treeRef.current;
+      const isOpen = treeApi?.isOpen(nodeId) ?? false;
+
+      onExpandedChange(
+        isOpen
+          ? [...new Set([...expandedNodeIds, nodeId])]
+          : expandedNodeIds.filter((currentId) => currentId !== nodeId),
+      );
+    },
+    [expandedNodeIds, onExpandedChange],
+  );
+
+  useEffect(() => {
+    const treeApi = treeRef.current;
+
+    if (!treeApi) {
+      return;
+    }
+
+    isSyncingOpenStateRef.current = true;
+
+    try {
+      const expandedNodeIdSet = new Set(expandedNodeIds);
+
+      for (const folderNodeId of folderNodeIds) {
+        const shouldBeOpen = expandedNodeIdSet.has(folderNodeId);
+        const isOpen = treeApi.isOpen(folderNodeId);
+
+        if (shouldBeOpen && !isOpen) {
+          treeApi.open(folderNodeId);
+        }
+
+        if (!shouldBeOpen && isOpen) {
+          treeApi.close(folderNodeId);
+        }
+      }
+    } finally {
+      isSyncingOpenStateRef.current = false;
+    }
+  }, [expandedNodeIds, folderNodeIds]);
+
+  return (
+    <section
+      role="region"
+      className="flex h-full min-h-0 flex-col"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+    >
+      <div className="border-b border-sidebar-border px-4 py-3">
+        <h3 id={titleId} className="text-sm font-semibold text-foreground">
+          Files
+        </h3>
+        <p id={descriptionId} className="sr-only">
+          Repository files. Use the arrow keys to move, expand, and collapse
+          folders.
+        </p>
+      </div>
+      <div ref={ref} className="min-h-0 flex-1 py-2">
+        {height > 0 ? (
+          <Tree
+            ref={treeRef}
+            data={tree}
+            width={width || "100%"}
+            height={Math.max(height, 1)}
+            rowHeight={32}
+            indent={16}
+            padding={8}
+            openByDefault={false}
+            disableDrag
+            disableDrop
+            disableEdit
+            disableMultiSelection
+            selection={selectedNodeId}
+            selectionFollowsFocus
+            initialOpenState={initialOpenState}
+            onSelect={(nodes) => {
+              const [selectedNode] = nodes;
+
+              if (selectedNode) {
+                onSelectNode(selectedNode.data);
+              }
+            }}
+            onToggle={handleToggle}
+            rowClassName="outline-hidden"
+            renderRow={FileTreeRow}
+          >
+            {FileTreeNode}
+          </Tree>
+        ) : null}
+      </div>
+    </section>
   );
 }
