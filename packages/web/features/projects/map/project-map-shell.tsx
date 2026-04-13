@@ -26,7 +26,7 @@ import type {
   ProjectImport,
   ProjectMapSnapshot,
 } from "@/lib/api/projects";
-import { getProjectFileContent } from "@/lib/api/projects";
+import { browserProjectsApi } from "@/lib/api/projects";
 import { DetailPanel } from "./detail-panel";
 import {
   collectFolderNodeIds,
@@ -117,7 +117,7 @@ export function ProjectMapShell({
       ? ["project-file-content", project.id, mapSnapshot.importId, selectedFileNode.path]
       : null,
     ([, currentProjectId, , filePath]) =>
-      getProjectFileContent(currentProjectId as string, filePath as string),
+      browserProjectsApi.getProjectFileContent(currentProjectId as string, filePath as string),
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,

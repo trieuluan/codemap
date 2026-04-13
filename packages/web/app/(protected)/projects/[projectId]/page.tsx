@@ -11,8 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { ProjectOverview } from "@/features/projects/detail/project-overview";
 import {
-  getProject,
-  getProjectImports,
+  createServerProjectsApi,
   ProjectsApiError,
 } from "@/lib/api/projects";
 
@@ -22,12 +21,14 @@ export default async function ProjectDetailPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const cookieHeader = (await cookies()).toString();
+  const api = createServerProjectsApi({
+    cookieHeader: (await cookies()).toString(),
+  });
 
   try {
     const [project, imports] = await Promise.all([
-      getProject(projectId, { cookieHeader }),
-      getProjectImports(projectId, { cookieHeader }),
+      api.getProject(projectId),
+      api.getProjectImports(projectId),
     ]);
 
     return (

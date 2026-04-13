@@ -20,8 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import {
-  getProject,
-  getProjectImports,
+  browserProjectsApi,
   ProjectsApiError,
   triggerProjectImport,
   type Project,
@@ -64,7 +63,7 @@ export function ProjectOverview({
 
   const { data: project, mutate: mutateProject } = useSWR(
     ["project", projectId],
-    () => getProject(projectId),
+    () => browserProjectsApi.getProject(projectId),
     {
       ...swrOptions,
       fallbackData: initialProject,
@@ -75,7 +74,7 @@ export function ProjectOverview({
 
   const { data: imports, mutate: mutateImports } = useSWR(
     ["project-imports", projectId],
-    () => getProjectImports(projectId),
+    () => browserProjectsApi.getProjectImports(projectId),
     {
       ...swrOptions,
       fallbackData: initialImports,
