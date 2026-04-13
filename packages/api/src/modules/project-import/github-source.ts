@@ -11,6 +11,7 @@ export interface GithubRepositoryReference {
 
 export interface MaterializedGithubRepository {
   branch: string;
+  commitSha: string;
   reference: GithubRepositoryReference;
   workspacePath: string;
   cleanup: () => Promise<void>;
@@ -19,6 +20,22 @@ export interface MaterializedGithubRepository {
 export interface ResolvedGithubRepositorySource {
   branch: string;
   reference: GithubRepositoryReference;
+}
+
+async function getGitHeadCommitSha(workspacePath: string) {
+  const git = simpleGit(workspacePath).env("GIT_TERMINAL_PROMPT", "0");
+
+  try {
+    const commitSha = await git.revparse(["HEAD"]);
+
+    return commitSha.trim();
+  } catch (error) {
+    if (error instanceof Error && error.message.trim()) {
+      throw new Error(`Unable to resolve repository commit SHA: ${error.message.trim()}`);
+    }
+
+    throw new Error("Unable to resolve repository commit SHA");
+  }
 }
 
 function trimGitSuffix(value: string) {
@@ -195,8 +212,11 @@ export async function materializeGithubRepositorySource(
     throw error;
   }
 
+  const commitSha = await getGitHeadCommitSha(workspacePath);
+
   return {
     branch: source.branch,
+    commitSha,
     reference: source.reference,
     workspacePath,
     cleanup: async () => {

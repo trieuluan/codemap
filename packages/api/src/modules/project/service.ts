@@ -231,6 +231,25 @@ export function createProjectService(database: Database) {
       return deletedProject ?? null;
     },
 
+    async listProjectImportsWithSource(
+      projectId: string,
+      ownerUserId: string,
+    ) {
+      const existingProject = await getOwnedProject(projectId, ownerUserId);
+
+      if (!existingProject) {
+        return null;
+      }
+
+      return database.query.projectImport.findMany({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          eq(projectImport.sourceAvailable, true),
+        ),
+        orderBy: [desc(projectImport.completedAt), desc(projectImport.createdAt)],
+      });
+    },
+
     async createImport(
       projectId: string,
       ownerUserId: string,
@@ -357,6 +376,42 @@ export function createProjectService(database: Database) {
       return completedImport;
     },
 
+    async saveImportSourceMetadata(input: {
+      projectImportId: string;
+      branch?: string | null;
+      commitSha: string;
+      sourceStorageKey: string;
+      sourceWorkspacePath: string;
+    }) {
+      const [updatedImport] = await database
+        .update(projectImport)
+        .set({
+          branch: input.branch ?? undefined,
+          commitSha: input.commitSha,
+          sourceStorageKey: input.sourceStorageKey,
+          sourceWorkspacePath: input.sourceWorkspacePath,
+          sourceAvailable: true,
+        })
+        .where(eq(projectImport.id, input.projectImportId))
+        .returning();
+
+      return updatedImport ?? null;
+    },
+
+    async clearImportSourceMetadata(projectImportId: string) {
+      const [updatedImport] = await database
+        .update(projectImport)
+        .set({
+          sourceStorageKey: null,
+          sourceWorkspacePath: null,
+          sourceAvailable: false,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return updatedImport ?? null;
+    },
+
     async markImportAsFailed(projectImportId: string, errorMessage: string) {
       const completedAt = new Date();
 
@@ -451,6 +506,23 @@ export function createProjectService(database: Database) {
         importRecord,
         projectRecord,
       };
+    },
+
+    async getLatestSuccessfulImportWithSource(
+      projectId: string,
+      options?: { excludeImportId?: string },
+    ) {
+      return database.query.projectImport.findFirst({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          eq(projectImport.status, "completed"),
+          eq(projectImport.sourceAvailable, true),
+          options?.excludeImportId
+            ? ne(projectImport.id, options.excludeImportId)
+            : undefined,
+        ),
+        orderBy: [desc(projectImport.completedAt), desc(projectImport.createdAt)],
+      });
     },
   };
 }

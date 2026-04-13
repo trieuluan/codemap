@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   jsonb,
   pgEnum,
@@ -97,6 +98,10 @@ export const projectImport = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     status: projectImportStatusEnum("status").default("pending").notNull(),
     branch: text("branch"),
+    commitSha: text("commit_sha"),
+    sourceStorageKey: text("source_storage_key"),
+    sourceWorkspacePath: text("source_workspace_path"),
+    sourceAvailable: boolean("source_available").default(false).notNull(),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
     errorMessage: text("error_message"),
@@ -110,6 +115,10 @@ export const projectImport = pgTable(
     index("project_import_project_id_idx").on(table.projectId),
     index("project_import_triggered_by_user_id_idx").on(table.triggeredByUserId),
     index("project_import_status_idx").on(table.status),
+    index("project_import_project_id_source_available_idx").on(
+      table.projectId,
+      table.sourceAvailable,
+    ),
   ],
 );
 

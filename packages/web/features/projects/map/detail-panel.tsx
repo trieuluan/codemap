@@ -1,40 +1,34 @@
 "use client";
 
-import { Code2, GitBranch, ListTree, Route } from "lucide-react";
+import { Binary, Code2, FolderTree, Hash, Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { getFileKind } from "@/lib/file-types";
 import type { RepositoryTreeNode } from "./file-tree-model";
+import { getRepositoryNodeChildCount } from "./file-tree-model";
 
 interface DetailPanelProps {
   file: RepositoryTreeNode;
-  activeView: "structure" | "dependencies" | "entry-points";
 }
 
-const mockDependencies = [
-  "react@19.0.0",
-  "next@16.2.2",
-  "drizzle-orm@0.45.2",
-  "tailwindcss@4.2.2",
-];
+function getDisplayExtension(file: RepositoryTreeNode) {
+  if (file.type === "folder") {
+    return "DIRECTORY";
+  }
 
-const mockStructure = [
-  { name: "Exports", count: 5 },
-  { name: "Interfaces", count: 3 },
-  { name: "Functions", count: 8 },
-  { name: "Types", count: 12 },
-];
-
-const mockEntryPoints = [
-  { path: "src/index.ts", type: "Main entry" },
-  { path: "src/hooks/index.ts", type: "Hooks" },
-  { path: "src/utils/index.ts", type: "Utils" },
-];
-
-export function DetailPanel({ file, activeView }: DetailPanelProps) {
-  const fileExtension =
-    file.type === "folder"
-      ? "DIRECTORY"
-      : file.extension?.toUpperCase() ||
-        file.name.split(".").pop()?.toUpperCase() ||
-        "FILE";
+  return (
+    file.extension?.toUpperCase() ||
+    file.name.split(".").pop()?.toUpperCase() ||
+    "FILE"
+  );
+}
+export function DetailPanel({ file }: DetailPanelProps) {
+  const fileKind = getFileKind({
+    name: file.name,
+    extension: file.extension,
+    isDirectory: file.type === "folder",
+  });
+  const fileExtension = getDisplayExtension(file);
+  const childCount = getRepositoryNodeChildCount(file);
 
   return (
     <div className="flex h-full flex-col">
@@ -46,110 +40,103 @@ export function DetailPanel({ file, activeView }: DetailPanelProps) {
           <div>
             <p className="font-semibold text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">
-              {fileExtension} • {file.language || "Source file"} •{" "}
-              {file.size ? `${(file.size / 1024).toFixed(1)}kb` : "N/A"}
+              {fileExtension} • {file.language || "Unknown language"} •{" "}
+              {file.type === "folder"
+                ? `${childCount} item${childCount === 1 ? "" : "s"}`
+                : file.size
+                  ? `${(file.size / 1024).toFixed(1)}kb`
+                  : "Size unavailable"}
             </p>
           </div>
         </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border border-border/70 bg-background/70 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Tag className="size-4 text-muted-foreground" />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Classification
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">{file.type === "folder" ? "Directory" : "File"}</Badge>
+              <Badge variant="secondary" className="capitalize">
+                {fileKind}
+              </Badge>
+              <Badge variant="secondary">{file.language || "Unknown language"}</Badge>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-background/70 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Hash className="size-4 text-muted-foreground" />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Technical
+              </p>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="text-muted-foreground">Extension:</span>{" "}
+                {fileExtension}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Kind:</span>{" "}
+                <span className="capitalize">{fileKind}</span>
+              </p>
+              {file.type === "folder" ? (
+                <p>
+                  <span className="text-muted-foreground">Children:</span>{" "}
+                  {childCount}
+                </p>
+              ) : (
+                <p>
+                  <span className="text-muted-foreground">Size:</span>{" "}
+                  {file.size ? `${(file.size / 1024).toFixed(1)}kb` : "Unavailable"}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Type
-          </p>
-          <p className="mt-2 text-sm capitalize">{file.type}</p>
-          {file.path ? (
-            <p className="mt-2 font-mono text-xs text-muted-foreground">
-              {file.path}
+          <div className="mb-3 flex items-center gap-2">
+            <FolderTree className="size-4 text-muted-foreground" />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Repository path
             </p>
-          ) : null}
-        </div>
-
-        <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Tags
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">
-              {file.language || "Unknown"}
-            </span>
-            <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">
-              {file.type === "folder" ? "Directory" : "Module"}
-            </span>
+          </div>
+          <div className="rounded-md bg-sidebar-accent/40 p-3">
+            <p className="break-all font-mono text-xs text-foreground">
+              {file.path || file.name}
+            </p>
           </div>
         </div>
 
         <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Description
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Mock analysis for now. This panel will eventually show extracted
-            summaries, ownership hints, and architecture annotations for the
-            selected module.
-          </p>
+          <div className="mb-3 flex items-center gap-2">
+            <Binary className="size-4 text-muted-foreground" />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Mapping summary
+            </p>
+          </div>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              CodeMap has loaded the repository tree for this node. Deeper mapped
+              entities such as dependencies, symbols, and entry points are not yet
+              available in this workspace.
+            </p>
+            <p>
+              Selected {file.type === "folder" ? "directory" : "file"} kind:{" "}
+              <span className="font-medium capitalize text-foreground">{fileKind}</span>
+            </p>
+            <p>
+              Full path is available above so you can quickly inspect location
+              and classify the selected repository node.
+            </p>
+          </div>
         </div>
-
-        {activeView === "structure" ? (
-          <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <ListTree className="size-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Structure</p>
-            </div>
-            <div className="space-y-3">
-              {mockStructure.map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between rounded-lg bg-sidebar-accent p-3"
-                >
-                  <span className="text-sm">{item.name}</span>
-                  <span className="text-sm font-semibold text-primary">
-                    {item.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {activeView === "dependencies" ? (
-          <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <GitBranch className="size-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Dependencies</p>
-            </div>
-            <div className="space-y-3">
-              {mockDependencies.map((dependency) => (
-                <div
-                  key={dependency}
-                  className="rounded-lg bg-sidebar-accent p-3 text-sm font-mono"
-                >
-                  {dependency}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {activeView === "entry-points" ? (
-          <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <Route className="size-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Entry points</p>
-            </div>
-            <div className="space-y-3">
-              {mockEntryPoints.map((entry) => (
-                <div key={entry.path} className="rounded-lg bg-sidebar-accent p-3">
-                  <p className="text-xs text-muted-foreground">{entry.type}</p>
-                  <p className="mt-1 text-sm font-mono text-foreground">
-                    {entry.path}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

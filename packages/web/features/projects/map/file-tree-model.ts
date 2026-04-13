@@ -1,5 +1,5 @@
 import type { ProjectMapTreeNode } from "@/lib/api/projects";
-import { getLanguageByExtension } from "@/lib/file-types";
+import { getFileKind, getLanguageByExtension, type FileKind } from "@/lib/file-types";
 
 export interface RepositoryTreeNode {
   id: string;
@@ -33,8 +33,19 @@ export function mapProjectTreeToRepositoryNode(
 export function mapProjectTreeToRepositoryNodes(
   tree?: ProjectMapTreeNode | null,
 ) {
-  console.log(tree);
   return tree?.children?.map(mapProjectTreeToRepositoryNode) ?? [];
+}
+
+export function getRepositoryNodeKind(node: RepositoryTreeNode): FileKind {
+  return getFileKind({
+    name: node.name,
+    extension: node.extension,
+    isDirectory: node.type === "folder",
+  });
+}
+
+export function getRepositoryNodeChildCount(node: RepositoryTreeNode) {
+  return node.children?.length ?? 0;
 }
 
 export function findRepositoryNodeById(
@@ -145,4 +156,103 @@ export function pruneExpandedNodeIds(
 
 export function buildOpenState(expandedNodeIds: string[]) {
   return Object.fromEntries(expandedNodeIds.map((nodeId) => [nodeId, true]));
+}
+
+export function collectRepositoryLanguages(nodes: RepositoryTreeNode[]) {
+  const languages = new Set<string>();
+
+  function walk(currentNodes: RepositoryTreeNode[]) {
+    for (const node of currentNodes) {
+      if (node.language) {
+        languages.add(node.language);
+      }
+
+      if (node.children?.length) {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+
+  return Array.from(languages).sort((left, right) => left.localeCompare(right));
+}
+
+export function collectRepositoryKinds(nodes: RepositoryTreeNode[]) {
+  const kinds = new Set<FileKind>();
+
+  function walk(currentNodes: RepositoryTreeNode[]) {
+    for (const node of currentNodes) {
+      kinds.add(getRepositoryNodeKind(node));
+
+      if (node.children?.length) {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+
+  return Array.from(kinds).sort((left, right) => left.localeCompare(right));
+}
+
+export function filterRepositoryTree(
+  nodes: RepositoryTreeNode[],
+  options?: {
+    query?: string;
+    kind?: FileKind | "all";
+    language?: string | "all";
+  },
+) {
+  const normalizedQuery = options?.query?.trim().toLowerCase() ?? "";
+  const normalizedKind = options?.kind ?? "all";
+  const normalizedLanguage = options?.language ?? "all";
+
+  if (!normalizedQuery && normalizedKind === "all" && normalizedLanguage === "all") {
+    return nodes;
+  }
+
+  function nodeMatches(node: RepositoryTreeNode) {
+    const matchesQuery =
+      !normalizedQuery ||
+      node.name.toLowerCase().includes(normalizedQuery) ||
+      node.path?.toLowerCase().includes(normalizedQuery);
+
+    const nodeKind = getRepositoryNodeKind(node);
+    const matchesKind = normalizedKind === "all" || nodeKind === normalizedKind;
+    const matchesLanguage =
+      normalizedLanguage === "all" || node.language === normalizedLanguage;
+
+    if (node.type === "folder") {
+      if (!normalizedQuery) {
+        return false;
+      }
+
+      return matchesQuery;
+    }
+
+    return matchesQuery && matchesKind && matchesLanguage;
+  }
+
+  function walk(currentNodes: RepositoryTreeNode[]): RepositoryTreeNode[] {
+    const nextNodes: RepositoryTreeNode[] = [];
+
+    for (const node of currentNodes) {
+      const filteredChildren = node.children?.length ? walk(node.children) : undefined;
+      const includeNode = nodeMatches(node) || Boolean(filteredChildren?.length);
+
+      if (!includeNode) {
+        continue;
+      }
+
+      nextNodes.push({
+        ...node,
+        children: filteredChildren,
+      });
+    }
+
+    return nextNodes;
+  }
+
+  return walk(nodes);
 }

@@ -1,6 +1,7 @@
 import type { Job } from "bullmq";
 import { db } from "../../db";
 import { createProjectMapPersistence } from "./map-persistence";
+import { createRepositoryWorkspaceService } from "./repository-workspace";
 import { buildProjectTree } from "./tree-builder";
 import { createProjectService } from "../project/service";
 import {
@@ -15,6 +16,7 @@ interface RunProjectImportContext {
 
 const projectService = createProjectService(db);
 const projectMapPersistence = createProjectMapPersistence(db);
+const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
 function toImportFailureMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) {
@@ -59,9 +61,10 @@ export async function runProjectImport(
     return;
   }
 
-  let materializedSource:
-    | Awaited<ReturnType<typeof materializeRepositorySource>>
-    | null = null;
+  let materializedSource: Awaited<
+    ReturnType<typeof materializeRepositorySource>
+  > | null = null;
+  let retainedWorkspacePath: string | null = null;
 
   try {
     await reportProjectImportProgress(context, 10, "validating-repository");
@@ -104,9 +107,57 @@ export async function runProjectImport(
       tree,
     });
 
+    await reportProjectImportProgress(context, 92, "retaining-source");
+    const retainedWorkspace =
+      await repositoryWorkspaceService.promoteStagedWorkspace({
+        projectId: projectRecord.id,
+        importId: importRecord.id,
+        stagedWorkspacePath: materializedSource.workspacePath,
+      });
+    retainedWorkspacePath = retainedWorkspace.workspacePath;
+
+    await projectService.saveImportSourceMetadata({
+      projectImportId: importRecord.id,
+      branch: resolvedSource.branch,
+      commitSha: materializedSource.commitSha,
+      sourceStorageKey: retainedWorkspace.storageKey,
+      sourceWorkspacePath: retainedWorkspace.workspacePath,
+    });
+
     await reportProjectImportProgress(context, 100, "completed");
     await projectService.markImportAsCompleted(importRecord.id);
+
+    const previousSuccessfulImport =
+      await projectService.getLatestSuccessfulImportWithSource(
+        projectRecord.id,
+        {
+          excludeImportId: importRecord.id,
+        },
+      );
+
+    if (previousSuccessfulImport?.sourceWorkspacePath) {
+      try {
+        await repositoryWorkspaceService.removeWorkspaceByPath(
+          previousSuccessfulImport.sourceWorkspacePath,
+        );
+        await projectService.clearImportSourceMetadata(
+          previousSuccessfulImport.id,
+        );
+      } catch (cleanupError) {
+        console.error(
+          "Unable to clean up superseded retained project workspace",
+          cleanupError,
+        );
+      }
+    }
   } catch (error) {
+    if (retainedWorkspacePath) {
+      await repositoryWorkspaceService.removeWorkspaceByPath(
+        retainedWorkspacePath,
+      );
+      await projectService.clearImportSourceMetadata(importRecord.id);
+    }
+
     await projectService.markImportAsFailed(
       importRecord.id,
       toImportFailureMessage(error),

@@ -1,7 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import { AlertCircle, CheckCircle2, Clock3, LoaderCircle } from "lucide-react";
+import { AlertCircle, Clock3, LoaderCircle, RotateCcw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,11 +18,10 @@ import {
 } from "@/lib/api/projects";
 import { useToast } from "@/components/ui/use-toast";
 import { LocalProjectDate } from "../shared/local-project-date";
+import { ProjectImportStatusBadge } from "../shared/project-import-status-badge";
 
 function ImportStatusIcon({ status }: { status: ProjectImport["status"] }) {
   switch (status) {
-    case "completed":
-      return <CheckCircle2 className="size-4 text-emerald-500" />;
     case "failed":
       return <AlertCircle className="size-4 text-destructive" />;
     case "running":
@@ -35,6 +35,10 @@ function ImportStatusIcon({ status }: { status: ProjectImport["status"] }) {
 
 function canRetryImport(status: ProjectImport["status"]) {
   return status === "failed" || status === "pending" || status === "running";
+}
+
+function getRetryLabel(status: ProjectImport["status"]) {
+  return status === "failed" ? "Retry" : "Restart";
 }
 
 export function ProjectImportHistory({
@@ -93,21 +97,29 @@ export function ProjectImportHistory({
           </Empty>
         ) : (
           <div className="space-y-3">
-            {imports.map((item) => (
+            {imports.map((item, index) => (
               <div
                 key={item.id}
                 className="rounded-lg border border-border/70 bg-background/70 p-4"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <ImportStatusIcon status={item.status} />
-                      <p className="text-sm font-medium capitalize">{item.status}</p>
+                      <ProjectImportStatusBadge status={item.status} />
+                      {index === 0 ? <Badge variant="secondary">Latest</Badge> : null}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Started <LocalProjectDate value={item.startedAt} />
-                      {item.branch ? ` • ${item.branch}` : ""}
-                    </p>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p>
+                        Branch:{" "}
+                        <span className="font-medium text-foreground">
+                          {item.branch || "Default branch"}
+                        </span>
+                      </p>
+                      <p>
+                        Started <LocalProjectDate value={item.startedAt} />
+                      </p>
+                    </div>
                     {item.completedAt ? (
                       <p className="text-xs text-muted-foreground">
                         Completed <LocalProjectDate value={item.completedAt} />
@@ -124,7 +136,8 @@ export function ProjectImportHistory({
                       onClick={() => handleRetry(item)}
                       disabled={isRetryPending}
                     >
-                      {item.status === "failed" ? "Retry" : "Restart"}
+                      <RotateCcw className="size-4" />
+                      {getRetryLabel(item.status)}
                     </Button>
                   ) : null}
                 </div>

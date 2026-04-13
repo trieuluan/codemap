@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { FileKind } from "@/lib/file-types";
 import type {
   Project,
   ProjectImport,
@@ -15,6 +26,10 @@ import type {
 } from "@/lib/api/projects";
 import { DetailPanel } from "./detail-panel";
 import {
+  collectFolderNodeIds,
+  collectRepositoryKinds,
+  collectRepositoryLanguages,
+  filterRepositoryTree,
   findRepositoryNodeById,
   getAncestorNodeIds,
   getFirstSelectableRepositoryNode,
@@ -24,8 +39,6 @@ import {
 } from "./file-tree-model";
 import { FileTree } from "./file-tree-explorer";
 import { ProjectMapStatusBanner } from "./project-map-status-banner";
-
-type MapView = "structure" | "dependencies" | "entry-points";
 
 function areNodeIdListsEqual(currentIds: string[], nextIds: string[]) {
   if (currentIds.length !== nextIds.length) {
@@ -44,7 +57,9 @@ export function ProjectMapShell({
   imports: ProjectImport[];
   mapSnapshot: ProjectMapSnapshot | null;
 }) {
-  const [activeView, setActiveView] = useState<MapView>("structure");
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<FileKind | "all">("all");
+  const [languageFilter, setLanguageFilter] = useState<string | "all">("all");
   const fileTree = useMemo(
     () => mapProjectTreeToRepositoryNodes(mapSnapshot?.tree),
     [mapSnapshot?.tree],
@@ -61,13 +76,34 @@ export function ProjectMapShell({
     project.status === "importing" ||
     latestImport?.status === "pending" ||
     latestImport?.status === "running";
+  const availableKinds = useMemo(() => collectRepositoryKinds(fileTree), [fileTree]);
+  const availableLanguages = useMemo(
+    () => collectRepositoryLanguages(fileTree),
+    [fileTree],
+  );
+  const filteredTree = useMemo(
+    () =>
+      filterRepositoryTree(fileTree, {
+        query,
+        kind: kindFilter,
+        language: languageFilter,
+      }),
+    [fileTree, kindFilter, languageFilter, query],
+  );
+  const isFiltering =
+    query.trim().length > 0 || kindFilter !== "all" || languageFilter !== "all";
+  const effectiveExpandedNodeIds = useMemo(
+    () =>
+      isFiltering ? collectFolderNodeIds(filteredTree) : expandedNodeIds,
+    [expandedNodeIds, filteredTree, isFiltering],
+  );
   const selectedNode = useMemo(
-    () => findRepositoryNodeById(fileTree, selectedNodeId),
-    [fileTree, selectedNodeId],
+    () => findRepositoryNodeById(filteredTree, selectedNodeId),
+    [filteredTree, selectedNodeId],
   );
 
   useEffect(() => {
-    if (!fileTree.length) {
+    if (!filteredTree.length) {
       if (selectedNodeId !== undefined) {
         setSelectedNodeId(undefined);
       }
@@ -79,14 +115,16 @@ export function ProjectMapShell({
       return;
     }
 
-    const fallbackSelectionId = getFirstSelectableRepositoryNode(fileTree)?.id;
+    const fallbackSelectionId = getFirstSelectableRepositoryNode(filteredTree)?.id;
     const nextSelectedNodeId =
-      selectedNodeId && findRepositoryNodeById(fileTree, selectedNodeId)
+      selectedNodeId && findRepositoryNodeById(filteredTree, selectedNodeId)
         ? selectedNodeId
         : fallbackSelectionId;
     const nextExpandedNodeIds = pruneExpandedNodeIds(fileTree, expandedNodeIds);
     const resolvedExpandedNodeIds =
-      nextExpandedNodeIds.length > 0
+      isFiltering
+        ? collectFolderNodeIds(filteredTree)
+        : nextExpandedNodeIds.length > 0
         ? nextExpandedNodeIds
         : getAncestorNodeIds(fileTree, nextSelectedNodeId);
 
@@ -97,42 +135,151 @@ export function ProjectMapShell({
     if (!areNodeIdListsEqual(expandedNodeIds, resolvedExpandedNodeIds)) {
       setExpandedNodeIds(resolvedExpandedNodeIds);
     }
-  }, [expandedNodeIds, fileTree, selectedNodeId]);
+  }, [expandedNodeIds, fileTree, filteredTree, isFiltering, selectedNodeId]);
 
   return (
     <div className="space-y-6">
       <ProjectMapStatusBanner project={project} imports={imports} />
 
-      {hasMapSnapshot && selectedNode ? (
+      {hasMapSnapshot ? (
         <div className="rounded-lg border border-border/70 bg-card">
-          <div className="border-b border-border/70 px-4 py-4">
-            <Tabs
-              value={activeView}
-              onValueChange={(value: string) => setActiveView(value as MapView)}
-              className="w-full"
-            >
-              <TabsList className="grid w-full max-w-md grid-cols-3">
-                <TabsTrigger value="structure">Structure</TabsTrigger>
-                <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
-                <TabsTrigger value="entry-points">Entry Points</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
           <div className="grid h-[680px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="border-r border-border/70 bg-sidebar">
-              <FileTree
-                tree={fileTree}
-                selectedNodeId={selectedNode.id}
-                expandedNodeIds={expandedNodeIds}
-                onSelectNode={(node: RepositoryTreeNode) => {
-                  setSelectedNodeId(node.id);
-                }}
-                onExpandedChange={setExpandedNodeIds}
-              />
+            <div className="flex min-h-0 flex-col border-r border-border/70 bg-sidebar">
+              <div className="space-y-3 border-b border-sidebar-border px-4 py-4">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search files"
+                    className="pl-9"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <Select
+                      value={kindFilter}
+                      onValueChange={(value: string) =>
+                        setKindFilter(value as FileKind | "all")
+                      }
+                    >
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="Filter kind" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All kinds</SelectItem>
+                        {availableKinds.map((kind) => (
+                          <SelectItem key={kind} value={kind}>
+                            {kind}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0">
+                    <Select
+                      value={languageFilter}
+                      onValueChange={(value: string) => setLanguageFilter(value)}
+                    >
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="Filter language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All languages</SelectItem>
+                        {availableLanguages.map((language) => (
+                          <SelectItem key={language} value={language}>
+                            {language}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {isFiltering ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {filteredTree.length > 0
+                        ? "Showing filtered repository results."
+                        : "No matching files or folders."}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setQuery("");
+                        setKindFilter("all");
+                        setLanguageFilter("all");
+                      }}
+                    >
+                      <X className="size-4" />
+                      Reset
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="min-h-0 flex-1">
+                {filteredTree.length > 0 ? (
+                  <FileTree
+                    tree={filteredTree}
+                    selectedNodeId={selectedNode?.id}
+                    expandedNodeIds={effectiveExpandedNodeIds}
+                    onSelectNode={(node: RepositoryTreeNode) => {
+                      setSelectedNodeId(node.id);
+                    }}
+                    onExpandedChange={setExpandedNodeIds}
+                  />
+                ) : (
+                  <Empty className="m-4 min-h-[220px] border border-dashed border-sidebar-border bg-sidebar p-6">
+                    <EmptyHeader>
+                      <EmptyTitle>No matching files</EmptyTitle>
+                      <EmptyDescription>
+                        Adjust the search term or filters to find a file in this
+                        repository snapshot.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setQuery("");
+                          setKindFilter("all");
+                          setLanguageFilter("all");
+                        }}
+                      >
+                        Reset filters
+                      </Button>
+                    </EmptyContent>
+                  </Empty>
+                )}
+              </div>
             </div>
             <div className="min-w-0">
-              <DetailPanel file={selectedNode} activeView={activeView} />
+              {selectedNode ? (
+                <DetailPanel file={selectedNode} />
+              ) : (
+                <Empty className="h-full rounded-none border-0 bg-transparent p-10">
+                  <EmptyHeader>
+                    <EmptyTitle>No file selected</EmptyTitle>
+                    <EmptyDescription>
+                      No repository nodes match the current search or filter.
+                      Reset the filters or search for another file to inspect its
+                      details.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setQuery("");
+                        setKindFilter("all");
+                        setLanguageFilter("all");
+                      }}
+                    >
+                      Reset filters
+                    </Button>
+                  </EmptyContent>
+                </Empty>
+              )}
             </div>
           </div>
         </div>

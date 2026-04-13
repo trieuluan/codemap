@@ -3,6 +3,7 @@ import {
   enqueueProjectImportJob,
   getProjectImportJob,
 } from "../../lib/project-import-queue";
+import { createRepositoryWorkspaceService } from "../project-import/repository-workspace";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
@@ -28,6 +29,7 @@ function getAuthenticatedUserId(
 
 export function createProjectController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
+  const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
   return {
     createProject: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -81,11 +83,28 @@ export function createProjectController(fastify: FastifyInstance) {
     deleteProject: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
+      const retainedImports = await service.listProjectImportsWithSource(
+        projectId,
+        userId,
+      );
 
       const deletedProject = await service.deleteProject(projectId, userId);
 
       if (!deletedProject) {
         throw fastify.httpErrors.notFound("Project not found");
+      }
+
+      for (const importRecord of retainedImports ?? []) {
+        try {
+          await repositoryWorkspaceService.removeWorkspaceByPath(
+            importRecord.sourceWorkspacePath,
+          );
+        } catch (error) {
+          request.log.error(
+            { error, projectId, importId: importRecord.id },
+            "Failed to delete retained repository workspace during project deletion",
+          );
+        }
       }
 
       return reply.success({
