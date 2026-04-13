@@ -23,6 +23,15 @@ export interface RequestApiOptions {
   cookieHeader?: string;
   cache?: RequestCache;
   headers?: HeadersInit;
+  queryParams?: Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | undefined
+    | Array<string | number | boolean>
+  >;
 }
 
 export interface ApiClientOptions {
@@ -94,8 +103,24 @@ export async function requestApi<T>(
   if (isServer && options.cookieHeader) {
     headers.set("cookie", options.cookieHeader);
   }
+  let url = `${getApiBaseUrl()}${path}`;
+  if (options.queryParams) {
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(options.queryParams)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        value.forEach((v) => searchParams.append(key, String(v)));
+        continue;
+      }
+      searchParams.set(key, String(value));
+    }
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += (url.includes("?") ? "&" : "?") + queryString;
+    }
+  }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

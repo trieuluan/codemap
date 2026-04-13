@@ -75,6 +75,7 @@ export type ProjectFileContentStatus =
   | "too_large"
   | "unsupported"
   | "unavailable";
+export type ProjectFileContentKind = "text" | "image" | "binary";
 
 export interface ProjectFileContent {
   path: string;
@@ -82,6 +83,8 @@ export interface ProjectFileContent {
   type: "file" | "directory";
   extension: string | null;
   language: string | null;
+  kind: ProjectFileContentKind;
+  mimeType: string | null;
   status: ProjectFileContentStatus;
   content: string | null;
   sizeBytes: number | null;

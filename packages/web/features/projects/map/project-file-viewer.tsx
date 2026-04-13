@@ -1,6 +1,16 @@
 "use client";
 
-import { AlertCircle, FileCode2, FileWarning, FolderSearch, RefreshCcw } from "lucide-react";
+import { useState } from "react";
+import {
+  AlertCircle,
+  File,
+  FileCode2,
+  FileImage,
+  FileWarning,
+  FolderSearch,
+  ImageOff,
+  RefreshCcw,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +21,15 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ProjectsApiError, ProjectFileContent } from "@/lib/api/projects";
+import {
+  buildProjectRawFileUrl,
+  type ProjectFileContent,
+  type ProjectsApiError,
+} from "@/lib/api/projects";
 import type { RepositoryTreeNode } from "./file-tree-model";
 
 interface ProjectFileViewerProps {
+  projectId: string;
   selectedNode: RepositoryTreeNode | null;
   fileContent?: ProjectFileContent;
   isLoading: boolean;
@@ -93,7 +108,181 @@ function EmptyViewer({
   );
 }
 
+function formatFileSize(sizeBytes: number | null) {
+  if (!sizeBytes) {
+    return null;
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function ViewerBadges({
+  fileContent,
+  selectedNode,
+}: {
+  fileContent: ProjectFileContent;
+  selectedNode: RepositoryTreeNode;
+}) {
+  const sizeLabel = formatFileSize(fileContent.sizeBytes);
+
+  return (
+    <>
+      <Badge variant="secondary">
+        {fileContent.extension?.toUpperCase() || "FILE"}
+      </Badge>
+      <Badge variant="secondary">
+        {fileContent.language || selectedNode.language || "Unknown language"}
+      </Badge>
+      <Badge variant="secondary">
+        {fileContent.kind === "text"
+          ? "Text preview"
+          : fileContent.kind === "image"
+            ? "Image preview"
+            : "Binary file"}
+      </Badge>
+      {fileContent.mimeType ? (
+        <Badge variant="secondary" className="max-w-full truncate">
+          {fileContent.mimeType}
+        </Badge>
+      ) : null}
+      {sizeLabel ? <Badge variant="secondary">{sizeLabel}</Badge> : null}
+    </>
+  );
+}
+
+function TextFileViewer({
+  fileContent,
+  selectedNode,
+}: {
+  fileContent: ProjectFileContent;
+  selectedNode: RepositoryTreeNode;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <ViewerHeader
+        title={fileContent.name}
+        subtitle={fileContent.path}
+        badges={
+          <ViewerBadges fileContent={fileContent} selectedNode={selectedNode} />
+        }
+      />
+      <div className="flex-1 overflow-auto bg-background/30 p-6">
+        <div className="rounded-lg border border-border/70 bg-background/80 shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
+            <FileCode2 className="size-4 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              Retained source preview
+            </p>
+          </div>
+          <pre className="overflow-x-auto p-4 text-sm leading-6 text-foreground">
+            <code>{fileContent.content}</code>
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageFileViewer({
+  fileContent,
+  selectedNode,
+  projectId,
+}: {
+  fileContent: ProjectFileContent;
+  selectedNode: RepositoryTreeNode;
+  projectId: string;
+}) {
+  const [hasImageLoadError, setHasImageLoadError] = useState(false);
+
+  if (hasImageLoadError) {
+    return (
+      <EmptyViewer
+        title="Image preview unavailable"
+        description="The browser could not load this retained image preview."
+        icon={ImageOff}
+      />
+    );
+  }
+  console.log(buildProjectRawFileUrl(projectId, fileContent.path));
+  return (
+    <div className="flex h-full flex-col">
+      <ViewerHeader
+        title={fileContent.name}
+        subtitle={fileContent.path}
+        badges={
+          <ViewerBadges fileContent={fileContent} selectedNode={selectedNode} />
+        }
+      />
+      <div className="flex flex-1 overflow-auto bg-background/30 p-6">
+        <div className="flex min-h-full w-full items-center justify-center rounded-lg border border-border/70 bg-background/80 p-6 shadow-sm">
+          <img
+            src={buildProjectRawFileUrl(projectId, fileContent.path)}
+            alt={fileContent.name}
+            className="max-h-full max-w-full rounded-md object-contain shadow-sm"
+            onError={() => setHasImageLoadError(true)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockedFileViewer({
+  fileContent,
+  selectedNode,
+  title,
+  description,
+  icon: Icon,
+}: {
+  fileContent: ProjectFileContent;
+  selectedNode: RepositoryTreeNode;
+  title: string;
+  description: string;
+  icon: typeof FileWarning;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <ViewerHeader
+        title={fileContent.name}
+        subtitle={fileContent.path}
+        badges={
+          <ViewerBadges fileContent={fileContent} selectedNode={selectedNode} />
+        }
+      />
+      <Empty className="h-full rounded-none border-0 bg-transparent p-10">
+        <EmptyHeader>
+          <div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-muted">
+            <Icon className="size-6 text-muted-foreground" />
+          </div>
+          <EmptyTitle>{title}</EmptyTitle>
+          <EmptyDescription>{description}</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <div className="flex flex-wrap justify-center gap-2">
+            {fileContent.mimeType ? (
+              <Badge variant="outline">{fileContent.mimeType}</Badge>
+            ) : null}
+            <Badge variant="outline">
+              {fileContent.extension?.toUpperCase() || "FILE"}
+            </Badge>
+            {fileContent.sizeBytes ? (
+              <Badge variant="outline">
+                {formatFileSize(fileContent.sizeBytes)}
+              </Badge>
+            ) : null}
+          </div>
+        </EmptyContent>
+      </Empty>
+    </div>
+  );
+}
+
 export function ProjectFileViewer({
+  projectId,
   selectedNode,
   fileContent,
   isLoading,
@@ -140,53 +329,62 @@ export function ProjectFileViewer({
     );
   }
 
-  const badges = (
-    <>
-      <Badge variant="secondary">{fileContent.extension?.toUpperCase() || "FILE"}</Badge>
-      <Badge variant="secondary">
-        {fileContent.language || selectedNode.language || "Unknown language"}
-      </Badge>
-      {fileContent.sizeBytes ? (
-        <Badge variant="secondary">
-          {(fileContent.sizeBytes / 1024).toFixed(1)} KB
-        </Badge>
-      ) : null}
-    </>
-  );
-
-  if (fileContent.status !== "ready") {
+  if (fileContent.status === "ready" && fileContent.kind === "image") {
     return (
-      <EmptyViewer
-        title="Preview not available"
+      <ImageFileViewer
+        fileContent={fileContent}
+        selectedNode={selectedNode}
+        projectId={projectId}
+      />
+    );
+  }
+
+  if (fileContent.status === "ready" && fileContent.kind === "text") {
+    return (
+      <TextFileViewer fileContent={fileContent} selectedNode={selectedNode} />
+    );
+  }
+
+  if (fileContent.status === "too_large") {
+    return (
+      <BlockedFileViewer
+        fileContent={fileContent}
+        selectedNode={selectedNode}
+        title="File preview is too large"
         description={
           fileContent.reason ||
-          "This file cannot be previewed in the current lightweight viewer."
+          "This file exceeds the current preview size limit."
         }
-        icon={FileWarning}
+        icon={File}
+      />
+    );
+  }
+
+  if (fileContent.status === "binary") {
+    return (
+      <BlockedFileViewer
+        fileContent={fileContent}
+        selectedNode={selectedNode}
+        title="Binary preview not available"
+        description={
+          fileContent.reason ||
+          "This file cannot be previewed as text in the current lightweight viewer."
+        }
+        icon={FileImage}
       />
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <ViewerHeader
-        title={fileContent.name}
-        subtitle={fileContent.path}
-        badges={badges}
-      />
-      <div className="flex-1 overflow-auto bg-background/30 p-6">
-        <div className="rounded-lg border border-border/70 bg-background/80 shadow-sm">
-          <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
-            <FileCode2 className="size-4 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              Retained source preview
-            </p>
-          </div>
-          <pre className="overflow-x-auto p-4 text-sm leading-6 text-foreground">
-            <code>{fileContent.content}</code>
-          </pre>
-        </div>
-      </div>
-    </div>
+    <BlockedFileViewer
+      fileContent={fileContent}
+      selectedNode={selectedNode}
+      title="Preview not available"
+      description={
+        fileContent.reason ||
+        "This file cannot be previewed in the current lightweight viewer."
+      }
+      icon={FileWarning}
+    />
   );
 }

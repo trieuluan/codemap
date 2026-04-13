@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import { open, readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { ProjectTreeNode } from "./tree-builder";
@@ -9,20 +10,38 @@ export type ProjectFilePreviewStatus =
   | "unsupported"
   | "unavailable";
 
+export type ProjectFilePreviewKind = "text" | "image" | "binary";
+
 export interface ProjectFilePreviewResult {
   path: string;
   name: string;
   type: "file" | "directory";
   extension: string | null;
   language: string | null;
+  kind: ProjectFilePreviewKind;
+  mimeType: string | null;
   status: ProjectFilePreviewStatus;
   content: string | null;
   sizeBytes: number | null;
   reason: string | null;
 }
 
-const MAX_PREVIEW_BYTES = 200 * 1024;
+export interface ProjectRawImageFileResult {
+  absoluteFilePath: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+const MAX_PREVIEW_BYTES = 500 * 1024;
 const BINARY_SAMPLE_BYTES = 8192;
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+};
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   ts: "TypeScript",
@@ -50,6 +69,58 @@ function inferLanguageLabel(extension?: string | null) {
   return LANGUAGE_BY_EXTENSION[extension.toLowerCase()] ?? null;
 }
 
+function normalizeExtension(extension?: string | null) {
+  return extension?.trim().toLowerCase() || null;
+}
+
+function inferMimeType(extension?: string | null) {
+  const normalizedExtension = normalizeExtension(extension);
+
+  if (!normalizedExtension) {
+    return null;
+  }
+
+  const imageMimeType = IMAGE_MIME_TYPES[normalizedExtension];
+
+  if (imageMimeType) {
+    return imageMimeType;
+  }
+
+  switch (normalizedExtension) {
+    case "json":
+      return "application/json";
+    case "yml":
+    case "yaml":
+      return "application/yaml";
+    case "toml":
+      return "application/toml";
+    case "md":
+      return "text/markdown";
+    case "css":
+      return "text/css";
+    case "scss":
+    case "sass":
+    case "less":
+      return "text/plain";
+    case "html":
+      return "text/html";
+    case "js":
+    case "jsx":
+      return "text/javascript";
+    case "ts":
+    case "tsx":
+      return "text/plain";
+    default:
+      return null;
+  }
+}
+
+export function isPreviewableImageExtension(extension?: string | null) {
+  const normalizedExtension = normalizeExtension(extension);
+
+  return normalizedExtension ? normalizedExtension in IMAGE_MIME_TYPES : false;
+}
+
 function getPreviewMetadata(node: Pick<ProjectTreeNode, "name" | "path" | "type" | "extension">) {
   return {
     path: node.path,
@@ -57,6 +128,8 @@ function getPreviewMetadata(node: Pick<ProjectTreeNode, "name" | "path" | "type"
     type: node.type === "directory" ? "directory" : "file",
     extension: node.extension ?? null,
     language: inferLanguageLabel(node.extension),
+    kind: node.type === "directory" ? "binary" : "text",
+    mimeType: inferMimeType(node.extension),
   } as const;
 }
 
@@ -72,6 +145,8 @@ export function buildUnavailableFilePreview(input: {
     type: "file",
     extension: input.extension ?? null,
     language: inferLanguageLabel(input.extension),
+    kind: "binary",
+    mimeType: inferMimeType(input.extension),
     status: "unavailable",
     content: null,
     sizeBytes: null,
@@ -89,6 +164,7 @@ function buildBlockedPreview(
 
   return {
     ...metadata,
+    kind: "binary",
     content: null,
     status,
     sizeBytes: sizeBytes ?? null,
@@ -137,6 +213,33 @@ async function readSampleBuffer(filePath: string, size: number) {
   }
 }
 
+function resolveWorkspaceFilePath(
+  workspacePath: string,
+  repositoryPath: string,
+) {
+  const absoluteFilePath = path.resolve(workspacePath, ...repositoryPath.split("/"));
+  const normalizedWorkspaceRoot = path.resolve(workspacePath);
+
+  if (
+    absoluteFilePath !== normalizedWorkspaceRoot &&
+    !absoluteFilePath.startsWith(`${normalizedWorkspaceRoot}${path.sep}`)
+  ) {
+    throw new Error("Resolved file path escapes the repository workspace");
+  }
+
+  return absoluteFilePath;
+}
+
+async function getWorkspaceFileStats(
+  workspacePath: string,
+  treeNode: ProjectTreeNode,
+) {
+  const absoluteFilePath = resolveWorkspaceFilePath(workspacePath, treeNode.path);
+  const fileStats = await stat(absoluteFilePath);
+
+  return { absoluteFilePath, fileStats };
+}
+
 export async function getProjectFilePreview(input: {
   workspacePath: string;
   treeNode: ProjectTreeNode;
@@ -151,21 +254,11 @@ export async function getProjectFilePreview(input: {
     );
   }
 
-  const absoluteFilePath = path.resolve(
-    input.workspacePath,
-    ...input.treeNode.path.split("/"),
-  );
-  const normalizedWorkspaceRoot = path.resolve(input.workspacePath);
-
-  if (
-    absoluteFilePath !== normalizedWorkspaceRoot &&
-    !absoluteFilePath.startsWith(`${normalizedWorkspaceRoot}${path.sep}`)
-  ) {
-    throw new Error("Resolved file path escapes the repository workspace");
-  }
-
   try {
-    const fileStats = await stat(absoluteFilePath);
+    const { absoluteFilePath, fileStats } = await getWorkspaceFileStats(
+      input.workspacePath,
+      input.treeNode,
+    );
 
     if (!fileStats.isFile()) {
       return buildBlockedPreview(
@@ -184,6 +277,18 @@ export async function getProjectFilePreview(input: {
       );
     }
 
+    if (isPreviewableImageExtension(input.treeNode.extension)) {
+      return {
+        ...metadata,
+        kind: "image",
+        mimeType: inferMimeType(input.treeNode.extension),
+        status: "ready",
+        content: null,
+        sizeBytes: fileStats.size,
+        reason: null,
+      };
+    }
+
     const sampleBuffer = await readSampleBuffer(absoluteFilePath, fileStats.size);
 
     if (isBinaryBuffer(sampleBuffer)) {
@@ -197,6 +302,8 @@ export async function getProjectFilePreview(input: {
 
     return {
       ...metadata,
+      kind: "text",
+      mimeType: inferMimeType(input.treeNode.extension),
       status: "ready",
       content: await readFile(absoluteFilePath, "utf8"),
       sizeBytes: fileStats.size,
@@ -218,4 +325,46 @@ export async function getProjectFilePreview(input: {
 
     throw error;
   }
+}
+
+export async function getProjectRawImageFile(input: {
+  workspacePath: string;
+  treeNode: ProjectTreeNode;
+}): Promise<ProjectRawImageFileResult> {
+  if (input.treeNode.type === "directory") {
+    throw new Error("Directories cannot be previewed as raw files.");
+  }
+
+  if (!isPreviewableImageExtension(input.treeNode.extension)) {
+    throw new Error("Only previewable image files support raw preview access.");
+  }
+
+  const { absoluteFilePath, fileStats } = await getWorkspaceFileStats(
+    input.workspacePath,
+    input.treeNode,
+  );
+
+  if (!fileStats.isFile()) {
+    throw new Error("Only regular files can be previewed.");
+  }
+
+  if (fileStats.size > MAX_PREVIEW_BYTES) {
+    throw new Error("This file is too large to preview in the browser.");
+  }
+
+  const mimeType = inferMimeType(input.treeNode.extension);
+
+  if (!mimeType) {
+    throw new Error("Unable to determine a previewable image content type.");
+  }
+
+  return {
+    absoluteFilePath,
+    mimeType,
+    sizeBytes: fileStats.size,
+  };
+}
+
+export function createProjectRawImageReadStream(filePath: string) {
+  return createReadStream(filePath);
 }

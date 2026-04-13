@@ -1,5 +1,6 @@
 import {
   ApiClientError,
+  getApiBaseUrl,
   type ApiClientOptions as ServerProjectsApiOptions,
   requestApi,
 } from "./client";
@@ -53,9 +54,12 @@ export function createServerProjectsApi(
 
     getProjectFileContent: async (projectId: string, filePath: string) => {
       return requestApi<ProjectFileContent>(
-        `/projects/${projectId}/map/files/content?path=${encodeURIComponent(filePath)}`,
+        `/projects/${projectId}/map/files/content`,
         {
           cookieHeader: defaults.cookieHeader,
+          queryParams: {
+            path: filePath,
+          },
         },
       );
     },
@@ -63,6 +67,10 @@ export function createServerProjectsApi(
 }
 
 export const browserProjectsApi = createServerProjectsApi();
+
+export function buildProjectRawFileUrl(projectId: string, filePath: string) {
+  return `${getApiBaseUrl()}/projects/${projectId}/map/files/raw?path=${encodeURIComponent(filePath)}`;
+}
 
 export async function createProject(input: CreateProjectInput) {
   return requestApi<Project>("/projects", {

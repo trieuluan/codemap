@@ -5,7 +5,9 @@ import * as path from "node:path";
 import { test } from "node:test";
 import {
   buildUnavailableFilePreview,
+  getProjectRawImageFile,
   getProjectFilePreview,
+  isPreviewableImageExtension,
   normalizeRepositoryFilePath,
 } from "../../../src/modules/project-import/file-preview";
 import type { ProjectTreeNode } from "../../../src/modules/project-import/tree-builder";
@@ -29,6 +31,8 @@ test("buildUnavailableFilePreview returns a structured unavailable response", ()
       type: "file",
       extension: null,
       language: null,
+      kind: "binary",
+      mimeType: null,
       status: "unavailable",
       content: null,
       sizeBytes: null,
@@ -67,6 +71,8 @@ test("getProjectFilePreview returns text content for previewable files", async (
   });
 
   assert.equal(preview.status, "ready");
+  assert.equal(preview.kind, "text");
+  assert.equal(preview.mimeType, "text/plain");
   assert.equal(preview.language, "TypeScript");
   assert.match(preview.content ?? "", /hello/);
 });
@@ -84,11 +90,12 @@ test("getProjectFilePreview returns unsupported for directories", async () => {
 
   assert.equal(preview.status, "unsupported");
   assert.equal(preview.type, "directory");
+  assert.equal(preview.kind, "binary");
 });
 
-test("getProjectFilePreview returns binary for files with null bytes", async (t) => {
+test("getProjectFilePreview returns image mode for supported image previews", async (t) => {
   const workspaceRoot = await mkdtemp(
-    path.join(os.tmpdir(), "codemap-file-preview-binary-test-"),
+    path.join(os.tmpdir(), "codemap-file-preview-image-test-"),
   );
 
   t.after(async () => {
@@ -110,7 +117,10 @@ test("getProjectFilePreview returns binary for files with null bytes", async (t)
     },
   });
 
-  assert.equal(preview.status, "binary");
+  assert.equal(preview.status, "ready");
+  assert.equal(preview.kind, "image");
+  assert.equal(preview.mimeType, "image/png");
+  assert.equal(preview.content, null);
 });
 
 test("getProjectFilePreview returns too_large for oversized files", async (t) => {
@@ -141,6 +151,7 @@ test("getProjectFilePreview returns too_large for oversized files", async (t) =>
   });
 
   assert.equal(preview.status, "too_large");
+  assert.equal(preview.kind, "binary");
 });
 
 test("getProjectFilePreview returns unavailable when the retained file is missing", async (t) => {
@@ -165,4 +176,40 @@ test("getProjectFilePreview returns unavailable when the retained file is missin
   });
 
   assert.equal(preview.status, "unavailable");
+  assert.equal(preview.kind, "binary");
+});
+
+test("isPreviewableImageExtension only allows supported image extensions", () => {
+  assert.equal(isPreviewableImageExtension("png"), true);
+  assert.equal(isPreviewableImageExtension("svg"), true);
+  assert.equal(isPreviewableImageExtension("ts"), false);
+});
+
+test("getProjectRawImageFile resolves image metadata for raw preview", async (t) => {
+  const workspaceRoot = await mkdtemp(
+    path.join(os.tmpdir(), "codemap-file-preview-raw-image-test-"),
+  );
+
+  t.after(async () => {
+    await import("node:fs/promises").then(({ rm }) =>
+      rm(workspaceRoot, { recursive: true, force: true }),
+    );
+  });
+
+  const imagePath = path.join(workspaceRoot, "logo.webp");
+  await writeFile(imagePath, Buffer.from([0x52, 0x49, 0x46, 0x46]));
+
+  const rawImageFile = await getProjectRawImageFile({
+    workspacePath: workspaceRoot,
+    treeNode: {
+      name: "logo.webp",
+      path: "logo.webp",
+      type: "file",
+      extension: "webp",
+    },
+  });
+
+  assert.equal(rawImageFile.absoluteFilePath, imagePath);
+  assert.equal(rawImageFile.mimeType, "image/webp");
+  assert.equal(rawImageFile.sizeBytes, 4);
 });

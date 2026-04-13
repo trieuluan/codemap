@@ -279,7 +279,8 @@ export function ProjectMapShell({
             <div className="grid min-h-0 grid-rows-[minmax(0,1.2fr)_minmax(0,0.95fr)] border-t border-border/70 lg:border-t-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:grid-rows-1">
               <div className="min-w-0 border-b border-border/70 xl:border-r xl:border-b-0">
                 <ProjectFileViewer
-                  selectedNode={selectedNode}
+                  projectId={project.id}
+                  selectedNode={selectedNode ?? null}
                   fileContent={selectedFileContent}
                   isLoading={isSelectedFileContentLoading}
                   error={selectedFileContentError}

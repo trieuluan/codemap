@@ -5,7 +5,9 @@ import {
 } from "../../lib/project-import-queue";
 import {
   buildUnavailableFilePreview,
+  createProjectRawImageReadStream,
   getProjectFilePreview,
+  getProjectRawImageFile,
   normalizeRepositoryFilePath,
 } from "../project-import/file-preview";
 import { createRepositoryWorkspaceService } from "../project-import/repository-workspace";
@@ -352,6 +354,96 @@ export function createProjectController(fastify: FastifyInstance) {
       });
 
       return reply.success(preview);
+    },
+
+    getProjectRawFile: async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectFileContentQuerySchema.parse(request.query ?? {});
+
+      let normalizedPath: string;
+
+      try {
+        normalizedPath = normalizeRepositoryFilePath(query.path);
+      } catch (error) {
+        throw fastify.httpErrors.badRequest(
+          error instanceof Error ? error.message : "Invalid file path",
+        );
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const treeNode = findProjectTreeNodeByPath(
+        latestMapWithSource.mapSnapshot.treeJson as ProjectTreeNode,
+        normalizedPath,
+      );
+
+      if (!treeNode) {
+        throw fastify.httpErrors.notFound(
+          "This file is not present in the latest project map snapshot.",
+        );
+      }
+
+      if (
+        !latestMapWithSource.importRecord?.sourceAvailable ||
+        !latestMapWithSource.importRecord.sourceWorkspacePath
+      ) {
+        throw fastify.httpErrors.notFound(
+          "Retained source is not available for the latest successful import.",
+        );
+      }
+
+      try {
+        const rawImageFile = await getProjectRawImageFile({
+          workspacePath: latestMapWithSource.importRecord.sourceWorkspacePath,
+          treeNode,
+        });
+
+        reply.header("cache-control", "no-store");
+        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+        reply.type(rawImageFile.mimeType);
+
+        return reply.send(
+          createProjectRawImageReadStream(rawImageFile.absoluteFilePath),
+        );
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          throw fastify.httpErrors.notFound(
+            "This file is not available in the retained repository workspace.",
+          );
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "File preview is unavailable";
+
+        if (message.includes("too large")) {
+          throw fastify.httpErrors.badRequest(message);
+        }
+
+        if (
+          message.includes("previewable image") ||
+          message.includes("Directories cannot") ||
+          message.includes("Only regular files")
+        ) {
+          throw fastify.httpErrors.badRequest(message);
+        }
+
+        throw error;
+      }
     },
   };
 }
