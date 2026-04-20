@@ -15,6 +15,7 @@ import {
   type RepoSymbolOccurrenceInsert,
 } from "./repo-parse-graph";
 import { normalizeRepositoryFilePath } from "./file-preview";
+import ts from "typescript";
 
 const IGNORED_NAMES = new Set([
   ".git",
@@ -55,6 +56,27 @@ const PARSE_TOOL_VERSION = "0.1.0";
 
 interface RunProjectParseContext {
   job?: Job;
+}
+
+interface TypeScriptPathAliasPattern {
+  pattern: string;
+  hasWildcard: boolean;
+  prefix: string;
+  suffix: string;
+  targets: string[];
+}
+
+interface TypeScriptResolverConfig {
+  configPath: string;
+  configDirPath: string;
+  configDirRelativePath: string;
+  baseUrlPath: string;
+  pathAliases: TypeScriptPathAliasPattern[];
+}
+
+interface TypeScriptCompilerOptionsConfig {
+  baseUrl?: string;
+  paths?: Record<string, string[]>;
 }
 
 interface WorkspaceFileCandidate {
@@ -246,9 +268,10 @@ async function collectWorkspaceFiles(
       candidates.push({
         path: relativePath,
         absolutePath,
-        dirPath: path.posix.dirname(relativePath) === "."
-          ? ""
-          : path.posix.dirname(relativePath),
+        dirPath:
+          path.posix.dirname(relativePath) === "."
+            ? ""
+            : path.posix.dirname(relativePath),
         baseName: name,
         extension,
         language,
@@ -279,9 +302,10 @@ async function collectWorkspaceFiles(
     candidates.push({
       path: relativePath,
       absolutePath,
-      dirPath: path.posix.dirname(relativePath) === "."
-        ? ""
-        : path.posix.dirname(relativePath),
+      dirPath:
+        path.posix.dirname(relativePath) === "."
+          ? ""
+          : path.posix.dirname(relativePath),
       baseName: name,
       extension,
       language,
@@ -306,7 +330,176 @@ async function collectWorkspaceFiles(
   return candidates.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function buildLocalSymbolKey(filePath: string, kind: string, displayName: string) {
+function normalizeWorkspaceRelativePath(
+  workspacePath: string,
+  targetPath: string,
+) {
+  const relativePath = path.relative(workspacePath, targetPath);
+
+  if (!relativePath) {
+    return "";
+  }
+
+  return normalizeRepositoryFilePath(relativePath.split(path.sep).join("/"));
+}
+
+function readTsConfigFile(configPath: string) {
+  const readResult = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (readResult.error) {
+    return null;
+  }
+  return readResult.config as {
+    extends?: string;
+    compilerOptions?: TypeScriptCompilerOptionsConfig;
+  };
+}
+
+async function readTypeScriptCompilerOptionsConfig(
+  configPath: string,
+  visited = new Set<string>(),
+): Promise<TypeScriptCompilerOptionsConfig | null> {
+  if (visited.has(configPath)) {
+    return null;
+  }
+
+  visited.add(configPath);
+
+  try {
+    const parsed = readTsConfigFile(configPath);
+
+    const configDirPath = path.dirname(configPath);
+    let inheritedConfig: TypeScriptCompilerOptionsConfig | null = null;
+
+    if (parsed?.extends && parsed?.extends.startsWith(".")) {
+      const extendsPath = parsed.extends.endsWith(".json")
+        ? parsed.extends
+        : `${parsed.extends}.json`;
+      inheritedConfig = await readTypeScriptCompilerOptionsConfig(
+        path.resolve(configDirPath, extendsPath),
+        visited,
+      );
+    }
+
+    return {
+      baseUrl: parsed?.compilerOptions?.baseUrl ?? inheritedConfig?.baseUrl,
+      paths: parsed?.compilerOptions?.paths ?? inheritedConfig?.paths,
+    };
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+}
+
+async function loadTypeScriptResolverConfigs(
+  workspacePath: string,
+): Promise<TypeScriptResolverConfig[]> {
+  const configRelativePaths = ["tsconfig.json", "jsconfig.json"];
+  const discoveredConfigs = new Set<string>();
+
+  async function visit(absolutePath: string) {
+    const entryStats = await lstat(absolutePath);
+
+    if (entryStats.isSymbolicLink()) {
+      return;
+    }
+
+    const name = path.basename(absolutePath);
+
+    if (entryStats.isDirectory()) {
+      if (IGNORED_NAMES.has(name)) {
+        return;
+      }
+
+      const entries = await readdir(absolutePath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await visit(path.join(absolutePath, entry.name));
+          continue;
+        }
+
+        if (
+          entry.isFile() &&
+          (entry.name === "tsconfig.json" || entry.name === "jsconfig.json")
+        ) {
+          discoveredConfigs.add(path.join(absolutePath, entry.name));
+        }
+      }
+
+      return;
+    }
+  }
+
+  for (const relativePath of configRelativePaths) {
+    discoveredConfigs.add(path.join(workspacePath, relativePath));
+  }
+
+  await visit(workspacePath);
+
+  const resolverConfigs: TypeScriptResolverConfig[] = [];
+
+  for (const configPath of discoveredConfigs) {
+    try {
+      const compilerOptions =
+        await readTypeScriptCompilerOptionsConfig(configPath);
+
+      if (!compilerOptions?.paths) {
+        continue;
+      }
+
+      const configDirPath = path.dirname(configPath);
+      const baseUrlPath = path.resolve(
+        configDirPath,
+        compilerOptions.baseUrl ?? ".",
+      );
+      const pathAliases = Object.entries(compilerOptions.paths ?? {})
+        .filter(([, targets]) => Array.isArray(targets) && targets.length > 0)
+        .map(([pattern, targets]) => {
+          const wildcardIndex = pattern.indexOf("*");
+
+          return {
+            pattern,
+            hasWildcard: wildcardIndex >= 0,
+            prefix:
+              wildcardIndex >= 0 ? pattern.slice(0, wildcardIndex) : pattern,
+            suffix: wildcardIndex >= 0 ? pattern.slice(wildcardIndex + 1) : "",
+            targets,
+          };
+        });
+
+      if (pathAliases.length === 0) {
+        continue;
+      }
+
+      resolverConfigs.push({
+        configPath,
+        configDirPath,
+        configDirRelativePath: normalizeWorkspaceRelativePath(
+          workspacePath,
+          configDirPath,
+        ),
+        baseUrlPath,
+        pathAliases,
+      });
+    } catch (error) {
+      console.log(
+        `Failed to read TypeScript resolver config at ${configPath}`,
+        error,
+      );
+      continue;
+    }
+  }
+
+  return resolverConfigs.sort(
+    (left, right) => right.configDirPath.length - left.configDirPath.length,
+  );
+}
+
+function buildLocalSymbolKey(
+  filePath: string,
+  kind: string,
+  displayName: string,
+) {
   return `${filePath}#${kind}:${displayName}`;
 }
 
@@ -344,12 +537,123 @@ function resolveRelativeTargetPath(
     }
   }
 
-  const resolvedPath = candidates.find((candidate) => filePathSet.has(candidate));
+  const resolvedPath = candidates.find((candidate) =>
+    filePathSet.has(candidate),
+  );
 
   return {
     resolvedPath: resolvedPath ?? null,
     attemptedPath: basePath,
   };
+}
+
+function findBestResolverConfig(
+  sourceFilePath: string,
+  resolverConfigs: TypeScriptResolverConfig[],
+) {
+  return (
+    resolverConfigs.find((config) => {
+      const configRelativeDir = config.configDirRelativePath;
+
+      if (!configRelativeDir) {
+        return true;
+      }
+
+      return (
+        path.posix
+          .dirname(sourceFilePath)
+          .startsWith(`${configRelativeDir}/`) ||
+        path.posix.dirname(sourceFilePath) === configRelativeDir
+      );
+    }) ?? null
+  );
+}
+
+function resolveTsconfigAliasTargetPath(
+  workspacePath: string,
+  sourceFilePath: string,
+  moduleSpecifier: string,
+  language: string,
+  filePathSet: Set<string>,
+  resolverConfigs: TypeScriptResolverConfig[],
+) {
+  const resolverConfig = findBestResolverConfig(
+    sourceFilePath,
+    resolverConfigs,
+  );
+
+  if (!resolverConfig) {
+    return null;
+  }
+
+  const extensions =
+    language === "TypeScript" || language === "JavaScript"
+      ? JS_TS_EXTENSIONS
+      : language === "Dart"
+        ? DART_EXTENSIONS
+        : PHP_EXTENSIONS;
+
+  for (const alias of resolverConfig.pathAliases) {
+    let wildcardValue = "";
+
+    if (alias.hasWildcard) {
+      if (
+        !moduleSpecifier.startsWith(alias.prefix) ||
+        !moduleSpecifier.endsWith(alias.suffix)
+      ) {
+        continue;
+      }
+
+      wildcardValue = moduleSpecifier.slice(
+        alias.prefix.length,
+        moduleSpecifier.length - alias.suffix.length,
+      );
+    } else if (moduleSpecifier !== alias.pattern) {
+      continue;
+    }
+
+    for (const targetPattern of alias.targets) {
+      const targetValue = alias.hasWildcard
+        ? targetPattern.replace(/\*/g, wildcardValue)
+        : targetPattern;
+      const candidateBasePath = path.resolve(
+        resolverConfig.baseUrlPath,
+        targetValue,
+      );
+      const candidateRelativeBasePath = normalizeWorkspaceRelativePath(
+        workspacePath,
+        candidateBasePath,
+      );
+      const candidates = [candidateRelativeBasePath];
+
+      if (!path.posix.extname(candidateRelativeBasePath)) {
+        for (const extension of extensions) {
+          candidates.push(`${candidateRelativeBasePath}.${extension}`);
+          candidates.push(`${candidateRelativeBasePath}/index.${extension}`);
+        }
+      }
+
+      const resolvedPath = candidates.find((candidate) =>
+        filePathSet.has(candidate),
+      );
+
+      if (resolvedPath) {
+        return {
+          matched: true,
+          resolvedPath,
+          attemptedPath: candidateRelativeBasePath,
+        };
+      }
+
+      return {
+        matched: true,
+        resolvedPath: null,
+        attemptedPath: candidateRelativeBasePath,
+      };
+    }
+  }
+
+  return null;
 }
 
 function createExternalSymbolDraft(
@@ -376,6 +680,8 @@ function parseTypeScriptOrJavaScriptFile(
   file: WorkspaceFileCandidate,
   filePathSet: Set<string>,
   projectImportId: string,
+  workspacePath: string,
+  resolverConfigs: TypeScriptResolverConfig[],
 ): ParsedWorkspaceSemantics {
   const semantics: ParsedWorkspaceSemantics = {
     symbols: [],
@@ -396,12 +702,27 @@ function parseTypeScriptOrJavaScriptFile(
       matchIndex: number,
     ) => {
       const isRelative = moduleSpecifier.startsWith(".");
+      const aliasResolution = !isRelative
+        ? resolveTsconfigAliasTargetPath(
+            workspacePath,
+            file.path,
+            moduleSpecifier,
+            file.language!,
+            filePathSet,
+            resolverConfigs,
+          )
+        : null;
       const resolution = isRelative
-        ? resolveRelativeTargetPath(file.path, moduleSpecifier, file.language!, filePathSet)
-        : {
+        ? resolveRelativeTargetPath(
+            file.path,
+            moduleSpecifier,
+            file.language!,
+            filePathSet,
+          )
+        : (aliasResolution ?? {
             resolvedPath: null,
             attemptedPath: null,
-          };
+          });
       const importLocalKey = buildImportLocalKey(
         file.path,
         importKind,
@@ -422,16 +743,25 @@ function parseTypeScriptOrJavaScriptFile(
           ? resolution.resolvedPath
             ? "relative_path"
             : "unresolved"
-          : "package",
+          : aliasResolution?.resolvedPath
+            ? "tsconfig_alias"
+            : aliasResolution?.matched
+              ? "unresolved"
+              : "package",
         targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
-        targetExternalSymbolKey: isRelative
-          ? null
-          : `${file.language?.toLowerCase()}:${moduleSpecifier}`,
+        targetExternalSymbolKey:
+          isRelative || aliasResolution?.matched
+            ? null
+            : `${file.language?.toLowerCase()}:${moduleSpecifier}`,
       });
 
-      if (!isRelative) {
+      if (!isRelative && !aliasResolution?.matched) {
         semantics.externalSymbols.push(
-          createExternalSymbolDraft(projectImportId, file.language!, moduleSpecifier),
+          createExternalSymbolDraft(
+            projectImportId,
+            file.language!,
+            moduleSpecifier,
+          ),
         );
       } else if (!resolution.resolvedPath) {
         semantics.issues.push({
@@ -458,7 +788,12 @@ function parseTypeScriptOrJavaScriptFile(
         continue;
       }
 
-      pushImport(moduleSpecifier, "import", Boolean(match[1]), match.index ?? 0);
+      pushImport(
+        moduleSpecifier,
+        "import",
+        Boolean(match[1]),
+        match.index ?? 0,
+      );
     }
 
     for (const match of line.matchAll(/\brequire\(\s*["']([^"']+)["']\s*\)/g)) {
@@ -609,7 +944,11 @@ function parseTypeScriptOrJavaScriptFile(
       }
 
       const displayName = match[1];
-      const localKey = buildLocalSymbolKey(file.path, pattern.kind, displayName);
+      const localKey = buildLocalSymbolKey(
+        file.path,
+        pattern.kind,
+        displayName,
+      );
       const col = line.indexOf(displayName);
 
       semantics.symbols.push({
@@ -648,8 +987,9 @@ function parseTypeScriptOrJavaScriptFile(
         .filter(Boolean);
 
       for (const exportedItem of exportedItems) {
-        const renameMatch =
-          exportedItem.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
+        const renameMatch = exportedItem.match(
+          /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/,
+        );
 
         if (!renameMatch?.[1]) {
           continue;
@@ -661,7 +1001,11 @@ function parseTypeScriptOrJavaScriptFile(
           line: lineNumber,
           col: line.indexOf(exportedItem),
           endCol: line.indexOf(exportedItem) + exportedItem.length,
-          symbolLocalKey: buildLocalSymbolKey(file.path, "variable", renameMatch[1]),
+          symbolLocalKey: buildLocalSymbolKey(
+            file.path,
+            "variable",
+            renameMatch[1],
+          ),
         });
       }
     }
@@ -687,7 +1031,9 @@ function parseDartFile(
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
 
-    for (const match of line.matchAll(/^\s*(import|export|part)\s+['"]([^'"]+)['"]/g)) {
+    for (const match of line.matchAll(
+      /^\s*(import|export|part)\s+['"]([^'"]+)['"]/g,
+    )) {
       const kind = match[1];
       const moduleSpecifier = match[2];
 
@@ -701,7 +1047,12 @@ function parseDartFile(
         file.language!,
         filePathSet,
       );
-      const importKind = kind === "part" ? "include" : kind === "export" ? "export_from" : "import";
+      const importKind =
+        kind === "part"
+          ? "include"
+          : kind === "export"
+            ? "export_from"
+            : "import";
       const localKey = buildImportLocalKey(
         file.path,
         importKind,
@@ -718,7 +1069,9 @@ function parseDartFile(
         line: lineNumber,
         col: match.index ?? 0,
         endCol: (match.index ?? 0) + moduleSpecifier.length,
-        resolutionKind: resolution.resolvedPath ? "relative_path" : "unresolved",
+        resolutionKind: resolution.resolvedPath
+          ? "relative_path"
+          : "unresolved",
         targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
         targetExternalSymbolKey: null,
       });
@@ -830,7 +1183,13 @@ function parsePhpFile(
     if (useMatch?.[1]) {
       const namespace = useMatch[1].trim();
       const col = line.indexOf(namespace);
-      const localKey = buildImportLocalKey(file.path, "use", namespace, lineNumber, col);
+      const localKey = buildImportLocalKey(
+        file.path,
+        "use",
+        namespace,
+        lineNumber,
+        col,
+      );
 
       semantics.imports.push({
         localKey,
@@ -893,6 +1252,8 @@ export function parseWorkspaceFileSemantics(input: {
   file: WorkspaceFileCandidate;
   filePathSet: Set<string>;
   projectImportId: string;
+  workspacePath: string;
+  resolverConfigs?: TypeScriptResolverConfig[];
 }) {
   if (!input.file.language || !input.file.content) {
     return {
@@ -911,9 +1272,15 @@ export function parseWorkspaceFileSemantics(input: {
         input.file,
         input.filePathSet,
         input.projectImportId,
+        input.workspacePath,
+        input.resolverConfigs ?? [],
       );
     case "Dart":
-      return parseDartFile(input.file, input.filePathSet, input.projectImportId);
+      return parseDartFile(
+        input.file,
+        input.filePathSet,
+        input.projectImportId,
+      );
     case "PHP":
       return parsePhpFile(input.file, input.projectImportId);
     default:
@@ -940,11 +1307,9 @@ export async function runProjectParse(
   const { importRecord } = importDetails;
 
   if (!importRecord.sourceAvailable || !importRecord.sourceWorkspacePath) {
-    const errorMessage = "Retained repository source is unavailable for parsing";
-    await projectService.markParseAsFailed(
-      importId,
-      errorMessage,
-    );
+    const errorMessage =
+      "Retained repository source is unavailable for parsing";
+    await projectService.markParseAsFailed(importId, errorMessage);
     throw new Error(errorMessage);
   }
 
@@ -958,6 +1323,9 @@ export async function runProjectParse(
     await repoParseGraphService.clearImportData(importId);
 
     const workspaceFiles = await collectWorkspaceFiles(
+      importRecord.sourceWorkspacePath,
+    );
+    const resolverConfigs = await loadTypeScriptResolverConfigs(
       importRecord.sourceWorkspacePath,
     );
     const fileRows = await repoParseGraphService.saveFiles(
@@ -985,13 +1353,19 @@ export async function runProjectParse(
       })),
     );
 
-    const fileRowByPath = new Map(fileRows.map((file) => [file.path, file] as const));
+    const fileRowByPath = new Map(
+      fileRows.map((file) => [file.path, file] as const),
+    );
     const filePathSet = new Set(fileRows.map((file) => file.path));
     const symbolDrafts: RepoSymbolInsert[] = [];
     const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
-    const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string }> = [];
+    const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string }> =
+      [];
     const exportDrafts: Array<
-      RepoExportInsert & { symbolLocalKey?: string; sourceImportLocalKey?: string }
+      RepoExportInsert & {
+        symbolLocalKey?: string;
+        sourceImportLocalKey?: string;
+      }
     > = [];
     const parseIssues: RepoParseIssueInsert[] = [];
     const externalSymbols: RepoExternalSymbolInsert[] = [];
@@ -999,7 +1373,11 @@ export async function runProjectParse(
     await reportProjectParseProgress(context, 45, "parsing-files");
 
     for (const workspaceFile of workspaceFiles) {
-      if (!workspaceFile.isParseable || !workspaceFile.content || !workspaceFile.language) {
+      if (
+        !workspaceFile.isParseable ||
+        !workspaceFile.content ||
+        !workspaceFile.language
+      ) {
         continue;
       }
 
@@ -1014,6 +1392,8 @@ export async function runProjectParse(
           file: workspaceFile,
           filePathSet,
           projectImportId: importId,
+          workspacePath: importRecord.sourceWorkspacePath,
+          resolverConfigs,
         });
 
         for (const symbol of semantics.symbols) {
@@ -1066,7 +1446,9 @@ export async function runProjectParse(
             moduleSpecifier: importEdge.moduleSpecifier,
             importKind: importEdge.importKind,
             isTypeOnly: importEdge.isTypeOnly,
-            isResolved: Boolean(targetFile || importEdge.targetExternalSymbolKey),
+            isResolved: Boolean(
+              targetFile || importEdge.targetExternalSymbolKey,
+            ),
             resolutionKind: importEdge.resolutionKind,
             startLine: importEdge.line,
             startCol: importEdge.col,
@@ -1112,7 +1494,9 @@ export async function runProjectParse(
     const symbolIdByLocalKey = new Map(
       savedSymbols
         .map((symbol) => [symbol.localSymbolKey, symbol.id] as const)
-        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1])),
+        .filter((entry): entry is [string, string] =>
+          Boolean(entry[0] && entry[1]),
+        ),
     );
 
     for (const symbol of symbolDrafts) {
@@ -1122,7 +1506,8 @@ export async function runProjectParse(
       const symbolId = symbol.localSymbolKey
         ? symbolIdByLocalKey.get(symbol.localSymbolKey)
         : null;
-      const location = (symbol.extraJson as { line: number; col: number } | null) ?? null;
+      const location =
+        (symbol.extraJson as { line: number; col: number } | null) ?? null;
 
       if (!fileRow || !symbolId || !location) {
         continue;
@@ -1146,7 +1531,9 @@ export async function runProjectParse(
     await repoParseGraphService.saveOccurrences(occurrenceDrafts);
 
     const savedImportEdges = await repoParseGraphService.saveImportEdges(
-      importEdgeDrafts.map(({ localKey: _localKey, ...importEdge }) => importEdge),
+      importEdgeDrafts.map(
+        ({ localKey: _localKey, ...importEdge }) => importEdge,
+      ),
     );
     const importEdgeIdByLocalKey = new Map<string, string>();
 
@@ -1159,23 +1546,35 @@ export async function runProjectParse(
     });
 
     await repoParseGraphService.saveExports(
-      exportDrafts.map(({ symbolLocalKey, sourceImportLocalKey, ...exportDraft }) => ({
-        ...exportDraft,
-        symbolId: symbolLocalKey ? symbolIdByLocalKey.get(symbolLocalKey) ?? null : null,
-        sourceImportEdgeId: sourceImportLocalKey
-          ? importEdgeIdByLocalKey.get(sourceImportLocalKey) ?? null
-          : null,
-      })),
+      exportDrafts.map(
+        ({ symbolLocalKey, sourceImportLocalKey, ...exportDraft }) => ({
+          ...exportDraft,
+          symbolId: symbolLocalKey
+            ? (symbolIdByLocalKey.get(symbolLocalKey) ?? null)
+            : null,
+          sourceImportEdgeId: sourceImportLocalKey
+            ? (importEdgeIdByLocalKey.get(sourceImportLocalKey) ?? null)
+            : null,
+        }),
+      ),
     );
     await repoParseGraphService.saveParseIssues(parseIssues);
     await repoParseGraphService.upsertExternalSymbols(externalSymbols);
 
     const totalFileCount = fileRows.length;
-    const sourceFileCount = fileRows.filter((file) => Boolean(file.language)).length;
-    const parsedFileCount = fileRows.filter((file) => file.parseStatus === "parsed").length;
+    const sourceFileCount = fileRows.filter((file) =>
+      Boolean(file.language),
+    ).length;
+    const parsedFileCount = fileRows.filter(
+      (file) => file.parseStatus === "parsed",
+    ).length;
     const dependencyCount = savedImportEdges.length;
-    const errorFileCount = parseIssues.filter((issue) => issue.severity === "error").length;
-    const skippedFileCount = fileRows.filter((file) => file.parseStatus !== "parsed").length;
+    const errorFileCount = parseIssues.filter(
+      (issue) => issue.severity === "error",
+    ).length;
+    const skippedFileCount = fileRows.filter(
+      (file) => file.parseStatus !== "parsed",
+    ).length;
     const indexedSymbolCount = savedSymbols.length;
 
     await reportProjectParseProgress(context, 90, "persisting-parse-results");
@@ -1210,7 +1609,10 @@ export async function runProjectParse(
 
     await reportProjectParseProgress(context, 100, "completed");
   } catch (error) {
-    await projectService.markParseAsFailed(importId, toParseFailureMessage(error));
+    await projectService.markParseAsFailed(
+      importId,
+      toParseFailureMessage(error),
+    );
     throw error;
   }
 }

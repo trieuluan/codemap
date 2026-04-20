@@ -1,0 +1,129 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+### Development
+
+```bash
+# Start API + Web in parallel
+npm run dev
+
+# Start individually
+npm run dev:api        # Fastify API (port 3001)
+npm run dev:web        # Next.js web (port 3000)
+npm run dev:workers    # BullMQ workers (import + parse) in watch mode
+
+# Workers individually
+npm run dev:worker:parses   # parse worker only
+```
+
+### Database
+
+```bash
+# Run from root (drizzle-kit reads packages/api/drizzle.config.ts)
+npm --workspace=@codemap/api run db:generate   # generate migration from schema changes
+npm --workspace=@codemap/api run db:migrate    # apply migrations
+npm --workspace=@codemap/api run db:push       # push schema directly (dev only)
+npm --workspace=@codemap/api run db:seed       # seed admin user
+```
+
+### Build & Test
+
+```bash
+npm run build:shared   # must run before building api or web
+npm run build:api
+npm run build:web
+npm run test:api       # compiles TS then runs node:test suite
+```
+
+### Docker (local dev stack)
+
+```bash
+docker compose -f compose.dev.yml up
+```
+
+Services: `workspace` (app container), `worker`, `postgres`, `redis`. Inside the container, use `postgres` and `redis` as hostnames, not `localhost`.
+
+## Architecture
+
+### Monorepo packages
+
+- `packages/api` — Fastify 5 backend
+- `packages/web` — Next.js 16 App Router frontend
+- `packages/shared` — shared TypeScript types consumed by `web`
+
+`shared` must be built before `api` or `web`. It is referenced as a `file:` dependency in `web/package.json`.
+
+### Backend — `packages/api`
+
+**Plugin load order** (via `@fastify/autoload`, numbered files in `src/plugins/`):
+
+`01.env` → `02.cors` → `03.helmet` → `04.db` → `05.better-auth` → `06.redis` → `07.error-handler` → `08.response` → `09.auth-session` → `10.admin-queues`
+
+Each plugin attaches its decoration to the Fastify instance. Routes are autoloaded from `src/routes/`.
+
+**Module structure** (`src/modules/`):
+
+```
+project/
+  controller.ts   # thin HTTP handlers, delegates to service
+  service.ts      # business logic, ownership checks, state transitions
+  schema.ts       # Zod request/response schemas
+
+project-import/
+  runner.ts             # orchestrates full import pipeline end-to-end
+  repository-source.ts  # resolve/validate/materialize repo source
+  repository-workspace.ts # staged + retained workspace management
+  tree-builder.ts       # scan filesystem, build file tree
+  map-persistence.ts    # persist project_map_snapshot
+  file-preview.ts       # file content preview
+```
+
+**Two-stage async pipeline:**
+
+1. `project-import.worker.ts` — clones repo, scans file tree, persists snapshot, enqueues parse job
+2. `project-parse.worker.ts` — extracts symbols, relationships, import edges, persists to `repo-parse-schema` tables
+
+Both workers run as separate processes and connect to BullMQ via Redis. Queue names come from env vars (`IMPORT_QUEUE_NAME`, `PARSE_QUEUE_NAME`).
+
+**Database schema** (`src/db/schema/`):
+
+- `auth-schema.ts` — Better Auth tables
+- `project-schema.ts` — `project`, `project_import`, `project_map_snapshot`
+- `repo-parse-schema.ts` — `repo_file`, `repo_symbol`, `repo_symbol_occurrence`, `repo_symbol_relationship`, `repo_import_edge`, `repo_external_dependency`
+
+**Local repository storage:** cloned repos are stored under `CODEMAP_STORAGE_ROOT` (mapped to `.codemap-storage/` in dev compose). Add `.codemap-storage/*` to `.gitignore`.
+
+### Frontend — `packages/web`
+
+**Route groups:**
+
+- `app/(auth)/` — login, signup, forgot-password (unauthenticated)
+- `app/(protected)/` — dashboard, projects, project detail, project map (requires session)
+
+**Feature directories** (`features/projects/`):
+
+- `list/` — create/list/delete projects
+- `detail/` — project overview, edit, import history
+- `map/` — the main code explorer (`project-map-shell.tsx` is the root component; `file-tree-explorer.tsx`, `detail-panel.tsx`, `project-file-viewer.tsx`, `import-progress.tsx`)
+- `shared/` — badges, formatters, shared helpers
+
+**API client** (`lib/api/`):
+
+- `client.ts` — base `requestApi` helper with cookie forwarding for SSR
+- `projects.ts` — typed functions for all project endpoints (`createServerProjectsApi` for SSR, `createBrowserProjectsApi` for client)
+- `projects.types.ts` — all API response types
+
+Server Components forward cookies to the API via `cookieHeader`. Client Components use browser fetch (cookies sent automatically).
+
+**Data fetching:** SWR for client-side polling (import status, map snapshot). Server Components fetch directly in `page.tsx`.
+
+## Key Conventions
+
+- Keep route handlers thin — all logic goes in `service.ts`
+- Validate all request inputs with Zod schemas defined in `schema.ts`
+- Use `cn()` for Tailwind class merging; default to server components, `"use client"` only when needed
+- The `web` package uses Zod v3; the `api` package uses Zod v4 — do not mix
+- `.claude/worktrees/` is generated by Claude Code tooling — safe to ignore/gitignore

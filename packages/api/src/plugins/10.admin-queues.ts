@@ -6,6 +6,7 @@ import path from "node:path";
 import { getProjectImportQueue } from "../lib/project-import-queue";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { getProjectParseQueue } from "../lib/project-parse-queue";
 
 export default fp(async function authSessionPlugin(fastify: FastifyInstance) {
   const serverAdapter = new FastifyAdapter();
@@ -20,9 +21,10 @@ export default fp(async function authSessionPlugin(fastify: FastifyInstance) {
   );
 
   const importQueue = getProjectImportQueue(fastifyWithRedis.redis);
+  const parseQueue = getProjectParseQueue(fastifyWithRedis.redis);
 
   createBullBoard({
-    queues: [new BullMQAdapter(importQueue)],
+    queues: [new BullMQAdapter(importQueue), new BullMQAdapter(parseQueue)],
     serverAdapter,
   });
 

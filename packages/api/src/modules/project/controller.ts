@@ -19,6 +19,7 @@ import {
   createProjectImportBodySchema,
   listProjectsQuerySchema,
   projectFileContentQuerySchema,
+  projectMapSearchQuerySchema,
   projectParamsSchema,
   updateProjectBodySchema,
 } from "./schema";
@@ -331,16 +332,22 @@ export function createProjectController(fastify: FastifyInstance) {
             importParseStatus: importRecord.parseStatus,
           },
           imports: [],
+          importedBy: [],
           exports: [],
           symbols: [],
         });
       }
 
-      const [imports, exportsToReturn, symbols] = await Promise.all([
+      const [imports, importedBy, exportsToReturn, symbols] = await Promise.all([
         repoParseGraphService.listFileImportEdges(importRecord.id, fileRecord.id),
+        repoParseGraphService.listFileIncomingImportEdges(
+          importRecord.id,
+          fileRecord.id,
+        ),
         repoParseGraphService.listExports(importRecord.id, fileRecord.id),
         repoParseGraphService.listFileSymbols(importRecord.id, fileRecord.id),
       ]);
+      const symbolById = new Map(symbols.map((item) => [item.id, item]));
 
       return reply.success({
         file: {
@@ -367,12 +374,41 @@ export function createProjectController(fastify: FastifyInstance) {
           endLine: item.endLine,
           endCol: item.endCol + 1,
         })),
+        importedBy: importedBy.map((item) => ({
+          id: item.id,
+          sourceFileId: item.sourceFileId,
+          sourceFilePath: item.sourceFilePath,
+          moduleSpecifier: item.moduleSpecifier,
+          importKind: item.importKind,
+          resolutionKind: item.resolutionKind,
+          startLine: item.startLine,
+          startCol: item.startCol + 1,
+          endLine: item.endLine,
+          endCol: item.endCol + 1,
+        })),
         exports: exportsToReturn.map((item) => ({
+          symbolId: item.symbolId,
           id: item.id,
           exportName: item.exportName,
           exportKind: item.exportKind,
           symbolDisplayName: item.symbolDisplayName,
           sourceModuleSpecifier: item.sourceModuleSpecifier,
+          symbolStartLine: item.symbolId
+            ? (symbolById.get(item.symbolId)?.startLine ?? null)
+            : null,
+          symbolStartCol: item.symbolId
+            ? ((symbolById.get(item.symbolId)?.startCol ?? null) === null
+                ? null
+                : (symbolById.get(item.symbolId)?.startCol ?? 0) + 1)
+            : null,
+          symbolEndLine: item.symbolId
+            ? (symbolById.get(item.symbolId)?.endLine ?? null)
+            : null,
+          symbolEndCol: item.symbolId
+            ? ((symbolById.get(item.symbolId)?.endCol ?? null) === null
+                ? null
+                : (symbolById.get(item.symbolId)?.endCol ?? 0) + 1)
+            : null,
           startLine: item.startLine,
           startCol: item.startCol + 1,
           endLine: item.endLine,
@@ -410,6 +446,86 @@ export function createProjectController(fastify: FastifyInstance) {
       );
 
       return reply.success(summary);
+    },
+
+    getProjectInsights: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      if (!latestMapWithSource.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const insights = await repoParseGraphService.getProjectInsights(
+        latestMapWithSource.importRecord.id,
+      );
+
+      return reply.success(insights);
+    },
+
+    searchProjectMap: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectMapSearchQuerySchema.parse(request.query ?? {});
+      const normalizedQuery = query.q.trim();
+
+      if (normalizedQuery.length < 2) {
+        return reply.success({
+          files: [],
+          symbols: [],
+          exports: [],
+        });
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource?.importRecord) {
+        return reply.success({
+          files: [],
+          symbols: [],
+          exports: [],
+        });
+      }
+
+      const results = await repoParseGraphService.searchProjectMap(
+        latestMapWithSource.importRecord.id,
+        normalizedQuery,
+      );
+
+      return reply.success({
+        files: results.files,
+        symbols: results.symbols.map((item) => ({
+          ...item,
+          startCol: item.startCol === null ? null : item.startCol + 1,
+          endCol: item.endCol === null ? null : item.endCol + 1,
+        })),
+        exports: results.exports.map((item) => ({
+          ...item,
+          symbolStartCol:
+            item.symbolStartCol === null ? null : item.symbolStartCol + 1,
+          symbolEndCol:
+            item.symbolEndCol === null ? null : item.symbolEndCol + 1,
+          startCol: item.startCol + 1,
+          endCol: item.endCol + 1,
+        })),
+      });
     },
 
     getProjectRawFile: async (request: FastifyRequest, reply: FastifyReply) => {

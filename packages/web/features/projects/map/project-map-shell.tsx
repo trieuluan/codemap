@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   Empty,
   EmptyContent,
@@ -11,14 +11,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { FileKind } from "@/lib/file-types";
 import type {
   ProjectAnalysisSummary,
@@ -36,17 +28,17 @@ import {
   collectRepositoryLanguages,
   filterRepositoryTree,
   findRepositoryNodeById,
+  findRepositoryNodeByPath,
   getAncestorNodeIds,
+  getAncestorNodeIdsByPath,
   getFirstSelectableRepositoryNode,
   mapProjectTreeToRepositoryNodes,
   pruneExpandedNodeIds,
   type RepositoryTreeNode,
 } from "./file-tree-model";
-import { FileTree } from "./file-tree-explorer";
-import {
-  ProjectFileViewer,
-  type ProjectViewerRange,
-} from "./project-file-viewer";
+import { ProjectFileViewer, type ProjectViewerRange } from "./project-file-viewer";
+import { ProjectMapSearchDialog } from "./project-map-search-dialog";
+import { ProjectMapSidebar } from "./project-map-sidebar";
 import { ProjectMapStatusBanner } from "./project-map-status-banner";
 
 function areNodeIdListsEqual(currentIds: string[], nextIds: string[]) {
@@ -61,17 +53,26 @@ export function ProjectMapShell({
   project,
   imports,
   mapSnapshot,
+  initialSelectedFilePath,
 }: {
   project: Project;
   imports: ProjectImport[];
   mapSnapshot: ProjectMapSnapshot | null;
+  initialSelectedFilePath?: string | null;
 }) {
+  const defaultRelationshipSections = ["imports", "imported-by"];
   const [query, setQuery] = useState("");
+  const [isProjectSearchOpen, setIsProjectSearchOpen] = useState(false);
   const [kindFilter, setKindFilter] = useState<FileKind | "all">("all");
   const [languageFilter, setLanguageFilter] = useState<string | "all">("all");
   const [activeDetailTab, setActiveDetailTab] = useState("details");
+  const [openRelationshipSections, setOpenRelationshipSections] = useState<
+    string[]
+  >(defaultRelationshipSections);
   const [selectedEditorRange, setSelectedEditorRange] =
     useState<ProjectViewerRange | null>(null);
+  const preserveRelationshipSectionsRef = useRef(false);
+
   const fileTree = useMemo(
     () => mapProjectTreeToRepositoryNodes(mapSnapshot?.tree),
     [mapSnapshot?.tree],
@@ -80,15 +81,22 @@ export function ProjectMapShell({
     getFirstSelectableRepositoryNode(fileTree)?.id,
   );
   const [expandedNodeIds, setExpandedNodeIds] = useState<string[]>(
-    getAncestorNodeIds(fileTree, getFirstSelectableRepositoryNode(fileTree)?.id),
+    getAncestorNodeIds(
+      fileTree,
+      getFirstSelectableRepositoryNode(fileTree)?.id,
+    ),
   );
+
   const latestImport = imports[0] ?? null;
   const hasMapSnapshot = Boolean(mapSnapshot);
   const isImportProcessing =
     project.status === "importing" ||
     latestImport?.status === "pending" ||
     latestImport?.status === "running";
-  const availableKinds = useMemo(() => collectRepositoryKinds(fileTree), [fileTree]);
+  const availableKinds = useMemo(
+    () => collectRepositoryKinds(fileTree),
+    [fileTree],
+  );
   const availableLanguages = useMemo(
     () => collectRepositoryLanguages(fileTree),
     [fileTree],
@@ -105,16 +113,20 @@ export function ProjectMapShell({
   const isFiltering =
     query.trim().length > 0 || kindFilter !== "all" || languageFilter !== "all";
   const effectiveExpandedNodeIds = useMemo(
-    () =>
-      isFiltering ? collectFolderNodeIds(filteredTree) : expandedNodeIds,
+    () => (isFiltering ? collectFolderNodeIds(filteredTree) : expandedNodeIds),
     [expandedNodeIds, filteredTree, isFiltering],
   );
   const selectedNode = useMemo(
+    () => findRepositoryNodeById(fileTree, selectedNodeId),
+    [fileTree, selectedNodeId],
+  );
+  const selectedVisibleNode = useMemo(
     () => findRepositoryNodeById(filteredTree, selectedNodeId),
     [filteredTree, selectedNodeId],
   );
   const selectedFileNode =
     selectedNode?.type === "file" && selectedNode.path ? selectedNode : null;
+
   const {
     data: selectedFileContent,
     error: selectedFileContentError,
@@ -122,43 +134,77 @@ export function ProjectMapShell({
     mutate: mutateSelectedFileContent,
   } = useSWR<ProjectFileContent>(
     selectedFileNode && mapSnapshot?.importId
-      ? ["project-file-content", project.id, mapSnapshot.importId, selectedFileNode.path]
+      ? [
+          "project-file-content",
+          project.id,
+          mapSnapshot.importId,
+          selectedFileNode.path,
+        ]
       : null,
     ([, currentProjectId, , filePath]: [string, string, string, string]) =>
-      browserProjectsApi.getProjectFileContent(currentProjectId as string, filePath as string),
+      browserProjectsApi.getProjectFileContent(
+        currentProjectId as string,
+        filePath as string,
+      ),
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,
       keepPreviousData: false,
     },
   );
-  const { data: selectedFileParseData, isLoading: isSelectedFileParseDataLoading } =
-    useSWR<ProjectFileParseData>(
-      selectedFileNode && mapSnapshot?.importId
-        ? ["project-file-parse", project.id, mapSnapshot.importId, selectedFileNode.path]
+  const {
+    data: selectedFileParseData,
+    isLoading: isSelectedFileParseDataLoading,
+  } = useSWR<ProjectFileParseData>(
+    selectedFileNode && mapSnapshot?.importId
+      ? [
+          "project-file-parse",
+          project.id,
+          mapSnapshot.importId,
+          selectedFileNode.path,
+        ]
+      : null,
+    ([, currentProjectId, , filePath]: [string, string, string, string]) =>
+      browserProjectsApi.getProjectFileParseData(
+        currentProjectId as string,
+        filePath as string,
+      ),
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      keepPreviousData: false,
+    },
+  );
+  const { data: projectAnalysisSummary, isLoading: isProjectAnalysisLoading } =
+    useSWR<ProjectAnalysisSummary>(
+      mapSnapshot?.importId
+        ? ["project-analysis", project.id, mapSnapshot.importId]
         : null,
-      ([, currentProjectId, , filePath]: [string, string, string, string]) =>
-        browserProjectsApi.getProjectFileParseData(
+      ([, currentProjectId]: [string, string, string]) =>
+        browserProjectsApi.getProjectAnalysisSummary(
           currentProjectId as string,
-          filePath as string,
         ),
       {
         revalidateOnFocus: false,
         revalidateIfStale: false,
-        keepPreviousData: false,
+        keepPreviousData: true,
       },
     );
-  const { data: projectAnalysisSummary, isLoading: isProjectAnalysisLoading } =
-    useSWR<ProjectAnalysisSummary>(
-    mapSnapshot?.importId ? ["project-analysis", project.id, mapSnapshot.importId] : null,
-    ([, currentProjectId]: [string, string, string]) =>
-      browserProjectsApi.getProjectAnalysisSummary(currentProjectId as string),
-    {
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-      keepPreviousData: true,
-    },
-  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsProjectSearchOpen((currentValue) => !currentValue);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     if (!filteredTree.length) {
@@ -173,16 +219,16 @@ export function ProjectMapShell({
       return;
     }
 
-    const fallbackSelectionId = getFirstSelectableRepositoryNode(filteredTree)?.id;
+    const fallbackSelectionId =
+      getFirstSelectableRepositoryNode(filteredTree)?.id;
     const nextSelectedNodeId =
-      selectedNodeId && findRepositoryNodeById(filteredTree, selectedNodeId)
+      selectedNodeId && findRepositoryNodeById(fileTree, selectedNodeId)
         ? selectedNodeId
         : fallbackSelectionId;
     const nextExpandedNodeIds = pruneExpandedNodeIds(fileTree, expandedNodeIds);
-    const resolvedExpandedNodeIds =
-      isFiltering
-        ? collectFolderNodeIds(filteredTree)
-        : nextExpandedNodeIds.length > 0
+    const resolvedExpandedNodeIds = isFiltering
+      ? collectFolderNodeIds(filteredTree)
+      : nextExpandedNodeIds.length > 0
         ? nextExpandedNodeIds
         : getAncestorNodeIds(fileTree, nextSelectedNodeId);
 
@@ -199,6 +245,88 @@ export function ProjectMapShell({
     setSelectedEditorRange(null);
   }, [selectedFileNode?.path]);
 
+  useEffect(() => {
+    if (!initialSelectedFilePath) {
+      return;
+    }
+
+    const targetNode = findRepositoryNodeByPath(fileTree, initialSelectedFilePath);
+
+    if (!targetNode) {
+      return;
+    }
+
+    setSelectedNodeId(targetNode.id);
+    setExpandedNodeIds((currentNodeIds) => {
+      const targetAncestorIds = getAncestorNodeIdsByPath(
+        fileTree,
+        initialSelectedFilePath,
+      );
+      const nextNodeIds = new Set([...currentNodeIds, ...targetAncestorIds]);
+      return Array.from(nextNodeIds);
+    });
+    setActiveDetailTab("details");
+  }, [fileTree, initialSelectedFilePath]);
+
+  useEffect(() => {
+    if (
+      activeDetailTab === "imports" ||
+      activeDetailTab === "imported-by" ||
+      activeDetailTab === "exports" ||
+      activeDetailTab === "defines"
+    ) {
+      setActiveDetailTab("relationships");
+    }
+  }, [activeDetailTab]);
+
+  useEffect(() => {
+    if (preserveRelationshipSectionsRef.current) {
+      preserveRelationshipSectionsRef.current = false;
+      return;
+    }
+
+    if (activeDetailTab === "relationships") {
+      setOpenRelationshipSections(defaultRelationshipSections);
+    }
+  }, [activeDetailTab, selectedFileNode?.path]);
+
+  const navigateToFile = (
+    filePath: string,
+    range?: ProjectViewerRange | null,
+    tab?: string,
+    relationshipSections?: string[],
+  ) => {
+    const targetNode = findRepositoryNodeByPath(fileTree, filePath);
+
+    if (!targetNode) {
+      return;
+    }
+
+    setSelectedNodeId(targetNode.id);
+    setExpandedNodeIds((currentNodeIds) => {
+      const targetAncestorIds = getAncestorNodeIdsByPath(fileTree, filePath);
+      const nextNodeIds = new Set([...currentNodeIds, ...targetAncestorIds]);
+      return Array.from(nextNodeIds);
+    });
+
+    if (tab) {
+      setActiveDetailTab(tab);
+    }
+
+    if (relationshipSections) {
+      preserveRelationshipSectionsRef.current = true;
+      setOpenRelationshipSections(relationshipSections);
+    }
+
+    setSelectedEditorRange(range ?? null);
+  };
+
+  const resetTreeFilters = () => {
+    setQuery("");
+    setKindFilter("all");
+    setLanguageFilter("all");
+  };
+
   return (
     <div className="space-y-6">
       <ProjectMapStatusBanner
@@ -209,116 +337,75 @@ export function ProjectMapShell({
 
       {hasMapSnapshot ? (
         <div className="rounded-lg border border-border/70 bg-card">
-          <div className="grid h-[760px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col border-r border-border/70 bg-sidebar">
-              <div className="space-y-3 border-b border-sidebar-border px-4 py-4">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search files"
-                    className="pl-9"
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <Select
-                      value={kindFilter}
-                      onValueChange={(value: string) =>
-                        setKindFilter(value as FileKind | "all")
-                      }
-                    >
-                      <SelectTrigger className="w-full min-w-0">
-                        <SelectValue placeholder="Filter kind" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All kinds</SelectItem>
-                        {availableKinds.map((kind) => (
-                          <SelectItem key={kind} value={kind}>
-                            {kind}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="min-w-0">
-                    <Select
-                      value={languageFilter}
-                      onValueChange={(value: string) => setLanguageFilter(value)}
-                    >
-                      <SelectTrigger className="w-full min-w-0">
-                        <SelectValue placeholder="Filter language" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All languages</SelectItem>
-                        {availableLanguages.map((language) => (
-                          <SelectItem key={language} value={language}>
-                            {language}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {isFiltering ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {filteredTree.length > 0
-                        ? "Showing filtered repository results."
-                        : "No matching files or folders."}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setQuery("");
-                        setKindFilter("all");
-                        setLanguageFilter("all");
-                      }}
-                    >
-                      <X className="size-4" />
-                      Reset
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-              <div className="min-h-0 flex-1">
-                {filteredTree.length > 0 ? (
-                  <FileTree
-                    tree={filteredTree}
-                    selectedNodeId={selectedNode?.id}
-                    expandedNodeIds={effectiveExpandedNodeIds}
-                    onSelectNode={(node: RepositoryTreeNode) => {
-                      setSelectedNodeId(node.id);
-                    }}
-                    onExpandedChange={setExpandedNodeIds}
-                  />
-                ) : (
-                  <Empty className="m-4 min-h-[220px] border border-dashed border-sidebar-border bg-sidebar p-6">
-                    <EmptyHeader>
-                      <EmptyTitle>No matching files</EmptyTitle>
-                      <EmptyDescription>
-                        Adjust the search term or filters to find a file in this
-                        repository snapshot.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setQuery("");
-                          setKindFilter("all");
-                          setLanguageFilter("all");
-                        }}
-                      >
-                        Reset filters
-                      </Button>
-                    </EmptyContent>
-                  </Empty>
-                )}
-              </div>
+          <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-foreground">
+                Code explorer
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Browse retained source, semantic relationships, and project
+                analysis.
+              </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="justify-center gap-2 sm:justify-start"
+              onClick={() => setIsProjectSearchOpen(true)}
+            >
+              <Search className="size-4 text-muted-foreground" />
+              Search project
+              <span className="ml-1 text-xs text-muted-foreground">
+                ⌘K / Ctrl+K
+              </span>
+            </Button>
+          </div>
+          <ProjectMapSearchDialog
+            open={isProjectSearchOpen}
+            onOpenChange={setIsProjectSearchOpen}
+            projectId={project.id}
+            importId={mapSnapshot?.importId}
+            parseStatus={latestImport?.parseStatus}
+            onSelectFile={(item) => {
+              navigateToFile(item.path, null);
+            }}
+            onSelectSymbol={(item, range) => {
+              navigateToFile(
+                item.filePath,
+                range ?? null,
+                "relationships",
+                ["defines"],
+              );
+            }}
+            onSelectExport={(item, range) => {
+              navigateToFile(
+                item.filePath,
+                range,
+                "relationships",
+                ["exports"],
+              );
+            }}
+          />
+          <div className="grid h-[760px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <ProjectMapSidebar
+              query={query}
+              onQueryChange={setQuery}
+              kindFilter={kindFilter}
+              onKindFilterChange={setKindFilter}
+              languageFilter={languageFilter}
+              onLanguageFilterChange={setLanguageFilter}
+              availableKinds={availableKinds}
+              availableLanguages={availableLanguages}
+              isFiltering={isFiltering}
+              filteredTree={filteredTree}
+              selectedVisibleNodeId={selectedVisibleNode?.id}
+              expandedNodeIds={effectiveExpandedNodeIds}
+              onSelectNode={(node: RepositoryTreeNode) => {
+                setSelectedNodeId(node.id);
+              }}
+              onExpandedChange={setExpandedNodeIds}
+              onResetFilters={resetTreeFilters}
+            />
             <div className="grid min-h-0 grid-rows-[minmax(0,1.2fr)_minmax(0,0.95fr)] border-t border-border/70 lg:border-t-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:grid-rows-1">
               <div className="min-w-0 border-b border-border/70 xl:border-r xl:border-b-0">
                 <ProjectFileViewer
@@ -337,13 +424,25 @@ export function ProjectMapShell({
                 {selectedNode ? (
                   <DetailPanel
                     file={selectedNode}
-                    parseData={selectedFileNode ? selectedFileParseData : undefined}
+                    fileContent={selectedFileContent}
+                    parseData={
+                      selectedFileNode ? selectedFileParseData : undefined
+                    }
                     analysisSummary={projectAnalysisSummary}
-                    parseDataLoading={Boolean(selectedFileNode) && isSelectedFileParseDataLoading}
+                    parseDataLoading={
+                      Boolean(selectedFileNode) &&
+                      isSelectedFileParseDataLoading
+                    }
                     analysisLoading={isProjectAnalysisLoading}
                     activeTab={activeDetailTab}
                     onActiveTabChange={setActiveDetailTab}
-                    onSelectSymbol={(symbol) => {
+                    openRelationshipSections={openRelationshipSections}
+                    onOpenRelationshipSectionsChange={setOpenRelationshipSections}
+                    onNavigateToSymbol={(symbol) => {
+                      if (!selectedFileNode?.path) {
+                        return;
+                      }
+
                       if (
                         !symbol.startLine ||
                         !symbol.startCol ||
@@ -353,13 +452,75 @@ export function ProjectMapShell({
                         return;
                       }
 
-                      setActiveDetailTab("symbols");
-                      setSelectedEditorRange({
-                        startLineNumber: symbol.startLine,
-                        startColumn: symbol.startCol,
-                        endLineNumber: symbol.endLine,
-                        endColumn: symbol.endCol,
-                      });
+                      navigateToFile(
+                        selectedFileNode.path,
+                        {
+                          startLineNumber: symbol.startLine,
+                          startColumn: symbol.startCol,
+                          endLineNumber: symbol.endLine,
+                          endColumn: symbol.endCol,
+                        },
+                        "relationships",
+                        ["defines"],
+                      );
+                    }}
+                    onNavigateToImport={(item) => {
+                      if (!item.targetPathText) {
+                        return;
+                      }
+
+                      navigateToFile(
+                        item.targetPathText,
+                        null,
+                        "relationships",
+                        ["imports"],
+                      );
+                    }}
+                    onNavigateToIncomingImport={(item) => {
+                      navigateToFile(
+                        item.sourceFilePath,
+                        {
+                          startLineNumber: item.startLine,
+                          startColumn: item.startCol,
+                          endLineNumber: item.endLine,
+                          endColumn: item.endCol,
+                        },
+                        "relationships",
+                        ["imported-by"],
+                      );
+                    }}
+                    onNavigateToExport={(item) => {
+                      const linkedDeclarationRange =
+                        item.symbolStartLine &&
+                        item.symbolStartCol &&
+                        item.symbolEndLine &&
+                        item.symbolEndCol
+                          ? {
+                              startLineNumber: item.symbolStartLine,
+                              startColumn: item.symbolStartCol,
+                              endLineNumber: item.symbolEndLine,
+                              endColumn: item.symbolEndCol,
+                            }
+                          : null;
+
+                      if (!selectedFileNode?.path) {
+                        return;
+                      }
+
+                      navigateToFile(
+                        selectedFileNode.path,
+                        linkedDeclarationRange ?? {
+                          startLineNumber: item.startLine,
+                          startColumn: item.startCol,
+                          endLineNumber: item.endLine,
+                          endColumn: item.endCol,
+                        },
+                        "relationships",
+                        ["exports"],
+                      );
+                    }}
+                    onNavigateToFile={(path, tab, range) => {
+                      navigateToFile(path, range ?? null, tab);
                     }}
                   />
                 ) : (
@@ -367,20 +528,13 @@ export function ProjectMapShell({
                     <EmptyHeader>
                       <EmptyTitle>No file selected</EmptyTitle>
                       <EmptyDescription>
-                        No repository nodes match the current search or filter.
-                        Reset the filters or search for another file to inspect its
+                        No repository nodes match the current tree filter.
+                        Reset the filters or choose another file to inspect its
                         details.
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setQuery("");
-                          setKindFilter("all");
-                          setLanguageFilter("all");
-                        }}
-                      >
+                      <Button variant="outline" onClick={resetTreeFilters}>
                         Reset filters
                       </Button>
                     </EmptyContent>

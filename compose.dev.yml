@@ -35,7 +35,7 @@ services:
     container_name: codemap-worker-dev
     working_dir: /workspace/packages/api
     volumes: *codemap-volumes
-    command: sh -c "node --inspect=0.0.0.0:9230 --import tsx src/workers/index.ts"
+    command: sh -c "npx tsx watch --inspect=0.0.0.0:9230 --clear-screen=false src/workers/index.ts"
     env_file:
       - .env
     ports:

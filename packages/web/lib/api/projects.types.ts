@@ -163,12 +163,30 @@ export interface ProjectFileImportEdge {
   endCol: number;
 }
 
+export interface ProjectFileIncomingImportEdge {
+  id: string;
+  sourceFileId: string;
+  sourceFilePath: string;
+  moduleSpecifier: string;
+  importKind: string;
+  resolutionKind: string;
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
 export interface ProjectFileExport {
   id: string;
+  symbolId: string | null;
   exportName: string;
   exportKind: string;
   symbolDisplayName: string | null;
   sourceModuleSpecifier: string | null;
+  symbolStartLine: number | null;
+  symbolStartCol: number | null;
+  symbolEndLine: number | null;
+  symbolEndCol: number | null;
   startLine: number;
   startCol: number;
   endLine: number;
@@ -178,6 +196,7 @@ export interface ProjectFileExport {
 export interface ProjectFileParseData {
   file: ProjectParsedFileDetail;
   imports: ProjectFileImportEdge[];
+  importedBy: ProjectFileIncomingImportEdge[];
   exports: ProjectFileExport[];
   symbols: ProjectFileSymbol[];
 }
@@ -209,6 +228,87 @@ export interface ProjectAnalysisSummary {
     dependencies: number;
     symbols: number;
   };
+}
+
+export interface ProjectInsightFileEntry {
+  path: string;
+  language: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+}
+
+export interface ProjectInsightFolderEntry {
+  folder: string;
+  sourceFileCount: number;
+}
+
+export interface ProjectInsightEntryLikeFile extends ProjectInsightFileEntry {
+  score: number;
+  reason: string;
+}
+
+export interface ProjectInsightCycleCandidate {
+  paths: string[];
+  edgeCount: number;
+  kind: "direct" | "scc";
+  summary: string;
+}
+
+export interface ProjectMapInsightsResponse {
+  topFilesByImportCount: ProjectInsightFileEntry[];
+  topFilesByInboundDependencyCount: ProjectInsightFileEntry[];
+  topFoldersBySourceFileCount: ProjectInsightFolderEntry[];
+  orphanFiles: ProjectInsightFileEntry[];
+  entryLikeFiles: ProjectInsightEntryLikeFile[];
+  circularDependencyCandidates: ProjectInsightCycleCandidate[];
+  totals: {
+    files: number;
+    sourceFiles: number;
+    parsedFiles: number;
+    dependencies: number;
+    symbols: number;
+  };
+}
+
+export interface ProjectMapSearchFileResult {
+  kind: "file";
+  path: string;
+  language: string | null;
+}
+
+export interface ProjectMapSearchSymbolResult {
+  kind: "symbol";
+  id: string;
+  displayName: string;
+  symbolKind: string;
+  filePath: string;
+  parentSymbolName: string | null;
+  startLine: number | null;
+  startCol: number | null;
+  endLine: number | null;
+  endCol: number | null;
+}
+
+export interface ProjectMapSearchExportResult {
+  kind: "export";
+  id: string;
+  exportName: string;
+  filePath: string;
+  symbolId: string | null;
+  symbolStartLine: number | null;
+  symbolStartCol: number | null;
+  symbolEndLine: number | null;
+  symbolEndCol: number | null;
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+export interface ProjectMapSearchResponse {
+  files: ProjectMapSearchFileResult[];
+  symbols: ProjectMapSearchSymbolResult[];
+  exports: ProjectMapSearchExportResult[];
 }
 
 export interface CreateProjectInput {

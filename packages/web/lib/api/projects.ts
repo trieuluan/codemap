@@ -10,10 +10,12 @@ import type {
   Project,
   ProjectFileContent,
   ProjectFileParseData,
+  ProjectMapInsightsResponse,
   ProjectImport,
   ProjectListInclude,
   ProjectListItem,
   ProjectMapSnapshot,
+  ProjectMapSearchResponse,
   UpdateProjectInput,
   TriggerProjectImportInput,
 } from "./projects.types";
@@ -83,6 +85,27 @@ export function createServerProjectsApi(
         `/projects/${projectId}/map/analysis`,
         {
           cookieHeader: defaults.cookieHeader,
+        },
+      );
+    },
+
+    getProjectInsights: async (projectId: string) => {
+      return requestApi<ProjectMapInsightsResponse>(
+        `/projects/${projectId}/map/insights`,
+        {
+          cookieHeader: defaults.cookieHeader,
+        },
+      );
+    },
+
+    searchProjectMap: async (projectId: string, query: string) => {
+      return requestApi<ProjectMapSearchResponse>(
+        `/projects/${projectId}/map/search`,
+        {
+          cookieHeader: defaults.cookieHeader,
+          queryParams: {
+            q: query,
+          },
         },
       );
     },

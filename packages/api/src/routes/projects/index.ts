@@ -10,7 +10,9 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);
   fastify.get("/:projectId/map/files/parse", controller.getProjectFileParseData);
   fastify.get("/:projectId/map/files/raw", controller.getProjectRawFile);
+  fastify.get("/:projectId/map/search", controller.searchProjectMap);
   fastify.get("/:projectId/map/analysis", controller.getProjectAnalysis);
+  fastify.get("/:projectId/map/insights", controller.getProjectInsights);
   fastify.get("/:projectId/map", controller.getProjectMap);
   fastify.patch("/:projectId", controller.updateProject);
   fastify.delete("/:projectId", controller.deleteProject);

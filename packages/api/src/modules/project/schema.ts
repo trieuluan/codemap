@@ -36,6 +36,10 @@ export const projectFileContentQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000),
 });
 
+export const projectMapSearchQuerySchema = z.object({
+  q: z.string().trim().min(0).max(200),
+});
+
 function parseIncludeQueryValue(value: unknown) {
   if (Array.isArray(value)) {
     return value
@@ -106,3 +110,4 @@ export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySche
 export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type ProjectFileContentQuery = z.infer<typeof projectFileContentQuerySchema>;
+export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;

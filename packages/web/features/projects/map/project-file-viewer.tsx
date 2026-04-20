@@ -246,7 +246,6 @@ function TextFileViewer({
 
   useEffect(() => {
     const editor = editorRef.current;
-
     if (!editor || !selectedRange) {
       return;
     }
@@ -260,7 +259,7 @@ function TextFileViewer({
         {
           range: selectedRange,
           options: {
-            inlineClassName: "bg-primary/10",
+            inlineClassName: "bg-primary-foreground/10",
             className: "ring-1 ring-primary/30",
           },
         },

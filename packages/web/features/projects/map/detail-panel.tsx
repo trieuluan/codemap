@@ -1,9 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
+  ArrowRight,
+  ArrowUpRight,
   BarChart3,
   Binary,
   Boxes,
+  ExternalLink,
   FileCode2,
   FolderTree,
   GitBranch,
@@ -14,6 +18,12 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -23,6 +33,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getFileKind } from "@/lib/file-types";
 import type {
   ProjectAnalysisSummary,
+  ProjectFileContent,
+  ProjectFileExport,
+  ProjectFileIncomingImportEdge,
+  ProjectFileImportEdge,
   ProjectFileParseData,
   ProjectFileSymbol,
 } from "@/lib/api/projects";
@@ -32,13 +46,29 @@ import { getRepositoryNodeChildCount } from "./file-tree-model";
 
 interface DetailPanelProps {
   file: RepositoryTreeNode;
+  fileContent?: ProjectFileContent;
   parseData?: ProjectFileParseData;
   analysisSummary?: ProjectAnalysisSummary;
   parseDataLoading?: boolean;
   analysisLoading?: boolean;
   activeTab: string;
   onActiveTabChange: (value: string) => void;
-  onSelectSymbol: (symbol: ProjectFileSymbol) => void;
+  openRelationshipSections: string[];
+  onOpenRelationshipSectionsChange: (value: string[]) => void;
+  onNavigateToSymbol: (symbol: ProjectFileSymbol) => void;
+  onNavigateToImport: (item: ProjectFileImportEdge) => void;
+  onNavigateToIncomingImport: (item: ProjectFileIncomingImportEdge) => void;
+  onNavigateToExport: (item: ProjectFileExport) => void;
+  onNavigateToFile: (
+    path: string,
+    tab?: string,
+    range?: {
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+    },
+  ) => void;
 }
 
 function getDisplayExtension(file: RepositoryTreeNode) {
@@ -54,8 +84,8 @@ function getDisplayExtension(file: RepositoryTreeNode) {
 }
 
 function formatFileSize(sizeBytes?: number | null) {
-  if (!sizeBytes) {
-    return "Unavailable";
+  if (sizeBytes == null) {
+    return "—";
   }
 
   if (sizeBytes < 1024) {
@@ -71,10 +101,60 @@ function formatFileSize(sizeBytes?: number | null) {
 
 function formatParseStatusLabel(value?: string | null) {
   if (!value) {
-    return "Unavailable";
+    return "—";
   }
 
   return value.replace(/_/g, " ");
+}
+
+function getLineCountFallback(
+  lineCount?: number | null,
+  content?: string | null,
+) {
+  if (lineCount != null) {
+    return String(lineCount);
+  }
+
+  if (typeof content === "string") {
+    return String(content.split(/\r?\n/).length);
+  }
+
+  return "—";
+}
+
+function getMimeTypeFallback(
+  mimeType?: string | null,
+  extension?: string | null,
+) {
+  if (mimeType) {
+    return mimeType;
+  }
+
+  switch (extension?.toLowerCase()) {
+    case ".yaml":
+    case ".yml":
+      return "application/yaml";
+    case ".json":
+      return "application/json";
+    case ".md":
+      return "text/markdown";
+    case ".toml":
+      return "application/toml";
+    case ".ico":
+      return "image/x-icon";
+    case ".env":
+    case ".txt":
+    case ".conf":
+    case ".ini":
+    case ".lock":
+      return "text/plain";
+    case ".xml":
+      return "application/xml";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "—";
+  }
 }
 
 function getResolutionKindLabel(value: string) {
@@ -124,6 +204,177 @@ function renderBar(value: number, maxValue: number) {
   );
 }
 
+function isInternalImport(item: ProjectFileImportEdge) {
+  return (
+    (item.resolutionKind === "relative_path" ||
+      item.resolutionKind === "tsconfig_alias") &&
+    Boolean(item.targetPathText)
+  );
+}
+
+function hasLinkedExportDeclaration(item: ProjectFileExport) {
+  return Boolean(
+    item.symbolId &&
+      item.symbolStartLine &&
+      item.symbolStartCol &&
+      item.symbolEndLine &&
+      item.symbolEndCol,
+  );
+}
+
+function ClickHintIcon() {
+  return <ArrowUpRight className="size-3.5 text-muted-foreground" />;
+}
+
+function getNpmPackageName(moduleSpecifier: string) {
+  if (!moduleSpecifier) {
+    return null;
+  }
+
+  if (moduleSpecifier.startsWith("@")) {
+    const [scope, name] = moduleSpecifier.split("/");
+
+    if (!scope || !name) {
+      return moduleSpecifier;
+    }
+
+    return `${scope}/${name}`;
+  }
+
+  const [name] = moduleSpecifier.split("/");
+  return name || null;
+}
+
+interface RelationshipListItem {
+  id: string;
+  title: string;
+  titleBadge: string;
+  resolutionLabel?: string;
+  resolutionClassName?: string;
+  targetLabel?: string;
+  targetValue?: string | null;
+  location: string;
+  detailLabel?: string;
+  detailValue?: string | null;
+  canNavigate?: boolean;
+  onNavigate?: () => void;
+  actionIcon?: ReactNode;
+  actionHref?: string | null;
+  actionLabel?: string;
+}
+
+function ClickableCard({
+  children,
+  onClick,
+  disabled = false,
+  className,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  if (disabled || !onClick) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/20",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-lg border border-border/70 bg-background/70 p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RelationshipList({
+  items,
+}: {
+  items: RelationshipListItem[];
+}) {
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <ClickableCard
+          key={item.id}
+          onClick={item.canNavigate ? item.onNavigate : undefined}
+          disabled={!item.canNavigate}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <GitBranch className="size-4 text-muted-foreground" />
+            <p className="break-all font-medium text-foreground">{item.title}</p>
+            <Badge variant="secondary" className="capitalize">
+              {item.titleBadge}
+            </Badge>
+            {item.resolutionLabel ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "border font-semibold shadow-sm",
+                  item.resolutionClassName,
+                )}
+              >
+                {item.resolutionLabel}
+              </Badge>
+            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+              {item.actionHref ? (
+                <a
+                  href={item.actionHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                  }}
+                  aria-label={item.actionLabel}
+                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {item.actionIcon}
+                </a>
+              ) : item.actionIcon ? (
+                <span
+                  aria-hidden="true"
+                  className="inline-flex size-7 items-center justify-center text-muted-foreground"
+                >
+                  {item.actionIcon}
+                </span>
+              ) : null}
+              {item.canNavigate ? <ClickHintIcon /> : null}
+            </div>
+          </div>
+          <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+            {item.targetLabel && item.targetValue ? (
+              <p>
+                {item.targetLabel}: {item.targetValue}
+              </p>
+            ) : null}
+            {item.detailLabel && item.detailValue ? (
+              <p>
+                {item.detailLabel}: {item.detailValue}
+              </p>
+            ) : null}
+            <p>Location: {item.location}</p>
+          </div>
+        </ClickableCard>
+      ))}
+    </div>
+  );
+}
+
 function EmptyTabState({
   title,
   description,
@@ -143,13 +394,20 @@ function EmptyTabState({
 
 export function DetailPanel({
   file,
+  fileContent,
   parseData,
   analysisSummary,
   parseDataLoading = false,
   analysisLoading = false,
   activeTab,
   onActiveTabChange,
-  onSelectSymbol,
+  openRelationshipSections,
+  onOpenRelationshipSectionsChange,
+  onNavigateToSymbol,
+  onNavigateToImport,
+  onNavigateToIncomingImport,
+  onNavigateToExport,
+  onNavigateToFile,
 }: DetailPanelProps) {
   const fileKind = getFileKind({
     name: file.name,
@@ -164,6 +422,21 @@ export function DetailPanel({
   const maxLanguageCount = Math.max(
     ...(analysisSummary?.sourceFileDistribution.map((item) => item.fileCount) ?? [0]),
   );
+  const detailLanguage =
+    parseData?.file.language || fileContent?.language || file.language || "Unknown language";
+  const detailSize = formatFileSize(
+    parseData?.file.sizeBytes ?? fileContent?.sizeBytes ?? file.size,
+  );
+  const detailLineCount = getLineCountFallback(
+    parseData?.file.lineCount,
+    fileContent?.content,
+  );
+  const detailMimeType = getMimeTypeFallback(
+    parseData?.file.mimeType ?? fileContent?.mimeType,
+    parseData?.file.extension ?? file.extension,
+  );
+  const relationshipTabValue =
+    activeTab === "analysis" ? "analysis" : activeTab === "details" ? "details" : "relationships";
 
   return (
     <div className="flex h-full flex-col">
@@ -175,27 +448,25 @@ export function DetailPanel({
           <div className="min-w-0">
             <p className="truncate font-semibold text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">
-              {fileExtension} • {file.language || parseData?.file.language || "Unknown language"}{" "}
+              {fileExtension} • {detailLanguage}{" "}
               •{" "}
               {file.type === "folder"
                 ? `${childCount} item${childCount === 1 ? "" : "s"}`
-                : formatFileSize(parseData?.file.sizeBytes ?? file.size)}
+                : detailSize}
             </p>
           </div>
         </div>
       </div>
 
       <Tabs
-        value={activeTab}
+        value={relationshipTabValue}
         onValueChange={onActiveTabChange}
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="border-b border-border/70 px-4 py-3">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="symbols">Symbols</TabsTrigger>
-            <TabsTrigger value="imports">Imports</TabsTrigger>
-            <TabsTrigger value="exports">Exports</TabsTrigger>
+            <TabsTrigger value="relationships">Relationships</TabsTrigger>
             <TabsTrigger value="analysis">Analysis</TabsTrigger>
           </TabsList>
         </div>
@@ -217,9 +488,7 @@ export function DetailPanel({
                   <Badge variant="secondary" className="capitalize">
                     {fileKind}
                   </Badge>
-                  <Badge variant="secondary">
-                    {parseData?.file.language || file.language || "Unknown language"}
-                  </Badge>
+                  <Badge variant="secondary">{detailLanguage}</Badge>
                   {parseData ? (
                     <Badge variant="outline" className="capitalize">
                       {formatParseStatusLabel(parseData.file.parseStatus)}
@@ -253,15 +522,15 @@ export function DetailPanel({
                     <>
                       <p>
                         <span className="text-muted-foreground">Size:</span>{" "}
-                        {formatFileSize(parseData?.file.sizeBytes ?? file.size)}
+                        {detailSize}
                       </p>
                       <p>
                         <span className="text-muted-foreground">Line count:</span>{" "}
-                        {parseData?.file.lineCount ?? "Unavailable"}
+                        {detailLineCount}
                       </p>
                       <p>
                         <span className="text-muted-foreground">MIME type:</span>{" "}
-                        {parseData?.file.mimeType ?? "Unavailable"}
+                        {detailMimeType}
                       </p>
                       <p>
                         <span className="text-muted-foreground">Import parse:</span>{" "}
@@ -290,184 +559,311 @@ export function DetailPanel({
             </div>
           </TabsContent>
 
-          <TabsContent value="symbols" className="mt-0">
-            {file.type !== "file" ? (
-              <EmptyTabState
-                title="Outline is available for files"
-                description="Select a source file to inspect symbols and jump within the viewer."
-              />
-            ) : parseDataLoading ? (
-              <EmptyTabState
-                title="Loading symbols"
-                description="Semantic symbol data for this file is still being fetched."
-              />
-            ) : !parseData ? (
-              <EmptyTabState
-                title="No parse data yet"
-                description="Semantic analysis has not produced file symbols for this selection yet."
-              />
-            ) : parseData.symbols.length === 0 ? (
-              <EmptyTabState
-                title="No symbols found"
-                description="This file does not currently expose functions, classes, interfaces, or other symbol definitions."
-              />
-            ) : (
-              <div className="space-y-2">
-                {parseData.symbols.map((symbol) => (
-                  <button
-                    key={symbol.id}
-                    type="button"
-                    onClick={() => onSelectSymbol(symbol)}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-left transition-colors hover:bg-accent/40"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-foreground">
-                          {symbol.displayName}
-                        </span>
-                        <Badge variant="secondary" className="capitalize">
-                          {symbol.kind.replace(/_/g, " ")}
-                        </Badge>
-                        {symbol.isExported ? (
-                          <Badge variant="outline">Exported</Badge>
-                        ) : null}
-                      </div>
-                      {symbol.signature ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {symbol.signature}
-                        </p>
-                      ) : null}
-                      {symbol.parentSymbolName ? (
-                        <p className="text-xs text-muted-foreground">
-                          In {symbol.parentSymbolName}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {symbol.startLine ? `L${symbol.startLine}` : "No range"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="imports" className="mt-0">
-            {file.type !== "file" ? (
-              <EmptyTabState
-                title="Imports are file-specific"
-                description="Select a file to inspect its resolved and unresolved imports."
-              />
-            ) : parseDataLoading ? (
-              <EmptyTabState
-                title="Loading imports"
-                description="Semantic import edges for this file are still being fetched."
-              />
-            ) : !parseData ? (
-              <EmptyTabState
-                title="No parse data yet"
-                description="Semantic analysis has not produced import information for this file yet."
-              />
-            ) : parseData.imports.length === 0 ? (
-              <EmptyTabState
-                title="No imports found"
-                description="This file does not currently declare import edges in the semantic index."
-              />
-            ) : (
-              <div className="space-y-2">
-                {parseData.imports.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border border-border/70 bg-background/70 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <GitBranch className="size-4 text-muted-foreground" />
-                      <p className="break-all font-medium text-foreground">
-                        {item.moduleSpecifier}
-                      </p>
-                      <Badge variant="secondary" className="capitalize">
-                        {item.importKind.replace(/_/g, " ")}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "border font-semibold shadow-sm",
-                          getResolutionKindBadgeClassName(item.resolutionKind),
-                        )}
-                      >
-                        {getResolutionKindLabel(item.resolutionKind)}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      <p>
-                        Resolution kind: {getResolutionKindLabel(item.resolutionKind)}
-                      </p>
-                      <p>
-                        Target:{" "}
-                        {item.targetPathText ??
+          <TabsContent value="relationships" className="mt-0">
+            <Accordion
+              type="multiple"
+              value={openRelationshipSections}
+              onValueChange={onOpenRelationshipSectionsChange}
+              className="space-y-3"
+            >
+              <AccordionItem
+                value="imports"
+                className="rounded-lg border border-border/70 bg-background/70 px-4"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="font-medium text-foreground">Imports</span>
+                    <Badge variant="secondary">
+                      {parseData?.imports.length ?? 0}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {file.type !== "file" ? (
+                    <EmptyTabState
+                      title="Imports are file-specific"
+                      description="Select a file to inspect its resolved and unresolved imports."
+                    />
+                  ) : parseDataLoading ? (
+                    <EmptyTabState
+                      title="Loading imports"
+                      description="Semantic import edges for this file are still being fetched."
+                    />
+                  ) : !parseData ? (
+                    <EmptyTabState
+                      title="No parse data yet"
+                      description="Semantic analysis has not produced import information for this file yet."
+                    />
+                  ) : parseData.imports.length === 0 ? (
+                    <EmptyTabState
+                      title="No imports found"
+                      description="This file does not currently declare import edges in the semantic index."
+                    />
+                  ) : (
+                    <RelationshipList
+                      items={parseData.imports.map((item) => ({
+                        id: item.id,
+                        title: item.moduleSpecifier,
+                        titleBadge: item.importKind.replace(/_/g, " "),
+                        resolutionLabel: getResolutionKindLabel(
+                          item.resolutionKind,
+                        ),
+                        resolutionClassName: getResolutionKindBadgeClassName(
+                          item.resolutionKind,
+                        ),
+                        targetLabel: "Target",
+                        targetValue:
+                          item.targetPathText ??
                           item.targetExternalSymbolKey ??
-                          "Unknown target"}
-                      </p>
-                      <p>
-                        Location: L{item.startLine}:{item.startCol}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+                          "Unknown target",
+                        detailLabel: "Resolution",
+                        detailValue: getResolutionKindLabel(item.resolutionKind),
+                        location: `L${item.startLine}:${item.startCol}`,
+                        canNavigate: isInternalImport(item),
+                        onNavigate: () => onNavigateToImport(item),
+                        actionIcon: isInternalImport(item) ? (
+                          <ArrowRight className="size-4" />
+                        ) : item.resolutionKind === "package" ? (
+                          <ExternalLink className="size-4" />
+                        ) : undefined,
+                        actionHref:
+                          item.resolutionKind === "package" &&
+                          getNpmPackageName(item.moduleSpecifier)
+                            ? `https://www.npmjs.com/package/${getNpmPackageName(item.moduleSpecifier)}`
+                            : null,
+                        actionLabel:
+                          item.resolutionKind === "package"
+                            ? "Open package on npm"
+                            : undefined,
+                      }))}
+                    />
+                  )}
+                </AccordionContent>
+              </AccordionItem>
 
-          <TabsContent value="exports" className="mt-0">
-            {file.type !== "file" ? (
-              <EmptyTabState
-                title="Exports are file-specific"
-                description="Select a file to inspect its export surface."
-              />
-            ) : parseDataLoading ? (
-              <EmptyTabState
-                title="Loading exports"
-                description="Semantic export data for this file is still being fetched."
-              />
-            ) : !parseData ? (
-              <EmptyTabState
-                title="No parse data yet"
-                description="Semantic analysis has not produced export information for this file yet."
-              />
-            ) : parseData.exports.length === 0 ? (
-              <EmptyTabState
-                title="No exports found"
-                description="This file does not currently expose named, default, wildcard, or re-exports."
-              />
-            ) : (
-              <div className="space-y-2">
-                {parseData.exports.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border border-border/70 bg-background/70 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Binary className="size-4 text-muted-foreground" />
-                      <p className="font-medium text-foreground">
-                        {item.exportName}
-                      </p>
-                      <Badge variant="secondary" className="capitalize">
-                        {item.exportKind.replace(/_/g, " ")}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      <p>Symbol: {item.symbolDisplayName ?? "Not linked"}</p>
-                      <p>
-                        Source module: {item.sourceModuleSpecifier ?? "Local export"}
-                      </p>
-                      <p>
-                        Location: L{item.startLine}:{item.startCol}
-                      </p>
-                    </div>
+              <AccordionItem
+                value="imported-by"
+                className="rounded-lg border border-border/70 bg-background/70 px-4"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="font-medium text-foreground">
+                      Imported by
+                    </span>
+                    <Badge variant="secondary">
+                      {parseData?.importedBy.length ?? 0}
+                    </Badge>
                   </div>
-                ))}
-              </div>
-            )}
+                </AccordionTrigger>
+                <AccordionContent>
+                  {file.type !== "file" ? (
+                    <EmptyTabState
+                      title="Incoming imports are file-specific"
+                      description="Select a file to inspect which other internal files depend on it."
+                    />
+                  ) : parseDataLoading ? (
+                    <EmptyTabState
+                      title="Loading incoming imports"
+                      description="Semantic dependency edges pointing to this file are still being fetched."
+                    />
+                  ) : !parseData ? (
+                    <EmptyTabState
+                      title="No parse data yet"
+                      description="Semantic analysis has not produced incoming dependency information for this file yet."
+                    />
+                  ) : parseData.importedBy.length === 0 ? (
+                    <EmptyTabState
+                      title="No internal files import this file yet"
+                      description="The current semantic index does not show any internal repo files depending on this file."
+                    />
+                  ) : (
+                    <RelationshipList
+                      items={parseData.importedBy.map((item) => ({
+                        id: item.id,
+                        title: item.sourceFilePath,
+                        titleBadge: item.importKind.replace(/_/g, " "),
+                        resolutionLabel: getResolutionKindLabel(
+                          item.resolutionKind,
+                        ),
+                        resolutionClassName: getResolutionKindBadgeClassName(
+                          item.resolutionKind,
+                        ),
+                        openLabel: "Open source file",
+                        openPath: item.sourceFilePath,
+                        targetLabel: "Module specifier",
+                        targetValue: item.moduleSpecifier,
+                        detailLabel: "Imported from",
+                        detailValue: item.sourceFilePath,
+                        location: `L${item.startLine}:${item.startCol}`,
+                        canNavigate: true,
+                        onNavigate: () => onNavigateToIncomingImport(item),
+                      }))}
+                    />
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="defines"
+                className="rounded-lg border border-border/70 bg-background/70 px-4"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="font-medium text-foreground">
+                      Defines symbols
+                    </span>
+                    <Badge variant="secondary">
+                      {parseData?.symbols.length ?? 0}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {file.type !== "file" ? (
+                    <EmptyTabState
+                      title="Outline is available for files"
+                      description="Select a source file to inspect symbols and jump within the viewer."
+                    />
+                  ) : parseDataLoading ? (
+                    <EmptyTabState
+                      title="Loading symbols"
+                      description="Semantic symbol data for this file is still being fetched."
+                    />
+                  ) : !parseData ? (
+                    <EmptyTabState
+                      title="No parse data yet"
+                      description="Semantic analysis has not produced file symbols for this selection yet."
+                    />
+                  ) : parseData.symbols.length === 0 ? (
+                    <EmptyTabState
+                      title="No symbols found"
+                      description="This file does not currently expose functions, classes, interfaces, or other symbol definitions."
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {parseData.symbols.map((symbol) => (
+                        <button
+                          key={symbol.id}
+                          type="button"
+                          onClick={() => onNavigateToSymbol(symbol)}
+                          className="flex w-full items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-foreground">
+                                {symbol.displayName}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="capitalize"
+                              >
+                                {symbol.kind.replace(/_/g, " ")}
+                              </Badge>
+                              {symbol.isExported ? (
+                                <Badge variant="outline">Exported</Badge>
+                              ) : null}
+                            </div>
+                            {symbol.signature ? (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {symbol.signature}
+                              </p>
+                            ) : null}
+                            {symbol.parentSymbolName ? (
+                              <p className="text-xs text-muted-foreground">
+                                In {symbol.parentSymbolName}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                            {symbol.startLine
+                              ? `L${symbol.startLine}`
+                              : "No range"}
+                            <ClickHintIcon />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="exports"
+                className="rounded-lg border border-border/70 bg-background/70 px-4"
+              >
+                <AccordionTrigger className="hover:no-underline">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="font-medium text-foreground">Exports</span>
+                    <Badge variant="secondary">
+                      {parseData?.exports.length ?? 0}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {file.type !== "file" ? (
+                    <EmptyTabState
+                      title="Exports are file-specific"
+                      description="Select a file to inspect its export surface."
+                    />
+                  ) : parseDataLoading ? (
+                    <EmptyTabState
+                      title="Loading exports"
+                      description="Semantic export data for this file is still being fetched."
+                    />
+                  ) : !parseData ? (
+                    <EmptyTabState
+                      title="No parse data yet"
+                      description="Semantic analysis has not produced export information for this file yet."
+                    />
+                  ) : parseData.exports.length === 0 ? (
+                    <EmptyTabState
+                      title="No exports found"
+                      description="This file does not currently expose named, default, wildcard, or re-exports."
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {parseData.exports.map((item) => (
+                        <ClickableCard
+                          key={item.id}
+                          onClick={() => onNavigateToExport(item)}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Binary className="size-4 text-muted-foreground" />
+                            <p className="font-medium text-foreground">
+                              {item.exportName}
+                            </p>
+                            <Badge variant="secondary" className="capitalize">
+                              {item.exportKind.replace(/_/g, " ")}
+                            </Badge>
+                            <Badge variant="outline">
+                              {hasLinkedExportDeclaration(item)
+                                ? "Declaration linked"
+                                : "Export line only"}
+                            </Badge>
+                            <ClickHintIcon />
+                          </div>
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            <p>Symbol: {item.symbolDisplayName ?? "Not linked"}</p>
+                            <p>
+                              Source module:{" "}
+                              {item.sourceModuleSpecifier ?? "Local export"}
+                            </p>
+                            {hasLinkedExportDeclaration(item) ? (
+                              <p className="text-foreground">Jump: declaration</p>
+                            ) : (
+                              <p>Jump: export statement</p>
+                            )}
+                            <p>
+                              Location: L{item.startLine}:{item.startCol}
+                            </p>
+                          </div>
+                        </ClickableCard>
+                      ))}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+            </Accordion>
           </TabsContent>
 
           <TabsContent value="analysis" className="mt-0 space-y-4">
@@ -549,14 +945,23 @@ export function DetailPanel({
                   ) : (
                     <div className="space-y-3">
                       {analysisSummary.topFilesByDependencies.map((item) => (
-                        <div key={item.path} className="space-y-1">
-                          <p className="truncate font-mono text-xs text-foreground">
-                            {item.path}
-                          </p>
+                        <ClickableCard
+                          key={item.path}
+                          onClick={() =>
+                            onNavigateToFile(item.path, "details")
+                          }
+                          className="space-y-1"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="truncate font-mono text-xs text-foreground">
+                              {item.path}
+                            </p>
+                            <ClickHintIcon />
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             Outgoing {item.outgoingCount} • Incoming {item.incomingCount}
                           </p>
-                        </div>
+                        </ClickableCard>
                       ))}
                     </div>
                   )}

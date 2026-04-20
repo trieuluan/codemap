@@ -11,36 +11,26 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { ProjectMapInsightsView } from "@/features/projects/map/project-map-insights-view";
 import { ProjectMapNav } from "@/features/projects/map/project-map-nav";
-import { ProjectMapShell } from "@/features/projects/map/project-map-shell";
 import { ProjectStatusBadge } from "@/features/projects/shared/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/lib/api/projects";
 
-export default async function ProjectMapPage({
+export default async function ProjectMapInsightsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ path?: string }>;
 }) {
   const { projectId } = await params;
-  const { path } = await searchParams;
   const api = createServerProjectsApi({
     cookieHeader: (await cookies()).toString(),
   });
 
   try {
-    const [project, imports, mapSnapshot] = await Promise.all([
+    const [project, imports, insights] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImports(projectId),
-      api.getProjectMap(projectId).catch((error) => {
-        console.log("Error fetching project map:", error);
-        if (error instanceof ProjectsApiError && error.statusCode === 404) {
-          return null;
-        }
-
-        throw error;
-      }),
+      api.getProjectInsights(projectId),
     ]);
 
     return (
@@ -61,7 +51,7 @@ export default async function ProjectMapPage({
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Mapping</BreadcrumbPage>
+                <BreadcrumbPage>Insights</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -70,15 +60,15 @@ export default async function ProjectMapPage({
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-3xl font-semibold tracking-tight">
-                  {project.name} mapping
+                  {project.name} insights
                 </h1>
                 <ProjectStatusBadge status={project.status} />
               </div>
               <p className="text-muted-foreground">
-                Explore the project structure, dependency surface, and likely
-                entry points.
+                Review dependency and structure insights before investing in graph
+                visualizations.
               </p>
-              <ProjectMapNav projectId={project.id} active="mapping" />
+              <ProjectMapNav projectId={project.id} active="insights" />
             </div>
 
             <Button variant="outline" asChild>
@@ -90,11 +80,10 @@ export default async function ProjectMapPage({
           </div>
         </div>
 
-        <ProjectMapShell
+        <ProjectMapInsightsView
           project={project}
           imports={imports}
-          mapSnapshot={mapSnapshot}
-          initialSelectedFilePath={path}
+          insights={insights}
         />
       </div>
     );

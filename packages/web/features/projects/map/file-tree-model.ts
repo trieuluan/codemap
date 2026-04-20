@@ -16,6 +16,14 @@ export function mapProjectTreeToRepositoryNode(
   node: ProjectMapTreeNode,
 ): RepositoryTreeNode {
   const isFolder = node.type === "directory";
+  const children = isFolder ? (node.children ?? []) : undefined;
+  const uniqueChildren = children
+    ? [
+        ...new Map(
+          children.map((child) => [child.path || child.name, child]),
+        ).values(),
+      ]
+    : undefined;
 
   return {
     id: node.path || node.name,
@@ -24,9 +32,7 @@ export function mapProjectTreeToRepositoryNode(
     type: isFolder ? "folder" : "file",
     extension: node.extension ?? null,
     language: isFolder ? undefined : getLanguageByExtension(node.extension),
-    children: isFolder
-      ? (node.children?.map(mapProjectTreeToRepositoryNode) ?? [])
-      : undefined,
+    children: uniqueChildren?.map(mapProjectTreeToRepositoryNode),
   };
 }
 
@@ -71,6 +77,17 @@ export function findRepositoryNodeById(
   }
 
   return null;
+}
+
+export function findRepositoryNodeByPath(
+  nodes: RepositoryTreeNode[],
+  nodePath?: string | null,
+) {
+  if (!nodePath) {
+    return null;
+  }
+
+  return findRepositoryNodeById(nodes, nodePath);
 }
 
 export function getFirstSelectableRepositoryNode(
@@ -122,6 +139,17 @@ export function getAncestorNodeIds(
   walk(nodes, []);
 
   return ancestors;
+}
+
+export function getAncestorNodeIdsByPath(
+  nodes: RepositoryTreeNode[],
+  nodePath?: string | null,
+) {
+  if (!nodePath) {
+    return [];
+  }
+
+  return getAncestorNodeIds(nodes, nodePath);
 }
 
 export function collectFolderNodeIds(nodes: RepositoryTreeNode[]) {

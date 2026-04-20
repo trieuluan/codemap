@@ -5,6 +5,8 @@ import { parseWorkspaceFileSemantics } from "../../../src/modules/project-import
 test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, and exports", () => {
   const semantics = parseWorkspaceFileSemantics({
     projectImportId: "import-1",
+    workspacePath: "/tmp",
+    resolverConfigs: [],
     filePathSet: new Set(["src/utils.ts"]),
     file: {
       path: "src/index.ts",
@@ -47,6 +49,8 @@ test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, an
 test("parseWorkspaceFileSemantics extracts Dart imports and declarations", () => {
   const semantics = parseWorkspaceFileSemantics({
     projectImportId: "import-1",
+    workspacePath: "/tmp",
+    resolverConfigs: [],
     filePathSet: new Set(["lib/src/models.dart"]),
     file: {
       path: "lib/main.dart",
@@ -87,6 +91,8 @@ test("parseWorkspaceFileSemantics extracts Dart imports and declarations", () =>
 test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and symbols", () => {
   const semantics = parseWorkspaceFileSemantics({
     projectImportId: "import-1",
+    workspacePath: "/tmp",
+    resolverConfigs: [],
     filePathSet: new Set(),
     file: {
       path: "src/Service.php",
@@ -123,4 +129,66 @@ test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and s
   assert.equal(semantics.symbols.length, 2);
   assert.equal(semantics.symbols[0]?.kind, "namespace");
   assert.equal(semantics.symbols[1]?.displayName, "ExampleService");
+});
+
+test("parseWorkspaceFileSemantics resolves tsconfig path aliases for internal imports", () => {
+  const semantics = parseWorkspaceFileSemantics({
+    projectImportId: "import-1",
+    workspacePath: "/tmp/repo",
+    resolverConfigs: [
+      {
+        configPath: "/tmp/repo/packages/web/tsconfig.json",
+        configDirPath: "/tmp/repo/packages/web",
+        configDirRelativePath: "packages/web",
+        baseUrlPath: "/tmp/repo/packages/web",
+        pathAliases: [
+          {
+            pattern: "@/*",
+            hasWildcard: true,
+            prefix: "@/",
+            suffix: "",
+            targets: ["./*"],
+          },
+        ],
+      },
+    ],
+    filePathSet: new Set([
+      "packages/web/hooks/useAuth.ts",
+      "packages/web/app/page.tsx",
+    ]),
+    file: {
+      path: "packages/web/app/page.tsx",
+      absolutePath: "/tmp/repo/packages/web/app/page.tsx",
+      dirPath: "packages/web/app",
+      baseName: "page.tsx",
+      extension: "tsx",
+      language: "TypeScript",
+      mimeType: "text/plain",
+      sizeBytes: 120,
+      contentSha256: "abc",
+      isText: true,
+      isBinary: false,
+      isGenerated: false,
+      isIgnored: false,
+      ignoreReason: null,
+      isParseable: true,
+      parseStatus: "parsed",
+      parserName: "codemap-regex-parser",
+      parserVersion: "0.1.0",
+      lineCount: 2,
+      content: [
+        "import { useAuth } from '@/hooks/useAuth';",
+        "export function Page() {}",
+      ].join("\n"),
+    },
+  });
+
+  assert.equal(semantics.imports.length, 1);
+  assert.equal(semantics.imports[0]?.resolutionKind, "tsconfig_alias");
+  assert.equal(
+    semantics.imports[0]?.targetPathText,
+    "packages/web/hooks/useAuth.ts",
+  );
+  assert.equal(semantics.imports[0]?.targetExternalSymbolKey, null);
+  assert.equal(semantics.externalSymbols.length, 0);
 });

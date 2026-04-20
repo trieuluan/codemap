@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
 import {
   projectImport,
   repoExport,
@@ -182,6 +182,156 @@ export interface ProjectAnalysisSummary {
     dependencies: number;
     symbols: number;
   };
+}
+
+export interface ProjectInsightsFileEntry {
+  path: string;
+  language: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+}
+
+export interface ProjectInsightsFolderEntry {
+  folder: string;
+  sourceFileCount: number;
+}
+
+export interface ProjectInsightsEntryLikeFile {
+  path: string;
+  language: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+  score: number;
+  reason: string;
+}
+
+export interface ProjectInsightsCycleCandidate {
+  paths: string[];
+  edgeCount: number;
+  kind: "direct" | "scc";
+  summary: string;
+}
+
+export interface ProjectInsightsSummary {
+  topFilesByImportCount: ProjectInsightsFileEntry[];
+  topFilesByInboundDependencyCount: ProjectInsightsFileEntry[];
+  topFoldersBySourceFileCount: ProjectInsightsFolderEntry[];
+  orphanFiles: ProjectInsightsFileEntry[];
+  entryLikeFiles: ProjectInsightsEntryLikeFile[];
+  circularDependencyCandidates: ProjectInsightsCycleCandidate[];
+  totals: {
+    files: number;
+    sourceFiles: number;
+    parsedFiles: number;
+    dependencies: number;
+    symbols: number;
+  };
+}
+
+export interface ProjectMapSearchFileResult {
+  kind: "file";
+  path: string;
+  language: string | null;
+}
+
+export interface ProjectMapSearchSymbolResult {
+  kind: "symbol";
+  id: string;
+  displayName: string;
+  symbolKind: RepoSymbolKind;
+  filePath: string;
+  parentSymbolName: string | null;
+  startLine: number | null;
+  startCol: number | null;
+  endLine: number | null;
+  endCol: number | null;
+}
+
+export interface ProjectMapSearchExportResult {
+  kind: "export";
+  id: string;
+  exportName: string;
+  filePath: string;
+  symbolId: string | null;
+  symbolStartLine: number | null;
+  symbolStartCol: number | null;
+  symbolEndLine: number | null;
+  symbolEndCol: number | null;
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+export interface ProjectMapSearchResponse {
+  files: ProjectMapSearchFileResult[];
+  symbols: ProjectMapSearchSymbolResult[];
+  exports: ProjectMapSearchExportResult[];
+}
+
+function getSearchRank(value: string, query: string) {
+  const normalizedValue = value.trim().toLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedValue || !normalizedQuery) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  if (normalizedValue === normalizedQuery) {
+    return 0;
+  }
+
+  if (normalizedValue.startsWith(normalizedQuery)) {
+    return 1;
+  }
+
+  if (normalizedValue.includes(normalizedQuery)) {
+    return 2;
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function toPathBaseName(filePath: string) {
+  const lastSegment = filePath.split("/").pop() ?? filePath;
+  return lastSegment.replace(/\.[^.]+$/, "");
+}
+
+function toTopLevelFolder(filePath: string) {
+  return filePath.includes("/") ? filePath.split("/")[0] || "(root)" : "(root)";
+}
+
+function buildEntryLikeReason(
+  baseName: string,
+  path: string,
+  outgoingCount: number,
+  incomingCount: number,
+) {
+  const reasons: string[] = [];
+
+  if (["main", "app", "server", "cli", "worker", "entry", "bootstrap"].includes(baseName)) {
+    reasons.push(`entry-style filename: ${baseName}`);
+  } else if (baseName === "index") {
+    reasons.push("high-signal index file");
+  }
+
+  if (!path.includes("/")) {
+    reasons.push("root-level file");
+  } else if (path.startsWith("src/") || path.startsWith("app/")) {
+    reasons.push("top-level source path");
+  }
+
+  if (outgoingCount >= 5) {
+    reasons.push("high outgoing dependency count");
+  } else if (outgoingCount >= 3) {
+    reasons.push("multiple internal dependencies");
+  }
+
+  if (incomingCount === 0) {
+    reasons.push("not imported by other internal files");
+  }
+
+  return reasons.join(" · ");
 }
 
 export function createRepoParseGraphService(database: Database) {
@@ -415,6 +565,63 @@ export function createRepoParseGraphService(database: Database) {
         extraJson: edge.extraJson,
         createdAt: edge.createdAt,
       }));
+    },
+
+    async listFileIncomingImportEdges(
+      projectImportId: string,
+      fileId: string,
+    ): Promise<ProjectImportEdge[]> {
+      const edges = await database.query.repoImportEdge.findMany({
+        where: and(
+          eq(repoImportEdge.projectImportId, projectImportId),
+          eq(repoImportEdge.targetFileId, fileId),
+          eq(repoImportEdge.isResolved, true),
+        ),
+        with: {
+          sourceFile: true,
+          targetFile: true,
+        },
+        orderBy: [asc(repoImportEdge.startLine), asc(repoImportEdge.startCol)],
+      });
+
+      return edges
+        .filter((edge) => edge.sourceFile !== null && edge.targetFile !== null)
+        .map((edge) => ({
+          id: edge.id,
+          projectImportId: edge.projectImportId,
+          sourceFileId: edge.sourceFileId,
+          sourceFilePath: edge.sourceFile.path,
+          targetFileId: edge.targetFileId,
+          targetFilePath: edge.targetFile?.path ?? null,
+          targetPathText: edge.targetPathText,
+          targetExternalSymbolKey: edge.targetExternalSymbolKey,
+          moduleSpecifier: edge.moduleSpecifier,
+          importKind: edge.importKind,
+          isTypeOnly: edge.isTypeOnly,
+          isResolved: edge.isResolved,
+          resolutionKind: edge.resolutionKind,
+          startLine: edge.startLine,
+          startCol: edge.startCol,
+          endLine: edge.endLine,
+          endCol: edge.endCol,
+          extraJson: edge.extraJson,
+          createdAt: edge.createdAt,
+        }))
+        .sort((left, right) => {
+          const pathComparison = left.sourceFilePath.localeCompare(
+            right.sourceFilePath,
+          );
+
+          if (pathComparison !== 0) {
+            return pathComparison;
+          }
+
+          if (left.startLine !== right.startLine) {
+            return left.startLine - right.startLine;
+          }
+
+          return left.startCol - right.startCol;
+        });
     },
 
     async listSymbols(
@@ -857,6 +1064,621 @@ export function createRepoParseGraphService(database: Database) {
           dependencies: importEdges.length,
           symbols: symbols.length,
         },
+      };
+    },
+
+    async getProjectInsights(
+      projectImportId: string,
+    ): Promise<ProjectInsightsSummary> {
+      const [files, importEdges, symbols] = await Promise.all([
+        database.query.repoFile.findMany({
+          where: and(
+            eq(repoFile.projectImportId, projectImportId),
+            eq(repoFile.isIgnored, false),
+          ),
+          orderBy: [asc(repoFile.path)],
+        }),
+        database.query.repoImportEdge.findMany({
+          where: eq(repoImportEdge.projectImportId, projectImportId),
+          with: {
+            sourceFile: true,
+            targetFile: true,
+          },
+        }),
+        database.query.repoSymbol.findMany({
+          where: eq(repoSymbol.projectImportId, projectImportId),
+          columns: {
+            id: true,
+          },
+        }),
+      ]);
+
+      const fileStats = new Map<
+        string,
+        {
+          id: string;
+          path: string;
+          language: string | null;
+          incomingCount: number;
+          outgoingCount: number;
+          isParseable: boolean;
+        }
+      >();
+      const folderCounts = new Map<string, number>();
+      const internalAdjacency = new Map<string, Set<string>>();
+      const internalEdgeCounts = new Map<string, number>();
+
+      for (const file of files) {
+        fileStats.set(file.id, {
+          id: file.id,
+          path: file.path,
+          language: file.language,
+          incomingCount: 0,
+          outgoingCount: 0,
+          isParseable: file.isParseable,
+        });
+
+        if (file.isParseable) {
+          const topFolder = toTopLevelFolder(file.path);
+          folderCounts.set(topFolder, (folderCounts.get(topFolder) ?? 0) + 1);
+        }
+      }
+
+      for (const edge of importEdges) {
+        if (!edge.targetFileId) {
+          continue;
+        }
+
+        const sourceStats = fileStats.get(edge.sourceFileId);
+        const targetStats = fileStats.get(edge.targetFileId);
+
+        if (!sourceStats || !targetStats) {
+          continue;
+        }
+
+        sourceStats.outgoingCount += 1;
+        targetStats.incomingCount += 1;
+
+        if (!internalAdjacency.has(edge.sourceFileId)) {
+          internalAdjacency.set(edge.sourceFileId, new Set());
+        }
+
+        internalAdjacency.get(edge.sourceFileId)?.add(edge.targetFileId);
+      }
+
+      for (const [sourceId, targetIds] of internalAdjacency.entries()) {
+        for (const targetId of targetIds) {
+          internalEdgeCounts.set(
+            `${sourceId}->${targetId}`,
+            (internalEdgeCounts.get(`${sourceId}->${targetId}`) ?? 0) + 1,
+          );
+        }
+      }
+
+      const sourceFiles = Array.from(fileStats.values()).filter(
+        (item) => item.isParseable,
+      );
+
+      const topFilesByImportCount = [...sourceFiles]
+        .filter((item) => item.outgoingCount > 0)
+        .sort((left, right) => {
+          if (left.outgoingCount !== right.outgoingCount) {
+            return right.outgoingCount - left.outgoingCount;
+          }
+
+          if (left.incomingCount !== right.incomingCount) {
+            return right.incomingCount - left.incomingCount;
+          }
+
+          return left.path.localeCompare(right.path);
+        })
+        .slice(0, 12)
+        .map(({ path, language, incomingCount, outgoingCount }) => ({
+          path,
+          language,
+          incomingCount,
+          outgoingCount,
+        }));
+
+      const topFilesByInboundDependencyCount = [...sourceFiles]
+        .filter((item) => item.incomingCount > 0)
+        .sort((left, right) => {
+          if (left.incomingCount !== right.incomingCount) {
+            return right.incomingCount - left.incomingCount;
+          }
+
+          if (left.outgoingCount !== right.outgoingCount) {
+            return right.outgoingCount - left.outgoingCount;
+          }
+
+          return left.path.localeCompare(right.path);
+        })
+        .slice(0, 12)
+        .map(({ path, language, incomingCount, outgoingCount }) => ({
+          path,
+          language,
+          incomingCount,
+          outgoingCount,
+        }));
+
+      const orphanFiles = [...sourceFiles]
+        .filter((item) => item.incomingCount === 0 && item.outgoingCount === 0)
+        .sort((left, right) => left.path.localeCompare(right.path))
+        .slice(0, 24)
+        .map(({ path, language, incomingCount, outgoingCount }) => ({
+          path,
+          language,
+          incomingCount,
+          outgoingCount,
+        }));
+
+      const entryLikeFiles = [...sourceFiles]
+        .map((item) => {
+          const baseName = toPathBaseName(item.path).toLowerCase();
+          const normalizedPath = item.path.toLowerCase();
+          const disqualifyingPattern =
+            normalizedPath.includes(".test.") ||
+            normalizedPath.includes(".spec.") ||
+            normalizedPath.includes(".stories.") ||
+            normalizedPath.includes("/test/") ||
+            normalizedPath.includes("/tests/") ||
+            normalizedPath.includes("/__tests__/") ||
+            normalizedPath.includes("/mocks/") ||
+            normalizedPath.includes("/mock/") ||
+            normalizedPath.includes("/fixtures/") ||
+            normalizedPath.includes("/utils/") ||
+            normalizedPath.includes("/helpers/") ||
+            normalizedPath.includes("/constants/");
+
+          let score = 0;
+
+          if (
+            ["main", "app", "server", "cli", "worker", "entry", "bootstrap"].includes(
+              baseName,
+            )
+          ) {
+            score += 5;
+          } else if (
+            baseName === "index" &&
+            item.outgoingCount >= 3 &&
+            (item.path.startsWith("src/") ||
+              item.path.startsWith("app/") ||
+              !item.path.includes("/"))
+          ) {
+            score += 3;
+          }
+
+          if (!item.path.includes("/")) {
+            score += 2;
+          } else if (item.path.startsWith("src/") || item.path.startsWith("app/")) {
+            score += 1;
+          }
+
+          if (item.outgoingCount >= 5) {
+            score += 3;
+          } else if (item.outgoingCount >= 3) {
+            score += 2;
+          }
+
+          if (item.incomingCount === 0) {
+            score += 1;
+          }
+
+          if (disqualifyingPattern) {
+            score -= 4;
+          }
+
+          return {
+            ...item,
+            score,
+            reason:
+              score >= 5
+                ? buildEntryLikeReason(
+                    baseName,
+                    item.path,
+                    item.outgoingCount,
+                    item.incomingCount,
+                  )
+                : "",
+          };
+        })
+        .filter((item) => item.score >= 5 && item.reason)
+        .sort((left, right) => {
+          if (left.score !== right.score) {
+            return right.score - left.score;
+          }
+
+          if (left.outgoingCount !== right.outgoingCount) {
+            return right.outgoingCount - left.outgoingCount;
+          }
+
+          return left.path.localeCompare(right.path);
+        })
+        .slice(0, 12)
+        .map(({ path, language, incomingCount, outgoingCount, score, reason }) => ({
+          path,
+          language,
+          incomingCount,
+          outgoingCount,
+          score,
+          reason,
+        }));
+
+      const directCycleCandidates = new Map<string, ProjectInsightsCycleCandidate>();
+
+      for (const [sourceId, targetIds] of internalAdjacency.entries()) {
+        for (const targetId of targetIds) {
+          const reverseTargets = internalAdjacency.get(targetId);
+
+          if (!reverseTargets?.has(sourceId)) {
+            continue;
+          }
+
+          const sourcePath = fileStats.get(sourceId)?.path;
+          const targetPath = fileStats.get(targetId)?.path;
+
+          if (!sourcePath || !targetPath) {
+            continue;
+          }
+
+          const sortedPaths = [sourcePath, targetPath].sort((left, right) =>
+            left.localeCompare(right),
+          );
+          const key = sortedPaths.join("::");
+
+          if (directCycleCandidates.has(key)) {
+            continue;
+          }
+
+          directCycleCandidates.set(key, {
+            kind: "direct",
+            paths: sortedPaths,
+            edgeCount:
+              (internalEdgeCounts.get(`${sourceId}->${targetId}`) ?? 1) +
+              (internalEdgeCounts.get(`${targetId}->${sourceId}`) ?? 1),
+            summary: `${sortedPaths[0]} and ${sortedPaths[1]} import each other`,
+          });
+        }
+      }
+
+      const stronglyConnectedComponents: string[][] = [];
+      const visitedIndices = new Map<string, number>();
+      const lowLinks = new Map<string, number>();
+      const stack: string[] = [];
+      const stackSet = new Set<string>();
+      let index = 0;
+
+      const strongConnect = (nodeId: string) => {
+        visitedIndices.set(nodeId, index);
+        lowLinks.set(nodeId, index);
+        index += 1;
+        stack.push(nodeId);
+        stackSet.add(nodeId);
+
+        for (const neighborId of internalAdjacency.get(nodeId) ?? []) {
+          if (!visitedIndices.has(neighborId)) {
+            strongConnect(neighborId);
+            lowLinks.set(
+              nodeId,
+              Math.min(lowLinks.get(nodeId) ?? 0, lowLinks.get(neighborId) ?? 0),
+            );
+          } else if (stackSet.has(neighborId)) {
+            lowLinks.set(
+              nodeId,
+              Math.min(
+                lowLinks.get(nodeId) ?? 0,
+                visitedIndices.get(neighborId) ?? 0,
+              ),
+            );
+          }
+        }
+
+        if (lowLinks.get(nodeId) === visitedIndices.get(nodeId)) {
+          const component: string[] = [];
+          let currentNodeId: string | undefined;
+
+          do {
+            currentNodeId = stack.pop();
+
+            if (!currentNodeId) {
+              break;
+            }
+
+            stackSet.delete(currentNodeId);
+            component.push(currentNodeId);
+          } while (currentNodeId !== nodeId);
+
+          if (component.length > 1) {
+            stronglyConnectedComponents.push(component);
+          }
+        }
+      };
+
+      for (const file of sourceFiles) {
+        if (!visitedIndices.has(file.id)) {
+          strongConnect(file.id);
+        }
+      }
+
+      const circularDependencyCandidates = [
+        ...Array.from(directCycleCandidates.values()),
+        ...stronglyConnectedComponents
+          .filter((component) => component.length >= 3 && component.length <= 5)
+          .map((component) => {
+            const paths = component
+              .map((fileId) => fileStats.get(fileId)?.path)
+              .filter((path): path is string => Boolean(path))
+              .sort((left, right) => left.localeCompare(right));
+            const componentSet = new Set(component);
+            let edgeCount = 0;
+
+            for (const fileId of component) {
+              for (const neighborId of internalAdjacency.get(fileId) ?? []) {
+                if (componentSet.has(neighborId)) {
+                  edgeCount += 1;
+                }
+              }
+            }
+
+            return {
+              kind: "scc" as const,
+              paths,
+              edgeCount,
+              summary: `${paths.length}-file dependency cycle candidate`,
+            };
+          }),
+      ]
+        .sort((left, right) => {
+          if (left.kind !== right.kind) {
+            return left.kind === "direct" ? -1 : 1;
+          }
+
+          if (left.paths.length !== right.paths.length) {
+            return left.paths.length - right.paths.length;
+          }
+
+          if (left.edgeCount !== right.edgeCount) {
+            return right.edgeCount - left.edgeCount;
+          }
+
+          return left.paths.join("::").localeCompare(right.paths.join("::"));
+        })
+        .slice(0, 12);
+
+      return {
+        topFilesByImportCount,
+        topFilesByInboundDependencyCount,
+        topFoldersBySourceFileCount: Array.from(folderCounts.entries())
+          .map(([folder, sourceFileCount]) => ({
+            folder,
+            sourceFileCount,
+          }))
+          .sort((left, right) => {
+            if (left.sourceFileCount !== right.sourceFileCount) {
+              return right.sourceFileCount - left.sourceFileCount;
+            }
+
+            return left.folder.localeCompare(right.folder);
+          })
+          .slice(0, 12),
+        orphanFiles,
+        entryLikeFiles,
+        circularDependencyCandidates,
+        totals: {
+          files: files.length,
+          sourceFiles: sourceFiles.length,
+          parsedFiles: files.filter((file) => file.parseStatus === "parsed").length,
+          dependencies: importEdges.length,
+          symbols: symbols.length,
+        },
+      };
+    },
+
+    async searchProjectMap(
+      projectImportId: string,
+      query: string,
+    ): Promise<ProjectMapSearchResponse> {
+      const normalizedQuery = query.trim().toLowerCase();
+
+      if (normalizedQuery.length < 2) {
+        return {
+          files: [],
+          symbols: [],
+          exports: [],
+        };
+      }
+
+      const containsPattern = `%${normalizedQuery}%`;
+
+      const [fileMatches, symbolMatches, exportMatches] = await Promise.all([
+        database.query.repoFile.findMany({
+          where: and(
+            eq(repoFile.projectImportId, projectImportId),
+            ilike(repoFile.path, containsPattern),
+          ),
+          orderBy: [asc(repoFile.path)],
+          limit: 50,
+        }),
+        database.query.repoSymbol.findMany({
+          where: and(
+            eq(repoSymbol.projectImportId, projectImportId),
+            ilike(repoSymbol.displayName, containsPattern),
+          ),
+          with: {
+            file: true,
+            parentSymbol: true,
+          },
+          orderBy: [asc(repoSymbol.displayName), asc(repoSymbol.fileId)],
+          limit: 50,
+        }),
+        database.query.repoExport.findMany({
+          where: and(
+            eq(repoExport.projectImportId, projectImportId),
+            ilike(repoExport.exportName, containsPattern),
+          ),
+          with: {
+            file: true,
+          },
+          orderBy: [asc(repoExport.exportName), asc(repoExport.fileId)],
+          limit: 50,
+        }),
+      ]);
+
+      const symbolIds = symbolMatches.map((symbol) => symbol.id);
+      const exportSymbolIds = exportMatches
+        .map((item) => item.symbolId)
+        .filter((symbolId): symbolId is string => Boolean(symbolId));
+      const allSymbolIds = [...new Set([...symbolIds, ...exportSymbolIds])];
+
+      const occurrences =
+        allSymbolIds.length > 0
+          ? await database.query.repoSymbolOccurrence.findMany({
+              where: and(
+                eq(repoSymbolOccurrence.projectImportId, projectImportId),
+                inArray(repoSymbolOccurrence.symbolId, allSymbolIds),
+              ),
+              orderBy: [
+                asc(repoSymbolOccurrence.startLine),
+                asc(repoSymbolOccurrence.startCol),
+              ],
+            })
+          : [];
+
+      const occurrencePriority = new Map<RepoSymbolOccurrenceRole, number>([
+        ["definition", 0],
+        ["declaration", 1],
+        ["export", 2],
+        ["import", 3],
+        ["type_reference", 4],
+        ["reference", 5],
+      ]);
+      const bestOccurrenceBySymbolId = new Map<string, (typeof occurrences)[number]>();
+
+      for (const occurrence of occurrences) {
+        if (!occurrence.symbolId) {
+          continue;
+        }
+
+        const current = bestOccurrenceBySymbolId.get(occurrence.symbolId);
+
+        if (!current) {
+          bestOccurrenceBySymbolId.set(occurrence.symbolId, occurrence);
+          continue;
+        }
+
+        const currentPriority =
+          occurrencePriority.get(current.occurrenceRole) ?? Number.MAX_SAFE_INTEGER;
+        const nextPriority =
+          occurrencePriority.get(occurrence.occurrenceRole) ??
+          Number.MAX_SAFE_INTEGER;
+
+        if (nextPriority < currentPriority) {
+          bestOccurrenceBySymbolId.set(occurrence.symbolId, occurrence);
+        }
+      }
+
+      const files = fileMatches
+        .map((file) => ({
+          kind: "file" as const,
+          path: file.path,
+          language: file.language,
+          rank: getSearchRank(file.path, normalizedQuery),
+        }))
+        .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER)
+        .sort((left, right) => {
+          if (left.rank !== right.rank) {
+            return left.rank - right.rank;
+          }
+
+          return left.path.localeCompare(right.path);
+        })
+        .slice(0, 12)
+        .map(({ rank: _rank, ...item }) => item);
+
+      const symbols = symbolMatches
+        .filter((symbol) => symbol.file?.path)
+        .map((symbol) => {
+          const occurrence = bestOccurrenceBySymbolId.get(symbol.id);
+
+          return {
+            kind: "symbol" as const,
+            id: symbol.id,
+            displayName: symbol.displayName,
+            symbolKind: symbol.kind,
+            filePath: symbol.file?.path ?? "",
+            parentSymbolName: symbol.parentSymbol?.displayName ?? null,
+            startLine: occurrence?.startLine ?? null,
+            startCol: occurrence?.startCol ?? null,
+            endLine: occurrence?.endLine ?? null,
+            endCol: occurrence?.endCol ?? null,
+            rank: getSearchRank(symbol.displayName, normalizedQuery),
+          };
+        })
+        .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER && item.filePath)
+        .sort((left, right) => {
+          if (left.rank !== right.rank) {
+            return left.rank - right.rank;
+          }
+
+          const displayNameComparison = left.displayName.localeCompare(
+            right.displayName,
+          );
+
+          if (displayNameComparison !== 0) {
+            return displayNameComparison;
+          }
+
+          return left.filePath.localeCompare(right.filePath);
+        })
+        .slice(0, 12)
+        .map(({ rank: _rank, ...item }) => item);
+
+      const exports = exportMatches
+        .map((item) => {
+          const occurrence = item.symbolId
+            ? bestOccurrenceBySymbolId.get(item.symbolId)
+            : null;
+
+          return {
+            kind: "export" as const,
+            id: item.id,
+            exportName: item.exportName,
+            filePath: item.file.path,
+            symbolId: item.symbolId,
+            symbolStartLine: occurrence?.startLine ?? null,
+            symbolStartCol: occurrence?.startCol ?? null,
+            symbolEndLine: occurrence?.endLine ?? null,
+            symbolEndCol: occurrence?.endCol ?? null,
+            startLine: item.startLine,
+            startCol: item.startCol,
+            endLine: item.endLine,
+            endCol: item.endCol,
+            rank: getSearchRank(item.exportName, normalizedQuery),
+          };
+        })
+        .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER)
+        .sort((left, right) => {
+          if (left.rank !== right.rank) {
+            return left.rank - right.rank;
+          }
+
+          const exportNameComparison = left.exportName.localeCompare(
+            right.exportName,
+          );
+
+          if (exportNameComparison !== 0) {
+            return exportNameComparison;
+          }
+
+          return left.filePath.localeCompare(right.filePath);
+        })
+        .slice(0, 12)
+        .map(({ rank: _rank, ...item }) => item);
+
+      return {
+        files,
+        symbols,
+        exports,
       };
     },
   };
