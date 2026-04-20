@@ -32,10 +32,6 @@ export const projectParamsSchema = z.object({
   projectId: z.uuid(),
 });
 
-export const projectImportParamsSchema = projectParamsSchema.extend({
-  importId: z.uuid(),
-});
-
 export const projectFileContentQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000),
 });
@@ -106,7 +102,6 @@ export const createProjectImportBodySchema = projectImportInsertSchema
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
-export type ProjectImportParams = z.infer<typeof projectImportParamsSchema>;
 export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySchema>;
 export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;

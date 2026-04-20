@@ -1,9 +1,11 @@
 import type { Job } from "bullmq";
+import type IORedis from "ioredis";
 import { db } from "../../db";
 import { createProjectMapPersistence } from "./map-persistence";
 import { createRepositoryWorkspaceService } from "./repository-workspace";
 import { buildProjectTree } from "./tree-builder";
 import { createProjectService } from "../project/service";
+import { enqueueProjectParseJob } from "../../lib/project-parse-queue";
 import {
   materializeRepositorySource,
   resolveRepositorySource,
@@ -12,6 +14,7 @@ import {
 
 interface RunProjectImportContext {
   job?: Job;
+  redisConnection?: IORedis;
 }
 
 const projectService = createProjectService(db);
@@ -65,6 +68,8 @@ export async function runProjectImport(
     ReturnType<typeof materializeRepositorySource>
   > | null = null;
   let retainedWorkspacePath: string | null = null;
+  let sourceMetadataSaved = false;
+  let importPhaseCompleted = false;
 
   try {
     await reportProjectImportProgress(context, 10, "validating-repository");
@@ -123,9 +128,20 @@ export async function runProjectImport(
       sourceStorageKey: retainedWorkspace.storageKey,
       sourceWorkspacePath: retainedWorkspace.workspacePath,
     });
+    sourceMetadataSaved = true;
 
-    await reportProjectImportProgress(context, 100, "completed");
     await projectService.markImportAsCompleted(importRecord.id);
+    importPhaseCompleted = true;
+
+    if (!context?.redisConnection) {
+      throw new Error("Redis connection is required to enqueue parse jobs");
+    }
+
+    await reportProjectImportProgress(context, 96, "queueing-parse");
+    await enqueueProjectParseJob(context.redisConnection, {
+      importId: importRecord.id,
+    });
+    await reportProjectImportProgress(context, 100, "completed");
 
     const previousSuccessfulImport =
       await projectService.getLatestSuccessfulImportWithSource(
@@ -151,17 +167,27 @@ export async function runProjectImport(
       }
     }
   } catch (error) {
-    if (retainedWorkspacePath) {
+    if (!importPhaseCompleted && retainedWorkspacePath) {
       await repositoryWorkspaceService.removeWorkspaceByPath(
         retainedWorkspacePath,
       );
-      await projectService.clearImportSourceMetadata(importRecord.id);
+
+      if (sourceMetadataSaved) {
+        await projectService.clearImportSourceMetadata(importRecord.id);
+      }
     }
 
-    await projectService.markImportAsFailed(
-      importRecord.id,
-      toImportFailureMessage(error),
-    );
+    if (importPhaseCompleted) {
+      await projectService.markParseAsFailed(
+        importRecord.id,
+        toImportFailureMessage(error),
+      );
+    } else {
+      await projectService.markImportAsFailed(
+        importRecord.id,
+        toImportFailureMessage(error),
+      );
+    }
     throw error;
   } finally {
     await materializedSource?.cleanup();

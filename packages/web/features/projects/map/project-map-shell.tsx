@@ -21,8 +21,10 @@ import {
 } from "@/components/ui/select";
 import type { FileKind } from "@/lib/file-types";
 import type {
+  ProjectAnalysisSummary,
   Project,
   ProjectFileContent,
+  ProjectFileParseData,
   ProjectImport,
   ProjectMapSnapshot,
 } from "@/lib/api/projects";
@@ -41,7 +43,10 @@ import {
   type RepositoryTreeNode,
 } from "./file-tree-model";
 import { FileTree } from "./file-tree-explorer";
-import { ProjectFileViewer } from "./project-file-viewer";
+import {
+  ProjectFileViewer,
+  type ProjectViewerRange,
+} from "./project-file-viewer";
 import { ProjectMapStatusBanner } from "./project-map-status-banner";
 
 function areNodeIdListsEqual(currentIds: string[], nextIds: string[]) {
@@ -64,6 +69,9 @@ export function ProjectMapShell({
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<FileKind | "all">("all");
   const [languageFilter, setLanguageFilter] = useState<string | "all">("all");
+  const [activeDetailTab, setActiveDetailTab] = useState("details");
+  const [selectedEditorRange, setSelectedEditorRange] =
+    useState<ProjectViewerRange | null>(null);
   const fileTree = useMemo(
     () => mapProjectTreeToRepositoryNodes(mapSnapshot?.tree),
     [mapSnapshot?.tree],
@@ -116,12 +124,39 @@ export function ProjectMapShell({
     selectedFileNode && mapSnapshot?.importId
       ? ["project-file-content", project.id, mapSnapshot.importId, selectedFileNode.path]
       : null,
-    ([, currentProjectId, , filePath]) =>
+    ([, currentProjectId, , filePath]: [string, string, string, string]) =>
       browserProjectsApi.getProjectFileContent(currentProjectId as string, filePath as string),
     {
       revalidateOnFocus: false,
       revalidateIfStale: false,
       keepPreviousData: false,
+    },
+  );
+  const { data: selectedFileParseData, isLoading: isSelectedFileParseDataLoading } =
+    useSWR<ProjectFileParseData>(
+      selectedFileNode && mapSnapshot?.importId
+        ? ["project-file-parse", project.id, mapSnapshot.importId, selectedFileNode.path]
+        : null,
+      ([, currentProjectId, , filePath]: [string, string, string, string]) =>
+        browserProjectsApi.getProjectFileParseData(
+          currentProjectId as string,
+          filePath as string,
+        ),
+      {
+        revalidateOnFocus: false,
+        revalidateIfStale: false,
+        keepPreviousData: false,
+      },
+    );
+  const { data: projectAnalysisSummary, isLoading: isProjectAnalysisLoading } =
+    useSWR<ProjectAnalysisSummary>(
+    mapSnapshot?.importId ? ["project-analysis", project.id, mapSnapshot.importId] : null,
+    ([, currentProjectId]: [string, string, string]) =>
+      browserProjectsApi.getProjectAnalysisSummary(currentProjectId as string),
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      keepPreviousData: true,
     },
   );
 
@@ -160,9 +195,17 @@ export function ProjectMapShell({
     }
   }, [expandedNodeIds, fileTree, filteredTree, isFiltering, selectedNodeId]);
 
+  useEffect(() => {
+    setSelectedEditorRange(null);
+  }, [selectedFileNode?.path]);
+
   return (
     <div className="space-y-6">
-      <ProjectMapStatusBanner project={project} imports={imports} />
+      <ProjectMapStatusBanner
+        project={project}
+        imports={imports}
+        mapSnapshot={mapSnapshot}
+      />
 
       {hasMapSnapshot ? (
         <div className="rounded-lg border border-border/70 bg-card">
@@ -284,6 +327,7 @@ export function ProjectMapShell({
                   fileContent={selectedFileContent}
                   isLoading={isSelectedFileContentLoading}
                   error={selectedFileContentError}
+                  selectedRange={selectedEditorRange}
                   onRetry={() => {
                     void mutateSelectedFileContent();
                   }}
@@ -291,7 +335,33 @@ export function ProjectMapShell({
               </div>
               <div className="min-w-0">
                 {selectedNode ? (
-                  <DetailPanel file={selectedNode} />
+                  <DetailPanel
+                    file={selectedNode}
+                    parseData={selectedFileNode ? selectedFileParseData : undefined}
+                    analysisSummary={projectAnalysisSummary}
+                    parseDataLoading={Boolean(selectedFileNode) && isSelectedFileParseDataLoading}
+                    analysisLoading={isProjectAnalysisLoading}
+                    activeTab={activeDetailTab}
+                    onActiveTabChange={setActiveDetailTab}
+                    onSelectSymbol={(symbol) => {
+                      if (
+                        !symbol.startLine ||
+                        !symbol.startCol ||
+                        !symbol.endLine ||
+                        !symbol.endCol
+                      ) {
+                        return;
+                      }
+
+                      setActiveDetailTab("symbols");
+                      setSelectedEditorRange({
+                        startLineNumber: symbol.startLine,
+                        startColumn: symbol.startCol,
+                        endLineNumber: symbol.endLine,
+                        endColumn: symbol.endCol,
+                      });
+                    }}
+                  />
                 ) : (
                   <Empty className="h-full rounded-none border-0 bg-transparent p-10">
                     <EmptyHeader>

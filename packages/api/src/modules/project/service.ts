@@ -55,34 +55,6 @@ export function createProjectService(database: Database) {
     });
   }
 
-  async function getOwnedImport(
-    projectId: string,
-    projectImportId: string,
-    ownerUserId: string,
-  ) {
-    const existingProject = await getOwnedProject(projectId, ownerUserId);
-
-    if (!existingProject) {
-      return null;
-    }
-
-    const existingImport = await database.query.projectImport.findFirst({
-      where: and(
-        eq(projectImport.id, projectImportId),
-        eq(projectImport.projectId, projectId),
-      ),
-    });
-
-    if (!existingImport) {
-      return null;
-    }
-
-    return {
-      project: existingProject,
-      importRecord: existingImport,
-    };
-  }
-
   return {
     async createProject(ownerUserId: string, input: CreateProjectBody) {
       const baseSlug = slugifyProjectName(input.slug ?? input.name);
@@ -304,29 +276,6 @@ export function createProjectService(database: Database) {
       return createdImport;
     },
 
-    async retryImport(
-      projectId: string,
-      projectImportId: string,
-      ownerUserId: string,
-    ) {
-      const ownedImport = await getOwnedImport(
-        projectId,
-        projectImportId,
-        ownerUserId,
-      );
-
-      if (!ownedImport) {
-        return null;
-      }
-
-      return {
-        sourceImport: ownedImport.importRecord,
-        createdImport: await this.createImport(projectId, ownerUserId, {
-          branch: ownedImport.importRecord.branch ?? undefined,
-        }),
-      };
-    },
-
     async markImportAsRunning(
       projectImportId: string,
       options?: { branch?: string | null },
@@ -337,6 +286,16 @@ export function createProjectService(database: Database) {
           status: "running",
           branch: options?.branch ?? undefined,
           errorMessage: null,
+          parseStatus: "pending",
+          parseTool: null,
+          parseToolVersion: null,
+          parseStartedAt: null,
+          parseCompletedAt: null,
+          parseError: null,
+          indexedFileCount: 0,
+          indexedSymbolCount: 0,
+          indexedEdgeCount: 0,
+          parseStatsJson: null,
         })
         .where(eq(projectImport.id, projectImportId))
         .returning();
@@ -365,7 +324,7 @@ export function createProjectService(database: Database) {
         await tx
           .update(project)
           .set({
-            status: "ready",
+            status: "importing",
             lastImportedAt: completedAt,
           })
           .where(eq(project.id, updatedImport.projectId));
@@ -443,12 +402,168 @@ export function createProjectService(database: Database) {
       return failedImport;
     },
 
-    async getImportById(
-      projectId: string,
+    async markParseAsRunning(
       projectImportId: string,
-      ownerUserId: string,
+      options?: {
+        parseTool?: string | null;
+        parseToolVersion?: string | null;
+      },
     ) {
-      return getOwnedImport(projectId, projectImportId, ownerUserId);
+      const parseStartedAt = new Date();
+
+      const [updatedImport] = await database
+        .update(projectImport)
+        .set({
+          parseStatus: "running",
+          parseTool: options?.parseTool ?? undefined,
+          parseToolVersion: options?.parseToolVersion ?? undefined,
+          parseStartedAt,
+          parseCompletedAt: null,
+          parseError: null,
+          parseStatsJson: null,
+          indexedFileCount: 0,
+          indexedSymbolCount: 0,
+          indexedEdgeCount: 0,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return updatedImport ?? null;
+    },
+
+    async markParseAsCompleted(input: {
+      projectImportId: string;
+      indexedFileCount: number;
+      indexedSymbolCount: number;
+      indexedEdgeCount: number;
+      parseStatsJson: Record<string, unknown>;
+    }) {
+      const parseCompletedAt = new Date();
+
+      const [updatedImport] = await database.transaction(async (tx) => {
+        const [completedImport] = await tx
+          .update(projectImport)
+          .set({
+            parseStatus: "completed",
+            parseCompletedAt,
+            parseError: null,
+            indexedFileCount: input.indexedFileCount,
+            indexedSymbolCount: input.indexedSymbolCount,
+            indexedEdgeCount: input.indexedEdgeCount,
+            parseStatsJson: input.parseStatsJson,
+          })
+          .where(eq(projectImport.id, input.projectImportId))
+          .returning();
+
+        if (!completedImport) {
+          return [null];
+        }
+
+        await tx
+          .update(project)
+          .set({
+            status: "ready",
+            lastImportedAt: parseCompletedAt,
+          })
+          .where(eq(project.id, completedImport.projectId));
+
+        return [completedImport];
+      });
+
+      return updatedImport ?? null;
+    },
+
+    async markParseAsPartial(input: {
+      projectImportId: string;
+      parseError?: string | null;
+      indexedFileCount: number;
+      indexedSymbolCount: number;
+      indexedEdgeCount: number;
+      parseStatsJson: Record<string, unknown>;
+    }) {
+      const parseCompletedAt = new Date();
+
+      const [updatedImport] = await database.transaction(async (tx) => {
+        const [partialImport] = await tx
+          .update(projectImport)
+          .set({
+            parseStatus: "partial",
+            parseCompletedAt,
+            parseError: input.parseError ?? null,
+            indexedFileCount: input.indexedFileCount,
+            indexedSymbolCount: input.indexedSymbolCount,
+            indexedEdgeCount: input.indexedEdgeCount,
+            parseStatsJson: input.parseStatsJson,
+          })
+          .where(eq(projectImport.id, input.projectImportId))
+          .returning();
+
+        if (!partialImport) {
+          return [null];
+        }
+
+        await tx
+          .update(project)
+          .set({
+            status: "ready",
+            lastImportedAt: parseCompletedAt,
+          })
+          .where(eq(project.id, partialImport.projectId));
+
+        return [partialImport];
+      });
+
+      return updatedImport ?? null;
+    },
+
+    async markParseAsFailed(projectImportId: string, parseError: string) {
+      const parseCompletedAt = new Date();
+
+      const [updatedImport] = await database.transaction(async (tx) => {
+        const [failedImport] = await tx
+          .update(projectImport)
+          .set({
+            parseStatus: "failed",
+            parseCompletedAt,
+            parseError,
+          })
+          .where(eq(projectImport.id, projectImportId))
+          .returning();
+
+        if (!failedImport) {
+          return [null];
+        }
+
+        await tx
+          .update(project)
+          .set({
+            status: "failed",
+          })
+          .where(eq(project.id, failedImport.projectId));
+
+        return [failedImport];
+      });
+
+      return updatedImport ?? null;
+    },
+
+    async resetParseStateForRetry(projectImportId: string) {
+      const [updatedImport] = await database
+        .update(projectImport)
+        .set({
+          parseStatus: "pending",
+          parseStartedAt: null,
+          parseCompletedAt: null,
+          parseError: null,
+          indexedFileCount: 0,
+          indexedSymbolCount: 0,
+          indexedEdgeCount: 0,
+          parseStatsJson: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return updatedImport ?? null;
     },
 
     async listImports(projectId: string, ownerUserId: string) {
@@ -544,6 +659,8 @@ export function createProjectService(database: Database) {
           eq(projectImport.projectId, projectId),
           eq(projectImport.status, "completed"),
           eq(projectImport.sourceAvailable, true),
+          ne(projectImport.parseStatus, "pending"),
+          ne(projectImport.parseStatus, "running"),
           options?.excludeImportId
             ? ne(projectImport.id, options.excludeImportId)
             : undefined,

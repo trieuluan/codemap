@@ -80,3 +80,5 @@ packages/*/.env.*
 .turbo
 
 .continue
+
+.codemap-storage/*

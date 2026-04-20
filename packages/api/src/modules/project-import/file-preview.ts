@@ -121,7 +121,9 @@ export function isPreviewableImageExtension(extension?: string | null) {
   return normalizedExtension ? normalizedExtension in IMAGE_MIME_TYPES : false;
 }
 
-function getPreviewMetadata(node: Pick<ProjectTreeNode, "name" | "path" | "type" | "extension">) {
+function getPreviewMetadata(
+  node: Pick<ProjectTreeNode, "name" | "path" | "type" | "extension">,
+) {
   return {
     path: node.path,
     name: node.name,
@@ -173,10 +175,7 @@ function buildBlockedPreview(
 }
 
 export function normalizeRepositoryFilePath(input: string) {
-  const normalizedPath = input
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "");
+  const normalizedPath = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
   const resolvedPath = path.posix.normalize(normalizedPath);
 
   if (!resolvedPath || resolvedPath === "." || resolvedPath.startsWith("../")) {
@@ -217,7 +216,10 @@ function resolveWorkspaceFilePath(
   workspacePath: string,
   repositoryPath: string,
 ) {
-  const absoluteFilePath = path.resolve(workspacePath, ...repositoryPath.split("/"));
+  const absoluteFilePath = path.resolve(
+    workspacePath,
+    ...repositoryPath.split("/"),
+  );
   const normalizedWorkspaceRoot = path.resolve(workspacePath);
 
   if (
@@ -234,7 +236,10 @@ async function getWorkspaceFileStats(
   workspacePath: string,
   treeNode: ProjectTreeNode,
 ) {
-  const absoluteFilePath = resolveWorkspaceFilePath(workspacePath, treeNode.path);
+  const absoluteFilePath = resolveWorkspaceFilePath(
+    workspacePath,
+    treeNode.path,
+  );
   const fileStats = await stat(absoluteFilePath);
 
   return { absoluteFilePath, fileStats };
@@ -283,13 +288,19 @@ export async function getProjectFilePreview(input: {
         kind: "image",
         mimeType: inferMimeType(input.treeNode.extension),
         status: "ready",
-        content: null,
+        content:
+          input.treeNode.extension === "svg"
+            ? await readFile(absoluteFilePath, "utf8")
+            : null,
         sizeBytes: fileStats.size,
         reason: null,
       };
     }
 
-    const sampleBuffer = await readSampleBuffer(absoluteFilePath, fileStats.size);
+    const sampleBuffer = await readSampleBuffer(
+      absoluteFilePath,
+      fileStats.size,
+    );
 
     if (isBinaryBuffer(sampleBuffer)) {
       return buildBlockedPreview(

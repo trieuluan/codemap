@@ -305,11 +305,7 @@ export function ProjectOverview({
           </CardContent>
         </Card>
 
-        <ProjectImportHistory
-          projectId={project.id}
-          imports={imports}
-          onImportChanged={revalidateProjectDetail}
-        />
+        <ProjectImportHistory imports={imports} />
       </div>
 
       <Card className="h-fit">

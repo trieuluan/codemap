@@ -2,19 +2,19 @@ import path from "node:path";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadEnv } from "../config/load-env";
-import type { ProjectImportJobPayload } from "../lib/project-import-queue.js";
+import type { ProjectParseJobPayload } from "../lib/project-parse-queue.js";
 
 loadEnv();
 
-export async function startProjectImportWorker() {
+export async function startProjectParseWorker() {
   const [
     { sql },
-    { closeProjectImportQueue, getProjectImportQueueName },
-    { runProjectImport },
+    { closeProjectParseQueue, getProjectParseQueueName },
+    { runProjectParse },
   ] = await Promise.all([
     import("../db/index.js"),
-    import("../lib/project-import-queue.js"),
-    import("../modules/project-import/runner.js"),
+    import("../lib/project-parse-queue.js"),
+    import("../modules/project-import/parse-runner.js"),
   ]);
 
   const workerConnection = new IORedis(
@@ -25,13 +25,10 @@ export async function startProjectImportWorker() {
     },
   );
 
-  const worker = new Worker<ProjectImportJobPayload>(
-    getProjectImportQueueName(),
+  const worker = new Worker<ProjectParseJobPayload>(
+    getProjectParseQueueName(),
     async (job) => {
-      return runProjectImport(job.data.importId, {
-        job,
-        redisConnection: workerConnection,
-      });
+      return runProjectParse(job.data.importId, { job });
     },
     {
       connection: workerConnection,
@@ -40,23 +37,23 @@ export async function startProjectImportWorker() {
   );
 
   worker.on("completed", (job) => {
-    console.log(`Project import job completed: ${job.id}`);
+    console.log(`Project parse job completed: ${job.id}`);
   });
 
   worker.on("failed", (job, error) => {
-    console.error(`Project import job failed: ${job?.id ?? "unknown"}`, error);
+    console.error(`Project parse job failed: ${job?.id ?? "unknown"}`, error);
   });
 
   async function shutdown(signal: string) {
-    console.log(`Shutting down project import worker on ${signal}`);
+    console.log(`Shutting down project parse worker on ${signal}`);
     await worker.close();
-    await closeProjectImportQueue();
+    await closeProjectParseQueue();
     await workerConnection.quit();
     await sql.end({ timeout: 5 });
   }
 
   console.log(
-    `Project import worker started on queue "${getProjectImportQueueName()}"`,
+    `Project parse worker started on queue "${getProjectParseQueueName()}"`,
   );
 
   return {
@@ -65,15 +62,15 @@ export async function startProjectImportWorker() {
 }
 
 const workerEntryNames = new Set([
-  "project-import.worker.ts",
-  "project-import.worker.js",
+  "project-parse.worker.ts",
+  "project-parse.worker.js",
 ]);
 const isMainModule = process.argv[1]
   ? workerEntryNames.has(path.basename(process.argv[1]))
   : false;
 
 if (isMainModule) {
-  void startProjectImportWorker()
+  void startProjectParseWorker()
     .then(({ shutdown }) => {
       process.on("SIGINT", () => {
         void shutdown("SIGINT").finally(() => process.exit(0));
@@ -83,7 +80,7 @@ if (isMainModule) {
       });
     })
     .catch((error) => {
-      console.error("Unable to start project import worker", error);
+      console.error("Unable to start project parse worker", error);
       process.exit(1);
     });
 }

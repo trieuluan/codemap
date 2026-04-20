@@ -1,13 +1,17 @@
+x-codemap-volumes: &codemap-volumes
+  - .:/workspace:cached
+  - codemap_node_modules:/workspace/node_modules
+  - ./.codemap-storage:/codemap_storage
+
 services:
   workspace:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
+    image: codemap/dev-workspace:latest
     container_name: codemap-workspace-dev
     working_dir: /workspace
-    volumes:
-      - .:/workspace:cached
-      - codemap_node_modules:/workspace/node_modules
+    volumes: *codemap-volumes
     command: sh -c "sleep infinity"
     env_file:
       - .env
@@ -25,6 +29,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+
+  worker:
+    image: codemap/dev-workspace:latest
+    container_name: codemap-worker-dev
+    working_dir: /workspace/packages/api
+    volumes: *codemap-volumes
+    command: sh -c "node --inspect=0.0.0.0:9230 --import tsx src/workers/index.ts"
+    env_file:
+      - .env
+    ports:
+      - "9230:9230"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
 
   postgres:
     image: postgres:${POSTGRES_IMAGE_TAG:-18}

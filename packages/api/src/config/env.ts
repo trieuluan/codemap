@@ -9,6 +9,7 @@ export const envSchema = z.object({
   DATABASE_URL: z.url(),
   REDIS_URL: z.string().trim().min(1).default("redis://127.0.0.1:6379"),
   IMPORT_QUEUE_NAME: z.string().trim().min(1).default("project-imports"),
+  PARSE_QUEUE_NAME: z.string().trim().min(1).default("project-parses"),
   CODEMAP_STORAGE_ROOT: z.string().trim().min(1).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),

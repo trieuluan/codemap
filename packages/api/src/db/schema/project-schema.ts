@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  integer,
   index,
   jsonb,
   pgEnum,
@@ -11,6 +12,16 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+import {
+  repoExternalSymbol,
+  repoExport,
+  repoFile,
+  repoImportEdge,
+  repoParseIssue,
+  repoSymbol,
+  repoSymbolOccurrence,
+  repoSymbolRelationship,
+} from "./repo-parse-schema";
 
 // PostgreSQL enum types for domain-specific constrained values.
 export const projectVisibilityEnum = pgEnum("project_visibility", [
@@ -34,6 +45,14 @@ export const projectImportStatusEnum = pgEnum("project_import_status", [
   "running",
   "completed",
   "failed",
+]);
+
+export const repoParseStatusEnum = pgEnum("repo_parse_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "partial",
 ]);
 
 // The main project table. `pgTable` defines the Postgres table shape,
@@ -102,6 +121,17 @@ export const projectImport = pgTable(
     sourceStorageKey: text("source_storage_key"),
     sourceWorkspacePath: text("source_workspace_path"),
     sourceAvailable: boolean("source_available").default(false).notNull(),
+    parseStatus: repoParseStatusEnum("parse_status").default("pending").notNull(),
+    parseTool: text("parse_tool"),
+    parseToolVersion: text("parse_tool_version"),
+    parseStartedAt: timestamp("parse_started_at"),
+    parseCompletedAt: timestamp("parse_completed_at"),
+    parseError: text("parse_error"),
+    indexedFileCount: integer("indexed_file_count").default(0).notNull(),
+    indexedSymbolCount: integer("indexed_symbol_count").default(0).notNull(),
+    indexedEdgeCount: integer("indexed_edge_count").default(0).notNull(),
+    parseStatsJson: jsonb("parse_stats_json"),
+    ignoreRulesJson: jsonb("ignore_rules_json"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
     errorMessage: text("error_message"),
@@ -115,6 +145,7 @@ export const projectImport = pgTable(
     index("project_import_project_id_idx").on(table.projectId),
     index("project_import_triggered_by_user_id_idx").on(table.triggeredByUserId),
     index("project_import_status_idx").on(table.status),
+    index("project_import_parse_status_idx").on(table.parseStatus),
     index("project_import_project_id_source_available_idx").on(
       table.projectId,
       table.sourceAvailable,
@@ -162,7 +193,7 @@ export const projectRelations = relations(project, ({ one, many }) => ({
   mapSnapshots: many(projectMapSnapshot),
 }));
 
-export const projectImportRelations = relations(projectImport, ({ one }) => ({
+export const projectImportRelations = relations(projectImport, ({ one, many }) => ({
   project: one(project, {
     fields: [projectImport.projectId],
     references: [project.id],
@@ -175,6 +206,14 @@ export const projectImportRelations = relations(projectImport, ({ one }) => ({
     fields: [projectImport.id],
     references: [projectMapSnapshot.importId],
   }),
+  files: many(repoFile),
+  symbols: many(repoSymbol),
+  symbolOccurrences: many(repoSymbolOccurrence),
+  symbolRelationships: many(repoSymbolRelationship),
+  importEdges: many(repoImportEdge),
+  exports: many(repoExport),
+  parseIssues: many(repoParseIssue),
+  externalSymbols: many(repoExternalSymbol),
 }));
 
 export const projectMapSnapshotRelations = relations(

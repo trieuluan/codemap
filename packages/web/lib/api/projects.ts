@@ -5,9 +5,11 @@ import {
   requestApi,
 } from "./client";
 import type {
+  ProjectAnalysisSummary,
   CreateProjectInput,
   Project,
   ProjectFileContent,
+  ProjectFileParseData,
   ProjectImport,
   ProjectListInclude,
   ProjectListItem,
@@ -63,6 +65,27 @@ export function createServerProjectsApi(
         },
       );
     },
+
+    getProjectFileParseData: async (projectId: string, filePath: string) => {
+      return requestApi<ProjectFileParseData>(
+        `/projects/${projectId}/map/files/parse`,
+        {
+          cookieHeader: defaults.cookieHeader,
+          queryParams: {
+            path: filePath,
+          },
+        },
+      );
+    },
+
+    getProjectAnalysisSummary: async (projectId: string) => {
+      return requestApi<ProjectAnalysisSummary>(
+        `/projects/${projectId}/map/analysis`,
+        {
+          cookieHeader: defaults.cookieHeader,
+        },
+      );
+    },
   };
 }
 
@@ -106,13 +129,4 @@ export async function triggerProjectImport(
     method: "POST",
     body: input ?? {},
   });
-}
-
-export async function retryProjectImport(projectId: string, importId: string) {
-  return requestApi<ProjectImport>(
-    `/projects/${projectId}/imports/${importId}/retry`,
-    {
-      method: "POST",
-    },
-  );
 }

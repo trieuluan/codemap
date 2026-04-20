@@ -1,6 +1,8 @@
 import type {
   Project,
   ProjectImport,
+  ProjectImportParseStats,
+  ProjectImportParseStatus,
   ProjectImportStatus,
   ProjectStatus,
   ProjectVisibility,
@@ -93,4 +95,65 @@ export function getProjectImportStatusLabel(status: ProjectImportStatus) {
     default:
       return status;
   }
+}
+
+export function getProjectImportParseStatusLabel(
+  status?: ProjectImportParseStatus | null,
+) {
+  switch (status) {
+    case "pending":
+      return "Queued";
+    case "running":
+      return "Analyzing";
+    case "completed":
+      return "Analyzed";
+    case "partial":
+      return "Partial";
+    case "failed":
+      return "Parse failed";
+    default:
+      return "Not available";
+  }
+}
+
+function toValidCount(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export interface ProjectImportAnalysisStats {
+  totalFiles: number | null;
+  sourceFiles: number | null;
+  parsedFiles: number | null;
+  dependenciesFound: number | null;
+}
+
+export function getProjectImportAnalysisStats(
+  projectImport?: ProjectImport | null,
+): ProjectImportAnalysisStats {
+  const stats = projectImport?.parseStatsJson as ProjectImportParseStats | null;
+  const totalFiles =
+    toValidCount(stats?.totalFileCount) ??
+    toValidCount(projectImport?.indexedFileCount) ??
+    null;
+  const sourceFiles = toValidCount(stats?.sourceFileCount);
+  const parsedFiles = toValidCount(stats?.parsedFileCount);
+  const dependenciesFound =
+    toValidCount(stats?.dependencyCount) ??
+    toValidCount(projectImport?.indexedEdgeCount) ??
+    null;
+
+  return {
+    totalFiles,
+    sourceFiles,
+    parsedFiles,
+    dependenciesFound,
+  };
+}
+
+export function formatProjectImportAnalysisCount(value: number | null) {
+  if (value === null) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-US").format(value);
 }

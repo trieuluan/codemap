@@ -1,22 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
-import { AlertCircle, Clock3, LoaderCircle, RotateCcw } from "lucide-react";
+import { AlertCircle, Clock3, LoaderCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import {
-  ProjectsApiError,
-  retryProjectImport,
-  type ProjectImport,
-} from "@/lib/api/projects";
-import { useToast } from "@/components/ui/use-toast";
+import { type ProjectImport } from "@/lib/api/projects";
 import { LocalProjectDate } from "../shared/local-project-date";
 import { ProjectImportStatusBadge } from "../shared/project-import-status-badge";
 
@@ -33,52 +26,11 @@ function ImportStatusIcon({ status }: { status: ProjectImport["status"] }) {
   }
 }
 
-function canRetryImport(status: ProjectImport["status"]) {
-  return status === "failed" || status === "pending" || status === "running";
-}
-
-function getRetryLabel(status: ProjectImport["status"]) {
-  return status === "failed" ? "Retry" : "Restart";
-}
-
 export function ProjectImportHistory({
-  projectId,
   imports,
-  onImportChanged,
 }: {
-  projectId: string;
   imports: ProjectImport[];
-  onImportChanged: () => Promise<void>;
 }) {
-  const { toast } = useToast();
-  const [isRetryPending, startRetryTransition] = useTransition();
-
-  function handleRetry(projectImport: ProjectImport) {
-    startRetryTransition(async () => {
-      try {
-        await retryProjectImport(projectId, projectImport.id);
-        await onImportChanged();
-
-        toast({
-          title: "Import restarted",
-          description:
-            projectImport.status === "failed"
-              ? "A new import attempt was created from this failed run."
-              : "The interrupted import was restarted as a new attempt.",
-        });
-      } catch (error) {
-        toast({
-          title: "Unable to restart import",
-          description:
-            error instanceof ProjectsApiError
-              ? error.message
-              : "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        });
-      }
-    });
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -132,17 +84,6 @@ export function ProjectImportHistory({
                       <p className="text-sm text-destructive">{item.errorMessage}</p>
                     ) : null}
                   </div>
-                  {canRetryImport(item.status) ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRetry(item)}
-                      disabled={isRetryPending}
-                    >
-                      <RotateCcw className="size-4" />
-                      {getRetryLabel(item.status)}
-                    </Button>
-                  ) : null}
                 </div>
               </div>
             ))}

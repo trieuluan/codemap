@@ -13,10 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ProjectMapShell } from "@/features/projects/map/project-map-shell";
 import { ProjectStatusBadge } from "@/features/projects/shared/project-status-badge";
-import {
-  createServerProjectsApi,
-  ProjectsApiError,
-} from "@/lib/api/projects";
+import { createServerProjectsApi, ProjectsApiError } from "@/lib/api/projects";
 
 export default async function ProjectMapPage({
   params,
@@ -33,6 +30,7 @@ export default async function ProjectMapPage({
       api.getProject(projectId),
       api.getProjectImports(projectId),
       api.getProjectMap(projectId).catch((error) => {
+        console.log("Error fetching project map:", error);
         if (error instanceof ProjectsApiError && error.statusCode === 404) {
           return null;
         }

@@ -2,51 +2,52 @@
 
 ## Overview
 
-CodeMap is a TypeScript monorepo for mapping and understanding codebases.
+CodeMap is a TypeScript monorepo for importing repositories, indexing their file trees, and browsing the resulting project map.
 
-- `packages/api`: Fastify backend API
-- `packages/web`: Next.js frontend
-- `packages/shared`: shared TypeScript contracts
+- `packages/api`: Fastify API, auth, persistence, import queue, worker
+- `packages/web`: Next.js App Router frontend for auth, dashboard, projects, and map explorer
+- `packages/shared`: shared TypeScript package consumed by the web app
 
 ## Root Workspace
 
 Main files:
 
 - `README.md`: high-level project guide
-- `compose.dev.yml`: dev container + Postgres + Redis
-- `compose.yml`, `compose.prod.yml`: other deployment variants
-- `Dockerfile`: image build entry
-- `.env.example`: local environment template
 - `package.json`: workspace scripts
+- `compose.dev.yml`: local dev stack with workspace, Postgres, and Redis
+- `compose.yml`, `compose.prod.yml`: non-dev compose variants
+- `Dockerfile`: image build entrypoint
+- `.env.example`: baseline environment template
 
 Root scripts:
 
-- `npm run dev`: run API + web in parallel
+- `npm run dev`: run API and web in parallel
 - `npm run dev:api`: run backend only
 - `npm run dev:web`: run frontend only
-- `npm run build:api`: build shared then API
-- `npm run build:web`: build shared then web
-- `npm run test:api`: run API tests
+- `npm run dev:worker`: run the project import worker in watch mode
+- `npm run build:shared`: build the shared package
+- `npm run build:api`: build shared, then API
+- `npm run build:web`: build shared, then web
+- `npm run start:api`: start the built API
+- `npm run start:worker`: start the import worker once
+- `npm run test:api`: build and run API tests
 
 ## Runtime Topology
 
-Development services from `compose.dev.yml`:
+Primary local services:
 
-- `workspace`: main dev container mounted at `/workspace`
-- `postgres`: PostgreSQL 18
-- `redis`: Redis 8
+- Web app on `WEB_PORT` (default `3000`)
+- API on `API_PORT` (default `3001`)
+- PostgreSQL on `5432`
+- Redis on `6379`
+- BullMQ worker consuming repository import jobs from Redis
 
-Default ports:
+High-level flow:
 
-- Web: `3000`
-- API: `3001`
-- Postgres: `5432`
-- Redis: `6379`
-
-Notes:
-
-- `DATABASE_URL` in `.env.example` points to container hostname `codemap_pg`
-- `REDIS_URL` is injected in dev compose, but Redis is not yet a visible app dependency in the scanned code
+1. User creates or updates a project with a repository URL.
+2. API creates a `project_import` record and enqueues a BullMQ job.
+3. Worker clones/materializes repository source, scans the file tree, and persists a snapshot.
+4. Frontend loads imports plus the latest map snapshot and lets users browse file metadata/content.
 
 ## Backend
 
@@ -59,29 +60,41 @@ Stack:
 - Drizzle ORM
 - PostgreSQL
 - Better Auth
+- BullMQ
+- Redis / ioredis
 - Zod
+- simple-git
 
 Important entry points:
 
-- `src/server.ts`: starts Fastify and listens on `API_PORT`
-- `src/app.ts`: loads env, configures logger, autoloads plugins and routes
-- `src/config/env.ts`: validates core env vars with Zod
+- `src/server.ts`: starts Fastify
+- `src/app.ts`: builds the Fastify app, loads plugins/routes
+- `src/config/env.ts`: validates environment variables
 - `src/lib/auth.ts`: Better Auth configuration
+- `src/lib/project-import-queue.ts`: BullMQ queue creation/enqueue helpers
+- `src/workers/project-import.worker.ts`: standalone import worker process
 
-Plugin flow:
+Plugin load order:
 
-- `src/plugins/01.env.ts` to `09.auth-session.ts`: autoloaded in filename order
-- `src/plugins/05.better-auth.ts`: mounts auth handler at `/auth/*`
-- `src/plugins/09.auth-session.ts`: attaches session to each request via Better Auth
+- `src/plugins/01.env.ts`: parse env and attach config
+- `src/plugins/02.cors.ts`
+- `src/plugins/03.helmet.ts`
+- `src/plugins/04.db.ts`
+- `src/plugins/05.better-auth.ts`
+- `src/plugins/06.redis.ts`
+- `src/plugins/07.error-handler.ts`
+- `src/plugins/08.response.ts`
+- `src/plugins/09.auth-session.ts`
+- `src/plugins/10.admin-queues.ts`
 
-API routes:
+Route modules:
 
 - `src/routes/root.ts`
 - `src/routes/auth/index.ts`
 - `src/routes/example/index.ts`
 - `src/routes/projects/index.ts`
 
-Projects API currently exposes:
+Projects API surface:
 
 - `POST /projects`
 - `GET /projects`
@@ -89,33 +102,49 @@ Projects API currently exposes:
 - `PATCH /projects/:projectId`
 - `DELETE /projects/:projectId`
 - `POST /projects/:projectId/import`
+- `POST /projects/:projectId/imports/:importId/retry`
 - `GET /projects/:projectId/imports`
+- `GET /projects/:projectId/map`
+- `GET /projects/:projectId/map/files/content`
+- `GET /projects/:projectId/map/files/raw`
 
-Project module structure:
+Project domain modules:
 
 - `src/modules/project/controller.ts`: HTTP handlers
-- `src/modules/project/service.ts`: business logic
-- `src/modules/project/schema.ts`: request/response validation
+- `src/modules/project/service.ts`: CRUD, ownership checks, import state transitions, snapshot lookup
+- `src/modules/project/schema.ts`: Zod request/response schemas
 
-Current backend domain model:
+Import pipeline modules:
+
+- `src/modules/project-import/repository-source.ts`: validate and resolve repository source
+- `src/modules/project-import/github-source.ts`: GitHub-specific source handling
+- `src/modules/project-import/repository-workspace.ts`: staged and retained workspace management
+- `src/modules/project-import/tree-builder.ts`: filesystem tree scan/build
+- `src/modules/project-import/map-persistence.ts`: persist project map snapshots
+- `src/modules/project-import/file-preview.ts`: file content preview support
+- `src/modules/project-import/runner.ts`: end-to-end import execution
+
+Current backend behavior:
+
+- Projects are user-owned and filtered by `ownerUserId`
+- Slugs are normalized and deduplicated
+- Imports record progress/status and can be retried
+- Successful imports persist both a file-tree snapshot and retained source workspace metadata
+- New successful imports clean up the previously retained workspace when possible
+
+Core persistence models:
 
 - `project`
 - `project_import`
+- `project_map_snapshot`
 - Better Auth tables from `auth-schema.ts`
 
-Project lifecycle values:
+Observed lifecycle values:
 
-- Visibility: `private | public | internal`
-- Status: `draft | importing | ready | failed | archived`
-- Provider: `github`
+- Project visibility: `private | public | internal`
+- Project status: `draft | importing | ready | failed | archived`
+- Provider: currently `github`
 - Import status: `pending | running | completed | failed`
-
-Current project service behavior:
-
-- Generates unique slugs from project names
-- Restricts project access by owner user id
-- Records import history
-- Marks a project as `importing` when import is triggered
 
 ## Frontend
 
@@ -127,33 +156,34 @@ Stack:
 - React 19
 - TypeScript
 - Tailwind CSS 4
-- shadcn/ui + Radix
+- shadcn/ui + Radix UI
+- SWR for client fetching
 
-Important files:
+Important app routes:
 
 - `app/page.tsx`: landing page
-- `app/(auth)/*`: auth pages
-- `app/(protected)/dashboard/page.tsx`: dashboard UI
-- `app/(protected)/projects/page.tsx`: projects list
-- `app/(protected)/projects/[projectId]/page.tsx`: project detail
-- `app/(protected)/projects/[projectId]/map/page.tsx`: project mapping page
-- `lib/api/projects.ts`: typed project API client
-- `lib/auth-client.ts`: Better Auth React client
+- `app/(auth)/auth/page.tsx`: login
+- `app/(auth)/auth/signup/page.tsx`
+- `app/(auth)/auth/forgot-password/page.tsx`
+- `app/(protected)/dashboard/page.tsx`
+- `app/(protected)/projects/page.tsx`
+- `app/(protected)/projects/[projectId]/page.tsx`
+- `app/(protected)/projects/[projectId]/map/page.tsx`
 
-Feature folders:
+Project-related frontend areas:
 
-- `features/auth`: login/signup/forgot password flows
-- `features/dashboard`: dashboard widgets and navigation
-- `features/projects/list`: project list/create/delete
-- `features/projects/detail`: project detail and edit flows
-- `features/projects/map`: map shell, file tree explorer, import progress
-- `features/projects/shared`: shared project badges/helpers
+- `features/projects/list/*`: create, list, and delete project flows
+- `features/projects/detail/*`: project overview, edit, import history
+- `features/projects/map/*`: import status banner, file tree explorer, detail panel, file viewer
+- `features/projects/shared/*`: badges, formatting, shared helpers
+- `lib/api/projects.ts`: typed API client for project CRUD/import/map endpoints
 
 Frontend data flow:
 
-- Server components use `cookies()` and forward the cookie header to API requests
-- `lib/api/projects.ts` talks to `NEXT_PUBLIC_API_URL` or `API_INTERNAL_URL`
-- Browser requests use `credentials: include`
+- Protected routes forward cookies to the API for authenticated requests
+- Project detail page loads project metadata and import history
+- Project map page loads the latest `project_map_snapshot`
+- `ProjectMapShell` supports tree expansion, search, kind/language filters, and file content fetching
 
 ## Shared Package
 
@@ -161,65 +191,68 @@ Location: `packages/shared`
 
 Purpose:
 
-- shared auth-related types
-- shared TypeScript exports consumed by other packages
+- shared TypeScript exports
+- shared contracts reused by other packages
 
 ## Environment
 
-Important env vars observed:
+Important env vars confirmed in code:
 
-- `NODE_ENV`
 - `API_PORT`
 - `WEB_PORT`
 - `HOST`
+- `NODE_ENV`
 - `CORS_ORIGIN`
 - `DATABASE_URL`
+- `REDIS_URL`
+- `IMPORT_QUEUE_NAME`
+- `CODEMAP_STORAGE_ROOT`
 - `BETTER_AUTH_SECRET`
 - `BETTER_AUTH_URL`
+
+Additional bootstrap vars referenced in docs:
+
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `ADMIN_NAME`
 
-Implementation note:
-
-- `env.ts` validates `CORS_ORIGIN`, but `lib/auth.ts` reads `CORS_ORIGINS`
-- this mismatch may cause trusted origin config drift
-
-## Tests And Migrations
+## Tests, Data, And Infra
 
 - API tests live in `packages/api/test`
 - Drizzle migrations live in `packages/api/drizzle`
-- Admin bootstrap/seed script lives in `packages/api/src/scripts/seed.ts`
+- Admin seed script lives in `packages/api/src/scripts/seed.ts`
+- Dev compose provisions Postgres and Redis for the API plus import queue
 
 ## Current Product Shape
 
-What already exists:
+What exists now:
 
-- landing page
 - auth flows
 - dashboard shell
 - project CRUD
-- project import history
-- project mapping UI scaffold
+- import history UI
+- repository import queue + worker
+- persisted project map snapshots
+- file tree browsing and file content viewing
 
-What looks incomplete or still scaffolded:
+What still looks like active build-out:
 
-- dashboard uses placeholder content like `userName="John"`
-- Redis is provisioned but not clearly wired into app logic yet
-- project import flow marks imports as running, but scanned code does not yet show an async worker/import pipeline
-- landing page links to `/docs`, but no matching docs route was visible in the scanned files
+- dashboard content is still partly placeholder/demo content
+- provider support appears GitHub-first
+- raw/source browsing depends on retained local workspace storage
+- production/ops wiring for long-running workers is present in scripts but likely still evolving
 
 ## Good Starting Points
 
-If continuing backend work:
+Backend:
 
 - `packages/api/src/modules/project/service.ts`
-- `packages/api/src/db/schema/project-schema.ts`
-- `packages/api/src/lib/auth.ts`
+- `packages/api/src/modules/project-import/runner.ts`
+- `packages/api/src/lib/project-import-queue.ts`
+- `packages/api/src/workers/project-import.worker.ts`
 
-If continuing frontend work:
+Frontend:
 
+- `packages/web/app/(protected)/projects/[projectId]/map/page.tsx`
 - `packages/web/features/projects/map/project-map-shell.tsx`
-- `packages/web/features/projects/list/project-list.tsx`
 - `packages/web/lib/api/projects.ts`
-

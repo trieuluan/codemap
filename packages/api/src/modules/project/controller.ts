@@ -1,8 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import {
-  enqueueProjectImportJob,
-  getProjectImportJob,
-} from "../../lib/project-import-queue";
+import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import {
   buildUnavailableFilePreview,
   createProjectRawImageReadStream,
@@ -15,13 +12,13 @@ import {
   findProjectTreeNodeByPath,
   type ProjectTreeNode,
 } from "../project-import/tree-builder";
+import { createRepoParseGraphService } from "../project-import/repo-parse-graph";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
   projectFileContentQuerySchema,
-  projectImportParamsSchema,
   projectParamsSchema,
   updateProjectBodySchema,
 } from "./schema";
@@ -41,6 +38,7 @@ function getAuthenticatedUserId(
 
 export function createProjectController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
+  const repoParseGraphService = createRepoParseGraphService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
   return {
@@ -171,92 +169,6 @@ export function createProjectController(fastify: FastifyInstance) {
       return reply.success(createdImport, 201);
     },
 
-    retryImport: async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = getAuthenticatedUserId(fastify, request);
-      const { projectId, importId } = projectImportParamsSchema.parse(
-        request.params,
-      );
-
-      const existingImport = await service.getImportById(
-        projectId,
-        importId,
-        userId,
-      );
-
-      if (!existingImport) {
-        throw fastify.httpErrors.notFound("Project import not found");
-      }
-
-      if (
-        existingImport.importRecord.status === "pending" ||
-        existingImport.importRecord.status === "running"
-      ) {
-        const existingJob = await getProjectImportJob(fastify.redis, importId);
-        const existingJobState = existingJob
-          ? await existingJob.getState()
-          : null;
-
-        if (
-          existingJobState &&
-          ["waiting", "active", "delayed", "prioritized"].includes(
-            existingJobState,
-          )
-        ) {
-          throw fastify.httpErrors.conflict(
-            "This import job is still active and cannot be restarted yet",
-          );
-        }
-
-        await service.markImportAsFailed(
-          importId,
-          "Import was restarted after the previous job stopped unexpectedly",
-        );
-      }
-
-      let retriedImport;
-
-      try {
-        retriedImport = await service.retryImport(projectId, importId, userId);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
-        ) {
-          throw fastify.httpErrors.conflict(
-            "An import is already queued or running for this project",
-          );
-        }
-
-        throw error;
-      }
-
-      if (!retriedImport?.createdImport) {
-        throw fastify.httpErrors.notFound("Project import not found");
-      }
-
-      try {
-        await enqueueProjectImportJob(fastify.redis, {
-          importId: retriedImport.createdImport.id,
-        });
-      } catch (error) {
-        request.log.error(
-          error,
-          "Failed to enqueue retried project import job",
-        );
-
-        await service.markImportAsFailed(
-          retriedImport.createdImport.id,
-          "Unable to restart import job",
-        );
-
-        throw fastify.httpErrors.internalServerError(
-          "Unable to restart import job",
-        );
-      }
-
-      return reply.success(retriedImport.createdImport, 201);
-    },
-
     listImports: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
@@ -354,6 +266,150 @@ export function createProjectController(fastify: FastifyInstance) {
       });
 
       return reply.success(preview);
+    },
+
+    getProjectFileParseData: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectFileContentQuerySchema.parse(request.query ?? {});
+
+      let normalizedPath: string;
+
+      try {
+        normalizedPath = normalizeRepositoryFilePath(query.path);
+      } catch (error) {
+        throw fastify.httpErrors.badRequest(
+          error instanceof Error ? error.message : "Invalid file path",
+        );
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const treeNode = findProjectTreeNodeByPath(
+        latestMapWithSource.mapSnapshot.treeJson as ProjectTreeNode,
+        normalizedPath,
+      );
+
+      if (!treeNode) {
+        throw fastify.httpErrors.notFound(
+          "This file is not present in the latest project map snapshot.",
+        );
+      }
+
+      const importRecord = latestMapWithSource.importRecord;
+
+      if (!importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const fileRecord = await repoParseGraphService.getFileByPath(
+        importRecord.id,
+        normalizedPath,
+      );
+
+      if (!fileRecord) {
+        return reply.success({
+          file: {
+            fileId: null,
+            path: normalizedPath,
+            language: null,
+            lineCount: null,
+            parseStatus: "unavailable",
+            sizeBytes: null,
+            mimeType: null,
+            extension: treeNode.extension ?? null,
+            importParseStatus: importRecord.parseStatus,
+          },
+          imports: [],
+          exports: [],
+          symbols: [],
+        });
+      }
+
+      const [imports, exportsToReturn, symbols] = await Promise.all([
+        repoParseGraphService.listFileImportEdges(importRecord.id, fileRecord.id),
+        repoParseGraphService.listExports(importRecord.id, fileRecord.id),
+        repoParseGraphService.listFileSymbols(importRecord.id, fileRecord.id),
+      ]);
+
+      return reply.success({
+        file: {
+          fileId: fileRecord.id,
+          path: fileRecord.path,
+          language: fileRecord.language,
+          lineCount: fileRecord.lineCount,
+          parseStatus: fileRecord.parseStatus,
+          sizeBytes: fileRecord.sizeBytes ?? null,
+          mimeType: fileRecord.mimeType,
+          extension: fileRecord.extension,
+          importParseStatus: importRecord.parseStatus,
+        },
+        imports: imports.map((item) => ({
+          id: item.id,
+          moduleSpecifier: item.moduleSpecifier,
+          importKind: item.importKind,
+          isResolved: item.isResolved,
+          resolutionKind: item.resolutionKind,
+          targetPathText: item.targetPathText ?? item.targetFilePath,
+          targetExternalSymbolKey: item.targetExternalSymbolKey,
+          startLine: item.startLine,
+          startCol: item.startCol + 1,
+          endLine: item.endLine,
+          endCol: item.endCol + 1,
+        })),
+        exports: exportsToReturn.map((item) => ({
+          id: item.id,
+          exportName: item.exportName,
+          exportKind: item.exportKind,
+          symbolDisplayName: item.symbolDisplayName,
+          sourceModuleSpecifier: item.sourceModuleSpecifier,
+          startLine: item.startLine,
+          startCol: item.startCol + 1,
+          endLine: item.endLine,
+          endCol: item.endCol + 1,
+        })),
+        symbols: symbols.map((item) => ({
+          ...item,
+          startCol: item.startCol === null ? null : item.startCol + 1,
+          endCol: item.endCol === null ? null : item.endCol + 1,
+        })),
+      });
+    },
+
+    getProjectAnalysis: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      if (!latestMapWithSource.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const summary = await repoParseGraphService.getProjectAnalysisSummary(
+        latestMapWithSource.importRecord.id,
+      );
+
+      return reply.success(summary);
     },
 
     getProjectRawFile: async (request: FastifyRequest, reply: FastifyReply) => {
