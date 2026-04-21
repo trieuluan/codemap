@@ -85,10 +85,12 @@ interface FileNodeProps {
   selected: boolean;
 }
 
-export const FileNode = memo(function FileNode({ data, selected }: FileNodeProps) {
+export const FileNode = memo(function FileNode({
+  data,
+  selected,
+}: FileNodeProps) {
   const isInCycle = data.isInCycle ?? false;
   const isCompact = (data.zoom ?? 1) < 0.45;
-
   if (isCompact) {
     return (
       <>
@@ -103,7 +105,12 @@ export const FileNode = memo(function FileNode({ data, selected }: FileNodeProps
           )}
           style={{ width: 160, height: 28 }}
         >
-          <div className={cn("size-2 shrink-0 rounded-full", getAccentClass(data.language))} />
+          <div
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              getAccentClass(data.language),
+            )}
+          />
           <p className="truncate font-mono text-[10px] leading-none text-foreground">
             {getFileName(data.path)}
           </p>
@@ -112,8 +119,30 @@ export const FileNode = memo(function FileNode({ data, selected }: FileNodeProps
             outgoing={data.externalOutgoingCount}
             compact
           />
-          <Handle type="target" position={Position.Left} className="!size-1.5 opacity-0" />
-          <Handle type="source" position={Position.Right} className="!size-1.5 opacity-0" />
+          <Handle
+            id="left"
+            type="target"
+            position={Position.Left}
+            className="!size-1.5 opacity-0"
+          />
+          <Handle
+            id="right"
+            type="source"
+            position={Position.Right}
+            className="!size-1.5 opacity-0"
+          />
+          <Handle
+            id="top"
+            type="target"
+            position={Position.Top}
+            className="!size-1.5 opacity-0"
+          />
+          <Handle
+            id="bottom"
+            type="source"
+            position={Position.Bottom}
+            className="!size-1.5 opacity-0"
+          />
         </div>
       </>
     );
@@ -133,7 +162,12 @@ export const FileNode = memo(function FileNode({ data, selected }: FileNodeProps
         )}
       >
         {/* Left accent strip */}
-        <div className={cn("w-1 shrink-0 self-stretch", getAccentClass(data.language))} />
+        <div
+          className={cn(
+            "w-1 shrink-0 self-stretch",
+            getAccentClass(data.language),
+          )}
+        />
 
         <div className="min-w-0 flex-1 px-2.5 py-2">
           <div className="flex items-center gap-1.5">
@@ -169,13 +203,27 @@ export const FileNode = memo(function FileNode({ data, selected }: FileNodeProps
         </div>
 
         <Handle
+          id="left"
           type="target"
           position={Position.Left}
           className="!size-2 !border-border !bg-muted-foreground/40"
         />
         <Handle
+          id="right"
           type="source"
           position={Position.Right}
+          className="!size-2 !border-border !bg-muted-foreground/40"
+        />
+        <Handle
+          id="top"
+          type="target"
+          position={Position.Top}
+          className="!size-2 !border-border !bg-muted-foreground/40"
+        />
+        <Handle
+          id="bottom"
+          type="source"
+          position={Position.Bottom}
           className="!size-2 !border-border !bg-muted-foreground/40"
         />
       </div>
@@ -200,7 +248,8 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
 }: FolderOverviewNodeProps) {
   const isCompact = (data.zoom ?? 1) < 0.45;
   const hasExternalRelations =
-    (data.externalIncomingCount ?? 0) > 0 || (data.externalOutgoingCount ?? 0) > 0;
+    (data.externalIncomingCount ?? 0) > 0 ||
+    (data.externalOutgoingCount ?? 0) > 0;
 
   if (isCompact) {
     return (
@@ -220,8 +269,16 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
           outgoing={data.externalOutgoingCount}
           compact
         />
-        <Handle type="target" position={Position.Left} className="!size-2 opacity-0" />
-        <Handle type="source" position={Position.Right} className="!size-2 opacity-0" />
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="!size-2 opacity-0"
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="!size-2 opacity-0"
+        />
       </div>
     );
   }
@@ -266,7 +323,9 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
           <p className="text-muted-foreground">in</p>
         </div>
         <div className="rounded-md bg-muted/60 px-2 py-1">
-          <p className="font-semibold text-foreground">{data.internalEdgeCount}</p>
+          <p className="font-semibold text-foreground">
+            {data.internalEdgeCount}
+          </p>
           <p className="text-muted-foreground">edges</p>
         </div>
       </div>

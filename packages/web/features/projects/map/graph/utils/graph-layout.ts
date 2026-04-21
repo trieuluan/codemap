@@ -27,7 +27,12 @@ export interface FolderStructureLayoutResult {
   hiddenDirectFileCount: number;
 }
 
-export type GraphRelationMode = "all" | "incoming" | "outgoing" | "cycles";
+export type GraphRelationMode =
+  | "all"
+  | "incoming"
+  | "outgoing"
+  | "cycles"
+  | "blast-radius";
 
 const NODE_WIDTH = 240;
 const NODE_HEIGHT = 72;
@@ -38,26 +43,29 @@ const FOCUS_RELATED_NODE_LIMIT = 40;
 
 const elk = new ELK();
 
-const LAYOUT_OPTIONS = {
-  layered: {
-    "elk.algorithm": "layered",
-    "elk.direction": "RIGHT",
-    "elk.edgeRouting": "ORTHOGONAL",
-    "elk.layered.spacing.nodeNodeBetweenLayers": "120",
-    "elk.spacing.nodeNode": "60",
-    "elk.layered.unnecessaryBendpoints": "true",
-    "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
-    "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
-  },
-  mrtree: {
-    "elk.algorithm": "mrtree",
-    "elk.direction": "DOWN",
-    "elk.spacing.nodeNode": "70",
-    "elk.spacing.edgeNode": "28",
-    "elk.mrtree.edgeRoutingMode": "AVOID_OVERLAP",
-    "elk.mrtree.searchOrder": "DFS",
-    "elk.separateConnectedComponents": "true",
-  },
+type LayoutContext =
+  | "full-file-graph"
+  | "focus-hub"
+  | "folder-overview"
+  | "folder-structure";
+
+const BASE_ELK_OPTIONS = {
+  "elk.algorithm": "layered",
+  "elk.direction": "RIGHT",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+  "elk.spacing.nodeNode": "60",
+  "elk.edgeRouting": "ORTHOGONAL",
+
+  // ← CÁC OPTIONS QUAN TRỌNG CHO HUB NODES:
+  "elk.layered.highDegreeNodes.treatment": "true", // bật xử lý đặc biệt cho high-degree
+  "elk.layered.highDegreeNodes.threshold": "16", // node có ≥ 16 edge → coi là hub
+  "elk.layered.highDegreeNodes.treeHeight": "5", // nén tree-ish subgraph của hub
+
+  "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
+  "elk.layered.thoroughness": "15", // càng cao càng đẹp, chậm hơn (default 7)
+  "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+  "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+  "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
 };
 
 export interface GraphLayoutResult {
@@ -67,7 +75,7 @@ export interface GraphLayoutResult {
   smartDefault: {
     shownCount: number;
     totalCount: number;
-    mode: "top-degree";
+    mode: "top-degree" | "blast-radius";
   } | null;
 }
 
@@ -143,12 +151,96 @@ function getNodeDegree(node: ProjectMapGraphNode): number {
   return node.incomingCount + node.outgoingCount;
 }
 
+export function pickLayoutAlgorithm(
+  nodeCount: number,
+  maxDegree: number,
+  context: LayoutContext,
+  relationMode?: GraphRelationMode,
+): Record<string, string> {
+  if (context === "focus-hub") {
+    // Blast radius — cây tự nhiên, mrtree đẹp nhất
+    if (relationMode === "blast-radius" && nodeCount <= 60) {
+      return {
+        "elk.algorithm": "mrtree",
+        "elk.direction": "DOWN",
+        "elk.mrtree.searchOrder": "DFS",
+        "elk.spacing.nodeNode": "40",
+        "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+        "elk.edgeRoutingMode": "MIDDLE_TO_MIDDLE",
+      };
+    }
+
+    // Pure fan-out với ít nodes — mrtree cũng hợp
+    if (relationMode === "outgoing" && nodeCount <= 20) {
+      return {
+        "elk.algorithm": "mrtree",
+        "elk.direction": "DOWN",
+        "elk.spacing.nodeNode": "50",
+      };
+    }
+    if (nodeCount <= 80) {
+      return {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.layered.spacing.nodeNodeBetweenLayers": "140",
+        "elk.spacing.nodeNode": "30",
+        "elk.edgeRouting": "ORTHOGONAL",
+        "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+        "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+        "elk.layered.thoroughness": "15",
+        // Giảm cycle breaking để giữ hướng import nguyên vẹn
+        "elk.layered.cycleBreaking.strategy": "GREEDY",
+      };
+    }
+
+    // Focus cực lớn (> 80 nodes) — cột layered sẽ quá dài,
+    // chuyển stress để trải 2D.
+    return {
+      "elk.algorithm": "stress",
+      "elk.stress.desiredEdgeLength": "200",
+      "elk.stress.epsilon": "0.0001",
+      "elk.spacing.nodeNode": "80",
+      "elk.edgeRouting": "SPLINES",
+      "elk.randomSeed": "1",
+    };
+  }
+
+  // 2. Folder grouped — giữ layered (hợp với structure)
+  if (context === "folder-overview") {
+    return BASE_ELK_OPTIONS;
+  }
+
+  // 3. Full graph
+  const hasBigHub = maxDegree >= 20;
+  const isSmall = nodeCount < 30;
+
+  if (hasBigHub && !isSmall) {
+    // Graph có hub lớn → force-directed
+    return {
+      "elk.algorithm": "stress",
+      "elk.stress.desiredEdgeLength": "160",
+      "elk.randomSeed": "1",
+      "elk.spacing.nodeNode": "70",
+      "elk.edgeRouting": "SPLINES",
+    };
+  }
+
+  // Mặc định: layered nhưng có treatment cho hub
+  return BASE_ELK_OPTIONS;
+}
+
 export async function buildFolderGraphLayout(
   graphData: ProjectMapGraphResponse,
 ): Promise<FolderGraphLayoutResult> {
   const elkGraph = {
     id: "root",
-    layoutOptions: LAYOUT_OPTIONS.layered,
+    layoutOptions: pickLayoutAlgorithm(
+      graphData.folderNodes.length,
+      Math.max(
+        ...graphData.folderNodes.map((n) => n.incomingCount + n.outgoingCount),
+      ),
+      "folder-overview",
+    ),
     children: graphData.folderNodes.map((node) => ({
       id: node.id,
       width: FOLDER_NODE_WIDTH,
@@ -362,7 +454,13 @@ export async function buildFolderStructureLayout(
 
   const elkGraph = {
     id: "root",
-    layoutOptions: LAYOUT_OPTIONS.layered,
+    layoutOptions: pickLayoutAlgorithm(
+      childNodes.length,
+      Math.max(
+        ...childNodes.map((n) => getNodeDegree(n as ProjectMapGraphNode)),
+      ),
+      "folder-structure",
+    ),
     children: childNodes.map((node) => ({
       id: node.id,
       width: "path" in node ? NODE_WIDTH : FOLDER_NODE_WIDTH,
@@ -431,14 +529,44 @@ export async function buildFolderStructureLayout(
 
 // ─── flat layout (no grouping) ──────────────────────────────────────────────
 
+// Map ELK direction → React Flow handle ids
+function getHandlesForDirection(direction?: string): {
+  sourceHandle: string;
+  targetHandle: string;
+} {
+  switch (direction) {
+    case "DOWN":
+      return { sourceHandle: "bottom", targetHandle: "top" };
+    case "UP":
+      return { sourceHandle: "top", targetHandle: "bottom" };
+    case "LEFT":
+      return { sourceHandle: "left", targetHandle: "right" };
+    case "RIGHT":
+    default:
+      return { sourceHandle: "right", targetHandle: "left" };
+  }
+}
+
 async function buildFlatLayout(
   filteredNodes: ProjectMapGraphNode[],
   filteredEdges: ProjectMapGraphResponse["edges"],
   cycleNodeIds: Set<string>,
+  context: LayoutContext = "focus-hub",
+  relationMode?: GraphRelationMode,
 ): Promise<{ nodes: Node[]; edges: Edge[] }> {
+  const layoutOptions = pickLayoutAlgorithm(
+    filteredNodes.length,
+    Math.max(0, ...filteredNodes.map((n) => getNodeDegree(n))),
+    context,
+    relationMode,
+  );
+  const { sourceHandle, targetHandle } = getHandlesForDirection(
+    layoutOptions["elk.direction"],
+  );
+
   const elkGraph = {
     id: "root",
-    layoutOptions: LAYOUT_OPTIONS.mrtree,
+    layoutOptions,
     children: filteredNodes.map((n) => ({
       id: n.id,
       width: NODE_WIDTH,
@@ -469,6 +597,8 @@ async function buildFlatLayout(
     id: e.id,
     source: e.source,
     target: e.target,
+    sourceHandle,
+    targetHandle,
     type: "smoothstep",
     style: edgeStyle(cycleNodeIds.has(e.source) && cycleNodeIds.has(e.target)),
   }));
@@ -502,6 +632,8 @@ export async function buildFileFocusGraphLayout(
       .filter((cycle) => cycle.nodeIds.includes(focusNodeId))
       .flatMap((cycle) => cycle.nodeIds),
   );
+  const blastRadiusEdgeIds = new Set<string>();
+  const blastRadiusDepthByNode = new Map<string, number>([[focusNodeId, 0]]);
 
   if (relationMode === "cycles" && cycleIdsForFocus.size === 0) {
     return {
@@ -512,8 +644,49 @@ export async function buildFileFocusGraphLayout(
     };
   }
 
+  if (relationMode === "blast-radius") {
+    const reverseEdgesByTarget = new Map<
+      string,
+      ProjectMapGraphResponse["edges"]
+    >();
+
+    for (const edge of graphData.edges) {
+      const items = reverseEdgesByTarget.get(edge.target) ?? [];
+      items.push(edge);
+      reverseEdgesByTarget.set(edge.target, items);
+    }
+
+    const visited = new Set<string>([focusNodeId]);
+    const queue: Array<{ nodeId: string; depth: number }> = [
+      { nodeId: focusNodeId, depth: 0 },
+    ];
+
+    while (queue.length > 0) {
+      const currentItem = queue.shift();
+
+      if (!currentItem) {
+        continue;
+      }
+
+      const { nodeId: currentNodeId, depth } = currentItem;
+
+      for (const edge of reverseEdgesByTarget.get(currentNodeId) ?? []) {
+        blastRadiusEdgeIds.add(edge.id);
+
+        if (visited.has(edge.source)) {
+          continue;
+        }
+
+        visited.add(edge.source);
+        blastRadiusDepthByNode.set(edge.source, depth + 1);
+        relatedIds.add(edge.source);
+        queue.push({ nodeId: edge.source, depth: depth + 1 });
+      }
+    }
+  }
+
   for (const edge of graphData.edges) {
-    if (relationMode === "cycles") {
+    if (relationMode === "cycles" || relationMode === "blast-radius") {
       continue;
     }
 
@@ -549,6 +722,16 @@ export async function buildFileFocusGraphLayout(
     const strongestNeighbors = relatedNodes
       .filter((node) => node.id !== focusNodeId)
       .sort((left, right) => {
+        if (relationMode === "blast-radius") {
+          const depthDifference =
+            (blastRadiusDepthByNode.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+            (blastRadiusDepthByNode.get(right.id) ?? Number.MAX_SAFE_INTEGER);
+
+          if (depthDifference !== 0) {
+            return depthDifference;
+          }
+        }
+
         const degreeDifference = getNodeDegree(right) - getNodeDegree(left);
 
         if (degreeDifference !== 0) {
@@ -561,9 +744,15 @@ export async function buildFileFocusGraphLayout(
 
     relatedNodes = [focus, ...strongestNeighbors];
     smartDefault = {
-      shownCount: relatedNodes.length,
-      totalCount: totalRelatedCount,
-      mode: "top-degree",
+      shownCount:
+        relationMode === "blast-radius"
+          ? Math.max(relatedNodes.length - 1, 0)
+          : relatedNodes.length,
+      totalCount:
+        relationMode === "blast-radius"
+          ? Math.max(totalRelatedCount - 1, 0)
+          : totalRelatedCount,
+      mode: relationMode === "blast-radius" ? "blast-radius" : "top-degree",
     };
   }
 
@@ -587,12 +776,19 @@ export async function buildFileFocusGraphLayout(
       );
     }
 
+    if (relationMode === "blast-radius") {
+      return blastRadiusEdgeIds.has(edge.id);
+    }
+
     return true;
   });
+
   const layout = await buildFlatLayout(
     relatedNodes,
     relatedEdges,
     cycleNodeIds,
+    "focus-hub",
+    relationMode,
   );
 
   return {

@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -17,13 +23,18 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { edgeTypes, type DependencyEdgeData } from "./graph-edge";
 import { nodeTypes } from "./graph-node";
-import type { ProjectMapGraphFolderNode, ProjectMapGraphNode } from "@/features/projects/api";
+import type {
+  ProjectMapGraphFolderNode,
+  ProjectMapGraphNode,
+} from "@/features/projects/api";
+import type { GraphRelationMode } from "../utils/graph-layout";
 
 const EDGE_COLORS = {
   outgoing: "rgb(56 189 248 / 0.82)",
   incoming: "rgb(251 146 60 / 0.82)",
   related: "rgb(148 163 184 / 0.5)",
   cycle: "rgb(239 68 68 / 0.76)",
+  blast: "rgb(217 70 239 / 0.82)",
   muted: "rgb(148 163 184 / 0.07)",
   mutedCycle: "rgb(239 68 68 / 0.1)",
 };
@@ -36,6 +47,7 @@ interface GraphCanvasProps {
   cycleNodeIds: Set<string>;
   selectedNodeId: string | null;
   highlightedNodeIds?: Set<string>;
+  activeRelationMode?: GraphRelationMode;
   projectId: string;
   enableFocusLayout?: boolean;
   onNodeClick: (nodeId: string) => void;
@@ -85,6 +97,7 @@ export function GraphCanvas({
   cycleNodeIds,
   selectedNodeId,
   highlightedNodeIds,
+  activeRelationMode = "all",
   projectId,
   enableFocusLayout = true,
   onNodeClick,
@@ -209,7 +222,8 @@ export function GraphCanvas({
   useEffect(() => {
     setEdges(
       initialEdges.map((e) => {
-        const isCycle = cycleNodeIds.has(e.source) && cycleNodeIds.has(e.target);
+        const isCycle =
+          cycleNodeIds.has(e.source) && cycleNodeIds.has(e.target);
         const relationAnchorId = selectedNodeId || hoveredNodeId;
         const isOutgoingFromAnchor = Boolean(
           relationAnchorId && e.source === relationAnchorId,
@@ -225,30 +239,40 @@ export function GraphCanvas({
           e.source === hoveredNodeId ||
           e.target === hoveredNodeId;
         const stroke = isActive
-          ? isCycle
-            ? EDGE_COLORS.cycle
-            : isOutgoingFromAnchor
-              ? EDGE_COLORS.outgoing
-              : isIncomingToAnchor
-                ? EDGE_COLORS.incoming
-                : EDGE_COLORS.related
+          ? activeRelationMode === "blast-radius"
+            ? EDGE_COLORS.blast
+            : isCycle
+              ? EDGE_COLORS.cycle
+              : isOutgoingFromAnchor
+                ? EDGE_COLORS.outgoing
+                : isIncomingToAnchor
+                  ? EDGE_COLORS.incoming
+                  : EDGE_COLORS.related
           : isCycle
             ? EDGE_COLORS.mutedCycle
             : EDGE_COLORS.muted;
         const strokeWidth =
-          isCycle || isOutgoingFromAnchor || isIncomingToAnchor ? 2.2 : 1.15;
-        const relationLabel = isOutgoingFromAnchor
-          ? "imports"
-          : isIncomingToAnchor
-            ? "imports this"
-            : undefined;
+          activeRelationMode === "blast-radius" ||
+          isCycle ||
+          isOutgoingFromAnchor ||
+          isIncomingToAnchor
+            ? 2.2
+            : 1.15;
+        const relationLabel =
+          activeRelationMode === "blast-radius" && isIncomingToAnchor
+            ? "direct impact"
+            : isOutgoingFromAnchor
+              ? "imports"
+              : isIncomingToAnchor
+                ? "imports this"
+                : undefined;
 
         return {
           ...e,
           type: "dependency",
           data: {
             ...(e.data as DependencyEdgeData | undefined),
-            curveOffset: edgeCurveOffsets.get(e.id) ?? 0,
+            // curveOffset: edgeCurveOffsets.get(e.id) ?? 0,
             relationLabel,
           },
           markerEnd: {
@@ -260,7 +284,10 @@ export function GraphCanvas({
           style: {
             stroke,
             strokeWidth,
-            strokeDasharray: isIncomingToAnchor ? "7 6" : undefined,
+            strokeDasharray:
+              activeRelationMode !== "blast-radius" && isIncomingToAnchor
+                ? "7 6"
+                : undefined,
             transition: "stroke 0.15s ease",
           },
         };
@@ -268,6 +295,7 @@ export function GraphCanvas({
     );
   }, [
     activeNodeIds,
+    activeRelationMode,
     edgeCurveOffsets,
     hoveredNodeId,
     initialEdges,
@@ -289,16 +317,19 @@ export function GraphCanvas({
     <ReactFlow
       nodes={nodes}
       edges={edges}
+      onlyRenderVisibleElements={true}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      onNodeClick={(_event: React.MouseEvent, node: Node<ProjectMapGraphNode>) =>
-        onNodeClick(node.id)
-      }
-      onNodeDoubleClick={(_event: React.MouseEvent, node: Node<ProjectMapGraphNode>) =>
-        onNodeDoubleClick?.(node.id)
-      }
+      // edgeTypes={edgeTypes}
+      onNodeClick={(
+        _event: React.MouseEvent,
+        node: Node<ProjectMapGraphNode>,
+      ) => onNodeClick(node.id)}
+      onNodeDoubleClick={(
+        _event: React.MouseEvent,
+        node: Node<ProjectMapGraphNode>,
+      ) => onNodeDoubleClick?.(node.id)}
       onPaneClick={() => onNodeClick("")}
       onNodeMouseEnter={handleNodeMouseEnter}
       onNodeMouseLeave={handleNodeMouseLeave}

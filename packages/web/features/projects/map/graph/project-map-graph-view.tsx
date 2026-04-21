@@ -15,6 +15,7 @@ import {
   Home,
   Loader2,
   Search,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,7 @@ const RELATION_MODE_LABEL: Record<GraphRelationMode, string> = {
   incoming: "Incoming",
   outgoing: "Outgoing",
   cycles: "Cycles",
+  "blast-radius": "Blast radius",
 };
 
 const RELATION_MODE_ICON: Record<GraphRelationMode, ReactNode> = {
@@ -62,7 +64,67 @@ const RELATION_MODE_ICON: Record<GraphRelationMode, ReactNode> = {
   incoming: <ArrowDown className="size-3.5" />,
   outgoing: <ArrowUp className="size-3.5" />,
   cycles: <Search className="size-3.5" />,
+  "blast-radius": <Zap className="size-3.5" />,
 };
+
+function getBlastRadiusSummary(
+  graphData: ProjectMapGraphResponse,
+  nodeId: string | null,
+) {
+  if (!nodeId) {
+    return null;
+  }
+
+  const reverseEdgesByTarget = new Map<
+    string,
+    ProjectMapGraphResponse["edges"]
+  >();
+
+  for (const edge of graphData.edges) {
+    const items = reverseEdgesByTarget.get(edge.target) ?? [];
+    items.push(edge);
+    reverseEdgesByTarget.set(edge.target, items);
+  }
+
+  const visited = new Set<string>([nodeId]);
+  const impactedIds = new Set<string>();
+  const queue: Array<{ nodeId: string; depth: number }> = [
+    { nodeId, depth: 0 },
+  ];
+  let directCount = 0;
+  let maxDepth = 0;
+  let hasCycles = false;
+
+  while (queue.length > 0) {
+    const currentItem = queue.shift();
+
+    if (!currentItem) {
+      continue;
+    }
+
+    for (const edge of reverseEdgesByTarget.get(currentItem.nodeId) ?? []) {
+      if (visited.has(edge.source)) {
+        hasCycles = true;
+        continue;
+      }
+
+      const nextDepth = currentItem.depth + 1;
+      visited.add(edge.source);
+      impactedIds.add(edge.source);
+      directCount += nextDepth === 1 ? 1 : 0;
+      maxDepth = Math.max(maxDepth, nextDepth);
+      queue.push({ nodeId: edge.source, depth: nextDepth });
+    }
+  }
+
+  return {
+    impactedIds,
+    totalCount: impactedIds.size,
+    directCount,
+    maxDepth,
+    hasCycles,
+  };
+}
 
 function getParentFolder(folderPath: string | null): string | null {
   if (!folderPath || folderPath === "(root)") {
@@ -171,10 +233,15 @@ export function ProjectMapGraphView({
     if (!selectedNodeId) return null;
     return graphData.nodes.find((node) => node.id === selectedNodeId) ?? null;
   }, [selectedNodeId, graphData.nodes]);
+  const selectedBlastRadius = useMemo(
+    () => getBlastRadiusSummary(graphData, selectedNodeId),
+    [graphData, selectedNodeId],
+  );
   const highlightedNodeIds = useMemo(() => {
     if (!selectedNodeId) return undefined;
 
     const relatedIds = new Set<string>([selectedNodeId]);
+    const blastRadiusSummary = getBlastRadiusSummary(graphData, selectedNodeId);
     const selectedCycleIds = new Set(
       graphData.cycles
         .filter((cycle) => cycle.nodeIds.includes(selectedNodeId))
@@ -183,6 +250,14 @@ export function ProjectMapGraphView({
 
     if (relationMode === "cycles") {
       for (const nodeId of selectedCycleIds) {
+        relatedIds.add(nodeId);
+      }
+
+      return relatedIds;
+    }
+
+    if (relationMode === "blast-radius") {
+      for (const nodeId of blastRadiusSummary?.impactedIds ?? []) {
         relatedIds.add(nodeId);
       }
 
@@ -206,7 +281,7 @@ export function ProjectMapGraphView({
     }
 
     return relatedIds;
-  }, [graphData.cycles, graphData.edges, relationMode, selectedNodeId]);
+  }, [graphData, relationMode, selectedNodeId]);
 
   const enterStructure = (folder: string) => {
     setMode("structure");
@@ -510,12 +585,26 @@ export function ProjectMapGraphView({
                   <span className="font-medium text-foreground">
                     {focusLayout.smartDefault.totalCount}
                   </span>{" "}
-                  strongest related files.
+                  {focusLayout.smartDefault.mode === "blast-radius"
+                    ? "closest impacted files."
+                    : "strongest related files."}
                 </div>
               ) : null}
               {relationMode === "cycles" ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
                   Circular dependency path
+                </div>
+              ) : null}
+              {relationMode === "blast-radius" && selectedBlastRadius ? (
+                <div className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
+                  <p className="font-medium text-fuchsia-100">
+                    Blast radius: {selectedBlastRadius.totalCount} impacted
+                    files
+                  </p>
+                  <p className="mt-1 text-fuchsia-100/75">
+                    Reverse dependency closure: files that import this file,
+                    then files importing those files.
+                  </p>
                 </div>
               ) : null}
             </>
@@ -553,6 +642,28 @@ export function ProjectMapGraphView({
                     Outgoing arrows point to files this file imports. Incoming
                     arrows point from files importing this file.
                   </p>
+                  {selectedBlastRadius ? (
+                    <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[10px] text-muted-foreground">
+                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
+                        <p className="font-mono font-semibold text-foreground">
+                          {selectedBlastRadius.totalCount}
+                        </p>
+                        <p>impact</p>
+                      </div>
+                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
+                        <p className="font-mono font-semibold text-foreground">
+                          {selectedBlastRadius.directCount}
+                        </p>
+                        <p>direct</p>
+                      </div>
+                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
+                        <p className="font-mono font-semibold text-foreground">
+                          {selectedBlastRadius.maxDepth}
+                        </p>
+                        <p>depth</p>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5">
@@ -562,6 +673,7 @@ export function ProjectMapGraphView({
                       "incoming",
                       "outgoing",
                       "cycles",
+                      "blast-radius",
                     ] as GraphRelationMode[]
                   ).map((item) => (
                     <Button
@@ -716,6 +828,12 @@ export function ProjectMapGraphView({
                     <span className="h-0.5 w-5 rounded-full border-t-2 border-dashed border-orange-400" />
                     imports selected
                   </span>
+                  {relationMode === "blast-radius" ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-0.5 w-5 rounded-full bg-fuchsia-400" />
+                      blast radius
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               <GraphCanvas
@@ -724,6 +842,7 @@ export function ProjectMapGraphView({
                 cycleNodeIds={activeCycleNodeIds}
                 selectedNodeId={selectedNodeId}
                 highlightedNodeIds={highlightedNodeIds}
+                activeRelationMode={relationMode}
                 projectId={projectId}
                 enableFocusLayout={mode !== "structure" || !selectedNodeId}
                 onNodeClick={handleNodeClick}
