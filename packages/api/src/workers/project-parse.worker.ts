@@ -14,7 +14,7 @@ export async function startProjectParseWorker() {
   ] = await Promise.all([
     import("../db/index.js"),
     import("../lib/project-parse-queue.js"),
-    import("../modules/project-import/parse-runner.js"),
+    import("../modules/project/parse/runner.js"),
   ]);
 
   const workerConnection = new IORedis(

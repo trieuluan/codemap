@@ -589,3 +589,39 @@ export const repoExternalSymbolRelations = relations(
     }),
   }),
 );
+
+type EnumValue<TEnum extends { enumValues: readonly string[] }> =
+  TEnum["enumValues"][number];
+
+export type RepoFileParseStatus = EnumValue<typeof repoFileParseStatusEnum>;
+export type RepoSymbolKind = EnumValue<typeof repoSymbolKindEnum>;
+export type RepoSymbolVisibility = EnumValue<typeof repoSymbolVisibilityEnum>;
+export type RepoSymbolOccurrenceRole =
+  EnumValue<typeof repoSymbolOccurrenceRoleEnum>;
+export type RepoSymbolRelationshipKind =
+  EnumValue<typeof repoSymbolRelationshipKindEnum>;
+export type RepoImportKind = EnumValue<typeof repoImportKindEnum>;
+export type RepoImportResolutionKind =
+  EnumValue<typeof repoImportResolutionKindEnum>;
+export type RepoExportKind = EnumValue<typeof repoExportKindEnum>;
+export type RepoParseIssueSeverity =
+  EnumValue<typeof repoParseIssueSeverityEnum>;
+
+export type ProjectFileRecord = typeof repoFile.$inferSelect;
+export type RepoFileInsert = typeof repoFile.$inferInsert;
+export type RepoSymbolRecord = typeof repoSymbol.$inferSelect;
+export type RepoSymbolInsert = typeof repoSymbol.$inferInsert;
+export type RepoSymbolOccurrenceRecord = typeof repoSymbolOccurrence.$inferSelect;
+export type RepoSymbolOccurrenceInsert = typeof repoSymbolOccurrence.$inferInsert;
+export type RepoSymbolRelationshipRecord =
+  typeof repoSymbolRelationship.$inferSelect;
+export type RepoSymbolRelationshipInsert =
+  typeof repoSymbolRelationship.$inferInsert;
+export type RepoImportEdgeRecord = typeof repoImportEdge.$inferSelect;
+export type RepoImportEdgeInsert = typeof repoImportEdge.$inferInsert;
+export type RepoExportRecord = typeof repoExport.$inferSelect;
+export type RepoExportInsert = typeof repoExport.$inferInsert;
+export type RepoParseIssueRecord = typeof repoParseIssue.$inferSelect;
+export type RepoParseIssueInsert = typeof repoParseIssue.$inferInsert;
+export type RepoExternalSymbolRecord = typeof repoExternalSymbol.$inferSelect;
+export type RepoExternalSymbolInsert = typeof repoExternalSymbol.$inferInsert;

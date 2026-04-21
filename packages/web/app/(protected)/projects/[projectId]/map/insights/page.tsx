@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ProjectMapInsightsView } from "@/features/projects/map/project-map-insights-view";
-import { ProjectMapNav } from "@/features/projects/map/project-map-nav";
-import { ProjectStatusBadge } from "@/features/projects/shared/project-status-badge";
-import { createServerProjectsApi, ProjectsApiError } from "@/lib/api/projects";
+import { ProjectMapInsightsView } from "@/features/projects/map/insights/project-map-insights-view";
+import { ProjectMapNav } from "@/features/projects/map/components/project-map-nav";
+import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
+import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
 export default async function ProjectMapInsightsPage({
   params,
@@ -65,8 +65,8 @@ export default async function ProjectMapInsightsPage({
                 <ProjectStatusBadge status={project.status} />
               </div>
               <p className="text-muted-foreground">
-                Review dependency and structure insights before investing in graph
-                visualizations.
+                Review dependency and structure insights before investing in
+                graph visualizations.
               </p>
               <ProjectMapNav projectId={project.id} active="insights" />
             </div>

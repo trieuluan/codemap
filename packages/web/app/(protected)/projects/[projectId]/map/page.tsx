@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ProjectMapNav } from "@/features/projects/map/project-map-nav";
-import { ProjectMapShell } from "@/features/projects/map/project-map-shell";
-import { ProjectStatusBadge } from "@/features/projects/shared/project-status-badge";
-import { createServerProjectsApi, ProjectsApiError } from "@/lib/api/projects";
+import { ProjectMapNav } from "@/features/projects/map/components/project-map-nav";
+import { ProjectMapShell } from "@/features/projects/map/explorer/project-map-shell";
+import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
+import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
 export default async function ProjectMapPage({
   params,

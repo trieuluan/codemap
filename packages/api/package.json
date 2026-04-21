@@ -8,7 +8,7 @@
     "start": "npm run build:ts && fastify start -l info dist/server.js",
     "build:ts": "tsc -p tsconfig.json",
     "watch:ts": "tsc -w -p tsconfig.json",
-    "dev": "tsx watch --clear-screen=false src/server.ts",
+    "dev": "tsx watch --inspect=0.0.0.0:9229 --clear-screen=false src/server.ts",
     "dev:workers": "tsx watch --clear-screen=false src/workers/index.ts",
     "dev:worker:imports": "tsx watch --clear-screen=false src/workers/project-import.worker.ts",
     "dev:worker:parses": "tsx watch --clear-screen=false src/workers/project-parse.worker.ts",

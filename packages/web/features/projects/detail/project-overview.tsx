@@ -25,19 +25,19 @@ import {
   triggerProjectImport,
   type Project,
   type ProjectImport,
-} from "@/lib/api/projects";
-import { ProjectStatusBadge } from "../shared/project-status-badge";
-import { ProjectVisibilityBadge } from "../shared/project-visibility-badge";
+} from "@/features/projects/api";
+import { ProjectStatusBadge } from "../components/project-status-badge";
+import { ProjectVisibilityBadge } from "../components/project-visibility-badge";
 import {
   getLatestProjectImport,
   getProjectImportStatusLabel,
   getProjectRepositoryLabel,
-} from "../shared/project-helpers";
-import { LocalProjectDate } from "../shared/local-project-date";
-import { ProjectImportStatusBadge } from "../shared/project-import-status-badge";
-import { DeleteProjectDialog } from "../list/delete-project-dialog";
-import { EditProjectDialog } from "./edit-project-dialog";
-import { ProjectImportHistory } from "./project-import-history";
+} from "../utils/project-helpers";
+import { LocalProjectDate } from "../components/local-project-date";
+import { ProjectImportStatusBadge } from "../components/project-import-status-badge";
+import { DeleteProjectDialog } from "../list/components/delete-project-dialog";
+import { EditProjectDialog } from "./components/edit-project-dialog";
+import { ProjectImportHistory } from "./components/project-import-history";
 
 export function ProjectOverview({
   initialProject,

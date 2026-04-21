@@ -14,7 +14,7 @@ export async function startProjectImportWorker() {
   ] = await Promise.all([
     import("../db/index.js"),
     import("../lib/project-import-queue.js"),
-    import("../modules/project-import/runner.js"),
+    import("../modules/project/import/runner.js"),
   ]);
 
   const workerConnection = new IORedis(

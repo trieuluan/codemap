@@ -13,7 +13,7 @@ import { ProjectOverview } from "@/features/projects/detail/project-overview";
 import {
   createServerProjectsApi,
   ProjectsApiError,
-} from "@/lib/api/projects";
+} from "@/features/projects/api";
 
 export default async function ProjectDetailPage({
   params,

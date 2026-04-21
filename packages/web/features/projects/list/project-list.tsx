@@ -19,10 +19,10 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import type { ProjectListItem, ProjectStatus } from "@/lib/api/projects";
-import { CreateProjectDialog } from "./create-project-dialog";
-import { DeleteProjectDialog } from "./delete-project-dialog";
-import { ProjectListCard } from "./project-list-card";
+import type { ProjectListItem, ProjectStatus } from "@/features/projects/api";
+import { CreateProjectDialog } from "./components/create-project-dialog";
+import { DeleteProjectDialog } from "./components/delete-project-dialog";
+import { ProjectListCard } from "./components/project-list-card";
 
 const statusOptions: Array<{ label: string; value: ProjectStatus | "all" }> = [
   { label: "All statuses", value: "all" },

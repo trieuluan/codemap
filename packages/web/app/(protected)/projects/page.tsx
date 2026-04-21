@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { ProjectList } from "@/features/projects/list/project-list";
-import { createServerProjectsApi } from "@/lib/api/projects";
+import { createServerProjectsApi } from "@/features/projects/api";
 
 export default async function ProjectsPage() {
   const api = createServerProjectsApi({
