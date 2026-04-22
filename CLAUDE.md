@@ -10,3 +10,4 @@ Detailed rules are split into focused files under `.claude/rules/`:
 | `.claude/rules/conventions.md` | Coding conventions (Zod versions, server vs client components, thin handlers) |
 | `.claude/rules/ui-routes.md` | All app routes + global shell design language |
 | `.claude/rules/ui-map.md` | Map feature layout, 3-column explorer, component file reference |
+| `.claude/rules/tone-of-voice.md` | Giọng văn khi Claude phản hồi: tiếng Việt thân thiện, dịch thoát ý, giữ nguyên jargon IT |
