@@ -41,7 +41,17 @@ const EDGE_COLORS = {
 
 interface GraphCanvasProps {
   nodes: Node<
-    (ProjectMapGraphNode | ProjectMapGraphFolderNode) & { isInCycle?: boolean }
+    | ((ProjectMapGraphNode | ProjectMapGraphFolderNode) & {
+        isInCycle?: boolean;
+      })
+    | {
+        kind: "cluster";
+        direction: "incoming" | "outgoing";
+        focusId: string;
+        nodeIds: string[];
+        count: number;
+        sample: string[];
+      }
   >[];
   edges: Edge[];
   cycleNodeIds: Set<string>;
@@ -54,6 +64,7 @@ interface GraphCanvasProps {
   onNodeDoubleClick?: (nodeId: string) => void;
   onOpenDrawer: (nodeId: string) => void;
   onCopyPath: (path: string) => void;
+  onExpandCluster?: (clusterId: string) => void;
 }
 
 // ── ZoomSync ────────────────────────────────────────────────────────────────
@@ -104,6 +115,7 @@ export function GraphCanvas({
   onNodeDoubleClick,
   onOpenDrawer,
   onCopyPath,
+  onExpandCluster,
 }: GraphCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -165,6 +177,23 @@ export function GraphCanvas({
     return null;
   }, [highlightedNodeIds, hoveredNodeId, selectedNodeId]);
 
+  // Extend activeNodeIds so cluster nodes light up whenever any of their
+  // contained leaf ids is active. Without this, clusters render at 0.22 opacity
+  // when the focus is selected.
+  const effectiveActiveNodeIds = useMemo(() => {
+    if (!activeNodeIds) return null;
+    const result = new Set(activeNodeIds);
+    for (const node of initialNodes) {
+      if (node.type !== "clusterNode") continue;
+      const clusterNodeIds = (node.data as { nodeIds?: string[] } | undefined)
+        ?.nodeIds;
+      if (clusterNodeIds?.some((id) => activeNodeIds.has(id))) {
+        result.add(node.id);
+      }
+    }
+    return result;
+  }, [activeNodeIds, initialNodes]);
+
   // Apply a fresh layout only when the graph data changes. Do not include zoom or
   // selection here, otherwise dragging a node gets overwritten on every zoom tick.
   useEffect(() => {
@@ -174,7 +203,10 @@ export function GraphCanvas({
         selected: n.id === selectedNodeId,
         style: {
           ...n.style,
-          opacity: activeNodeIds && !activeNodeIds.has(n.id) ? 0.22 : 1,
+          opacity:
+            effectiveActiveNodeIds && !effectiveActiveNodeIds.has(n.id)
+              ? 0.22
+              : 1,
           transition: "opacity 0.15s ease",
         },
         data: {
@@ -183,6 +215,7 @@ export function GraphCanvas({
           projectId,
           onOpenDrawer,
           onCopyPath,
+          onExpand: onExpandCluster,
         },
       })),
     );
@@ -197,7 +230,10 @@ export function GraphCanvas({
         selected: n.id === selectedNodeId,
         style: {
           ...n.style,
-          opacity: activeNodeIds && !activeNodeIds.has(n.id) ? 0.22 : 1,
+          opacity:
+            effectiveActiveNodeIds && !effectiveActiveNodeIds.has(n.id)
+              ? 0.22
+              : 1,
           transition: "opacity 0.15s ease",
         },
         data: {
@@ -206,16 +242,18 @@ export function GraphCanvas({
           projectId,
           onOpenDrawer,
           onCopyPath,
+          onExpand: onExpandCluster,
         },
       })),
     );
   }, [
-    activeNodeIds,
+    effectiveActiveNodeIds,
     selectedNodeId,
     zoom,
     projectId,
     onOpenDrawer,
     onCopyPath,
+    onExpandCluster,
     setNodes,
   ]);
 
@@ -232,8 +270,9 @@ export function GraphCanvas({
           relationAnchorId && e.target === relationAnchorId,
         );
         const isActive =
-          activeNodeIds === null ||
-          (activeNodeIds.has(e.source) && activeNodeIds.has(e.target)) ||
+          effectiveActiveNodeIds === null ||
+          (effectiveActiveNodeIds.has(e.source) &&
+            effectiveActiveNodeIds.has(e.target)) ||
           e.source === selectedNodeId ||
           e.target === selectedNodeId ||
           e.source === hoveredNodeId ||
@@ -294,7 +333,7 @@ export function GraphCanvas({
       }),
     );
   }, [
-    activeNodeIds,
+    effectiveActiveNodeIds,
     activeRelationMode,
     edgeCurveOffsets,
     hoveredNodeId,
@@ -321,7 +360,7 @@ export function GraphCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}
-      // edgeTypes={edgeTypes}
+      edgeTypes={edgeTypes}
       onNodeClick={(
         _event: React.MouseEvent,
         node: Node<ProjectMapGraphNode>,

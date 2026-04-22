@@ -8,6 +8,7 @@ import type {
   ProjectMapGraphFolderNode,
   ProjectMapGraphNode,
 } from "@/features/projects/api";
+import { ClusterNode } from "./cluster-node";
 
 const LANGUAGE_ACCENT: Record<string, string> = {
   TypeScript: "bg-blue-500",
@@ -346,4 +347,5 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
 export const nodeTypes = {
   fileNode: FileNode,
   folderOverview: FolderOverviewNode,
+  clusterNode: ClusterNode,
 };

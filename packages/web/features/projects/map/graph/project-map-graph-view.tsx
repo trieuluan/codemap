@@ -165,6 +165,9 @@ export function ProjectMapGraphView({
   const [focusLayout, setFocusLayout] = useState<GraphLayoutResult | null>(
     null,
   );
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [isLayouting, setIsLayouting] = useState(false);
   const layoutRunRef = useRef(0);
   useEffect(() => {
@@ -194,20 +197,30 @@ export function ProjectMapGraphView({
     }
 
     if (mode === "focus" && focusedNodeId) {
-      buildFileFocusGraphLayout(graphData, focusedNodeId, relationMode).then(
-        (result) => {
-          if (run !== layoutRunRef.current) return;
-          setFocusLayout(result);
-          setFolderLayout(null);
-          setStructureLayout(null);
-          setIsLayouting(false);
-        },
-      );
+      buildFileFocusGraphLayout(
+        graphData,
+        focusedNodeId,
+        relationMode,
+        expandedClusters,
+      ).then((result) => {
+        if (run !== layoutRunRef.current) return;
+        setFocusLayout(result);
+        setFolderLayout(null);
+        setStructureLayout(null);
+        setIsLayouting(false);
+      });
       return;
     }
 
     setIsLayouting(false);
-  }, [focusedNodeId, graphData, mode, relationMode, selectedFolder]);
+  }, [
+    expandedClusters,
+    focusedNodeId,
+    graphData,
+    mode,
+    relationMode,
+    selectedFolder,
+  ]);
 
   const allCycleNodeIds = useMemo(
     () => new Set(graphData.cycles.flatMap((cycle) => cycle.nodeIds)),
@@ -290,6 +303,7 @@ export function ProjectMapGraphView({
     setSelectedNodeId(null);
     setRelationMode("all");
     setDrawerNodeId(null);
+    setExpandedClusters(new Set());
   };
 
   const enterFocus = (nodeId: string, nextRelationMode = relationMode) => {
@@ -298,6 +312,7 @@ export function ProjectMapGraphView({
     setSelectedNodeId(nodeId);
     setRelationMode(nextRelationMode);
     setDrawerNodeId(null);
+    setExpandedClusters(new Set());
   };
 
   const backToOverview = () => {
@@ -307,6 +322,7 @@ export function ProjectMapGraphView({
     setSelectedNodeId(null);
     setRelationMode("all");
     setDrawerNodeId(null);
+    setExpandedClusters(new Set());
   };
 
   const backOneLevel = () => {
@@ -386,6 +402,15 @@ export function ProjectMapGraphView({
     navigator.clipboard.writeText(path).catch(() => {});
   }, []);
 
+  const handleExpandCluster = useCallback((clusterId: string) => {
+    setExpandedClusters((previous) => {
+      if (previous.has(clusterId)) return previous;
+      const next = new Set(previous);
+      next.add(clusterId);
+      return next;
+    });
+  }, []);
+
   const handleSelectByPath = (path: string) => {
     const node = graphData.nodes.find((item) => item.path === path);
 
@@ -395,6 +420,7 @@ export function ProjectMapGraphView({
       setRelationMode("all");
       setDrawerNodeId(node.id);
       setSelectedNodeId(node.id);
+      setExpandedClusters(new Set());
     }
   };
 
@@ -407,6 +433,7 @@ export function ProjectMapGraphView({
 
   const handleRelationModeChange = (nextRelationMode: GraphRelationMode) => {
     setRelationMode(nextRelationMode);
+    setExpandedClusters(new Set());
 
     if (selectedNodeId) {
       enterFocus(selectedNodeId, nextRelationMode);
@@ -849,6 +876,7 @@ export function ProjectMapGraphView({
                 onNodeDoubleClick={handleNodeDoubleClick}
                 onOpenDrawer={handleOpenDrawer}
                 onCopyPath={handleCopyPath}
+                onExpandCluster={handleExpandCluster}
               />
             </>
           ) : null}

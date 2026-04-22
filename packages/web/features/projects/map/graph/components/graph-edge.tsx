@@ -37,7 +37,6 @@ export const DependencyEdge = memo(function DependencyEdge({
     targetPosition: targetPosition ?? Position.Left,
     curvature: 0.35,
   });
-
   return (
     <>
       <BaseEdge
