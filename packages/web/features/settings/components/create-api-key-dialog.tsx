@@ -1,0 +1,200 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { Copy, KeyRound } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { browserSettingsApi, type CreateUserApiKeyResponse } from "@/features/settings/api";
+import { useToast } from "@/components/ui/use-toast";
+
+const api = browserSettingsApi();
+
+export function CreateApiKeyDialog({
+  trigger,
+  onCreated,
+}: {
+  trigger: React.ReactNode;
+  onCreated: () => Promise<unknown> | void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [name, setName] = useState("");
+  const [expiryPreset, setExpiryPreset] = useState<"never" | "90_days">(
+    "90_days",
+  );
+  const [createdKey, setCreatedKey] = useState<CreateUserApiKeyResponse | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open && !isPending) {
+      setName("");
+      setExpiryPreset("90_days");
+      setCreatedKey(null);
+    }
+  }, [isPending, open]);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    startTransition(async () => {
+      try {
+        const result = await api.createApiKey({
+          name: name.trim(),
+          expiryPreset,
+        });
+
+        setCreatedKey(result);
+        await onCreated();
+        toast({
+          title: "API key created",
+          description: "Store the key now. It is only shown once.",
+        });
+      } catch (error) {
+        toast({
+          title: "Unable to create API key",
+          description:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred. Please try again.",
+          variant: "destructive",
+        });
+      }
+    });
+  }
+
+  async function handleCopy() {
+    if (!createdKey?.plainTextKey) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createdKey.plainTextKey);
+      toast({
+        title: "API key copied",
+        description: "The new API key has been copied to your clipboard.",
+      });
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Copy the API key manually from the field below.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent>
+        {createdKey ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>API key created</DialogTitle>
+              <DialogDescription>
+                This key is shown once. Copy it now and store it somewhere safe.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-secondary/40 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="size-4" />
+                  New key
+                </div>
+                <div className="flex gap-2">
+                  <Input value={createdKey.plainTextKey} readOnly />
+                  <Button type="button" variant="outline" onClick={handleCopy}>
+                    <Copy className="mr-2 size-4" />
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" onClick={() => setOpen(false)}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Create API key</DialogTitle>
+              <DialogDescription>
+                Create a personal API key for scripts, MCP clients, or local
+                integrations.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <Label htmlFor="api-key-name">Name</Label>
+                <Input
+                  id="api-key-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="CodeMap MCP on Mac"
+                  disabled={isPending}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="api-key-expiry">Expiry</Label>
+                <Select
+                  value={expiryPreset}
+                  onValueChange={(value: "never" | "90_days") =>
+                    setExpiryPreset(value)
+                  }
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="api-key-expiry">
+                    <SelectValue placeholder="Choose expiry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="90_days">90 days</SelectItem>
+                    <SelectItem value="never">Never</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  disabled={isPending}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isPending || !name.trim()}>
+                  {isPending ? "Creating..." : "Create key"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
