@@ -12,6 +12,8 @@ npm run dev:worker:parses  # parse worker only
 
 ## Database (run from repo root)
 
+Schema changes are schema-first: update `packages/api/src/db/schema/*`, then generate migrations. Do not hand-write migration SQL unless explicitly requested.
+
 ```bash
 npm --workspace=@codemap/api run db:generate  # generate migration from schema changes
 npm --workspace=@codemap/api run db:migrate   # apply migrations

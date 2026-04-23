@@ -5,6 +5,7 @@
 - Keep route handlers thin — all business logic goes in `service.ts`
 - Validate all request inputs with Zod schemas defined in `schema.ts`
 - The `api` package uses **Zod v4** — do not use Zod v3 APIs here
+- Database structure changes are schema-first. Update Drizzle schema files under `packages/api/src/db/schema/`; do not hand-write migration SQL unless explicitly requested. See `database-schema.md`.
 
 ## Frontend
 

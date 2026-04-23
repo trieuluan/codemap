@@ -24,3 +24,16 @@ args = ["--connection-string", "postgresql://app:123456@codemap_pg:5432/codemap_
 transport = "stdio"
 command = "your-http-mcp-server"
 args = ["--base-url", "http://localhost:3001"]
+
+[mcp_servers.codemap_mcp_dev]
+command = "docker"
+args = [
+  "exec",
+  "-i",
+  "codemap-mcp-server-dev",
+  "npx",
+  "tsx",
+  "/workspace/packages/mcp-server/src/index.ts",
+]
+cwd = "/Users/louis/Development/codemap"
+enabled = true

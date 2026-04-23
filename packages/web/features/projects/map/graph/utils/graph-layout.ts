@@ -47,10 +47,7 @@ const CLUSTER_NODE_HEIGHT = 96;
 const elk = new ELK();
 const DEFAULT_POSITION = { x: 0, y: 0 };
 
-type LayoutContext =
-  | "focus-hub"
-  | "folder-overview"
-  | "folder-structure";
+type LayoutContext = "focus-hub" | "folder-overview" | "folder-structure";
 type GraphEdge = ProjectMapGraphResponse["edges"][number];
 type EdgeAggregate = {
   id: string;
@@ -273,10 +270,7 @@ function buildReverseEdgesByTarget(edges: GraphEdge[]) {
   return reverseEdgesByTarget;
 }
 
-function collectBlastRadius(
-  edges: GraphEdge[],
-  focusNodeId: string,
-) {
+function collectBlastRadius(edges: GraphEdge[], focusNodeId: string) {
   const reverseEdgesByTarget = buildReverseEdgesByTarget(edges);
   const edgeIds = new Set<string>();
   const nodeDepths = new Map<string, number>([[focusNodeId, 0]]);
@@ -426,9 +420,7 @@ function limitFocusNodes({
       shownCount: isBlastRadius
         ? Math.max(limitedNodes.length - 1, 0)
         : limitedNodes.length,
-      totalCount: isBlastRadius
-        ? Math.max(nodes.length - 1, 0)
-        : nodes.length,
+      totalCount: isBlastRadius ? Math.max(nodes.length - 1, 0) : nodes.length,
       mode: isBlastRadius ? "blast-radius" : "top-degree",
     },
   };
@@ -1092,6 +1084,29 @@ async function buildClusteredFocusLayout({
     edges: [...fileEdges, ...clusterEdges],
     clusters,
   };
+}
+
+// Re-layout pass dùng cho two-pass auto-layout: nhận nodes với width/height
+// thực (do React Flow đo sau khi mount) và chạy lại ELK với cùng layoutOptions
+// của focus-hub. Trả về position map thay vì React Flow nodes vì caller chỉ
+// cần cập nhật position trên nodes đang có.
+export async function relayoutFocusGraph({
+  nodes,
+  edges,
+  relationMode,
+}: {
+  nodes: Array<{ id: string; width: number; height: number }>;
+  edges: Array<{ id: string; source: string; target: string }>;
+  relationMode: GraphRelationMode;
+}): Promise<Map<string, { x: number; y: number }>> {
+  const layoutOptions = pickLayoutAlgorithm(
+    nodes.length,
+    0,
+    "focus-hub",
+    relationMode,
+  );
+
+  return layoutWithElk(nodes, edges, layoutOptions);
 }
 
 export async function buildFileFocusGraphLayout(

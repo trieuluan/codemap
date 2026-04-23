@@ -77,6 +77,26 @@ services:
     volumes:
       - codemap_redis_data:/data
 
+  mcp_server:
+    image: codemap/dev-workspace:latest
+    container_name: codemap-mcp-server-dev
+    working_dir: /workspace/packages/mcp-server
+    volumes: *codemap-volumes
+    command: sh -c "npx @modelcontextprotocol/inspector npx tsx src/index.ts"
+    env_file:
+      - .env
+    environment:
+      API_URL: ${API_URL:-http://workspace:3001}
+      API_TOKEN: ${API_TOKEN:-}
+      HOST: 0.0.0.0
+    restart: unless-stopped
+    ports:
+      - "6274:6274"
+      - "6277:6277"
+    depends_on:
+      workspace:
+        condition: service_started
+
 volumes:
   codemap_node_modules:
   codemap_postgres_data:

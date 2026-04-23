@@ -7,6 +7,7 @@ import {
   getProjectRawImageFile,
   normalizeRepositoryFilePath,
 } from "./map/file-preview";
+import { buildFileOutlineMarkdown } from "./map/file-outline";
 import { createRepositoryWorkspaceService } from "./import/repository-workspace";
 import {
   findProjectTreeNodeByPath,
@@ -562,6 +563,71 @@ export function createProjectController(fastify: FastifyInstance) {
           endCol: item.endCol + 1,
         })),
       });
+    },
+
+    getProjectFileOutline: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectFileContentQuerySchema.parse(request.query ?? {});
+
+      let normalizedPath: string;
+
+      try {
+        normalizedPath = normalizeRepositoryFilePath(query.path);
+      } catch (error) {
+        throw fastify.httpErrors.badRequest(
+          error instanceof Error ? error.message : "Invalid file path",
+        );
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const importRecord = latestMapWithSource.importRecord;
+
+      if (!importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const fileRecord = await repoParseGraphService.getFileByPath(
+        importRecord.id,
+        normalizedPath,
+      );
+
+      if (!fileRecord) {
+        throw fastify.httpErrors.notFound(
+          "File not found in the latest project map. It may not have been parsed yet.",
+        );
+      }
+
+      const [imports, exportsData, symbols] = await Promise.all([
+        repoParseGraphService.listFileImportEdges(importRecord.id, fileRecord.id),
+        repoParseGraphService.listExports(importRecord.id, fileRecord.id),
+        repoParseGraphService.listFileSymbols(importRecord.id, fileRecord.id),
+      ]);
+
+      const outline = buildFileOutlineMarkdown({
+        file: {
+          path: fileRecord.path,
+          language: fileRecord.language,
+          lineCount: fileRecord.lineCount,
+          parseStatus: fileRecord.parseStatus,
+        },
+        imports,
+        exports: exportsData,
+        symbols,
+      });
+
+      return reply.success({ outline });
     },
 
     getProjectRawFile: async (request: FastifyRequest, reply: FastifyReply) => {

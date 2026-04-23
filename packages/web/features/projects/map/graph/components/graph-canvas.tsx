@@ -15,6 +15,7 @@ import ReactFlow, {
   useEdgesState,
   useViewport,
   useReactFlow,
+  useNodesInitialized,
   MarkerType,
   type Node,
   type Edge,
@@ -27,7 +28,10 @@ import type {
   ProjectMapGraphFolderNode,
   ProjectMapGraphNode,
 } from "@/features/projects/api";
-import type { GraphRelationMode } from "../utils/graph-layout";
+import {
+  relayoutFocusGraph,
+  type GraphRelationMode,
+} from "../utils/graph-layout";
 
 const EDGE_COLORS = {
   outgoing: "rgb(56 189 248 / 0.82)",
@@ -100,6 +104,100 @@ function FitViewSync({
   return null;
 }
 
+// ── ClusterRelayout ──────────────────────────────────────────────────────────
+// Two-pass auto-layout: pass 1 render nodes với position ước lượng (ELK lần 1
+// với size tĩnh). Sau khi React Flow ResizeObserver đo size thật,
+// useNodesInitialized() trả về true → chạy ELK lần 2 với width/height chính
+// xác của từng node (đặc biệt quan trọng cho ClusterNode vốn có height động),
+// rồi cập nhật position. Chỉ chạy khi graph có cluster node — các trường hợp
+// khác báo ready ngay để tránh flash opacity.
+
+function ClusterRelayout({
+  edges,
+  relationMode,
+  nodesKey,
+  onReady,
+}: {
+  edges: Edge[];
+  relationMode: GraphRelationMode;
+  nodesKey: string;
+  onReady: () => void;
+}) {
+  const { getNodes, setNodes, fitView } = useReactFlow();
+  const initialized = useNodesInitialized();
+  const lastRelayoutKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!initialized) return;
+    if (lastRelayoutKeyRef.current === nodesKey) return;
+
+    const current = getNodes();
+    const hasCluster = current.some((node) => node.type === "clusterNode");
+
+    if (!hasCluster) {
+      lastRelayoutKeyRef.current = nodesKey;
+      onReady();
+      return;
+    }
+
+    let cancelled = false;
+    const sizedNodes = current.map((node) => ({
+      id: node.id,
+      width: node.width ?? 240,
+      height: node.height ?? 72,
+    }));
+    const flatEdges = edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+    }));
+
+    relayoutFocusGraph({
+      nodes: sizedNodes,
+      edges: flatEdges,
+      relationMode,
+    })
+      .then((posMap) => {
+        if (cancelled) return;
+        setNodes((currentNodes) =>
+          currentNodes.map((node) => ({
+            ...node,
+            position: posMap.get(node.id) ?? node.position,
+          })),
+        );
+        lastRelayoutKeyRef.current = nodesKey;
+        // fit sau khi positions được commit → chờ 2 rAF như FitViewSync
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            fitView({ duration: 250, padding: 0.2 });
+            onReady();
+          });
+        });
+      })
+      .catch(() => {
+        // Nếu ELK fail (hiếm), vẫn reveal graph với layout pass 1.
+        if (cancelled) return;
+        lastRelayoutKeyRef.current = nodesKey;
+        onReady();
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialized,
+    nodesKey,
+    edges,
+    relationMode,
+    getNodes,
+    setNodes,
+    fitView,
+    onReady,
+  ]);
+
+  return null;
+}
+
 // ── Main canvas ─────────────────────────────────────────────────────────────
 
 export function GraphCanvas({
@@ -124,6 +222,26 @@ export function GraphCanvas({
   const fitRef = useRef<(() => void) | null>(null);
   const displayNodes = initialNodes;
   const displayEdges = initialEdges;
+
+  // ── Two-pass layout readiness ─────────────────────────────────────────────
+  // Stable key để ClusterRelayout biết khi nào tập node đã đổi (chuyển focus,
+  // expand cluster, đổi relation mode). Reset isLayoutReady theo key này —
+  // nếu graph không có cluster thì ready ngay, không flash opacity.
+  const nodesKey = useMemo(
+    () => initialNodes.map((node) => node.id).join("|"),
+    [initialNodes],
+  );
+  const hasClusterInitial = useMemo(
+    () => initialNodes.some((node) => node.type === "clusterNode"),
+    [initialNodes],
+  );
+  const [isLayoutReady, setIsLayoutReady] = useState(!hasClusterInitial);
+  useEffect(() => {
+    setIsLayoutReady(!hasClusterInitial);
+  }, [nodesKey, hasClusterInitial]);
+  const handleLayoutReady = useCallback(() => {
+    setIsLayoutReady(true);
+  }, []);
 
   const edgeCurveOffsets = useMemo(() => {
     const outgoingGroups = new Map<string, Edge[]>();
@@ -378,9 +496,19 @@ export function GraphCanvas({
       maxZoom={2}
       proOptions={{ hideAttribution: true }}
       selectNodesOnDrag={false}
+      style={{
+        opacity: isLayoutReady ? 1 : 0,
+        transition: "opacity 180ms ease",
+      }}
     >
       <ZoomSync onZoom={setZoom} />
       <FitViewSync fitRef={fitRef} />
+      <ClusterRelayout
+        edges={edges}
+        relationMode={activeRelationMode}
+        nodesKey={nodesKey}
+        onReady={handleLayoutReady}
+      />
       <Background gap={20} size={1} color="rgb(148 163 184 / 0.15)" />
       <Controls showInteractive={false} />
       <MiniMap

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codemap-mcp-dev": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "codemap-mcp-server-dev",
+        "npx",
+        "tsx",
+        "/workspace/packages/mcp-server/src/index.ts"
+      ],
+      "cwd": "/Users/louis/Development/codemap"
+    }
+  }
+}

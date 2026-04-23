@@ -584,22 +584,30 @@ export function ProjectMapGraphView({
                 <p className="break-all font-mono text-sm text-foreground">
                   {focusedNode?.path ?? "Selected file"}
                 </p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Left side shows files that use this file. Right side shows
+                  files this file imports.
+                </p>
               </div>
 
               <Separator />
               <div className="space-y-2 text-xs text-muted-foreground">
                 <div className="flex justify-between">
-                  <span>Incoming</span>
+                  <span>Used by</span>
                   <span className="font-mono">
                     {focusedNode?.incomingCount ?? 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Outgoing</span>
+                  <span>Imports</span>
                   <span className="font-mono">
                     {focusedNode?.outgoingCount ?? 0}
                   </span>
                 </div>
+                <p className="pt-1 text-[11px] leading-relaxed">
+                  Arrows always point from the importing file to the imported
+                  file.
+                </p>
               </div>
 
               {focusLayout?.smartDefault ? (
@@ -662,12 +670,12 @@ export function ProjectMapGraphView({
                     {selectedNode.language ? (
                       <span>{selectedNode.language}</span>
                     ) : null}
-                    <span>↓ {selectedNode.incomingCount} incoming</span>
-                    <span>↑ {selectedNode.outgoingCount} outgoing</span>
+                    <span>↓ {selectedNode.incomingCount} used by</span>
+                    <span>↑ {selectedNode.outgoingCount} imports</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Outgoing arrows point to files this file imports. Incoming
-                    arrows point from files importing this file.
+                    Left/importers are files depending on this file.
+                    Right/dependencies are files this file depends on.
                   </p>
                   {selectedBlastRadius ? (
                     <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[10px] text-muted-foreground">
@@ -840,20 +848,20 @@ export function ProjectMapGraphView({
                   <span>
                     Direction:{" "}
                     <span className="font-medium text-foreground">
-                      importer
+                      importing file
                     </span>{" "}
                     →{" "}
                     <span className="font-medium text-foreground">
-                      imported
+                      imported file
                     </span>
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="h-0.5 w-5 rounded-full bg-sky-400" />
-                    selected imports
+                    selected → imports
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="h-0.5 w-5 rounded-full border-t-2 border-dashed border-orange-400" />
-                    imports selected
+                    used by → selected
                   </span>
                   {relationMode === "blast-radius" ? (
                     <span className="flex items-center gap-1.5">
@@ -861,6 +869,30 @@ export function ProjectMapGraphView({
                       blast radius
                     </span>
                   ) : null}
+                </div>
+              ) : null}
+              {mode === "focus" ? (
+                <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-full border border-border/70 bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Left:
+                    </span>{" "}
+                    used by / importers
+                  </span>
+                  <span className="text-muted-foreground/50">|</span>
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Center:
+                    </span>{" "}
+                    selected file
+                  </span>
+                  <span className="text-muted-foreground/50">|</span>
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Right:
+                    </span>{" "}
+                    imports / dependencies
+                  </span>
                 </div>
               ) : null}
               <GraphCanvas

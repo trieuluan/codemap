@@ -18,9 +18,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx src/scripts/seed.ts"
+    "db:seed": "tsx src/scripts/seed.ts",
+    "api-key:create": "tsx src/scripts/create-api-key.ts"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.6.7",
     "@bull-board/api": "^6.21.1",
     "@bull-board/fastify": "^6.21.1",
     "@fastify/autoload": "^6.3.1",
@@ -31,7 +33,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^6.0.0",
     "argon2": "^0.44.0",
-    "better-auth": "^1.6.1",
+    "better-auth": "^1.6.7",
     "bullmq": "^5.73.4",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
