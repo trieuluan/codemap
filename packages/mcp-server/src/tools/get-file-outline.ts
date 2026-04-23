@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
+import { requestCodeMapApi, toToolErrorContent } from "../lib/codemap-api.js";
 
 export function registerGetFileOutlineTool(
   server: McpServer,
@@ -29,77 +30,31 @@ export function registerGetFileOutlineTool(
       },
     },
     async ({ project_id, file_path }) => {
-      if (!config.apiUrl) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Error: API_URL is not configured. Set the API_URL environment variable to the CodeMap API base URL.",
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const url = new URL(
-        `/projects/${encodeURIComponent(project_id)}/map/files/outline`,
-        config.apiUrl,
-      );
-      url.searchParams.set("path", file_path);
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-
-      if (config.apiToken) {
-        headers["x-api-key"] = config.apiToken;
-        headers["Authorization"] = `Bearer ${config.apiToken}`;
-      }
-
-      let response: Response;
-
       try {
-        response = await fetch(url.toString(), { headers });
+        const data = await requestCodeMapApi<{ outline?: string }>(
+          config,
+          `/projects/${encodeURIComponent(project_id)}/map/files/outline`,
+          {
+            query: {
+              path: file_path,
+            },
+            authRequired: true,
+          },
+        );
+        const outline = data?.outline;
+
+        if (!outline) {
+          return {
+            content: [{ type: "text", text: "No outline available for this file." }],
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: outline }],
+        };
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Failed to reach CodeMap API at ${config.apiUrl}. ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return toToolErrorContent(error);
       }
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: CodeMap API returned ${response.status} ${response.statusText}. ${body}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const json = (await response.json()) as {
-        data?: { outline?: string };
-      };
-
-      const outline = json?.data?.outline;
-
-      if (!outline) {
-        return {
-          content: [{ type: "text", text: "No outline available for this file." }],
-        };
-      }
-
-      return {
-        content: [{ type: "text", text: outline }],
-      };
     },
   );
 }

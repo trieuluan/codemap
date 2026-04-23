@@ -57,6 +57,7 @@ export function registerCreateProjectFromWorkspaceTool(
               defaultBranch: workspace.branch,
               branch: branch ?? workspace.branch,
             },
+            authRequired: true,
           },
         );
 

@@ -1,35 +1,6 @@
-import { spawn } from "node:child_process";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-
-function isSupportedUrl(value: string) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function getOpenCommand(url: string) {
-  switch (process.platform) {
-    case "darwin":
-      return {
-        command: "open",
-        args: [url],
-      };
-    case "win32":
-      return {
-        command: "cmd",
-        args: ["/c", "start", "", url],
-      };
-    default:
-      return {
-        command: "xdg-open",
-        args: [url],
-      };
-  }
-}
+import { isSupportedUrl, openUrlInBrowser } from "../lib/open-url.js";
 
 export function registerOpenUrlTool(server: McpServer) {
   server.registerTool(
@@ -47,15 +18,8 @@ export function registerOpenUrlTool(server: McpServer) {
       },
     },
     async ({ url }) => {
-      const launcher = getOpenCommand(url);
-
       try {
-        const child = spawn(launcher.command, launcher.args, {
-          detached: true,
-          stdio: "ignore",
-        });
-
-        child.unref();
+        await openUrlInBrowser(url);
       } catch (error) {
         return {
           content: [

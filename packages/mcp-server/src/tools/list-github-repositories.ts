@@ -60,6 +60,7 @@ export function registerListGithubRepositoriesTool(
             query: {
               limit: limit ? `${limit}` : undefined,
             },
+            authRequired: true,
           },
         );
 
@@ -107,6 +108,7 @@ export function registerSearchGithubRepositoriesTool(
               q: query,
               limit: limit ? `${limit}` : undefined,
             },
+            authRequired: true,
           },
         );
 

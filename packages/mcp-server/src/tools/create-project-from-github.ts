@@ -64,6 +64,7 @@ export function registerCreateProjectFromGithubTool(
               defaultBranch: default_branch,
               branch,
             },
+            authRequired: true,
           },
         );
 

@@ -7,12 +7,11 @@ export async function requestCodeMapApi<T>(
     method?: "GET" | "POST";
     body?: unknown;
     query?: Record<string, string | undefined>;
+    authRequired?: boolean;
   },
 ) {
-  if (!config.apiUrl) {
-    throw new Error(
-      "API_URL is not configured. Set the API_URL environment variable to the CodeMap API base URL.",
-    );
+  if (options?.authRequired && !config.apiToken) {
+    throw new Error("Not authenticated. Run `codemap-mcp login`.");
   }
 
   const url = new URL(path, config.apiUrl);

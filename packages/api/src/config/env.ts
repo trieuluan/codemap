@@ -13,6 +13,7 @@ export const envSchema = z.object({
   CODEMAP_STORAGE_ROOT: z.string().trim().min(1).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
+  WEB_APP_URL: z.url().optional(),
   GITHUB_CLIENT_ID: z.string().trim().min(1).optional(),
   GITHUB_CLIENT_SECRET: z.string().trim().min(1).optional(),
   GITHUB_OAUTH_CALLBACK_URL: z.url().optional(),

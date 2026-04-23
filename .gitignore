@@ -82,3 +82,4 @@ packages/*/.env.*
 .continue
 
 .codemap-storage/*
+.codemap/
