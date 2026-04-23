@@ -7,6 +7,9 @@ import {
 import type {
   ProjectAnalysisSummary,
   CreateProjectInput,
+  CreateProjectFromGithubInput,
+  CreateProjectFromWorkspaceInput,
+  GithubRepositoryOption,
   Project,
   ProjectFileContent,
   ProjectFileParseData,
@@ -17,6 +20,7 @@ import type {
   ProjectMapSnapshot,
   ProjectMapSearchResponse,
   ProjectMapGraphResponse,
+  ProjectSourceImportResult,
   UpdateProjectInput,
   TriggerProjectImportInput,
 } from "./projects.types";
@@ -119,6 +123,16 @@ export function createServerProjectsApi(
         },
       );
     },
+
+    listGithubRepositories: async (query?: string, limit?: number) => {
+      return requestApi<GithubRepositoryOption[]>("/github/repositories", {
+        cookieHeader: defaults.cookieHeader,
+        queryParams: {
+          q: query,
+          limit: limit ? `${limit}` : undefined,
+        },
+      });
+    },
   };
 }
 
@@ -161,5 +175,23 @@ export async function triggerProjectImport(
   return requestApi<ProjectImport>(`/projects/${projectId}/import`, {
     method: "POST",
     body: input ?? {},
+  });
+}
+
+export async function createProjectFromWorkspace(
+  input: CreateProjectFromWorkspaceInput,
+) {
+  return requestApi<ProjectSourceImportResult>("/projects/from-workspace", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function createProjectFromGithub(
+  input: CreateProjectFromGithubInput,
+) {
+  return requestApi<ProjectSourceImportResult>("/projects/from-github", {
+    method: "POST",
+    body: input,
   });
 }

@@ -9,6 +9,13 @@ import { registerGetFileOutlineTool } from "./tools/get-file-outline.js";
 import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
 import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
 import { registerOpenUrlTool } from "./tools/open-url.js";
+import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
+import {
+  registerListGithubRepositoriesTool,
+  registerSearchGithubRepositoriesTool,
+} from "./tools/list-github-repositories.js";
+import { registerCreateProjectFromWorkspaceTool } from "./tools/create-project-from-workspace.js";
+import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
 
 async function main() {
   const config = loadConfig();
@@ -22,6 +29,11 @@ async function main() {
   registerCheckGithubConnectionTool(server, config);
   registerGetGithubConnectUrlTool(server, config);
   registerOpenUrlTool(server);
+  registerGetCurrentWorkspaceInfoTool(server);
+  registerListGithubRepositoriesTool(server, config);
+  registerSearchGithubRepositoriesTool(server, config);
+  registerCreateProjectFromWorkspaceTool(server, config);
+  registerCreateProjectFromGithubTool(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

@@ -3,6 +3,8 @@ import type { db } from "../../db";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
   CreateProjectBody,
+  CreateProjectFromGithubBody,
+  CreateProjectFromWorkspaceBody,
   CreateProjectImportBody,
   ProjectListInclude,
   UpdateProjectBody,
@@ -23,6 +25,14 @@ function slugifyProjectName(value: string) {
 }
 
 export function createProjectService(database: Database) {
+  function normalizeRepositoryUrl(value: string) {
+    return value.trim().replace(/\/+$/, "");
+  }
+
+  function normalizeLocalWorkspacePath(value: string) {
+    return value.trim();
+  }
+
   async function ensureUniqueSlug(slug: string, excludeProjectId?: string) {
     let candidate = slug;
     let suffix = 1;
@@ -55,14 +65,65 @@ export function createProjectService(database: Database) {
     });
   }
 
+  async function getOwnedProjectByGithubSource(
+    ownerUserId: string,
+    input: {
+      repositoryUrl: string;
+      externalRepoId?: string | null;
+    },
+  ) {
+    const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
+
+    if (input.externalRepoId) {
+      const projectByExternalRepoId = await database.query.project.findFirst({
+        where: and(
+          eq(project.ownerUserId, ownerUserId),
+          eq(project.provider, "github"),
+          eq(project.externalRepoId, input.externalRepoId),
+        ),
+      });
+
+      if (projectByExternalRepoId) {
+        return projectByExternalRepoId;
+      }
+    }
+
+    return database.query.project.findFirst({
+      where: and(
+        eq(project.ownerUserId, ownerUserId),
+        eq(project.provider, "github"),
+        eq(project.repositoryUrl, normalizedRepositoryUrl),
+      ),
+    });
+  }
+
+  async function getOwnedProjectByWorkspaceSource(
+    ownerUserId: string,
+    localWorkspacePath: string,
+  ) {
+    return database.query.project.findFirst({
+      where: and(
+        eq(project.ownerUserId, ownerUserId),
+        eq(project.provider, "local_workspace"),
+        eq(
+          project.localWorkspacePath,
+          normalizeLocalWorkspacePath(localWorkspacePath),
+        ),
+      ),
+    });
+  }
+
   return {
     async createProject(ownerUserId: string, input: CreateProjectBody) {
       const baseSlug = slugifyProjectName(input.slug ?? input.name);
       const slug = await ensureUniqueSlug(baseSlug);
       const hasRepositoryUrl = Boolean(input.repositoryUrl);
+      const hasLocalWorkspacePath = Boolean(input.localWorkspacePath);
       const provider = hasRepositoryUrl
         ? (input.provider ?? "github")
-        : (input.provider ?? null);
+        : hasLocalWorkspacePath
+          ? (input.provider ?? "local_workspace")
+          : (input.provider ?? null);
 
       const [createdProject] = await database
         .insert(project)
@@ -73,7 +134,12 @@ export function createProjectService(database: Database) {
           ownerUserId,
           visibility: input.visibility ?? "private",
           defaultBranch: input.defaultBranch ?? null,
-          repositoryUrl: input.repositoryUrl ?? null,
+          repositoryUrl: input.repositoryUrl
+            ? normalizeRepositoryUrl(input.repositoryUrl)
+            : null,
+          localWorkspacePath: input.localWorkspacePath
+            ? normalizeLocalWorkspacePath(input.localWorkspacePath)
+            : null,
           provider,
           externalRepoId: input.externalRepoId ?? null,
         })
@@ -141,10 +207,21 @@ export function createProjectService(database: Database) {
       if (input.defaultBranch !== undefined)
         values.defaultBranch = input.defaultBranch;
       if (input.repositoryUrl !== undefined) {
-        values.repositoryUrl = input.repositoryUrl;
+        values.repositoryUrl = input.repositoryUrl
+          ? normalizeRepositoryUrl(input.repositoryUrl)
+          : null;
         values.provider = input.repositoryUrl
           ? (input.provider ?? existingProject.provider ?? "github")
           : (input.provider ?? null);
+      }
+      if (input.localWorkspacePath !== undefined) {
+        values.localWorkspacePath = input.localWorkspacePath
+          ? normalizeLocalWorkspacePath(input.localWorkspacePath)
+          : null;
+        if (!input.repositoryUrl && input.localWorkspacePath) {
+          values.provider =
+            input.provider ?? existingProject.provider ?? "local_workspace";
+        }
       } else if (input.provider !== undefined) {
         values.provider = input.provider;
       }
@@ -165,6 +242,111 @@ export function createProjectService(database: Database) {
         .returning();
 
       return updatedProject;
+    },
+
+    async createOrReuseProjectFromGithub(
+      ownerUserId: string,
+      input: CreateProjectFromGithubBody,
+    ) {
+      const existingProject = await getOwnedProjectByGithubSource(ownerUserId, {
+        repositoryUrl: input.repositoryUrl,
+        externalRepoId: input.externalRepoId,
+      });
+      const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
+
+      if (existingProject) {
+        const [updatedProject] = await database
+          .update(project)
+          .set({
+            name: input.name ?? existingProject.name,
+            description:
+              input.description !== undefined
+                ? (input.description ?? null)
+                : existingProject.description,
+            defaultBranch:
+              input.defaultBranch !== undefined
+                ? (input.defaultBranch ?? null)
+                : existingProject.defaultBranch,
+            repositoryUrl: normalizedRepositoryUrl,
+            provider: "github",
+            externalRepoId:
+              input.externalRepoId !== undefined
+                ? (input.externalRepoId ?? null)
+                : existingProject.externalRepoId,
+          })
+          .where(eq(project.id, existingProject.id))
+          .returning();
+
+        return updatedProject ?? existingProject;
+      }
+
+      return this.createProject(ownerUserId, {
+        name:
+          input.name ??
+          normalizeRepositoryUrl(input.repositoryUrl)
+            .split("/")
+            .filter(Boolean)
+            .at(-1) ??
+          "github-project",
+        description: input.description ?? null,
+        defaultBranch: input.defaultBranch ?? null,
+        repositoryUrl: normalizedRepositoryUrl,
+        provider: "github",
+        externalRepoId: input.externalRepoId ?? null,
+      });
+    },
+
+    async createOrReuseProjectFromWorkspace(
+      ownerUserId: string,
+      input: CreateProjectFromWorkspaceBody,
+    ) {
+      const normalizedLocalWorkspacePath = normalizeLocalWorkspacePath(
+        input.localWorkspacePath,
+      );
+      const existingProject = await getOwnedProjectByWorkspaceSource(
+        ownerUserId,
+        normalizedLocalWorkspacePath,
+      );
+
+      if (existingProject) {
+        const [updatedProject] = await database
+          .update(project)
+          .set({
+            name: input.name ?? existingProject.name,
+            description:
+              input.description !== undefined
+                ? (input.description ?? null)
+                : existingProject.description,
+            defaultBranch:
+              input.defaultBranch !== undefined
+                ? (input.defaultBranch ?? null)
+                : existingProject.defaultBranch,
+            repositoryUrl:
+              input.repositoryUrl !== undefined
+                ? (input.repositoryUrl
+                    ? normalizeRepositoryUrl(input.repositoryUrl)
+                    : null)
+                : existingProject.repositoryUrl,
+            localWorkspacePath: normalizedLocalWorkspacePath,
+            provider: "local_workspace",
+          })
+          .where(eq(project.id, existingProject.id))
+          .returning();
+
+        return updatedProject ?? existingProject;
+      }
+
+      return this.createProject(ownerUserId, {
+        name:
+          input.name ??
+          normalizedLocalWorkspacePath.split("/").filter(Boolean).at(-1) ??
+          "workspace-project",
+        description: input.description ?? null,
+        defaultBranch: input.defaultBranch ?? null,
+        repositoryUrl: input.repositoryUrl ?? null,
+        localWorkspacePath: normalizedLocalWorkspacePath,
+        provider: "local_workspace",
+      });
     },
 
     async setProjectDefaultBranchIfMissing(projectId: string, branch: string) {

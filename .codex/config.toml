@@ -36,3 +36,6 @@ enabled = true
 [mcp_servers.codemap_mcp_dev.env]
 API_URL = "http://localhost:3001"
 API_TOKEN = "codemap_MVHCHGBXBtMVnwCTPsBMgrQjjvqCHWKziuQKcfAfVIswomlcCTzaZOMTcVUUIoSH"
+
+[mcp_servers.codemap_mcp_dev.tools.get_current_workspace_info]
+approval_mode = "approve"

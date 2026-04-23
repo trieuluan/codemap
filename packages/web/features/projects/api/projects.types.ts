@@ -5,7 +5,7 @@ export type ProjectStatus =
   | "ready"
   | "failed"
   | "archived";
-export type ProjectProvider = "github";
+export type ProjectProvider = "github" | "local_workspace";
 export type ProjectImportStatus =
   | "pending"
   | "running"
@@ -35,6 +35,7 @@ export interface Project {
   status: ProjectStatus;
   defaultBranch: string | null;
   repositoryUrl: string | null;
+  localWorkspacePath: string | null;
   provider: ProjectProvider | null;
   externalRepoId: string | null;
   lastImportedAt: string | null;
@@ -390,6 +391,7 @@ export interface CreateProjectInput {
   description?: string | null;
   defaultBranch?: string | null;
   repositoryUrl?: string | null;
+  localWorkspacePath?: string | null;
 }
 
 export interface UpdateProjectInput {
@@ -397,8 +399,42 @@ export interface UpdateProjectInput {
   description?: string | null;
   defaultBranch?: string | null;
   repositoryUrl?: string | null;
+  localWorkspacePath?: string | null;
 }
 
 export interface TriggerProjectImportInput {
   branch?: string;
+}
+
+export interface GithubRepositoryOption {
+  id: string;
+  name: string;
+  fullName: string;
+  ownerLogin: string;
+  defaultBranch: string | null;
+  private: boolean;
+  repositoryUrl: string;
+}
+
+export interface CreateProjectFromWorkspaceInput {
+  name?: string;
+  description?: string | null;
+  localWorkspacePath: string;
+  repositoryUrl?: string | null;
+  defaultBranch?: string | null;
+  branch?: string;
+}
+
+export interface CreateProjectFromGithubInput {
+  name?: string;
+  description?: string | null;
+  repositoryUrl: string;
+  externalRepoId?: string | null;
+  defaultBranch?: string | null;
+  branch?: string;
+}
+
+export interface ProjectSourceImportResult {
+  project: Project;
+  import: ProjectImport;
 }

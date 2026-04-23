@@ -5,6 +5,8 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   const controller = createProjectController(fastify);
 
   fastify.post("/", controller.createProject);
+  fastify.post("/from-workspace", controller.createProjectFromWorkspace);
+  fastify.post("/from-github", controller.createProjectFromGithub);
   fastify.get("/", controller.listProjects);
   fastify.get("/:projectId", controller.getProjectById);
   fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);

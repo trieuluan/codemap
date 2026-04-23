@@ -17,6 +17,8 @@ import { createRepoParseGraphService } from "./parse/repo-parse-graph";
 import { createProjectService } from "./service";
 import {
   createProjectBodySchema,
+  createProjectFromGithubBodySchema,
+  createProjectFromWorkspaceBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
   projectFileContentQuerySchema,
@@ -42,6 +44,28 @@ export function createProjectController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
   const repoParseGraphService = createRepoParseGraphService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
+
+  async function enqueueImportOrFail(
+    request: FastifyRequest,
+    projectImportId: string,
+  ) {
+    try {
+      await enqueueProjectImportJob(fastify.redis, {
+        importId: projectImportId,
+      });
+    } catch (error) {
+      request.log.error(error, "Failed to enqueue project import job");
+
+      await service.markImportAsFailed(
+        projectImportId,
+        "Unable to enqueue import job",
+      );
+
+      throw fastify.httpErrors.internalServerError(
+        "Unable to start import job",
+      );
+    }
+  }
 
   return {
     createProject: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -151,24 +175,105 @@ export function createProjectController(fastify: FastifyInstance) {
         throw fastify.httpErrors.notFound("Project not found");
       }
 
+      await enqueueImportOrFail(request, createdImport.id);
+
+      return reply.success(createdImport, 201);
+    },
+
+    createProjectFromWorkspace: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const body = createProjectFromWorkspaceBodySchema.parse(
+        request.body ?? {},
+      );
+      const project = await service.createOrReuseProjectFromWorkspace(
+        userId,
+        body,
+      );
+
+      let createdImport;
+
       try {
-        await enqueueProjectImportJob(fastify.redis, {
-          importId: createdImport.id,
+        createdImport = await service.createImport(project.id, userId, {
+          branch: body.branch,
         });
       } catch (error) {
-        request.log.error(error, "Failed to enqueue project import job");
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "An import is already queued or running for this project",
+          );
+        }
 
-        await service.markImportAsFailed(
-          createdImport.id,
-          "Unable to enqueue import job",
-        );
+        throw error;
+      }
 
+      if (!createdImport) {
         throw fastify.httpErrors.internalServerError(
-          "Unable to start import job",
+          "Unable to create project import",
         );
       }
 
-      return reply.success(createdImport, 201);
+      await enqueueImportOrFail(request, createdImport.id);
+
+      return reply.success(
+        {
+          project,
+          import: createdImport,
+        },
+        201,
+      );
+    },
+
+    createProjectFromGithub: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const body = createProjectFromGithubBodySchema.parse(request.body ?? {});
+      const project = await service.createOrReuseProjectFromGithub(
+        userId,
+        body,
+      );
+
+      let createdImport;
+
+      try {
+        createdImport = await service.createImport(project.id, userId, {
+          branch: body.branch,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "An import is already queued or running for this project",
+          );
+        }
+
+        throw error;
+      }
+
+      if (!createdImport) {
+        throw fastify.httpErrors.internalServerError(
+          "Unable to create project import",
+        );
+      }
+
+      await enqueueImportOrFail(request, createdImport.id);
+
+      return reply.success(
+        {
+          project,
+          import: createdImport,
+        },
+        201,
+      );
     },
 
     listImports: async (request: FastifyRequest, reply: FastifyReply) => {

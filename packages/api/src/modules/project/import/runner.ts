@@ -4,6 +4,7 @@ import { db } from "../../../db";
 import { enqueueProjectParseJob } from "../../../lib/project-parse-queue";
 import { createProjectMapPersistence } from "../map/map-persistence";
 import { buildProjectTree } from "../map/tree-builder";
+import { createGithubService } from "../../github/service";
 import { createProjectService } from "../service";
 import { createRepositoryWorkspaceService } from "./repository-workspace";
 import {
@@ -56,13 +57,47 @@ export async function runProjectImport(
 
   const { importRecord, projectRecord } = importDetails;
 
-  if (!projectRecord.repositoryUrl) {
+  if (
+    projectRecord.provider !== "github" &&
+    projectRecord.provider !== "local_workspace"
+  ) {
     await projectService.markImportAsFailed(
       importRecord.id,
-      "Repository URL is missing for this project",
+      "Project source provider is not configured for this project",
     );
     return;
   }
+
+  if (projectRecord.provider === "github" && !projectRecord.repositoryUrl) {
+    await projectService.markImportAsFailed(
+      importRecord.id,
+      "Repository URL is missing for this GitHub project",
+    );
+    return;
+  }
+
+  if (
+    projectRecord.provider === "local_workspace" &&
+    !projectRecord.localWorkspacePath
+  ) {
+    await projectService.markImportAsFailed(
+      importRecord.id,
+      "Local workspace path is missing for this project",
+    );
+    return;
+  }
+
+  const githubService = createGithubService(db, context?.redisConnection ?? null, {
+    clientId: process.env.GITHUB_CLIENT_ID ?? "",
+    clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+    callbackUrl:
+      process.env.GITHUB_OAUTH_CALLBACK_URL ??
+      `${process.env.BETTER_AUTH_URL}/github/callback`,
+  });
+  const githubAccessToken =
+    projectRecord.provider === "github"
+      ? await githubService.getAccessToken(projectRecord.ownerUserId)
+      : null;
 
   let materializedSource: Awaited<
     ReturnType<typeof materializeRepositorySource>
@@ -73,17 +108,38 @@ export async function runProjectImport(
 
   try {
     await reportProjectImportProgress(context, 10, "validating-repository");
-    await validateRepositorySourceAccess(projectRecord.repositoryUrl);
+    await validateRepositorySourceAccess(
+      projectRecord.provider === "local_workspace"
+        ? {
+            provider: "local_workspace",
+            workspacePath: projectRecord.localWorkspacePath!,
+          }
+        : {
+            provider: "github",
+            repositoryUrl: projectRecord.repositoryUrl!,
+            accessToken: githubAccessToken,
+          },
+    );
 
     await projectService.markImportAsRunning(importRecord.id, {
       branch: importRecord.branch ?? projectRecord.defaultBranch,
     });
 
     await reportProjectImportProgress(context, 30, "resolving-branch");
-    const resolvedSource = await resolveRepositorySource({
-      repositoryUrl: projectRecord.repositoryUrl,
-      preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
-    });
+    const resolvedSource = await resolveRepositorySource(
+      projectRecord.provider === "local_workspace"
+        ? {
+            provider: "local_workspace",
+            workspacePath: projectRecord.localWorkspacePath!,
+            preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+          }
+        : {
+            provider: "github",
+            repositoryUrl: projectRecord.repositoryUrl!,
+            preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+            accessToken: githubAccessToken,
+          },
+    );
 
     if (!projectRecord.defaultBranch) {
       await projectService.setProjectDefaultBranchIfMissing(
@@ -93,7 +149,9 @@ export async function runProjectImport(
     }
 
     await reportProjectImportProgress(context, 45, "downloading-source");
-    materializedSource = await materializeRepositorySource(resolvedSource);
+    materializedSource = await materializeRepositorySource(resolvedSource, {
+      accessToken: githubAccessToken,
+    });
 
     await projectService.markImportAsRunning(importRecord.id, {
       branch: resolvedSource.branch,
@@ -102,7 +160,9 @@ export async function runProjectImport(
     await reportProjectImportProgress(context, 60, "scanning-filesystem");
     const tree = await buildProjectTree(
       materializedSource.workspacePath,
-      materializedSource.reference.repo,
+      "repo" in materializedSource.reference
+        ? materializedSource.reference.repo
+        : materializedSource.reference.repoName,
     );
 
     await reportProjectImportProgress(context, 85, "saving-project-map");

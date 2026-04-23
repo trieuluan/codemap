@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createGithubService } from "./service";
-import { githubCallbackQuerySchema } from "./schema";
+import {
+  githubCallbackQuerySchema,
+  githubRepositoriesQuerySchema,
+} from "./schema";
 
 function getGithubConfig(fastify: FastifyInstance) {
   const clientId = process.env.GITHUB_CLIENT_ID;
@@ -72,6 +75,37 @@ export function createGithubController(fastify: FastifyInstance) {
       const url = await service.generateConnectUrl(userId);
 
       return reply.success({ url });
+    },
+
+    listRepositories: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const query = githubRepositoriesQuerySchema.parse(request.query ?? {});
+      const service = createGithubService(fastify.db, fastify.redis);
+
+      try {
+        const repositories = await service.listAccessibleRepositories(userId, {
+          query: query.q,
+          limit: query.limit,
+        });
+
+        return reply.success(repositories, 200, {
+          count: repositories.length,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "GITHUB_NOT_CONNECTED"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "GitHub account is not connected for this user",
+          );
+        }
+
+        throw error;
+      }
     },
 
     /**

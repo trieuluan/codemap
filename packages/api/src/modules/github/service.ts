@@ -23,9 +23,21 @@ type GithubUser = {
   email: string | null;
 };
 
+type GithubRepository = {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  default_branch: string | null;
+  html_url: string;
+  owner: {
+    login: string;
+  };
+};
+
 export function createGithubService(
   db: Db,
-  redis: Redis,
+  redis: Redis | null,
   config?: {
     clientId: string;
     clientSecret: string;
@@ -38,11 +50,20 @@ export function createGithubService(
     }
     return config;
   }
+
+  function requireRedis() {
+    if (!redis) {
+      throw new Error("Redis is not configured on this server");
+    }
+
+    return redis;
+  }
   // ── OAuth state helpers ────────────────────────────────────────────────────
 
   async function createOAuthState(userId: string): Promise<string> {
+    const redisClient = requireRedis();
     const state = randomUUID();
-    await redis.setex(
+    await redisClient.setex(
       `${GITHUB_STATE_KEY_PREFIX}${state}`,
       OAUTH_STATE_TTL_SECONDS,
       userId,
@@ -51,10 +72,11 @@ export function createGithubService(
   }
 
   async function consumeOAuthState(state: string): Promise<string | null> {
+    const redisClient = requireRedis();
     const key = `${GITHUB_STATE_KEY_PREFIX}${state}`;
-    const userId = await redis.get(key);
+    const userId = await redisClient.get(key);
     if (userId) {
-      await redis.del(key);
+      await redisClient.del(key);
     }
     return userId;
   }
@@ -103,6 +125,41 @@ export function createGithubService(
     }
 
     return res.json() as Promise<GithubUser>;
+  }
+
+  async function fetchGithubRepositories(accessToken: string) {
+    const repositories: GithubRepository[] = [];
+    let page = 1;
+
+    while (page <= 4) {
+      const url = new URL("https://api.github.com/user/repos");
+      url.searchParams.set("affiliation", "owner,collaborator,organization_member");
+      url.searchParams.set("sort", "updated");
+      url.searchParams.set("per_page", "100");
+      url.searchParams.set("page", `${page}`);
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github+json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch GitHub repositories: ${response.status}`);
+      }
+
+      const data = (await response.json()) as GithubRepository[];
+      repositories.push(...data);
+
+      if (data.length < 100) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return repositories;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -184,6 +241,51 @@ export function createGithubService(
         columns: { accessToken: true },
       });
       return conn?.accessToken ?? null;
+    },
+
+    async listAccessibleRepositories(
+      userId: string,
+      options?: {
+        query?: string | null;
+        limit?: number;
+      },
+    ) {
+      const accessToken = await this.getAccessToken(userId);
+
+      if (!accessToken) {
+        throw new Error("GITHUB_NOT_CONNECTED");
+      }
+
+      const repositories = await fetchGithubRepositories(accessToken);
+      const normalizedQuery = options?.query?.trim().toLowerCase();
+
+      const filteredRepositories = normalizedQuery
+        ? repositories.filter((repository) => {
+            const haystacks = [
+              repository.name,
+              repository.full_name,
+              repository.owner.login,
+              repository.html_url,
+            ];
+
+            return haystacks.some((value) =>
+              value.toLowerCase().includes(normalizedQuery),
+            );
+          })
+        : repositories;
+
+      return filteredRepositories
+        .sort((left, right) => left.full_name.localeCompare(right.full_name))
+        .slice(0, options?.limit ?? 25)
+        .map((repository) => ({
+          id: `${repository.id}`,
+          name: repository.name,
+          fullName: repository.full_name,
+          ownerLogin: repository.owner.login,
+          defaultBranch: repository.default_branch,
+          private: repository.private,
+          repositoryUrl: repository.html_url,
+        }));
     },
   };
 }

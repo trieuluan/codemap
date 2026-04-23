@@ -6,6 +6,7 @@ const githubRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
 
   fastify.get("/status", controller.getStatus);
   fastify.get("/connect", controller.getConnectUrl);
+  fastify.get("/repositories", controller.listRepositories);
   fastify.get("/callback", controller.handleCallback);
   fastify.delete("/disconnect", controller.disconnect);
 };

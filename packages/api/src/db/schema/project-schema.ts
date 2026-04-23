@@ -38,7 +38,10 @@ export const projectStatusEnum = pgEnum("project_status", [
   "archived",
 ]);
 
-export const projectProviderEnum = pgEnum("project_provider", ["github"]);
+export const projectProviderEnum = pgEnum("project_provider", [
+  "github",
+  "local_workspace",
+]);
 
 export const projectImportStatusEnum = pgEnum("project_import_status", [
   "pending",
@@ -76,6 +79,7 @@ export const project = pgTable(
     status: projectStatusEnum("status").default("draft").notNull(),
     defaultBranch: text("default_branch"),
     repositoryUrl: text("repository_url"),
+    localWorkspacePath: text("local_workspace_path"),
     provider: projectProviderEnum("provider"),
     externalRepoId: text("external_repo_id"),
     lastImportedAt: timestamp("last_imported_at"),
@@ -96,6 +100,10 @@ export const project = pgTable(
     index("project_provider_external_repo_id_idx").on(
       table.provider,
       table.externalRepoId,
+    ),
+    index("project_provider_local_workspace_path_idx").on(
+      table.provider,
+      table.localWorkspacePath,
     ),
   ],
 );
