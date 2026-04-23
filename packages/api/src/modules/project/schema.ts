@@ -40,15 +40,6 @@ export const projectMapSearchQuerySchema = z.object({
   q: z.string().trim().min(0).max(200),
 });
 
-export const createProjectFromWorkspaceBodySchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  description: nullableTrimmedString.optional(),
-  localWorkspacePath: z.string().trim().min(1).max(4000),
-  repositoryUrl: z.string().trim().url().max(500).nullable().optional(),
-  defaultBranch: nullableShortString.optional(),
-  branch: z.string().trim().min(1).max(255).optional(),
-});
-
 export const createProjectFromGithubBodySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: nullableTrimmedString.optional(),
@@ -130,9 +121,6 @@ export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type ProjectFileContentQuery = z.infer<typeof projectFileContentQuerySchema>;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
-export type CreateProjectFromWorkspaceBody = z.infer<
-  typeof createProjectFromWorkspaceBodySchema
->;
 export type CreateProjectFromGithubBody = z.infer<
   typeof createProjectFromGithubBodySchema
 >;

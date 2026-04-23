@@ -25,6 +25,21 @@ async function runGitCommand(cwd: string, args: string[]) {
   return stdout.trim();
 }
 
+/**
+ * Like getCurrentWorkspaceInfo but returns null instead of throwing when the
+ * current directory is not inside a Git repository or has a detached HEAD.
+ * Use this when the caller wants to gracefully handle the no-git case.
+ */
+export async function tryGetCurrentWorkspaceInfo(
+  cwd = process.cwd(),
+): Promise<CurrentWorkspaceInfo | null> {
+  try {
+    return await getCurrentWorkspaceInfo(cwd);
+  } catch {
+    return null;
+  }
+}
+
 export async function getCurrentWorkspaceInfo(
   cwd = process.cwd(),
 ): Promise<CurrentWorkspaceInfo> {

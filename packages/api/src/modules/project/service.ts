@@ -4,7 +4,6 @@ import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
   CreateProjectBody,
   CreateProjectFromGithubBody,
-  CreateProjectFromWorkspaceBody,
   CreateProjectImportBody,
   ProjectListInclude,
   UpdateProjectBody,
@@ -296,54 +295,27 @@ export function createProjectService(database: Database) {
       });
     },
 
-    async createOrReuseProjectFromWorkspace(
+    async createOrReuseProjectFromUpload(
       ownerUserId: string,
-      input: CreateProjectFromWorkspaceBody,
+      input: {
+        name?: string;
+        description?: string | null;
+        localWorkspacePath: string;
+        branch?: string;
+      },
     ) {
       const normalizedLocalWorkspacePath = normalizeLocalWorkspacePath(
         input.localWorkspacePath,
       );
-      const existingProject = await getOwnedProjectByWorkspaceSource(
-        ownerUserId,
-        normalizedLocalWorkspacePath,
-      );
 
-      if (existingProject) {
-        const [updatedProject] = await database
-          .update(project)
-          .set({
-            name: input.name ?? existingProject.name,
-            description:
-              input.description !== undefined
-                ? (input.description ?? null)
-                : existingProject.description,
-            defaultBranch:
-              input.defaultBranch !== undefined
-                ? (input.defaultBranch ?? null)
-                : existingProject.defaultBranch,
-            repositoryUrl:
-              input.repositoryUrl !== undefined
-                ? (input.repositoryUrl
-                    ? normalizeRepositoryUrl(input.repositoryUrl)
-                    : null)
-                : existingProject.repositoryUrl,
-            localWorkspacePath: normalizedLocalWorkspacePath,
-            provider: "local_workspace",
-          })
-          .where(eq(project.id, existingProject.id))
-          .returning();
-
-        return updatedProject ?? existingProject;
-      }
-
+      // Uploaded sources always get a fresh project — the tmp path is unique per upload
       return this.createProject(ownerUserId, {
         name:
           input.name ??
           normalizedLocalWorkspacePath.split("/").filter(Boolean).at(-1) ??
-          "workspace-project",
+          "uploaded-project",
         description: input.description ?? null,
-        defaultBranch: input.defaultBranch ?? null,
-        repositoryUrl: input.repositoryUrl ?? null,
+        defaultBranch: input.branch ?? null,
         localWorkspacePath: normalizedLocalWorkspacePath,
         provider: "local_workspace",
       });
@@ -520,7 +492,7 @@ export function createProjectService(database: Database) {
     async saveImportSourceMetadata(input: {
       projectImportId: string;
       branch?: string | null;
-      commitSha: string;
+      commitSha: string | null;
       sourceStorageKey: string;
       sourceWorkspacePath: string;
     }) {

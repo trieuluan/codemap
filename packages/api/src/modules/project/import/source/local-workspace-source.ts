@@ -9,14 +9,14 @@ export interface LocalWorkspaceReference {
 }
 
 export interface ResolvedLocalWorkspaceSource {
-  branch: string;
-  commitSha: string;
+  branch: string | null;
+  commitSha: string | null;
   reference: LocalWorkspaceReference;
 }
 
 export interface MaterializedLocalWorkspaceSource {
-  branch: string;
-  commitSha: string;
+  branch: string | null;
+  commitSha: string | null;
   reference: LocalWorkspaceReference;
   workspacePath: string;
   cleanup: () => Promise<void>;
@@ -148,7 +148,7 @@ export async function validateLocalWorkspaceSourceAccess(workspacePath: string) 
   const normalizedWorkspacePath = path.resolve(workspacePath);
   ensurePathWithinAllowedRoots(normalizedWorkspacePath);
   await requireDirectory(normalizedWorkspacePath);
-  await resolveGitRepoRoot(normalizedWorkspacePath);
+  // Git presence is optional — uploaded workspaces may not have a git repo.
 }
 
 export async function resolveLocalWorkspaceSource(input: {
@@ -157,9 +157,19 @@ export async function resolveLocalWorkspaceSource(input: {
   const normalizedWorkspacePath = path.resolve(input.workspacePath);
   await validateLocalWorkspaceSourceAccess(normalizedWorkspacePath);
 
-  const repoRootPath = await resolveGitRepoRoot(normalizedWorkspacePath);
-  const branch = await resolveCurrentBranch(repoRootPath);
-  const commitSha = await resolveHeadCommitSha(repoRootPath);
+  // Try to resolve git metadata. For uploaded workspaces that have no git
+  // repo, these gracefully fall back to null — no fake git init required.
+  let repoRootPath = normalizedWorkspacePath;
+  let branch: string | null = null;
+  let commitSha: string | null = null;
+
+  try {
+    repoRootPath = await resolveGitRepoRoot(normalizedWorkspacePath);
+    branch = await resolveCurrentBranch(repoRootPath);
+    commitSha = await resolveHeadCommitSha(repoRootPath);
+  } catch {
+    // Not a git repo — that is fine for uploaded sources.
+  }
 
   return {
     branch,

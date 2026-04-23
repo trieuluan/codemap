@@ -1,12 +1,34 @@
-import { FastifyPluginAsync } from "fastify";
+import { type FastifyPluginAsync, type FastifyRequest } from "fastify";
+import type { IncomingMessage } from "node:http";
 import { createProjectController } from "../../modules/project/controller";
+import { createProjectUploadController } from "../../modules/project/controller.upload";
+
+const MAX_UPLOAD_SIZE = 200 * 1024 * 1024; // 200 MB
 
 const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   const controller = createProjectController(fastify);
+  const uploadController = createProjectUploadController(fastify);
 
   fastify.post("/", controller.createProject);
-  fastify.post("/from-workspace", controller.createProjectFromWorkspace);
   fastify.post("/from-github", controller.createProjectFromGithub);
+
+  // Upload route in its own encapsulated scope so the zip body parser
+  // does not leak to other project routes.
+  fastify.register(async (uploadScope) => {
+    uploadScope.addContentTypeParser(
+      "application/zip",
+      { bodyLimit: MAX_UPLOAD_SIZE },
+      async (_request: FastifyRequest, payload: IncomingMessage) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of payload) {
+          chunks.push(chunk as Buffer);
+        }
+        return Buffer.concat(chunks);
+      },
+    );
+
+    uploadScope.post("/from-upload", uploadController.createProjectFromUpload);
+  });
   fastify.get("/", controller.listProjects);
   fastify.get("/:projectId", controller.getProjectById);
   fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);

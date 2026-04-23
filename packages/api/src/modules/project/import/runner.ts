@@ -141,7 +141,7 @@ export async function runProjectImport(
           },
     );
 
-    if (!projectRecord.defaultBranch) {
+    if (!projectRecord.defaultBranch && resolvedSource.branch) {
       await projectService.setProjectDefaultBranchIfMissing(
         projectRecord.id,
         resolvedSource.branch,

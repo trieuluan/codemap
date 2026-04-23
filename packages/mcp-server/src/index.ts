@@ -21,7 +21,7 @@ import {
   registerListGithubRepositoriesTool,
   registerSearchGithubRepositoriesTool,
 } from "./tools/list-github-repositories.js";
-import { registerCreateProjectFromWorkspaceTool } from "./tools/create-project-from-workspace.js";
+import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
@@ -48,7 +48,7 @@ async function runMcpServer() {
   registerGetCurrentWorkspaceInfoTool(server);
   registerListGithubRepositoriesTool(server, config);
   registerSearchGithubRepositoriesTool(server, config);
-  registerCreateProjectFromWorkspaceTool(server, config);
+  registerCreateProjectTool(server, config);
   registerCreateProjectFromGithubTool(server, config);
 
   const transport = new StdioServerTransport();

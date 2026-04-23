@@ -416,15 +416,6 @@ export interface GithubRepositoryOption {
   repositoryUrl: string;
 }
 
-export interface CreateProjectFromWorkspaceInput {
-  name?: string;
-  description?: string | null;
-  localWorkspacePath: string;
-  repositoryUrl?: string | null;
-  defaultBranch?: string | null;
-  branch?: string;
-}
-
 export interface CreateProjectFromGithubInput {
   name?: string;
   description?: string | null;

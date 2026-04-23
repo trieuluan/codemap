@@ -8,7 +8,6 @@ import type {
   ProjectAnalysisSummary,
   CreateProjectInput,
   CreateProjectFromGithubInput,
-  CreateProjectFromWorkspaceInput,
   GithubRepositoryOption,
   Project,
   ProjectFileContent,
@@ -175,15 +174,6 @@ export async function triggerProjectImport(
   return requestApi<ProjectImport>(`/projects/${projectId}/import`, {
     method: "POST",
     body: input ?? {},
-  });
-}
-
-export async function createProjectFromWorkspace(
-  input: CreateProjectFromWorkspaceInput,
-) {
-  return requestApi<ProjectSourceImportResult>("/projects/from-workspace", {
-    method: "POST",
-    body: input,
   });
 }
 
