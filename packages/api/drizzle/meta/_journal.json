@@ -57,6 +57,13 @@
       "when": 1776886456253,
       "tag": "0007_large_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776924401884,
+      "tag": "0008_early_warpath",
+      "breakpoints": true
     }
   ]
 }
