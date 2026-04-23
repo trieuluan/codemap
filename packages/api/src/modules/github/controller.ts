@@ -39,7 +39,8 @@ export function createGithubController(fastify: FastifyInstance) {
      */
     getStatus: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
-      const service = createGithubService(fastify.db, fastify.redis, getGithubConfig(fastify));
+      // getStatus only reads the DB — no OAuth config needed
+      const service = createGithubService(fastify.db, fastify.redis);
 
       const connection = await service.getConnection(userId);
 
@@ -62,7 +63,11 @@ export function createGithubController(fastify: FastifyInstance) {
      */
     getConnectUrl: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
-      const service = createGithubService(fastify.db, fastify.redis, getGithubConfig(fastify));
+      const service = createGithubService(
+        fastify.db,
+        fastify.redis,
+        getGithubConfig(fastify),
+      );
 
       const url = await service.generateConnectUrl(userId);
 
@@ -79,13 +84,19 @@ export function createGithubController(fastify: FastifyInstance) {
       const query = githubCallbackQuerySchema.safeParse(request.query ?? {});
 
       if (!query.success) {
-        const webUrl = process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ?? "http://localhost:3000";
-        return reply.redirect(`${webUrl}/dashboard?github_error=invalid_request`);
+        const webUrl =
+          process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ??
+          "http://localhost:3000";
+        return reply.redirect(
+          `${webUrl}/dashboard?github_error=invalid_request`,
+        );
       }
 
       const config = getGithubConfig(fastify);
       const service = createGithubService(fastify.db, fastify.redis, config);
-      const webUrl = process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ?? "http://localhost:3000";
+      const webUrl =
+        process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ??
+        "http://localhost:3000";
 
       try {
         const { githubLogin } = await service.handleCallback(
@@ -114,7 +125,8 @@ export function createGithubController(fastify: FastifyInstance) {
      */
     disconnect: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
-      const service = createGithubService(fastify.db, fastify.redis, getGithubConfig(fastify));
+      // disconnect only writes to the DB — no OAuth config needed
+      const service = createGithubService(fastify.db, fastify.redis);
 
       const removed = await service.disconnect(userId);
 

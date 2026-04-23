@@ -26,12 +26,18 @@ type GithubUser = {
 export function createGithubService(
   db: Db,
   redis: Redis,
-  config: {
+  config?: {
     clientId: string;
     clientSecret: string;
     callbackUrl: string;
   },
 ) {
+  function requireConfig() {
+    if (!config) {
+      throw new Error("GitHub OAuth credentials are not configured on this server");
+    }
+    return config;
+  }
   // ── OAuth state helpers ────────────────────────────────────────────────────
 
   async function createOAuthState(userId: string): Promise<string> {
@@ -56,6 +62,7 @@ export function createGithubService(
   // ── GitHub API helpers ─────────────────────────────────────────────────────
 
   async function exchangeCodeForToken(code: string): Promise<GithubTokenResponse> {
+    const c = requireConfig();
     const res = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: {
@@ -63,10 +70,10 @@ export function createGithubService(
         Accept: "application/json",
       },
       body: JSON.stringify({
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
+        client_id: c.clientId,
+        client_secret: c.clientSecret,
         code,
-        redirect_uri: config.callbackUrl,
+        redirect_uri: c.callbackUrl,
       }),
     });
 
@@ -102,9 +109,10 @@ export function createGithubService(
 
   return {
     buildConnectUrl(userId: string, state: string): string {
+      const c = requireConfig();
       const params = new URLSearchParams({
-        client_id: config.clientId,
-        redirect_uri: config.callbackUrl,
+        client_id: c.clientId,
+        redirect_uri: c.callbackUrl,
         scope: "repo,user:email",
         state,
       });
