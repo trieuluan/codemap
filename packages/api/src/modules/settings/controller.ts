@@ -22,7 +22,6 @@ export function createSettingsController(fastify: FastifyInstance) {
     listApiKeys: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const apiKeys = await service.listUserApiKeys(userId);
-      console.log("API Keys for user", userId, apiKeys);
 
       return reply.success(apiKeys, 200, {
         count: apiKeys.length,

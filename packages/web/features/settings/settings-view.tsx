@@ -3,12 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import useSWR from "swr";
 import { KeyRound, Shield, UserRound } from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
   CardContent,
@@ -44,9 +39,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { browserSettingsApi, type UserApiKeySummary } from "@/features/settings/api";
+import {
+  browserSettingsApi,
+  type UserApiKeySummary,
+} from "@/features/settings/api";
 import { CreateApiKeyDialog } from "./components/create-api-key-dialog";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 const api = browserSettingsApi();
 
@@ -113,15 +111,79 @@ function PlaceholderTab({
   );
 }
 
+function ApiKeyRow({
+  apiKey,
+  isPending,
+  onRevoke,
+}: {
+  apiKey: UserApiKeySummary;
+  isPending: boolean;
+  onRevoke: () => void;
+}) {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">
+        <div className="space-y-1">
+          <div>{apiKey.name ?? "Untitled API key"}</div>
+          {apiKey.metadata?.deviceName ? (
+            <div className="text-xs text-muted-foreground">
+              {apiKey.metadata.deviceName}
+            </div>
+          ) : null}
+        </div>
+      </TableCell>
+      <TableCell>{getApiKeyType(apiKey)}</TableCell>
+      <TableCell>
+        {apiKey.start ?? (apiKey.prefix ? `${apiKey.prefix}...` : "—")}
+      </TableCell>
+      <TableCell>{formatDate(apiKey.createdAt)}</TableCell>
+      <TableCell>{formatDate(apiKey.expiresAt)}</TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRevoke}
+          disabled={isPending}
+        >
+          Revoke
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export function SettingsView() {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
-  const [revokeTarget, setRevokeTarget] = useState<UserApiKeySummary | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<UserApiKeySummary | null>(
+    null,
+  );
+  const [showRevoked, setShowRevoked] = useState(false);
   const { data, isLoading, mutate } = useSWR("settings-api-keys", () =>
     api.listApiKeys(),
   );
 
   const apiKeys = useMemo(() => data ?? [], [data]);
+
+  const activeKeys = useMemo(
+    () =>
+      apiKeys.filter(
+        (k) =>
+          k.enabled &&
+          !(k.expiresAt && new Date(k.expiresAt).getTime() <= Date.now()),
+      ),
+    [apiKeys],
+  );
+
+  const inactiveKeys = useMemo(
+    () =>
+      apiKeys.filter(
+        (k) =>
+          !k.enabled ||
+          (k.expiresAt && new Date(k.expiresAt).getTime() <= Date.now()),
+      ),
+    [apiKeys],
+  );
 
   function handleRevoke() {
     if (!revokeTarget) {
@@ -205,7 +267,7 @@ export function SettingsView() {
                   <div className="text-sm text-muted-foreground">
                     Loading API keys...
                   </div>
-                ) : apiKeys.length === 0 ? (
+                ) : activeKeys.length === 0 && inactiveKeys.length === 0 ? (
                   <Empty className="border border-dashed border-border bg-background/40">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -213,8 +275,8 @@ export function SettingsView() {
                       </EmptyMedia>
                       <EmptyTitle>No API keys yet</EmptyTitle>
                       <EmptyDescription>
-                        Create your first API key to use CodeMap from local tools
-                        and scripts.
+                        Create your first API key to use CodeMap from local
+                        tools and scripts.
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
@@ -225,65 +287,125 @@ export function SettingsView() {
                     </EmptyContent>
                   </Empty>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Preview</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead>Expires</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {apiKeys.map((apiKey) => {
-                          const status = getApiKeyStatus(apiKey);
-
-                          return (
-                            <TableRow key={apiKey.id}>
-                              <TableCell className="font-medium">
-                                <div className="space-y-1">
-                                  <div>{apiKey.name ?? "Untitled API key"}</div>
-                                  {apiKey.metadata?.deviceName ? (
-                                    <div className="text-xs text-muted-foreground">
-                                      {apiKey.metadata.deviceName}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </TableCell>
-                              <TableCell>{getApiKeyType(apiKey)}</TableCell>
-                              <TableCell>
-                                {apiKey.start ??
-                                  (apiKey.prefix ? `${apiKey.prefix}...` : "—")}
-                              </TableCell>
-                              <TableCell>{formatDate(apiKey.createdAt)}</TableCell>
-                              <TableCell>{formatDate(apiKey.expiresAt)}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className={status.className}
-                                >
-                                  {status.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setRevokeTarget(apiKey)}
-                                  disabled={!apiKey.enabled || isPending}
-                                >
-                                  Revoke
-                                </Button>
+                  <div className="space-y-4">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Preview</TableHead>
+                            <TableHead>Created</TableHead>
+                            <TableHead>Expires</TableHead>
+                            <TableHead className="text-right">
+                              Actions
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeKeys.length === 0 ? (
+                            <TableRow>
+                              <TableCell
+                                colSpan={6}
+                                className="text-center text-sm text-muted-foreground py-6"
+                              >
+                                No active API keys. Create one to get started.
                               </TableCell>
                             </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                          ) : (
+                            activeKeys.map((apiKey) => (
+                              <ApiKeyRow
+                                key={apiKey.id}
+                                apiKey={apiKey}
+                                isPending={isPending}
+                                onRevoke={() => setRevokeTarget(apiKey)}
+                              />
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {inactiveKeys.length > 0 && (
+                      <div className="border-t border-border/50 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowRevoked((v) => !v)}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                        >
+                          <span>{showRevoked ? "▾" : "▸"}</span>
+                          {showRevoked
+                            ? "Hide revoked keys"
+                            : `Show ${inactiveKeys.length} revoked${inactiveKeys.length === 1 ? " key" : " keys"}`}
+                        </button>
+
+                        {showRevoked && (
+                          <div className="mt-3 overflow-x-auto opacity-70">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>Type</TableHead>
+                                  <TableHead>Preview</TableHead>
+                                  <TableHead>Created</TableHead>
+                                  <TableHead>Expires</TableHead>
+                                  <TableHead className="text-right">
+                                    Status
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {inactiveKeys.map((apiKey) => {
+                                  const status = getApiKeyStatus(apiKey);
+                                  return (
+                                    <TableRow
+                                      key={apiKey.id}
+                                      className="hover:bg-transparent"
+                                    >
+                                      <TableCell className="font-medium">
+                                        <div className="space-y-1">
+                                          <div className="line-through">
+                                            {apiKey.name ?? "Untitled API key"}
+                                          </div>
+                                          {apiKey.metadata?.deviceName ? (
+                                            <div className="text-xs text-muted-foreground">
+                                              {apiKey.metadata.deviceName}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        {getApiKeyType(apiKey)}
+                                      </TableCell>
+                                      <TableCell>
+                                        {apiKey.start ??
+                                          (apiKey.prefix
+                                            ? `${apiKey.prefix}...`
+                                            : "—")}
+                                      </TableCell>
+                                      <TableCell>
+                                        {formatDate(apiKey.createdAt)}
+                                      </TableCell>
+                                      <TableCell>
+                                        {formatDate(apiKey.expiresAt)}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <Badge
+                                          variant="outline"
+                                          className={status.className}
+                                        >
+                                          {status.label}
+                                        </Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

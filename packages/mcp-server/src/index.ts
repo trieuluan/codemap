@@ -14,6 +14,7 @@ import { registerPingTool } from "./tools/ping.js";
 import { registerGetFileOutlineTool } from "./tools/get-file-outline.js";
 import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
 import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
+import { registerDisconnectGithubTool } from "./tools/disconnect-github.js";
 import { registerOpenUrlTool } from "./tools/open-url.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
 import {
@@ -42,6 +43,7 @@ async function runMcpServer() {
   registerGetFileOutlineTool(server, config);
   registerCheckGithubConnectionTool(server, config);
   registerGetGithubConnectUrlTool(server, config);
+  registerDisconnectGithubTool(server, config);
   registerOpenUrlTool(server);
   registerGetCurrentWorkspaceInfoTool(server);
   registerListGithubRepositoriesTool(server, config);

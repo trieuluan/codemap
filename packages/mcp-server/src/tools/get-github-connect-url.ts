@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { requestCodeMapApi, toToolErrorContent } from "../lib/codemap-api.js";
+import { openUrlInBrowser } from "../lib/open-url.js";
 
 interface GithubConnectUrlResponse {
   url: string;
@@ -15,10 +16,10 @@ export function registerGetGithubConnectUrlTool(
     {
       title: "Get GitHub Connect URL",
       description:
-        "Returns a GitHub OAuth authorization URL that the user must open in their browser to grant CodeMap access to their repositories. " +
+        "Generates a GitHub OAuth authorization URL and automatically opens it in the user's default browser. " +
         "Use this when check_github_connection returns connected=false. " +
-        "After getting the URL, present it to the user and ask them to open it. " +
-        "Once they complete authorization, call check_github_connection again to confirm the connection.",
+        "The browser will be opened automatically — the user just needs to complete the authorization flow. " +
+        "Once they finish, call check_github_connection again to confirm the connection.",
       inputSchema: {},
     },
     async () => {
@@ -43,18 +44,20 @@ export function registerGetGithubConnectUrlTool(
           };
         }
 
+        await openUrlInBrowser(data.url);
+
         return {
           content: [
             {
               type: "text",
               text: [
-                "GitHub authorization URL generated successfully.",
+                "GitHub authorization page has been opened in the browser.",
                 "",
-                "Ask the user to open the following URL in their browser to grant CodeMap access to their GitHub repositories:",
+                "If the browser did not open automatically, the user can navigate to this URL manually:",
                 "",
                 data.url,
                 "",
-                "After they complete the authorization, call check_github_connection again to confirm the connection was successful.",
+                "Once the user completes the authorization, call check_github_connection again to confirm the connection was successful.",
               ].join("\n"),
             },
           ],

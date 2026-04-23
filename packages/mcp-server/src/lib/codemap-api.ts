@@ -4,7 +4,7 @@ export async function requestCodeMapApi<T>(
   config: McpServerConfig,
   path: string,
   options?: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "DELETE";
     body?: unknown;
     query?: Record<string, string | undefined>;
     authRequired?: boolean;
@@ -22,9 +22,12 @@ export async function requestCodeMapApi<T>(
     }
   }
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const hasBody = options?.body !== undefined;
+  const headers: Record<string, string> = {};
+
+  if (hasBody) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (config.apiToken) {
     headers["x-api-key"] = config.apiToken;
@@ -37,7 +40,7 @@ export async function requestCodeMapApi<T>(
     response = await fetch(url.toString(), {
       method: options?.method ?? "GET",
       headers,
-      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: hasBody ? JSON.stringify(options.body) : undefined,
     });
   } catch (error) {
     throw new Error(
