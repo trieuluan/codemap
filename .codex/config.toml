@@ -26,14 +26,13 @@ command = "your-http-mcp-server"
 args = ["--base-url", "http://localhost:3001"]
 
 [mcp_servers.codemap_mcp_dev]
-command = "docker"
+command = "npx"
 args = [
-  "exec",
-  "-i",
-  "codemap-mcp-server-dev",
-  "npx",
   "tsx",
-  "/workspace/packages/mcp-server/src/index.ts",
+  "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts",
 ]
 cwd = "/Users/louis/Development/codemap"
 enabled = true
+[mcp_servers.codemap_mcp_dev.env]
+API_URL = "http://localhost:3001"
+API_TOKEN = "codemap_MVHCHGBXBtMVnwCTPsBMgrQjjvqCHWKziuQKcfAfVIswomlcCTzaZOMTcVUUIoSH"

@@ -20,5 +20,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "codemap-mcp-dev"
+  ],
+  "enableAllProjectMcpServers": true
 }

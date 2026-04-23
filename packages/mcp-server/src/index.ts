@@ -6,6 +6,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { registerPingTool } from "./tools/ping.js";
 import { registerGetFileOutlineTool } from "./tools/get-file-outline.js";
+import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
+import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
+import { registerOpenUrlTool } from "./tools/open-url.js";
 
 async function main() {
   const config = loadConfig();
@@ -16,6 +19,9 @@ async function main() {
 
   registerPingTool(server, config);
   registerGetFileOutlineTool(server, config);
+  registerCheckGithubConnectionTool(server, config);
+  registerGetGithubConnectUrlTool(server, config);
+  registerOpenUrlTool(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

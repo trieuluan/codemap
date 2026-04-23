@@ -9,8 +9,7 @@
         "npx",
         "tsx",
         "/workspace/packages/mcp-server/src/index.ts"
-      ],
-      "cwd": "/Users/louis/Development/codemap"
+      ]
     }
   }
 }
