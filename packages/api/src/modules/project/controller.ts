@@ -24,6 +24,7 @@ import {
 } from "./parse/runner";
 import { createRepoParseGraphService } from "./parse/repo-parse-graph";
 import { createProjectService } from "./service";
+import { getProjectGitDiff } from "./map/git-diff";
 import {
   createProjectBodySchema,
   createProjectFromGithubBodySchema,
@@ -31,6 +32,7 @@ import {
   listProjectsQuerySchema,
   projectFileContentQuerySchema,
   projectFileSyncBodySchema,
+  projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
   projectParamsSchema,
   updateProjectBodySchema,
@@ -639,6 +641,57 @@ export function createProjectController(fastify: FastifyInstance) {
           endCol: item.endCol + 1,
         })),
       });
+    },
+
+    getProjectDiff: async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectMapDiffQuerySchema.parse(request.query ?? {});
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const importRecord = latestMapWithSource.importRecord;
+
+      if (
+        !importRecord?.sourceAvailable ||
+        !importRecord.sourceWorkspacePath
+      ) {
+        throw fastify.httpErrors.unprocessableEntity(
+          "Retained source is not available for this project. Re-import to restore workspace access.",
+        );
+      }
+
+      try {
+        const result = await getProjectGitDiff({
+          workspacePath: importRecord.sourceWorkspacePath,
+          from: query.from,
+          to: query.to,
+          includePatch: query.includePatch,
+        });
+
+        return reply.success(result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (
+          message.includes("unknown revision") ||
+          message.includes("bad revision") ||
+          message.includes("ambiguous argument")
+        ) {
+          throw fastify.httpErrors.badRequest(
+            `Invalid commit reference: ${message}`,
+          );
+        }
+
+        throw error;
+      }
     },
 
     getProjectRawFile: async (request: FastifyRequest, reply: FastifyReply) => {

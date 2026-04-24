@@ -28,6 +28,7 @@ import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerGetFileTool } from "./tools/get-file.js";
+import { registerGetDiffTool } from "./tools/get-diff.js";
 import { registerGetProjectMapTool } from "./tools/get-project-map.js";
 import { registerListProjectsTool } from "./tools/list-projects.js";
 import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
@@ -63,6 +64,7 @@ async function runMcpServer() {
   registerGetProjectTool(server, config);
   registerSearchCodebaseTool(server, config);
   registerGetFileTool(server, config);
+  registerGetDiffTool(server, config);
   registerGetProjectMapTool(server, config);
   registerListProjectsTool(server, config);
   registerGetProjectInsightsTool(server, config);

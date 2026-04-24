@@ -36,6 +36,15 @@ export const projectFileSyncBodySchema = z.object({
   localUpdatedAt: z.iso.datetime().optional(),
 });
 
+export const projectMapDiffQuerySchema = z.object({
+  from: z.string().trim().min(1).max(255),
+  to: z.string().trim().min(1).max(255).optional(),
+  includePatch: z.preprocess(
+    (val) => val === "true" || val === "1",
+    z.boolean().optional(),
+  ),
+});
+
 export const projectMapSearchQuerySchema = z.object({
   q: z.string().trim().min(0).max(200),
   symbolKinds: z.preprocess(
@@ -135,6 +144,7 @@ export type ProjectFileContentQuery = z.infer<
   typeof projectFileContentQuerySchema
 >;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
+export type ProjectMapDiffQuery = z.infer<typeof projectMapDiffQuerySchema>;
 export type CreateProjectFromGithubBody = z.infer<
   typeof createProjectFromGithubBodySchema
 >;
