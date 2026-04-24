@@ -800,8 +800,11 @@ function extractSymbolsWithAst(
         if (!ts.isIdentifier(decl.name)) continue;
         const name = decl.name.text;
 
+        const isPascalCase = /^[A-Z]/.test(name);
         let kind: ParsedSymbolDraft["kind"] = "variable";
-        if (
+        if (isPascalCase) {
+          kind = "component";
+        } else if (
           decl.initializer &&
           (ts.isArrowFunction(decl.initializer) ||
             ts.isFunctionExpression(decl.initializer))

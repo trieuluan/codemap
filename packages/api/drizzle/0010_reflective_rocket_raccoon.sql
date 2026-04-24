@@ -1,0 +1,1 @@
+ALTER TYPE "public"."repo_symbol_kind" ADD VALUE 'component' BEFORE 'method';

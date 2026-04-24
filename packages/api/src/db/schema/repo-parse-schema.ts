@@ -34,6 +34,7 @@ export const repoSymbolKindEnum = pgEnum("repo_symbol_kind", [
   "enum",
   "enum_member",
   "function",
+  "component",
   "method",
   "constructor",
   "property",
