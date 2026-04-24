@@ -11,6 +11,7 @@ import type {
   RepoParseIssueInsert,
   RepoSymbolInsert,
   RepoSymbolOccurrenceInsert,
+  RepoSymbolRelationshipInsert,
 } from "../../../db/schema";
 import { normalizeRepositoryFilePath } from "../map/file-preview";
 import { createProjectService } from "../service";
@@ -142,10 +143,17 @@ interface ParsedExportDraft {
   targetExternalSymbolKey?: string | null;
 }
 
+interface ParsedRelationshipDraft {
+  fromSymbolLocalKey: string;
+  toSymbolName: string;
+  relationshipKind: RepoSymbolRelationshipInsert["relationshipKind"];
+}
+
 interface ParsedWorkspaceSemantics {
   symbols: ParsedSymbolDraft[];
   imports: ParsedImportDraft[];
   exports: ParsedExportDraft[];
+  relationships: ParsedRelationshipDraft[];
   issues: RepoParseIssueInsert[];
   externalSymbols: RepoExternalSymbolInsert[];
 }
@@ -694,7 +702,7 @@ function createExternalSymbolDraft(
 
 function extractSymbolsWithAst(
   file: WorkspaceFileCandidate,
-): ParsedSymbolDraft[] {
+): { symbols: ParsedSymbolDraft[]; relationships: ParsedRelationshipDraft[] } {
   const content = file.content ?? "";
   const sourceFile = ts.createSourceFile(
     file.baseName,
@@ -707,6 +715,7 @@ function extractSymbolsWithAst(
   );
 
   const symbols: ParsedSymbolDraft[] = [];
+  const relationships: ParsedRelationshipDraft[] = [];
   const lines = content.split(/\r?\n/);
 
   function getLineCol(pos: number): { line: number; col: number } {
@@ -805,13 +814,30 @@ function extractSymbolsWithAst(
 
     // class Foo / export class Foo / export default class Foo
     if (ts.isClassDeclaration(node) && node.name) {
-      pushSymbol(node.name.text, "class", node, isExported, isDefault);
+      const name = node.name.text;
+      pushSymbol(name, "class", node, isExported, isDefault);
+      const localKey = buildLocalSymbolKey(file.path, "class", name);
+      for (const clause of node.heritageClauses ?? []) {
+        const kind = clause.token === ts.SyntaxKind.ExtendsKeyword ? "extends" : "implements";
+        for (const type of clause.types) {
+          const targetName = type.expression.getText(sourceFile);
+          relationships.push({ fromSymbolLocalKey: localKey, toSymbolName: targetName, relationshipKind: kind });
+        }
+      }
       return;
     }
 
     // interface Foo / export interface Foo
     if (ts.isInterfaceDeclaration(node)) {
-      pushSymbol(node.name.text, "interface", node, isExported, false);
+      const name = node.name.text;
+      pushSymbol(name, "interface", node, isExported, false);
+      const localKey = buildLocalSymbolKey(file.path, "interface", name);
+      for (const clause of node.heritageClauses ?? []) {
+        for (const type of clause.types) {
+          const targetName = type.expression.getText(sourceFile);
+          relationships.push({ fromSymbolLocalKey: localKey, toSymbolName: targetName, relationshipKind: "extends" });
+        }
+      }
       return;
     }
 
@@ -852,7 +878,7 @@ function extractSymbolsWithAst(
 
   ts.forEachChild(sourceFile, visitTopLevel);
 
-  return symbols;
+  return { symbols, relationships };
 }
 
 function maskCommentsAndTemplateLiterals(
@@ -978,6 +1004,7 @@ function parseTypeScriptOrJavaScriptFile(
     symbols: [],
     imports: [],
     exports: [],
+    relationships: [],
     issues: [],
     externalSymbols: [],
   };
@@ -1200,7 +1227,7 @@ function parseTypeScriptOrJavaScriptFile(
   });
 
   // AST-based symbol extraction
-  const astSymbols = extractSymbolsWithAst(file);
+  const { symbols: astSymbols, relationships: astRelationships } = extractSymbolsWithAst(file);
   for (const symbol of astSymbols) {
     semantics.symbols.push(symbol);
     if (symbol.isExported) {
@@ -1214,6 +1241,7 @@ function parseTypeScriptOrJavaScriptFile(
       });
     }
   }
+  semantics.relationships.push(...astRelationships);
 
   return semantics;
 }
@@ -1227,6 +1255,7 @@ function parseDartFile(
     symbols: [],
     imports: [],
     exports: [],
+    relationships: [],
     issues: [],
     externalSymbols: [],
   };
@@ -1360,6 +1389,7 @@ function parsePhpFile(
     symbols: [],
     imports: [],
     exports: [],
+    relationships: [],
     issues: [],
     externalSymbols: [],
   };
@@ -1479,6 +1509,7 @@ export function parseWorkspaceFileSemantics(input: {
       symbols: [],
       imports: [],
       exports: [],
+      relationships: [],
       issues: [],
       externalSymbols: [],
     } satisfies ParsedWorkspaceSemantics;
@@ -1507,6 +1538,7 @@ export function parseWorkspaceFileSemantics(input: {
         symbols: [],
         imports: [],
         exports: [],
+        relationships: [],
         issues: [],
         externalSymbols: [],
       } satisfies ParsedWorkspaceSemantics;
@@ -1578,6 +1610,7 @@ export async function runProjectParse(
     const filePathSet = new Set(fileRows.map((file) => file.path));
     const symbolDrafts: RepoSymbolInsert[] = [];
     const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
+    const pendingRelationships: Array<{ fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: RepoSymbolRelationshipInsert["relationshipKind"] }> = [];
     const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string }> =
       [];
     const exportDrafts: Array<
@@ -1695,6 +1728,8 @@ export async function runProjectParse(
             sourceImportLocalKey: exported.sourceImportLocalKey,
           });
         }
+
+        pendingRelationships.push(...semantics.relationships);
       } catch (error) {
         parseIssues.push({
           projectImportId: importId,
@@ -1717,6 +1752,28 @@ export async function runProjectParse(
           Boolean(entry[0] && entry[1]),
         ),
     );
+
+    // Save symbol relationships (extends/implements)
+    const relationshipDrafts = pendingRelationships
+      .map((r) => {
+        const fromSymbolId = symbolIdByLocalKey.get(r.fromSymbolLocalKey);
+        if (!fromSymbolId) return null;
+        return {
+          projectImportId: importId,
+          fromSymbolId,
+          toSymbolId: null,
+          toExternalSymbolKey: r.toSymbolName,
+          relationshipKind: r.relationshipKind,
+          isReference: false,
+          isImplementation: r.relationshipKind === "implements",
+          isTypeDefinition: false,
+          isDefinition: false,
+          extraJson: null,
+        };
+      })
+      .filter((r): r is Exclude<typeof r, null> => r !== null);
+
+    await repoParseGraphService.saveRelationships(relationshipDrafts);
 
     for (const symbol of symbolDrafts) {
       const fileRow = fileRowByPath.get(

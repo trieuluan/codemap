@@ -132,6 +132,7 @@ export interface ProjectFileSymbolRecord {
   signature: string | null;
   returnType: string | null;
   doc: string | null;
+  heritage: Array<{ kind: string; targetName: string }>;
   isExported: boolean;
   parentSymbolName: string | null;
   startLine: number | null;

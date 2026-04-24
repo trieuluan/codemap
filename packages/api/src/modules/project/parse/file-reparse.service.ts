@@ -175,6 +175,7 @@ export async function reparseFileIfStale(
       symbols: symbolDrafts,
       importEdges: importEdgeDrafts,
       exports: exportDrafts,
+      relationships: semantics.relationships,
       issues: issueDrafts,
       externalSymbols: semantics.externalSymbols.map((s) => ({
         ...s,

@@ -49,6 +49,7 @@ interface ParseSymbol {
   signature: string | null;
   returnType: string | null;
   doc: string | null;
+  heritage: Array<{ kind: string; targetName: string }>;
   isExported: boolean;
   parentSymbolName: string | null;
   startLine: number | null;
@@ -196,6 +197,11 @@ function buildOutlineSection(parse: FileParseResponse): string {
       }
       if (sym.returnType) {
         lines.push(`Returns: \`${sym.returnType}\``);
+      }
+      if (sym.heritage.length > 0) {
+        for (const h of sym.heritage) {
+          lines.push(`${h.kind === "implements" ? "Implements" : "Extends"}: \`${h.targetName}\``);
+        }
       }
       for (const child of childrenOf.get(sym.displayName) ?? []) {
         const childLoc = child.startLine != null ? ` · line ${child.startLine}` : "";

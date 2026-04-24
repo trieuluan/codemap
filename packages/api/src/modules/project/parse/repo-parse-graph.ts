@@ -263,6 +263,7 @@ export function createRepoParseGraphService(database: Database) {
         symbols: RepoSymbolInsert[];
         importEdges: Array<RepoImportEdgeInsert & { localKey: string }>;
         exports: Array<RepoExportInsert & { symbolLocalKey?: string; sourceImportLocalKey?: string }>;
+        relationships: Array<{ fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: RepoSymbolRelationshipInsert["relationshipKind"] }>;
         issues: RepoParseIssueInsert[];
         externalSymbols: RepoExternalSymbolInsert[];
       },
@@ -342,6 +343,32 @@ export function createRepoParseGraphService(database: Database) {
 
       if (occurrenceDrafts.length > 0) {
         await database.insert(repoSymbolOccurrence).values(occurrenceDrafts);
+      }
+
+      // Step 3.5: insert symbol relationships (extends/implements)
+      if (data.relationships.length > 0) {
+        const relationshipDrafts = data.relationships
+          .map((r) => {
+            const fromSymbolId = symbolIdByLocalKey.get(r.fromSymbolLocalKey);
+            if (!fromSymbolId) return null;
+            return {
+              projectImportId,
+              fromSymbolId,
+              toSymbolId: null,
+              toExternalSymbolKey: r.toSymbolName,
+              relationshipKind: r.relationshipKind,
+              isReference: false,
+              isImplementation: r.relationshipKind === "implements",
+              isTypeDefinition: false,
+              isDefinition: false,
+              extraJson: null,
+            };
+          })
+          .filter((r): r is Exclude<typeof r, null> => r !== null);
+
+        if (relationshipDrafts.length > 0) {
+          await database.insert(repoSymbolRelationship).values(relationshipDrafts);
+        }
       }
 
       // Step 4: insert new import edges
@@ -827,7 +854,7 @@ export function createRepoParseGraphService(database: Database) {
       projectImportId: string,
       fileId: string,
     ): Promise<ProjectFileSymbolRecord[]> {
-      const [symbols, occurrences] = await Promise.all([
+      const [symbols, occurrences, relationships] = await Promise.all([
         database.query.repoSymbol.findMany({
           where: and(
             eq(repoSymbol.projectImportId, projectImportId),
@@ -848,7 +875,29 @@ export function createRepoParseGraphService(database: Database) {
             asc(repoSymbolOccurrence.startCol),
           ],
         }),
+        database.query.repoSymbolRelationship.findMany({
+          where: and(
+            eq(repoSymbolRelationship.projectImportId, projectImportId),
+            inArray(
+              repoSymbolRelationship.fromSymbolId,
+              database
+                .select({ id: repoSymbol.id })
+                .from(repoSymbol)
+                .where(and(
+                  eq(repoSymbol.projectImportId, projectImportId),
+                  eq(repoSymbol.fileId, fileId),
+                )),
+            ),
+          ),
+        }),
       ]);
+
+      const relationshipsBySymbolId = new Map<string, { kind: string; targetName: string }[]>();
+      for (const rel of relationships) {
+        const arr = relationshipsBySymbolId.get(rel.fromSymbolId) ?? [];
+        arr.push({ kind: rel.relationshipKind, targetName: rel.toExternalSymbolKey ?? "" });
+        relationshipsBySymbolId.set(rel.fromSymbolId, arr);
+      }
 
       const occurrencePriority = new Map<RepoSymbolOccurrenceRole, number>([
         ["definition", 0],
@@ -899,6 +948,7 @@ export function createRepoParseGraphService(database: Database) {
             doc: symbol.docJson && typeof symbol.docJson === "object" && "text" in symbol.docJson
               ? (symbol.docJson as { text: string }).text
               : null,
+            heritage: relationshipsBySymbolId.get(symbol.id) ?? [],
             isExported: symbol.isExported,
             parentSymbolName: symbol.parentSymbol?.displayName ?? null,
             startLine: occurrence?.startLine ?? null,
