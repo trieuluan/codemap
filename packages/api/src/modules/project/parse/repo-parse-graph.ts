@@ -24,6 +24,7 @@ import {
 import type {
   ProjectAnalysisSummary,
   ProjectExportRecord,
+  ProjectFileAnalysis,
   ProjectFileBlastRadius,
   ProjectFileSymbolRecord,
   ProjectGraphCycle,
@@ -399,10 +400,11 @@ export function createRepoParseGraphService(database: Database) {
         });
     },
 
-    async getFileBlastRadius(
+    async getFileAnalysis(
       projectImportId: string,
       fileId: string,
-    ): Promise<ProjectFileBlastRadius> {
+    ): Promise<ProjectFileAnalysis> {
+      // Load all files and edges once — shared by blast radius + cycles computation
       const [files, edges] = await Promise.all([
         database.query.repoFile.findMany({
           where: and(
@@ -419,16 +421,17 @@ export function createRepoParseGraphService(database: Database) {
         }),
       ]);
 
+      // ── Shared data structures ──────────────────────────────────────────────
+
       const fileStats = new Map<
         string,
-        {
-          path: string;
-          language: string | null;
-          incomingCount: number;
-          outgoingCount: number;
-        }
+        { path: string; language: string | null; incomingCount: number; outgoingCount: number }
       >();
+      // forward adjacency: sourceId → Set<targetId>
+      const forwardAdjacency = new Map<string, Set<string>>();
+      // reverse adjacency: targetId → Set<sourceId>  (for blast radius BFS)
       const reverseAdjacency = new Map<string, Set<string>>();
+      const edgeCounts = new Map<string, number>();
 
       for (const file of files) {
         fileStats.set(file.id, {
@@ -440,24 +443,28 @@ export function createRepoParseGraphService(database: Database) {
       }
 
       for (const edge of edges) {
-        if (!edge.targetFileId) {
-          continue;
-        }
+        if (!edge.targetFileId) continue;
 
         const source = fileStats.get(edge.sourceFileId);
         const target = fileStats.get(edge.targetFileId);
-
-        if (!source || !target) {
-          continue;
-        }
+        if (!source || !target) continue;
 
         source.outgoingCount += 1;
         target.incomingCount += 1;
 
-        const importers = reverseAdjacency.get(edge.targetFileId) ?? new Set<string>();
-        importers.add(edge.sourceFileId);
-        reverseAdjacency.set(edge.targetFileId, importers);
+        const fwd = forwardAdjacency.get(edge.sourceFileId) ?? new Set<string>();
+        fwd.add(edge.targetFileId);
+        forwardAdjacency.set(edge.sourceFileId, fwd);
+
+        const rev = reverseAdjacency.get(edge.targetFileId) ?? new Set<string>();
+        rev.add(edge.sourceFileId);
+        reverseAdjacency.set(edge.targetFileId, rev);
+
+        const key = `${edge.sourceFileId}->${edge.targetFileId}`;
+        edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
       }
+
+      // ── Blast radius (reverse BFS from fileId) ─────────────────────────────
 
       const directDependents = reverseAdjacency.get(fileId) ?? new Set<string>();
       const visited = new Set<string>();
@@ -468,76 +475,139 @@ export function createRepoParseGraphService(database: Database) {
       let hasCycles = false;
       let maxDepth = 0;
 
-      for (let index = 0; index < queue.length; index += 1) {
-        const current = queue[index];
+      for (let i = 0; i < queue.length; i += 1) {
+        const current = queue[i];
 
-        if (current.fileId === fileId) {
-          hasCycles = true;
-          continue;
-        }
-
-        if (visited.has(current.fileId)) {
-          hasCycles = true;
-          continue;
-        }
+        if (current.fileId === fileId) { hasCycles = true; continue; }
+        if (visited.has(current.fileId)) { hasCycles = true; continue; }
 
         visited.add(current.fileId);
         maxDepth = Math.max(maxDepth, current.depth);
 
-        for (const nextFileId of reverseAdjacency.get(current.fileId) ?? []) {
-          queue.push({
-            fileId: nextFileId,
-            depth: current.depth + 1,
-          });
+        for (const nextId of reverseAdjacency.get(current.fileId) ?? []) {
+          queue.push({ fileId: nextId, depth: current.depth + 1 });
         }
       }
 
       const depthByFileId = new Map<string, number>();
-
       for (const item of queue) {
-        if (item.fileId === fileId || !visited.has(item.fileId)) {
-          continue;
-        }
-
-        const currentDepth = depthByFileId.get(item.fileId);
-
-        if (currentDepth === undefined || item.depth < currentDepth) {
-          depthByFileId.set(item.fileId, item.depth);
-        }
+        if (item.fileId === fileId || !visited.has(item.fileId)) continue;
+        const cur = depthByFileId.get(item.fileId);
+        if (cur === undefined || item.depth < cur) depthByFileId.set(item.fileId, item.depth);
       }
 
       const impactedFiles = Array.from(depthByFileId.entries())
-        .map(([impactedFileId, depth]) => {
-          const stats = fileStats.get(impactedFileId);
-
-          if (!stats) {
-            return null;
-          }
-
-          return {
-            path: stats.path,
-            language: stats.language,
-            depth,
-            incomingCount: stats.incomingCount,
-            outgoingCount: stats.outgoingCount,
-          };
+        .map(([impactedId, depth]) => {
+          const stats = fileStats.get(impactedId);
+          if (!stats) return null;
+          return { path: stats.path, language: stats.language, depth, incomingCount: stats.incomingCount, outgoingCount: stats.outgoingCount };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        .sort((left, right) => {
-          if (left.depth !== right.depth) {
-            return left.depth - right.depth;
-          }
+        .sort((a, b) => a.depth !== b.depth ? a.depth - b.depth : a.path.localeCompare(b.path));
 
-          return left.path.localeCompare(right.path);
-        });
-
-      return {
+      const blastRadius: ProjectFileBlastRadius = {
         totalCount: impactedFiles.length,
         directCount: directDependents.size,
         maxDepth,
         hasCycles,
         files: impactedFiles.slice(0, 25),
       };
+
+      // ── Cycles (Tarjan SCC on forward adjacency, filtered to fileId) ────────
+
+      const cycleCandidates: ProjectInsightsCycleCandidate[] = [];
+      const seenDirectKeys = new Set<string>();
+
+      // Direct (2-file) cycles: A ↔ B
+      for (const targetId of forwardAdjacency.get(fileId) ?? []) {
+        if (!forwardAdjacency.get(targetId)?.has(fileId)) continue;
+
+        const sourcePath = fileStats.get(fileId)?.path;
+        const targetPath = fileStats.get(targetId)?.path;
+        if (!sourcePath || !targetPath) continue;
+
+        const sortedPaths = [sourcePath, targetPath].sort((a, b) => a.localeCompare(b));
+        const key = sortedPaths.join("::");
+        if (seenDirectKeys.has(key)) continue;
+        seenDirectKeys.add(key);
+
+        cycleCandidates.push({
+          kind: "direct",
+          paths: sortedPaths,
+          edgeCount:
+            (edgeCounts.get(`${fileId}->${targetId}`) ?? 1) +
+            (edgeCounts.get(`${targetId}->${fileId}`) ?? 1),
+          summary: `${sortedPaths[0]} and ${sortedPaths[1]} import each other`,
+        });
+      }
+
+      // SCC cycles via Tarjan — only those containing fileId
+      const allNodeIds = Array.from(fileStats.keys());
+      const visitedIndices = new Map<string, number>();
+      const lowLinks = new Map<string, number>();
+      const sccStack: string[] = [];
+      const sccStackSet = new Set<string>();
+      let sccIndex = 0;
+      const sccs: string[][] = [];
+
+      const strongConnect = (nodeId: string) => {
+        visitedIndices.set(nodeId, sccIndex);
+        lowLinks.set(nodeId, sccIndex);
+        sccIndex += 1;
+        sccStack.push(nodeId);
+        sccStackSet.add(nodeId);
+
+        for (const neighborId of forwardAdjacency.get(nodeId) ?? []) {
+          if (!visitedIndices.has(neighborId)) {
+            strongConnect(neighborId);
+            lowLinks.set(nodeId, Math.min(lowLinks.get(nodeId) ?? 0, lowLinks.get(neighborId) ?? 0));
+          } else if (sccStackSet.has(neighborId)) {
+            lowLinks.set(nodeId, Math.min(lowLinks.get(nodeId) ?? 0, visitedIndices.get(neighborId) ?? 0));
+          }
+        }
+
+        if (lowLinks.get(nodeId) === visitedIndices.get(nodeId)) {
+          const component: string[] = [];
+          let curr: string | undefined;
+          do {
+            curr = sccStack.pop();
+            if (!curr) break;
+            sccStackSet.delete(curr);
+            component.push(curr);
+          } while (curr !== nodeId);
+          if (component.length > 1) sccs.push(component);
+        }
+      };
+
+      for (const id of allNodeIds) {
+        if (!visitedIndices.has(id)) strongConnect(id);
+      }
+
+      for (const component of sccs) {
+        if (component.length < 3 || !component.includes(fileId)) continue;
+
+        const paths = component
+          .map((id) => fileStats.get(id)?.path)
+          .filter((p): p is string => Boolean(p))
+          .sort((a, b) => a.localeCompare(b));
+
+        const componentSet = new Set(component);
+        let edgeCount = 0;
+        for (const fid of component) {
+          for (const nid of forwardAdjacency.get(fid) ?? []) {
+            if (componentSet.has(nid)) edgeCount += 1;
+          }
+        }
+
+        cycleCandidates.push({
+          kind: "scc",
+          paths,
+          edgeCount,
+          summary: `${paths.length}-file dependency cycle`,
+        });
+      }
+
+      return { blastRadius, cycles: cycleCandidates };
     },
 
     async listSymbols(

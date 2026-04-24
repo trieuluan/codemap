@@ -217,6 +217,7 @@ export interface ProjectFileParseData {
   exports: ProjectFileExport[];
   symbols: ProjectFileSymbol[];
   blastRadius: ProjectFileBlastRadius;
+  cycles: ProjectInsightCycleCandidate[];
 }
 
 export interface ProjectAnalysisSummaryFileEntry {

@@ -12,7 +12,6 @@ import {
   waitForLoginAuthorization,
 } from "./lib/mcp-auth.js";
 import { registerPingTool } from "./tools/ping.js";
-import { registerGetFileOutlineTool } from "./tools/get-file-outline.js";
 import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
 import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
 import { registerDisconnectGithubTool } from "./tools/disconnect-github.js";
@@ -28,6 +27,10 @@ import { registerWaitForImportTool } from "./tools/wait-for-import.js";
 import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
+import { registerGetFileTool } from "./tools/get-file.js";
+import { registerGetProjectMapTool } from "./tools/get-project-map.js";
+import { registerListProjectsTool } from "./tools/list-projects.js";
+import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
 import { registerProjectContextResource } from "./resources/project-context.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
@@ -46,7 +49,6 @@ async function runMcpServer() {
   registerLogoutTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);
-  registerGetFileOutlineTool(server, config);
   registerCheckGithubConnectionTool(server, config);
   registerGetGithubConnectUrlTool(server, config);
   registerDisconnectGithubTool(server, config);
@@ -60,6 +62,10 @@ async function runMcpServer() {
   registerTriggerReimportTool(server, config);
   registerGetProjectTool(server, config);
   registerSearchCodebaseTool(server, config);
+  registerGetFileTool(server, config);
+  registerGetProjectMapTool(server, config);
+  registerListProjectsTool(server, config);
+  registerGetProjectInsightsTool(server, config);
 
   // Resources — automatically surfaced to Claude as session context
   registerProjectContextResource(server, config);

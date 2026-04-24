@@ -67,16 +67,13 @@ function buildContextText(
 
   lines.push("");
   lines.push("## Available Tools");
-  lines.push(
-    "- search_codebase — find files, symbols, and exports by keyword",
-  );
-  lines.push(
-    "- get_file_outline — inspect symbols defined in a specific file",
-  );
-  lines.push("- get_project — refresh project status");
-  lines.push(
-    "- trigger_reimport — re-index the codebase after code changes",
-  );
+  lines.push("- list_projects — list all accessible projects");
+  lines.push("- get_project — get current project status and metadata");
+  lines.push("- get_project_map — browse the full file tree");
+  lines.push("- search_codebase — find files, symbols, and exports by keyword");
+  lines.push("- get_file — read a file: content, symbol outline, and/or blast radius (impact analysis)");
+  lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
+  lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
 
   lines.push("");

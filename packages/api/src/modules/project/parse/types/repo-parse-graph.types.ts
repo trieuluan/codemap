@@ -133,6 +133,11 @@ export interface ProjectFileBlastRadius {
   files: ProjectFileBlastRadiusEntry[];
 }
 
+export interface ProjectFileAnalysis {
+  blastRadius: ProjectFileBlastRadius;
+  cycles: ProjectInsightsCycleCandidate[];
+}
+
 export interface ProjectAnalysisSummary {
   topFilesByDependencies: Array<{
     path: string;

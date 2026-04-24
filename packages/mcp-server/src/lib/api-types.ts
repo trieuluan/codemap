@@ -18,6 +18,9 @@ export interface ProjectImport {
   branch: string | null;
   commitSha: string | null;
   parseStatus: string;
+  completedAt: string | null;
+  errorMessage: string | null;
+  parseError: string | null;
 }
 
 export interface ProjectSourceImportResult {
@@ -68,6 +71,40 @@ export interface TriggerImportResult {
   createdAt: string;
 }
 
+export interface ProjectMapTreeNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  extension?: string | null;
+  children?: ProjectMapTreeNode[];
+}
+
+export interface ProjectMapSnapshot {
+  id: string;
+  projectId: string;
+  importId: string;
+  tree: ProjectMapTreeNode;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FileContentStatus = "ready" | "binary" | "too_large" | "unsupported" | "unavailable";
+export type FileContentKind = "text" | "image" | "binary";
+
+export interface FileContent {
+  path: string;
+  name: string;
+  type: "file" | "directory";
+  extension: string | null;
+  language: string | null;
+  kind: FileContentKind;
+  mimeType: string | null;
+  status: FileContentStatus;
+  content: string | null;
+  sizeBytes: number | null;
+  reason: string | null;
+}
+
 export interface SearchFileResult {
   kind: "file";
   path: string;
@@ -99,6 +136,70 @@ export interface CodebaseSearchResponse {
   files: SearchFileResult[];
   symbols: SearchSymbolResult[];
   exports: SearchExportResult[];
+}
+
+// --- Blast Radius ---
+
+export interface BlastRadiusEntry {
+  path: string;
+  language: string | null;
+  depth: number;
+  incomingCount: number;
+  outgoingCount: number;
+}
+
+export interface BlastRadius {
+  totalCount: number;
+  directCount: number;
+  maxDepth: number;
+  hasCycles: boolean;
+  files: BlastRadiusEntry[];
+}
+
+// --- Insights ---
+
+export interface InsightsFileEntry {
+  path: string;
+  language: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+}
+
+export interface InsightsFolderEntry {
+  folder: string;
+  sourceFileCount: number;
+}
+
+export interface InsightsEntryLikeFile {
+  path: string;
+  language: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+  score: number;
+  reason: string;
+}
+
+export interface InsightsCycleCandidate {
+  paths: string[];
+  edgeCount: number;
+  kind: "direct" | "scc";
+  summary: string;
+}
+
+export interface ProjectInsightsSummary {
+  topFilesByImportCount: InsightsFileEntry[];
+  topFilesByInboundDependencyCount: InsightsFileEntry[];
+  topFoldersBySourceFileCount: InsightsFolderEntry[];
+  orphanFiles: InsightsFileEntry[];
+  entryLikeFiles: InsightsEntryLikeFile[];
+  circularDependencyCandidates: InsightsCycleCandidate[];
+  totals: {
+    files: number;
+    sourceFiles: number;
+    parsedFiles: number;
+    dependencies: number;
+    symbols: number;
+  };
 }
 
 export interface ProjectDetail {
