@@ -109,6 +109,7 @@ interface ParsedSymbolDraft {
   kind: RepoSymbolInsert["kind"];
   language: string;
   signature: string | null;
+  returnType: string | null;
   doc: string | null;
   isExported: boolean;
   isDefaultExport: boolean;
@@ -718,6 +719,18 @@ function extractSymbolsWithAst(
     return (lines[line - 1] ?? "").trim().slice(0, 200);
   }
 
+  function getReturnType(node: ts.Node): string | null {
+    if (
+      ts.isFunctionDeclaration(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node)
+    ) {
+      return node.type ? node.type.getText(sourceFile).slice(0, 200) : null;
+    }
+    return null;
+  }
+
   function getJSDoc(node: ts.Node): string | null {
     const tags = ts.getJSDocCommentsAndTags(node);
     if (tags.length === 0) return null;
@@ -754,6 +767,7 @@ function extractSymbolsWithAst(
       kind,
       language: file.language!,
       signature: getSignature(node),
+      returnType: getReturnType(node),
       doc: getJSDoc(node),
       isExported,
       isDefaultExport,
@@ -1322,6 +1336,7 @@ function parseDartFile(
         kind: pattern.kind,
         language: file.language!,
         signature: originalLine.trim(),
+        returnType: null,
         doc: null,
         isExported: false,
         isDefaultExport: false,
@@ -1369,6 +1384,7 @@ function parsePhpFile(
         kind: "namespace",
         language: file.language!,
         signature: originalLine.trim(),
+        returnType: null,
         doc: null,
         isExported: false,
         isDefaultExport: false,
@@ -1435,6 +1451,7 @@ function parsePhpFile(
         kind: pattern.kind,
         language: file.language!,
         signature: originalLine.trim(),
+        returnType: null,
         doc: null,
         isExported: false,
         isDefaultExport: false,
@@ -1611,7 +1628,7 @@ export async function runProjectParse(
             isExported: symbol.isExported,
             isDefaultExport: symbol.isDefaultExport,
             signature: symbol.signature,
-            returnType: null,
+            returnType: symbol.returnType,
             parentSymbolId: null,
             ownerSymbolKey: null,
             docJson: symbol.doc ? { text: symbol.doc } : null,

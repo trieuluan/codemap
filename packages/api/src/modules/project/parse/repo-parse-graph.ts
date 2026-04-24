@@ -895,6 +895,7 @@ export function createRepoParseGraphService(database: Database) {
             displayName: symbol.displayName,
             kind: symbol.kind,
             signature: symbol.signature,
+            returnType: symbol.returnType,
             doc: symbol.docJson && typeof symbol.docJson === "object" && "text" in symbol.docJson
               ? (symbol.docJson as { text: string }).text
               : null,

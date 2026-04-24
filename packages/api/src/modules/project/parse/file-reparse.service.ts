@@ -111,7 +111,7 @@ export async function reparseFileIfStale(
     isExported: sym.isExported,
     isDefaultExport: sym.isDefaultExport,
     signature: sym.signature,
-    returnType: null,
+    returnType: sym.returnType,
     parentSymbolId: null,
     ownerSymbolKey: null,
     docJson: sym.doc ? { text: sym.doc } : null,
