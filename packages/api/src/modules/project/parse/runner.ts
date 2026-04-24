@@ -689,6 +689,136 @@ function createExternalSymbolDraft(
   };
 }
 
+
+function extractSymbolsWithAst(
+  file: WorkspaceFileCandidate,
+): ParsedSymbolDraft[] {
+  const content = file.content ?? "";
+  const sourceFile = ts.createSourceFile(
+    file.baseName,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    file.extension === "tsx" || file.extension === "jsx"
+      ? ts.ScriptKind.TSX
+      : ts.ScriptKind.TS,
+  );
+
+  const symbols: ParsedSymbolDraft[] = [];
+  const lines = content.split(/\r?\n/);
+
+  function getLineCol(pos: number): { line: number; col: number } {
+    const lc = sourceFile.getLineAndCharacterOfPosition(pos);
+    return { line: lc.line + 1, col: lc.character };
+  }
+
+  function getSignature(node: ts.Node): string {
+    const { line } = getLineCol(node.getStart(sourceFile));
+    return (lines[line - 1] ?? "").trim().slice(0, 200);
+  }
+
+  function pushSymbol(
+    name: string,
+    kind: ParsedSymbolDraft["kind"],
+    node: ts.Node,
+    isExported: boolean,
+    isDefaultExport: boolean,
+  ) {
+    const nameStart = content.indexOf(name, node.getStart(sourceFile));
+    const { line, col } = nameStart >= 0
+      ? getLineCol(nameStart)
+      : getLineCol(node.getStart(sourceFile));
+
+    symbols.push({
+      localKey: buildLocalSymbolKey(file.path, kind, name),
+      stableKey: buildStableSymbolKey(file.path, kind, name, line),
+      displayName: name,
+      kind,
+      language: file.language!,
+      signature: getSignature(node),
+      isExported,
+      isDefaultExport,
+      line,
+      col,
+      endCol: col + name.length,
+    });
+  }
+
+  function visitTopLevel(node: ts.Node) {
+    // export default function Foo() / export default class Foo
+    if (ts.isExportAssignment(node)) {
+      const expr = node.expression;
+      if (
+        (ts.isFunctionExpression(expr) || ts.isArrowFunction(expr)) &&
+        ts.isIdentifier((expr as ts.FunctionExpression).name ?? null as never)
+      ) {
+        const name = ((expr as ts.FunctionExpression).name as ts.Identifier).text;
+        pushSymbol(name, "function", node, true, true);
+      }
+      return;
+    }
+
+    if (!ts.isStatement(node)) return;
+
+    const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+    const isExported = modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+    const isDefault = modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
+
+    // function Foo() / export function Foo() / export default function Foo()
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      pushSymbol(node.name.text, "function", node, isExported, isDefault);
+      return;
+    }
+
+    // class Foo / export class Foo / export default class Foo
+    if (ts.isClassDeclaration(node) && node.name) {
+      pushSymbol(node.name.text, "class", node, isExported, isDefault);
+      return;
+    }
+
+    // interface Foo / export interface Foo
+    if (ts.isInterfaceDeclaration(node)) {
+      pushSymbol(node.name.text, "interface", node, isExported, false);
+      return;
+    }
+
+    // type Foo = ... / export type Foo = ...
+    if (ts.isTypeAliasDeclaration(node)) {
+      pushSymbol(node.name.text, "type_alias", node, isExported, false);
+      return;
+    }
+
+    // enum Foo / export enum Foo
+    if (ts.isEnumDeclaration(node)) {
+      pushSymbol(node.name.text, "enum", node, isExported, false);
+      return;
+    }
+
+    // export const Foo = ... / export const Foo = () => ...
+    if (ts.isVariableStatement(node) && isExported) {
+      for (const decl of node.declarationList.declarations) {
+        if (!ts.isIdentifier(decl.name)) continue;
+        const name = decl.name.text;
+
+        let kind: ParsedSymbolDraft["kind"] = "variable";
+        if (
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) ||
+            ts.isFunctionExpression(decl.initializer))
+        ) {
+          kind = "function";
+        }
+
+        pushSymbol(name, kind, decl, isExported, false);
+      }
+    }
+  }
+
+  ts.forEachChild(sourceFile, visitTopLevel);
+
+  return symbols;
+}
+
 function maskCommentsAndTemplateLiterals(
   content: string,
   options: { hashLineComments?: boolean } = {},
@@ -815,11 +945,9 @@ function parseTypeScriptOrJavaScriptFile(
     issues: [],
     externalSymbols: [],
   };
-  const originalLines = (file.content ?? "").split(/\r?\n/);
   const lines = maskCommentsAndTemplateLiterals(file.content ?? "").split(/\r?\n/);
 
   lines.forEach((line, index) => {
-    const originalLine = originalLines[index] ?? line;
     const lineNumber = index + 1;
 
     const pushImport = (
@@ -1002,110 +1130,6 @@ function parseTypeScriptOrJavaScriptFile(
       }
     }
 
-    const symbolPatterns: Array<{
-      regex: RegExp;
-      kind: ParsedSymbolDraft["kind"];
-      defaultExport?: boolean;
-      exportPrefix?: boolean;
-    }> = [
-      {
-        regex: /^\s*export\s+default\s+class\s+([A-Za-z_$][\w$]*)/,
-        kind: "class",
-        defaultExport: true,
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*export\s+default\s+function\s+([A-Za-z_$][\w$]*)/,
-        kind: "function",
-        defaultExport: true,
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*export\s+class\s+([A-Za-z_$][\w$]*)/,
-        kind: "class",
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*class\s+([A-Za-z_$][\w$]*)/,
-        kind: "class",
-      },
-      {
-        regex: /^\s*export\s+interface\s+([A-Za-z_$][\w$]*)/,
-        kind: "interface",
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*interface\s+([A-Za-z_$][\w$]*)/,
-        kind: "interface",
-      },
-      {
-        regex: /^\s*export\s+function\s+([A-Za-z_$][\w$]*)/,
-        kind: "function",
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*function\s+([A-Za-z_$][\w$]*)/,
-        kind: "function",
-      },
-      {
-        regex: /^\s*export\s+enum\s+([A-Za-z_$][\w$]*)/,
-        kind: "enum",
-        exportPrefix: true,
-      },
-      {
-        regex: /^\s*enum\s+([A-Za-z_$][\w$]*)/,
-        kind: "enum",
-      },
-      {
-        regex: /^\s*export\s+type\s+([A-Za-z_$][\w$]*)/,
-        kind: "type_alias",
-        exportPrefix: true,
-      },
-    ];
-
-    for (const pattern of symbolPatterns) {
-      const match = line.match(pattern.regex);
-
-      if (!match?.[1]) {
-        continue;
-      }
-
-      const displayName = match[1];
-      const localKey = buildLocalSymbolKey(
-        file.path,
-        pattern.kind,
-        displayName,
-      );
-      const col = line.indexOf(displayName);
-
-      semantics.symbols.push({
-        localKey,
-        stableKey: buildStableSymbolKey(file.path, pattern.kind, displayName, lineNumber),
-        displayName,
-        kind: pattern.kind,
-        language: file.language!,
-        signature: originalLine.trim(),
-        isExported: Boolean(pattern.exportPrefix),
-        isDefaultExport: Boolean(pattern.defaultExport),
-        line: lineNumber,
-        col: Math.max(col, 0),
-        endCol: Math.max(col, 0) + displayName.length,
-      });
-
-      if (pattern.exportPrefix) {
-        semantics.exports.push({
-          exportName: pattern.defaultExport ? "default" : displayName,
-          exportKind: pattern.defaultExport ? "default" : "named",
-          line: lineNumber,
-          col: Math.max(col, 0),
-          endCol: Math.max(col, 0) + displayName.length,
-          symbolLocalKey: localKey,
-        });
-      }
-
-      break;
-    }
-
     const namedExportMatch = line.match(/^\s*export\s+\{([^}]+)\}/);
 
     if (namedExportMatch?.[1]) {
@@ -1138,6 +1162,22 @@ function parseTypeScriptOrJavaScriptFile(
       }
     }
   });
+
+  // AST-based symbol extraction
+  const astSymbols = extractSymbolsWithAst(file);
+  for (const symbol of astSymbols) {
+    semantics.symbols.push(symbol);
+    if (symbol.isExported) {
+      semantics.exports.push({
+        exportName: symbol.isDefaultExport ? "default" : symbol.displayName,
+        exportKind: symbol.isDefaultExport ? "default" : "named",
+        line: symbol.line,
+        col: symbol.col,
+        endCol: symbol.endCol,
+        symbolLocalKey: symbol.localKey,
+      });
+    }
+  }
 
   return semantics;
 }
