@@ -5,7 +5,7 @@ import {
   type McpServerConfig,
   saveGlobalConfig,
 } from "../config.js";
-import { requestCodeMapApi } from "./codemap-api.js";
+import { createCodeMapClient, type CodeMapClient } from "./codemap-api.js";
 import { openUrlInBrowser } from "./open-url.js";
 
 export interface StartAuthResponse {
@@ -55,8 +55,8 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function startMcpLogin(config: McpServerConfig) {
-  return requestCodeMapApi<StartAuthResponse>(config, "/mcp/auth/start", {
+export async function startMcpLogin(client: CodeMapClient) {
+  return client.request<StartAuthResponse>("/mcp/auth/start", {
     method: "POST",
     body: {
       clientName: "CodeMap MCP",
@@ -65,32 +65,22 @@ export async function startMcpLogin(config: McpServerConfig) {
   });
 }
 
-export async function getMcpAuthStatus(
-  config: McpServerConfig,
-  sessionId: string,
-) {
-  return requestCodeMapApi<AuthStatusResponse>(config, "/mcp/auth/status", {
-    query: {
-      sessionId,
-    },
+export async function getMcpAuthStatus(client: CodeMapClient, sessionId: string) {
+  return client.request<AuthStatusResponse>("/mcp/auth/status", {
+    query: { sessionId },
   });
 }
 
-export async function getMcpWhoAmI(config: McpServerConfig) {
-  return requestCodeMapApi<AuthMeResponse>(config, "/mcp/auth/me", {
+export async function getMcpWhoAmI(client: CodeMapClient) {
+  return client.request<AuthMeResponse>("/mcp/auth/me", {
     authRequired: true,
   });
 }
 
-export async function claimMcpAuthSession(
-  config: McpServerConfig,
-  sessionId: string,
-) {
-  return requestCodeMapApi<ClaimAuthResponse>(config, "/mcp/auth/claim", {
+export async function claimMcpAuthSession(client: CodeMapClient, sessionId: string) {
+  return client.request<ClaimAuthResponse>("/mcp/auth/claim", {
     method: "POST",
-    body: {
-      sessionId,
-    },
+    body: { sessionId },
   });
 }
 
@@ -132,6 +122,9 @@ export async function pollMcpAuthUntilDone(
     maxWaitMs?: number | null;
   },
 ): Promise<WaitForAuthResult> {
+  // Client created once for the lifetime of this poll loop
+  const client = createCodeMapClient(config);
+
   const pollIntervalMs =
     options?.pollIntervalMs && options.pollIntervalMs > 0
       ? options.pollIntervalMs
@@ -144,7 +137,7 @@ export async function pollMcpAuthUntilDone(
       : null;
 
   while (true) {
-    const status = await getMcpAuthStatus(config, sessionId);
+    const status = await getMcpAuthStatus(client, sessionId);
     if (!effectiveExpiresAt && status.expiresAt) {
       effectiveExpiresAt = status.expiresAt;
     }
@@ -154,7 +147,7 @@ export async function pollMcpAuthUntilDone(
 
     if (status.status === "authorized") {
       try {
-        const claimResult = await claimMcpAuthSession(config, sessionId);
+        const claimResult = await claimMcpAuthSession(client, sessionId);
         await persistAuthorizedSession(config, claimResult);
 
         return {
@@ -237,7 +230,8 @@ export async function pollMcpAuthUntilDone(
 }
 
 export async function runLoginFlow(config: McpServerConfig) {
-  const startResponse = await startMcpLogin(config);
+  const client = createCodeMapClient(config);
+  const startResponse = await startMcpLogin(client);
   const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);
   const result = await waitForLoginAuthorization(config, startResponse);
 
@@ -278,9 +272,7 @@ export async function waitForLoginAuthorization(
   }
 
   if (result.status === "expired") {
-    throw new Error(
-      "MCP login session expired before authorization completed.",
-    );
+    throw new Error("MCP login session expired before authorization completed.");
   }
 
   if (result.status === "denied") {

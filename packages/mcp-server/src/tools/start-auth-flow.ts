@@ -1,11 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
+import { createCodeMapClient } from "../lib/codemap-api.js";
 import { startMcpLogin, tryOpenLoginBrowser } from "../lib/mcp-auth.js";
+import { errorContent } from "../lib/tool-response.js";
 
 export function registerStartAuthFlowTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
+  const client = createCodeMapClient(config);
+
   server.registerTool(
     "start_auth_flow",
     {
@@ -16,13 +20,13 @@ export function registerStartAuthFlowTool(
     },
     async () => {
       try {
-        const startResponse = await startMcpLogin(config);
+        const startResponse = await startMcpLogin(client);
         const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);
 
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify(
                 {
                   sessionId: startResponse.sessionId,
@@ -41,15 +45,7 @@ export function registerStartAuthFlowTool(
           ],
         };
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : String(error),
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(error);
       }
     },
   );

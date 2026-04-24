@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
+import { createCodeMapClient } from "../lib/codemap-api.js";
 import { getMcpWhoAmI } from "../lib/mcp-auth.js";
 import { text, errorContent } from "../lib/tool-response.js";
 
@@ -7,6 +8,8 @@ export function registerCheckAuthStatusTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
+  const client = createCodeMapClient(config);
+
   server.registerTool(
     "check_auth_status",
     {
@@ -25,7 +28,7 @@ export function registerCheckAuthStatusTool(
       }
 
       try {
-        const response = await getMcpWhoAmI(config);
+        const response = await getMcpWhoAmI(client);
 
         return text(
           [
