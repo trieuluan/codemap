@@ -286,7 +286,7 @@ export async function materializeGithubRepositorySource(
       workspacePath,
       [
       "--depth",
-      "1",
+      "100",
       "--single-branch",
       "--branch",
       source.branch,
