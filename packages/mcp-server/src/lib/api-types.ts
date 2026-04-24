@@ -68,6 +68,39 @@ export interface TriggerImportResult {
   createdAt: string;
 }
 
+export interface SearchFileResult {
+  kind: "file";
+  path: string;
+  language: string | null;
+}
+
+export interface SearchSymbolResult {
+  kind: "symbol";
+  id: string;
+  displayName: string;
+  symbolKind: string;
+  filePath: string;
+  parentSymbolName: string | null;
+  startLine: number | null;
+  startCol: number | null;
+}
+
+export interface SearchExportResult {
+  kind: "export";
+  id: string;
+  exportName: string;
+  filePath: string;
+  symbolId: string | null;
+  startLine: number;
+  startCol: number;
+}
+
+export interface CodebaseSearchResponse {
+  files: SearchFileResult[];
+  symbols: SearchSymbolResult[];
+  exports: SearchExportResult[];
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;

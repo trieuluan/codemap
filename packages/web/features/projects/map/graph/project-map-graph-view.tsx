@@ -47,6 +47,7 @@ const GraphCanvas = dynamic(
 interface ProjectMapGraphViewProps {
   projectId: string;
   graphData: ProjectMapGraphResponse;
+  initialFocusFile?: string | null;
 }
 
 type GraphMode = "overview" | "structure" | "focus";
@@ -151,13 +152,18 @@ function getFolderBreadcrumb(folderPath: string | null): string[] {
 export function ProjectMapGraphView({
   projectId,
   graphData,
+  initialFocusFile,
 }: ProjectMapGraphViewProps) {
-  const [mode, setMode] = useState<GraphMode>("overview");
+  const initialFocusNode = initialFocusFile
+    ? (graphData.nodes.find((n) => n.path === initialFocusFile) ?? null)
+    : null;
+
+  const [mode, setMode] = useState<GraphMode>(initialFocusNode ? "focus" : "overview");
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(initialFocusNode?.id ?? null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(initialFocusNode?.id ?? null);
   const [relationMode, setRelationMode] = useState<GraphRelationMode>("all");
-  const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null);
+  const [drawerNodeId, setDrawerNodeId] = useState<string | null>(initialFocusNode?.id ?? null);
   const [folderLayout, setFolderLayout] =
     useState<FolderGraphLayoutResult | null>(null);
   const [structureLayout, setStructureLayout] =

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Search } from "lucide-react";
 import {
   Empty,
   EmptyContent,
@@ -39,7 +38,6 @@ import {
   ProjectFileViewer,
   type ProjectViewerRange,
 } from "./components/project-file-viewer";
-import { ProjectMapSearchDialog } from "./components/project-map-search-dialog";
 import { ProjectMapSidebar } from "./components/project-map-sidebar";
 import { useMapFilters } from "../hooks/use-map-filters";
 import { ProjectMapStatusBanner } from "../components/status/project-map-status-banner";
@@ -64,7 +62,6 @@ export function ProjectMapShell({
   initialSelectedFilePath?: string | null;
 }) {
   const defaultRelationshipSections = ["imports", "imported-by"];
-  const [isProjectSearchOpen, setIsProjectSearchOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState("details");
   const [openRelationshipSections, setOpenRelationshipSections] = useState<
     string[]
@@ -198,21 +195,6 @@ export function ProjectMapShell({
         keepPreviousData: true,
       },
     );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setIsProjectSearchOpen((currentValue) => !currentValue);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   useEffect(() => {
     if (!filteredTree.length) {
@@ -349,7 +331,7 @@ export function ProjectMapShell({
 
       {hasMapSnapshot ? (
         <div className="rounded-lg border border-border/70 bg-card">
-          <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          {/* <div className="border-b border-border/70 px-4 py-4">
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-foreground">
                 Code explorer
@@ -359,39 +341,7 @@ export function ProjectMapShell({
                 analysis.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="justify-center gap-2 sm:justify-start"
-              onClick={() => setIsProjectSearchOpen(true)}
-            >
-              <Search className="size-4 text-muted-foreground" />
-              Search project
-              <span className="ml-1 text-xs text-muted-foreground">
-                ⌘K / Ctrl+K
-              </span>
-            </Button>
-          </div>
-          <ProjectMapSearchDialog
-            open={isProjectSearchOpen}
-            onOpenChange={setIsProjectSearchOpen}
-            projectId={project.id}
-            importId={mapSnapshot?.importId}
-            parseStatus={latestImport?.parseStatus}
-            onSelectFile={(item) => {
-              navigateToFile(item.path, null);
-            }}
-            onSelectSymbol={(item, range) => {
-              navigateToFile(item.filePath, range ?? null, "relationships", [
-                "defines",
-              ]);
-            }}
-            onSelectExport={(item, range) => {
-              navigateToFile(item.filePath, range, "relationships", [
-                "exports",
-              ]);
-            }}
-          />
+          </div> */}
           <div className="grid h-[760px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
             <ProjectMapSidebar
               query={query}
@@ -429,6 +379,7 @@ export function ProjectMapShell({
               <div className="min-w-0">
                 {selectedNode ? (
                   <DetailPanel
+                    projectId={project.id}
                     file={selectedNode}
                     fileContent={selectedFileContent}
                     parseData={

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ProjectMapNav } from "@/features/projects/map/components/project-map-nav";
+import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectMapShell } from "@/features/projects/map/explorer/project-map-shell";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
@@ -78,7 +78,12 @@ export default async function ProjectMapPage({
                 Explore the project structure, dependency surface, and likely
                 entry points.
               </p>
-              <ProjectMapNav projectId={project.id} active="mapping" />
+              <ProjectMapHeader
+                projectId={project.id}
+                active="mapping"
+                importId={imports[0]?.id}
+                parseStatus={imports[0]?.parseStatus}
+              />
             </div>
 
             <Button variant="outline" asChild>

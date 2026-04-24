@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ProjectMapInsightsView } from "@/features/projects/map/insights/project-map-insights-view";
-import { ProjectMapNav } from "@/features/projects/map/components/project-map-nav";
+import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
@@ -68,7 +68,12 @@ export default async function ProjectMapInsightsPage({
                 Review dependency and structure insights before investing in
                 graph visualizations.
               </p>
-              <ProjectMapNav projectId={project.id} active="insights" />
+              <ProjectMapHeader
+                projectId={project.id}
+                active="insights"
+                importId={imports[0]?.id}
+                parseStatus={imports[0]?.parseStatus}
+              />
             </div>
 
             <Button variant="outline" asChild>

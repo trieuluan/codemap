@@ -27,6 +27,8 @@ import { registerCreateProjectFromGithubTool } from "./tools/create-project-from
 import { registerWaitForImportTool } from "./tools/wait-for-import.js";
 import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
+import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
+import { registerProjectContextResource } from "./resources/project-context.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
@@ -57,6 +59,10 @@ async function runMcpServer() {
   registerWaitForImportTool(server, config);
   registerTriggerReimportTool(server, config);
   registerGetProjectTool(server, config);
+  registerSearchCodebaseTool(server, config);
+
+  // Resources — automatically surfaced to Claude as session context
+  registerProjectContextResource(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

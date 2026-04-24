@@ -13,9 +13,11 @@ import {
   GitBranch,
   Hash,
   Languages,
+  Network,
   ScanSearch,
   Tag,
 } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -46,6 +48,7 @@ import type { RepositoryTreeNode } from "../utils/file-tree-model";
 import { getRepositoryNodeChildCount } from "../utils/file-tree-model";
 
 interface DetailPanelProps {
+  projectId: string;
   file: RepositoryTreeNode;
   fileContent?: ProjectFileContent;
   parseData?: ProjectFileParseData;
@@ -416,6 +419,7 @@ function RelationshipLoadingSkeleton() {
 }
 
 export function DetailPanel({
+  projectId,
   file,
   fileContent,
   parseData,
@@ -465,10 +469,10 @@ export function DetailPanel({
     <div className="flex h-full flex-col">
       <div className="border-b border-sidebar-border px-6 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-accent">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent">
             <FileCode2 className="h-5 w-5 text-sidebar-foreground" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">
               {fileExtension} • {detailLanguage}{" "}
@@ -478,6 +482,16 @@ export function DetailPanel({
                 : detailSize}
             </p>
           </div>
+          {file.type === "file" && file.path ? (
+            <Link
+              href={`/projects/${projectId}/map/graph?file=${encodeURIComponent(file.path)}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="View in Graph"
+            >
+              <Network className="size-3.5" />
+              Graph
+            </Link>
+          ) : null}
         </div>
       </div>
 

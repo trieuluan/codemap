@@ -12,23 +12,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { ProjectMapGraphView } from "@/features/projects/map/graph/project-map-graph-view";
-import { ProjectMapNav } from "@/features/projects/map/components/project-map-nav";
+import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
 export default async function ProjectMapGraphPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ file?: string }>;
 }) {
   const { projectId } = await params;
+  const { file: initialFocusFile } = await searchParams;
   const api = createServerProjectsApi({
     cookieHeader: (await cookies()).toString(),
   });
 
   try {
-    const [project, graphData] = await Promise.all([
+    const [project, imports, graphData] = await Promise.all([
       api.getProject(projectId),
+      api.getProjectImports(projectId),
       api.getProjectGraph(projectId),
     ]);
 
@@ -67,7 +71,12 @@ export default async function ProjectMapGraphPage({
                 Explore folder-level dependencies first, then drill into
                 file-level graphs when needed.
               </p>
-              <ProjectMapNav projectId={project.id} active="graph" />
+              <ProjectMapHeader
+                projectId={project.id}
+                active="graph"
+                importId={imports[0]?.id}
+                parseStatus={imports[0]?.parseStatus}
+              />
             </div>
 
             <Button variant="outline" asChild>
@@ -79,7 +88,11 @@ export default async function ProjectMapGraphPage({
           </div>
         </div>
 
-        <ProjectMapGraphView projectId={project.id} graphData={graphData} />
+        <ProjectMapGraphView
+          projectId={project.id}
+          graphData={graphData}
+          initialFocusFile={initialFocusFile}
+        />
       </div>
     );
   } catch (error) {
