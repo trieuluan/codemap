@@ -109,6 +109,7 @@ interface ParsedSymbolDraft {
   kind: RepoSymbolInsert["kind"];
   language: string;
   signature: string | null;
+  doc: string | null;
   isExported: boolean;
   isDefaultExport: boolean;
   line: number;
@@ -717,6 +718,23 @@ function extractSymbolsWithAst(
     return (lines[line - 1] ?? "").trim().slice(0, 200);
   }
 
+  function getJSDoc(node: ts.Node): string | null {
+    const tags = ts.getJSDocCommentsAndTags(node);
+    if (tags.length === 0) return null;
+
+    const parts: string[] = [];
+    for (const tag of tags) {
+      if (ts.isJSDoc(tag) && tag.comment) {
+        const text = typeof tag.comment === "string"
+          ? tag.comment
+          : tag.comment.map((c) => c.text).join("");
+        if (text.trim()) parts.push(text.trim());
+      }
+    }
+
+    return parts.length > 0 ? parts.join("\n").slice(0, 500) : null;
+  }
+
   function pushSymbol(
     name: string,
     kind: ParsedSymbolDraft["kind"],
@@ -736,6 +754,7 @@ function extractSymbolsWithAst(
       kind,
       language: file.language!,
       signature: getSignature(node),
+      doc: getJSDoc(node),
       isExported,
       isDefaultExport,
       line,
@@ -1303,6 +1322,7 @@ function parseDartFile(
         kind: pattern.kind,
         language: file.language!,
         signature: originalLine.trim(),
+        doc: null,
         isExported: false,
         isDefaultExport: false,
         line: lineNumber,
@@ -1349,6 +1369,7 @@ function parsePhpFile(
         kind: "namespace",
         language: file.language!,
         signature: originalLine.trim(),
+        doc: null,
         isExported: false,
         isDefaultExport: false,
         line: lineNumber,
@@ -1414,6 +1435,7 @@ function parsePhpFile(
         kind: pattern.kind,
         language: file.language!,
         signature: originalLine.trim(),
+        doc: null,
         isExported: false,
         isDefaultExport: false,
         line: lineNumber,
@@ -1592,7 +1614,7 @@ export async function runProjectParse(
             returnType: null,
             parentSymbolId: null,
             ownerSymbolKey: null,
-            docJson: null,
+            docJson: symbol.doc ? { text: symbol.doc } : null,
             typeJson: null,
             modifiersJson: null,
             extraJson: {

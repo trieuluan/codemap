@@ -130,6 +130,7 @@ export interface ProjectFileSymbolRecord {
   displayName: string;
   kind: RepoSymbolKind;
   signature: string | null;
+  doc: string | null;
   isExported: boolean;
   parentSymbolName: string | null;
   startLine: number | null;

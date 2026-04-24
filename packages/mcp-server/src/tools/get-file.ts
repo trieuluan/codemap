@@ -47,6 +47,7 @@ interface ParseSymbol {
   displayName: string;
   kind: string;
   signature: string | null;
+  doc: string | null;
   isExported: boolean;
   parentSymbolName: string | null;
   startLine: number | null;
@@ -184,6 +185,9 @@ function buildOutlineSection(parse: FileParseResponse): string {
       const loc = sym.startLine != null ? ` · line ${sym.startLine}` : "";
       const exp = sym.isExported ? " · exported" : "";
       lines.push(`#### ${sym.displayName} · ${sym.kind}${exp}${loc}`);
+      if (sym.doc) {
+        lines.push(`> ${sym.doc.replace(/\n/g, "\n> ")}`);
+      }
       if (sym.signature) {
         lines.push("```");
         lines.push(sym.signature);

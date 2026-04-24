@@ -114,7 +114,7 @@ export async function reparseFileIfStale(
     returnType: null,
     parentSymbolId: null,
     ownerSymbolKey: null,
-    docJson: null,
+    docJson: sym.doc ? { text: sym.doc } : null,
     typeJson: null,
     modifiersJson: null,
     extraJson: { line: sym.line, col: sym.col } as unknown,
