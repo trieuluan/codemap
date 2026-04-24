@@ -2084,6 +2084,7 @@ export function createRepoParseGraphService(database: Database) {
             id: symbol.id,
             displayName: symbol.displayName,
             symbolKind: symbol.kind,
+            signature: symbol.signature ?? null,
             filePath: symbol.file?.path ?? "",
             parentSymbolName: symbol.parentSymbol?.displayName ?? null,
             startLine: occurrence?.startLine ?? null,

@@ -57,7 +57,8 @@ function formatSymbolResult(r: SearchSymbolResult, index: number): string {
   const kind = formatSymbolKind(r.symbolKind);
   const location = r.startLine ? `:${r.startLine}` : "";
   const parent = r.parentSymbolName ? ` (in ${r.parentSymbolName})` : "";
-  return `${index + 1}. ${r.displayName}  [${kind}]${parent}\n   ${r.filePath}${location}`;
+  const signature = r.signature ? `\n   \`${r.signature}\`` : "";
+  return `${index + 1}. ${r.displayName}  [${kind}]${parent}\n   ${r.filePath}${location}${signature}`;
 }
 
 function formatExportResult(r: SearchExportResult, index: number): string {

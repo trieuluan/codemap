@@ -116,6 +116,7 @@ export interface SearchSymbolResult {
   id: string;
   displayName: string;
   symbolKind: string;
+  signature: string | null;
   filePath: string;
   parentSymbolName: string | null;
   startLine: number | null;

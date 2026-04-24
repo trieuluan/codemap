@@ -294,6 +294,7 @@ export interface ProjectMapSearchSymbolResult {
   id: string;
   displayName: string;
   symbolKind: RepoSymbolKind;
+  signature: string | null;
   filePath: string;
   parentSymbolName: string | null;
   startLine: number | null;
