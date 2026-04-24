@@ -6,6 +6,7 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { text, withToolError } from "../lib/tool-response.js";
 import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 import { zipWorkspaceFolder } from "../lib/workspace-zip.js";
+import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { GithubStatus, ProjectSourceImportResult } from "../lib/api-types.js";
 
 export function registerCreateProjectTool(
@@ -77,6 +78,11 @@ export function registerCreateProjectTool(
           },
         );
 
+        await saveWorkspaceProjectId(
+          workspace.repoRootPath ?? process.cwd(),
+          result.project.id,
+        ).catch(() => undefined); // non-fatal
+
         return text(
           [
             "Project import started from GitHub repository.",
@@ -85,6 +91,8 @@ export function registerCreateProjectTool(
             `Branch: ${result.import.branch ?? workspace.branch}`,
             `Import status: ${result.import.status}`,
             `Parse status: ${result.import.parseStatus}`,
+            "",
+            `Project ID saved to workspace — future tools will use it automatically.`,
           ].join("\n"),
         );
       }
@@ -132,6 +140,8 @@ export function registerCreateProjectTool(
         { query, authRequired: true },
       );
 
+      await saveWorkspaceProjectId(folderPath, result.project.id).catch(() => undefined); // non-fatal
+
       return text(
         [
           "Source code uploaded and project import started.",
@@ -143,6 +153,8 @@ export function registerCreateProjectTool(
           `Branch: ${result.import.branch ?? branch ?? "main"}`,
           `Import status: ${result.import.status}`,
           `Parse status: ${result.import.parseStatus}`,
+          "",
+          `Project ID saved to workspace — future tools will use it automatically.`,
         ]
           .filter(Boolean)
           .join("\n"),

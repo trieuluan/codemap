@@ -76,7 +76,15 @@ export async function runProjectImport(
     return;
   }
 
+  // Upload flow: the controller has already extracted the zip directly into
+  // .codemap-storage and saved sourceWorkspacePath on the import record.
+  // Skip clone/materialize/promote — the source is already in the right place.
+  const isPreMaterialized =
+    projectRecord.provider === "local_workspace" &&
+    Boolean(importRecord.sourceWorkspacePath);
+
   if (
+    !isPreMaterialized &&
     projectRecord.provider === "local_workspace" &&
     !projectRecord.localWorkspacePath
   ) {
@@ -103,92 +111,115 @@ export async function runProjectImport(
     ReturnType<typeof materializeRepositorySource>
   > | null = null;
   let retainedWorkspacePath: string | null = null;
-  let sourceMetadataSaved = false;
+  // For pre-materialized sources, metadata is already saved by the controller.
+  let sourceMetadataSaved = isPreMaterialized;
   let importPhaseCompleted = false;
 
   try {
-    await reportProjectImportProgress(context, 10, "validating-repository");
-    await validateRepositorySourceAccess(
-      projectRecord.provider === "local_workspace"
-        ? {
-            provider: "local_workspace",
-            workspacePath: projectRecord.localWorkspacePath!,
-          }
-        : {
-            provider: "github",
-            repositoryUrl: projectRecord.repositoryUrl!,
-            accessToken: githubAccessToken,
-          },
-    );
+    if (isPreMaterialized) {
+      // Fast path for uploaded projects: source is already retained in .codemap-storage
+      retainedWorkspacePath = importRecord.sourceWorkspacePath!;
 
-    await projectService.markImportAsRunning(importRecord.id, {
-      branch: importRecord.branch ?? projectRecord.defaultBranch,
-    });
+      await projectService.markImportAsRunning(importRecord.id, {
+        branch: importRecord.branch ?? null,
+      });
 
-    await reportProjectImportProgress(context, 30, "resolving-branch");
-    const resolvedSource = await resolveRepositorySource(
-      projectRecord.provider === "local_workspace"
-        ? {
-            provider: "local_workspace",
-            workspacePath: projectRecord.localWorkspacePath!,
-            preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
-          }
-        : {
-            provider: "github",
-            repositoryUrl: projectRecord.repositoryUrl!,
-            preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
-            accessToken: githubAccessToken,
-          },
-    );
-
-    if (!projectRecord.defaultBranch && resolvedSource.branch) {
-      await projectService.setProjectDefaultBranchIfMissing(
-        projectRecord.id,
-        resolvedSource.branch,
+      await reportProjectImportProgress(context, 60, "scanning-filesystem");
+      const tree = await buildProjectTree(
+        retainedWorkspacePath,
+        projectRecord.name,
       );
-    }
 
-    await reportProjectImportProgress(context, 45, "downloading-source");
-    materializedSource = await materializeRepositorySource(resolvedSource, {
-      accessToken: githubAccessToken,
-    });
-
-    await projectService.markImportAsRunning(importRecord.id, {
-      branch: resolvedSource.branch,
-    });
-
-    await reportProjectImportProgress(context, 60, "scanning-filesystem");
-    const tree = await buildProjectTree(
-      materializedSource.workspacePath,
-      "repo" in materializedSource.reference
-        ? materializedSource.reference.repo
-        : materializedSource.reference.repoName,
-    );
-
-    await reportProjectImportProgress(context, 85, "saving-project-map");
-    await projectMapPersistence.saveSnapshot({
-      projectId: projectRecord.id,
-      importId: importRecord.id,
-      tree,
-    });
-
-    await reportProjectImportProgress(context, 92, "retaining-source");
-    const retainedWorkspace =
-      await repositoryWorkspaceService.promoteStagedWorkspace({
+      await reportProjectImportProgress(context, 85, "saving-project-map");
+      await projectMapPersistence.saveSnapshot({
         projectId: projectRecord.id,
         importId: importRecord.id,
-        stagedWorkspacePath: materializedSource.workspacePath,
+        tree,
       });
-    retainedWorkspacePath = retainedWorkspace.workspacePath;
+    } else {
+      await reportProjectImportProgress(context, 10, "validating-repository");
+      await validateRepositorySourceAccess(
+        projectRecord.provider === "local_workspace"
+          ? {
+              provider: "local_workspace",
+              workspacePath: projectRecord.localWorkspacePath!,
+            }
+          : {
+              provider: "github",
+              repositoryUrl: projectRecord.repositoryUrl!,
+              accessToken: githubAccessToken,
+            },
+      );
 
-    await projectService.saveImportSourceMetadata({
-      projectImportId: importRecord.id,
-      branch: resolvedSource.branch,
-      commitSha: materializedSource.commitSha,
-      sourceStorageKey: retainedWorkspace.storageKey,
-      sourceWorkspacePath: retainedWorkspace.workspacePath,
-    });
-    sourceMetadataSaved = true;
+      await projectService.markImportAsRunning(importRecord.id, {
+        branch: importRecord.branch ?? projectRecord.defaultBranch,
+      });
+
+      await reportProjectImportProgress(context, 30, "resolving-branch");
+      const resolvedSource = await resolveRepositorySource(
+        projectRecord.provider === "local_workspace"
+          ? {
+              provider: "local_workspace",
+              workspacePath: projectRecord.localWorkspacePath!,
+              preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+            }
+          : {
+              provider: "github",
+              repositoryUrl: projectRecord.repositoryUrl!,
+              preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+              accessToken: githubAccessToken,
+            },
+      );
+
+      if (!projectRecord.defaultBranch && resolvedSource.branch) {
+        await projectService.setProjectDefaultBranchIfMissing(
+          projectRecord.id,
+          resolvedSource.branch,
+        );
+      }
+
+      await reportProjectImportProgress(context, 45, "downloading-source");
+      materializedSource = await materializeRepositorySource(resolvedSource, {
+        accessToken: githubAccessToken,
+      });
+
+      await projectService.markImportAsRunning(importRecord.id, {
+        branch: resolvedSource.branch,
+      });
+
+      await reportProjectImportProgress(context, 60, "scanning-filesystem");
+      const tree = await buildProjectTree(
+        materializedSource.workspacePath,
+        "repo" in materializedSource.reference
+          ? materializedSource.reference.repo
+          : materializedSource.reference.repoName,
+      );
+
+      await reportProjectImportProgress(context, 85, "saving-project-map");
+      await projectMapPersistence.saveSnapshot({
+        projectId: projectRecord.id,
+        importId: importRecord.id,
+        tree,
+      });
+
+      await reportProjectImportProgress(context, 92, "retaining-source");
+      const retainedWorkspace =
+        await repositoryWorkspaceService.promoteStagedWorkspace({
+          projectId: projectRecord.id,
+          importId: importRecord.id,
+          stagedWorkspacePath: materializedSource.workspacePath,
+        });
+      retainedWorkspacePath = retainedWorkspace.workspacePath;
+
+      await projectService.saveImportSourceMetadata({
+        projectImportId: importRecord.id,
+        branch: resolvedSource.branch,
+        commitSha: materializedSource.commitSha,
+        sourceStorageKey: retainedWorkspace.storageKey,
+        sourceWorkspacePath: retainedWorkspace.workspacePath,
+      });
+      sourceMetadataSaved = true;
+    }
 
     await projectService.markImportAsCompleted(importRecord.id);
     importPhaseCompleted = true;
@@ -227,7 +258,7 @@ export async function runProjectImport(
       }
     }
   } catch (error) {
-    if (!importPhaseCompleted && retainedWorkspacePath) {
+    if (!importPhaseCompleted && retainedWorkspacePath && !isPreMaterialized) {
       await repositoryWorkspaceService.removeWorkspaceByPath(
         retainedWorkspacePath,
       );

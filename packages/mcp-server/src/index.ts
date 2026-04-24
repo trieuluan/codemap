@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { clearGlobalAuthConfig, loadConfig } from "./config.js";
+import { createCodeMapClient } from "./lib/codemap-api.js";
 import {
   getMcpWhoAmI,
   startMcpLogin,
@@ -23,6 +24,9 @@ import {
 } from "./tools/list-github-repositories.js";
 import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
+import { registerWaitForImportTool } from "./tools/wait-for-import.js";
+import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
+import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
@@ -50,6 +54,9 @@ async function runMcpServer() {
   registerSearchGithubRepositoriesTool(server, config);
   registerCreateProjectTool(server, config);
   registerCreateProjectFromGithubTool(server, config);
+  registerWaitForImportTool(server, config);
+  registerTriggerReimportTool(server, config);
+  registerGetProjectTool(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -57,7 +64,8 @@ async function runMcpServer() {
 
 async function runLoginCommand() {
   const config = await loadConfig();
-  const startResponse = await startMcpLogin(config);
+  const client = createCodeMapClient(config);
+  const startResponse = await startMcpLogin(client);
   const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);
 
   if (openedBrowser) {
@@ -98,7 +106,7 @@ async function runWhoAmICommand() {
     return;
   }
 
-  const me = await getMcpWhoAmI(config);
+  const me = await getMcpWhoAmI(createCodeMapClient(config));
   console.log("Authenticated with CodeMap.");
   console.log(`API URL: ${me.apiUrl}`);
   if (me.user.email) {

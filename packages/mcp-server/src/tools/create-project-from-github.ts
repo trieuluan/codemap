@@ -4,6 +4,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { text, withToolError } from "../lib/tool-response.js";
 import type { ProjectSourceImportResult } from "../lib/api-types.js";
+import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
 
 export function registerCreateProjectFromGithubTool(
   server: McpServer,
@@ -50,6 +51,8 @@ export function registerCreateProjectFromGithubTool(
           authRequired: true,
         },
       );
+
+      await saveWorkspaceProjectId(process.cwd(), result.project.id);
 
       return text(
         [

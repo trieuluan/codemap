@@ -3,6 +3,7 @@ import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import { createProjectService } from "./service";
 import { createProjectFromUploadQuerySchema } from "./schema.upload";
 import { extractAndPrepareUploadSource } from "./import/source/upload-source";
+import { createRepositoryWorkspaceService } from "./import/repository-workspace";
 
 function getAuthenticatedUserId(
   fastify: FastifyInstance,
@@ -15,6 +16,7 @@ function getAuthenticatedUserId(
 
 export function createProjectUploadController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
+  const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
   return {
     createProjectFromUpload: async (
@@ -34,6 +36,7 @@ export function createProjectUploadController(fastify: FastifyInstance) {
         );
       }
 
+      // Phase 1: extract zip into a temp dir (validated, sensitive files removed)
       let prepared;
 
       try {
@@ -48,13 +51,13 @@ export function createProjectUploadController(fastify: FastifyInstance) {
         );
       }
 
+      // Phase 2: create project + import records to obtain both IDs
       let project;
 
       try {
         project = await service.createOrReuseProjectFromUpload(userId, {
           name: query.name,
           description: query.description,
-          localWorkspacePath: prepared.workspacePath,
           branch: query.branch ?? null,
         });
       } catch (error) {
@@ -66,7 +69,7 @@ export function createProjectUploadController(fastify: FastifyInstance) {
 
       try {
         createdImport = await service.createImport(project.id, userId, {
-          branch: query.branch ?? null,
+          branch: query.branch,
         });
       } catch (error) {
         if (
@@ -90,6 +93,38 @@ export function createProjectUploadController(fastify: FastifyInstance) {
         );
       }
 
+      // Phase 3: move the extracted temp dir into .codemap-storage so the worker
+      // container can access it on the shared volume. After promote, the temp dir
+      // is gone — no further cleanup needed for the happy path.
+      let retainedWorkspace;
+
+      try {
+        retainedWorkspace = await repositoryWorkspaceService.promoteStagedWorkspace({
+          projectId: project.id,
+          importId: createdImport.id,
+          stagedWorkspacePath: prepared.workspacePath,
+        });
+
+        await service.saveImportSourceMetadata({
+          projectImportId: createdImport.id,
+          branch: query.branch ?? null,
+          commitSha: null,
+          sourceStorageKey: retainedWorkspace.storageKey,
+          sourceWorkspacePath: retainedWorkspace.workspacePath,
+        });
+      } catch (error) {
+        request.log.error(error, "Failed to retain uploaded workspace");
+        await prepared.cleanup();
+        await service.markImportAsFailed(
+          createdImport.id,
+          "Failed to retain uploaded source files",
+        );
+        throw fastify.httpErrors.internalServerError(
+          "Failed to retain uploaded source files",
+        );
+      }
+
+      // Phase 4: enqueue the import job — worker will find the source already in place
       try {
         await enqueueProjectImportJob(fastify.redis, {
           importId: createdImport.id,
@@ -100,7 +135,6 @@ export function createProjectUploadController(fastify: FastifyInstance) {
           createdImport.id,
           "Unable to enqueue import job",
         );
-        await prepared.cleanup();
         throw fastify.httpErrors.internalServerError(
           "Unable to start import job",
         );

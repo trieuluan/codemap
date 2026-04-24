@@ -300,23 +300,17 @@ export function createProjectService(database: Database) {
       input: {
         name?: string;
         description?: string | null;
-        localWorkspacePath: string;
-        branch?: string;
+        branch?: string | null;
       },
     ) {
-      const normalizedLocalWorkspacePath = normalizeLocalWorkspacePath(
-        input.localWorkspacePath,
-      );
-
-      // Uploaded sources always get a fresh project — the tmp path is unique per upload
+      // Uploaded sources always get a fresh project.
+      // localWorkspacePath is intentionally omitted here — the controller will
+      // promote the extracted zip directly into .codemap-storage and save
+      // sourceWorkspacePath on the import record before the worker runs.
       return this.createProject(ownerUserId, {
-        name:
-          input.name ??
-          normalizedLocalWorkspacePath.split("/").filter(Boolean).at(-1) ??
-          "uploaded-project",
+        name: input.name ?? "uploaded-project",
         description: input.description ?? null,
         defaultBranch: input.branch ?? null,
-        localWorkspacePath: normalizedLocalWorkspacePath,
         provider: "local_workspace",
       });
     },
