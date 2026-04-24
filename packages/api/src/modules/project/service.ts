@@ -816,5 +816,24 @@ export function createProjectService(database: Database) {
         orderBy: [desc(projectImport.completedAt), desc(projectImport.createdAt)],
       });
     },
+
+    async deleteSupersededImports(projectId: string, currentImportId: string) {
+      const superseded = await database.query.projectImport.findMany({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          ne(projectImport.id, currentImportId),
+        ),
+        columns: { id: true },
+      });
+
+      if (superseded.length === 0) return;
+
+      await database.delete(projectImport).where(
+        inArray(
+          projectImport.id,
+          superseded.map((r) => r.id),
+        ),
+      );
+    },
   };
 }

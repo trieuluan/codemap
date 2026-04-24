@@ -31,62 +31,57 @@ export function ProjectImportHistory({
 }: {
   imports: ProjectImport[];
 }) {
+  const current = imports[0];
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Import history</CardTitle>
+        <CardTitle>Current import</CardTitle>
       </CardHeader>
       <CardContent>
-        {imports.length === 0 ? (
+        {!current ? (
           <Empty className="border border-dashed border-border bg-background p-8">
             <EmptyHeader>
               <EmptyTitle>No imports yet</EmptyTitle>
               <EmptyDescription>
-                Trigger the first import to start tracking repository indexing
-                history for this project.
+                Trigger the first import to start indexing this repository.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="space-y-3">
-            {imports.map((item, index) => (
-              <div
-                key={item.id}
-                className="rounded-lg border border-border/70 bg-background/70 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ImportStatusIcon status={item.status} />
-                      <ProjectImportStatusBadge status={item.status} />
-                      {index === 0 ? <Badge variant="secondary">Latest</Badge> : null}
-                      {item.sourceAvailable ? (
-                        <Badge variant="secondary">Preview ready</Badge>
-                      ) : null}
-                    </div>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <p>
-                        Branch:{" "}
-                        <span className="font-medium text-foreground">
-                          {item.branch || "Default branch"}
-                        </span>
-                      </p>
-                      <p>
-                        Started <LocalProjectDate value={item.startedAt} />
-                      </p>
-                    </div>
-                    {item.completedAt ? (
-                      <p className="text-xs text-muted-foreground">
-                        Completed <LocalProjectDate value={item.completedAt} />
-                      </p>
-                    ) : null}
-                    {item.errorMessage ? (
-                      <p className="text-sm text-destructive">{item.errorMessage}</p>
-                    ) : null}
-                  </div>
+          <div
+            className="rounded-lg border border-border/70 bg-background/70 p-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ImportStatusIcon status={current.status} />
+                  <ProjectImportStatusBadge status={current.status} />
+                  {current.sourceAvailable ? (
+                    <Badge variant="secondary">Preview ready</Badge>
+                  ) : null}
                 </div>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p>
+                    Branch:{" "}
+                    <span className="font-medium text-foreground">
+                      {current.branch || "Default branch"}
+                    </span>
+                  </p>
+                  <p>
+                    Started <LocalProjectDate value={current.startedAt} />
+                  </p>
+                </div>
+                {current.completedAt ? (
+                  <p className="text-xs text-muted-foreground">
+                    Completed <LocalProjectDate value={current.completedAt} />
+                  </p>
+                ) : null}
+                {current.errorMessage ? (
+                  <p className="text-sm text-destructive">{current.errorMessage}</p>
+                ) : null}
               </div>
-            ))}
+            </div>
           </div>
         )}
       </CardContent>

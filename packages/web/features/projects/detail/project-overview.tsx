@@ -288,19 +288,6 @@ export function ProjectOverview({
                 <p className="mt-2 text-sm">{project.slug}</p>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-background/70 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Latest import status
-                </p>
-                <p className="mt-2 text-sm capitalize">
-                  {latestImport?.status ?? "No imports yet"}
-                </p>
-                {latestImport?.completedAt ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Finished <LocalProjectDate value={latestImport.completedAt} />
-                  </p>
-                ) : null}
-              </div>
             </div>
           </CardContent>
         </Card>

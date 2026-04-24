@@ -257,6 +257,15 @@ export async function runProjectImport(
         );
       }
     }
+
+    try {
+      await projectService.deleteSupersededImports(
+        projectRecord.id,
+        importRecord.id,
+      );
+    } catch (cleanupError) {
+      console.error("Unable to delete superseded project imports", cleanupError);
+    }
   } catch (error) {
     if (!importPhaseCompleted && retainedWorkspacePath && !isPreMaterialized) {
       await repositoryWorkspaceService.removeWorkspaceByPath(

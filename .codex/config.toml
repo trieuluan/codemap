@@ -29,6 +29,7 @@ args = ["--base-url", "http://localhost:3001"]
 command = "npx"
 args = [
   "tsx",
+  "--watch",
   "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts",
 ]
 cwd = "/Users/louis/Development/codemap"
