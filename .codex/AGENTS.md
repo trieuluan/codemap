@@ -19,6 +19,61 @@ Main goals:
 
 ---
 
+## Session Bootstrap
+
+When starting a new Codex session in this repo, load the repo rules first before making architectural, UI, or data-model changes.
+
+### Rule aliases
+
+Use these short aliases mentally when navigating the repo instructions:
+
+- `@arch` → `.claude/rules/architecture.md`
+- `@routes` → `.claude/rules/ui-routes.md`
+- `@map` → `.claude/rules/ui-map.md`
+- `@conv` → `.claude/rules/conventions.md`
+- `@db` → `.claude/rules/database-schema.md`
+- `@mcp` → `.claude/rules/mcp-first.md`
+
+### Minimum read order
+
+For most tasks, read in this order:
+
+1. `@arch`
+2. `@conv`
+3. `@mcp`
+
+Then add task-specific rules as needed:
+
+- UI / route work → `@routes`
+- project map / explorer / graph work → `@map`
+- DB schema or Better Auth table changes → `@db`
+
+### MCP-first exploration
+
+Inside `codemap`, prefer MCP tools before direct file reads:
+
+1. `search_codebase`
+2. `get_file`
+3. `get_project_map`
+4. direct file reads / shell search only when MCP is not enough
+
+### Skill / plugin hints
+
+If the capability exists in the session, prefer:
+
+- `openai-docs` for OpenAI product/API questions
+- GitHub plugin skills/tools for PR, issue, or CI work
+- Computer Use only for explicit browser/UI side effects
+
+Local repo skill references:
+
+- confirm-before-edit → `.claude/skills/confirm-before-edit/SKILL.md`
+  Use before edits that have non-obvious consequences or when you need to pause and realign with the user on a risky change.
+
+Do not assume every skill is available in every session; use them only when present and relevant.
+
+---
+
 ## Tech Stack
 
 ### Backend

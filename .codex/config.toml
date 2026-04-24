@@ -37,3 +37,21 @@ enabled = true
 
 [mcp_servers.codemap_mcp_dev.tools.get_current_workspace_info]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.check_auth_status]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project_map]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project_insights]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_file]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.search_codebase]
+approval_mode = "approve"

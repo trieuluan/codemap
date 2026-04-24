@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, Search } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,19 +22,40 @@ interface DashboardHeaderProps {
   title?: string;
 }
 
+function getUserInitials(name?: string | null, email?: string | null) {
+  const source = name?.trim() || email?.trim() || "User";
+  const words = source
+    .split(/\s+/)
+    .map((word) => word[0]?.toUpperCase())
+    .filter(Boolean);
+
+  return words.slice(0, 2).join("") || "U";
+}
+
 export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { data: session, isPending } = authClient.useSession();
+  const user = session?.user;
+  const userName = user?.name?.trim() || "CodeMap User";
+  const userEmail = user?.email?.trim() || "Signed in";
+  const userImage = user?.image || undefined;
+  const userInitials = getUserInitials(user?.name, user?.email);
 
   const signOut = async () => {
-    // Placeholder for sign out logic
-    // In production, this would call your auth API to sign out the user
     try {
       const response = await authClient.signOut();
       if (!response.error) {
         router.push("/auth");
         router.refresh();
+        return;
       }
+
+      toast({
+        title: "Error signing out",
+        description: response.error.message || "Unable to sign out right now.",
+        variant: "destructive",
+      });
     } catch (error) {
       toast({
         title: "Error signing out",
@@ -69,9 +91,9 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
               <Avatar className="size-8">
-                <AvatarImage src="/avatars/user.jpg" alt="User" />
+                <AvatarImage src={userImage} alt={userName} />
                 <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
-                  JD
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
               <span className="sr-only">User menu</span>
@@ -80,16 +102,21 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="text-sm font-medium">John Doe</span>
+                <span className="text-sm font-medium">
+                  {isPending ? "Loading..." : userName}
+                </span>
                 <span className="text-xs text-muted-foreground">
-                  john@example.com
+                  {isPending ? "Fetching session" : userEmail}
                 </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/projects">Projects</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings">Settings</Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="text-destructive">
               Sign out
