@@ -1952,6 +1952,7 @@ export function createRepoParseGraphService(database: Database) {
     async searchProjectMap(
       projectImportId: string,
       query: string,
+      symbolKinds?: RepoSymbolKind[],
     ): Promise<ProjectMapSearchResponse> {
       const normalizedQuery = query.trim().toLowerCase();
 
@@ -1978,6 +1979,9 @@ export function createRepoParseGraphService(database: Database) {
           where: and(
             eq(repoSymbol.projectImportId, projectImportId),
             ilike(repoSymbol.displayName, containsPattern),
+            symbolKinds && symbolKinds.length > 0
+              ? inArray(repoSymbol.kind, symbolKinds)
+              : undefined,
           ),
           with: {
             file: true,

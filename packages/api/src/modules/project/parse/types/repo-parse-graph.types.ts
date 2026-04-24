@@ -8,6 +8,27 @@ import type {
   RepoSymbolVisibility,
 } from "../../../../db/schema";
 
+export const REPO_SYMBOL_KIND_VALUES = [
+  "module",
+  "namespace",
+  "class",
+  "interface",
+  "trait",
+  "mixin",
+  "enum",
+  "enum_member",
+  "function",
+  "component",
+  "method",
+  "constructor",
+  "property",
+  "field",
+  "variable",
+  "constant",
+  "type_alias",
+  "parameter",
+] as const;
+
 export interface ProjectImportEdge {
   id: string;
   projectImportId: string;

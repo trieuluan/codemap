@@ -1,12 +1,14 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
+import { REPO_SYMBOL_KIND_VALUES } from "./parse/types/repo-parse-graph.types";
 
 export const projectSelectSchema = createSelectSchema(project);
 export const projectInsertSchema = createInsertSchema(project);
 export const projectImportSelectSchema = createSelectSchema(projectImport);
 export const projectImportInsertSchema = createInsertSchema(projectImport);
-export const projectMapSnapshotSelectSchema = createSelectSchema(projectMapSnapshot);
+export const projectMapSnapshotSelectSchema =
+  createSelectSchema(projectMapSnapshot);
 
 export const projectVisibilitySchema = projectSelectSchema.shape.visibility;
 export const projectStatusSchema = projectSelectSchema.shape.status;
@@ -14,19 +16,9 @@ export const projectProviderSchema = projectSelectSchema.shape.provider;
 export const projectImportStatusSchema = projectImportSelectSchema.shape.status;
 export const projectListIncludeSchema = z.enum(["latestImport"]);
 
-const nullableTrimmedString = z
-  .string()
-  .trim()
-  .min(1)
-  .max(500)
-  .nullable();
+const nullableTrimmedString = z.string().trim().min(1).max(500).nullable();
 
-const nullableShortString = z
-  .string()
-  .trim()
-  .min(1)
-  .max(255)
-  .nullable();
+const nullableShortString = z.string().trim().min(1).max(255).nullable();
 
 export const projectParamsSchema = z.object({
   projectId: z.uuid(),
@@ -46,6 +38,10 @@ export const projectFileSyncBodySchema = z.object({
 
 export const projectMapSearchQuerySchema = z.object({
   q: z.string().trim().min(0).max(200),
+  symbolKinds: z.preprocess(
+    (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
+    z.array(z.enum(REPO_SYMBOL_KIND_VALUES)).optional(),
+  ),
 });
 
 export const createProjectFromGithubBodySchema = z.object({
@@ -103,7 +99,13 @@ export const createProjectBodySchema = projectInsertSchema
     description: nullableTrimmedString.optional(),
     defaultBranch: nullableShortString.optional(),
     repositoryUrl: z.string().trim().url().max(500).nullable().optional(),
-    localWorkspacePath: z.string().trim().min(1).max(4000).nullable().optional(),
+    localWorkspacePath: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4000)
+      .nullable()
+      .optional(),
     externalRepoId: nullableShortString.optional(),
   });
 
@@ -124,10 +126,14 @@ export const createProjectImportBodySchema = projectImportInsertSchema
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
-export type CreateProjectImportBody = z.infer<typeof createProjectImportBodySchema>;
+export type CreateProjectImportBody = z.infer<
+  typeof createProjectImportBodySchema
+>;
 export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
-export type ProjectFileContentQuery = z.infer<typeof projectFileContentQuerySchema>;
+export type ProjectFileContentQuery = z.infer<
+  typeof projectFileContentQuerySchema
+>;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
 export type CreateProjectFromGithubBody = z.infer<
   typeof createProjectFromGithubBodySchema

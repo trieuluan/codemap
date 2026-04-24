@@ -11,6 +11,27 @@ import type {
   SearchSymbolResult,
 } from "../lib/api-types.js";
 
+const SYMBOL_KIND_VALUES = [
+  "module",
+  "namespace",
+  "class",
+  "interface",
+  "trait",
+  "mixin",
+  "enum",
+  "enum_member",
+  "function",
+  "component",
+  "method",
+  "constructor",
+  "property",
+  "field",
+  "variable",
+  "constant",
+  "type_alias",
+  "parameter",
+] as const;
+
 const SYMBOL_KIND_LABEL: Record<string, string> = {
   function: "fn",
   class: "class",
@@ -106,9 +127,17 @@ export function registerSearchCodebaseTool(
           .describe(
             "Which result types to include. Defaults to all: files, symbols, exports.",
           ),
+        symbol_kinds: z
+          .array(z.enum(SYMBOL_KIND_VALUES))
+          .optional()
+          .describe(
+            "Filter symbol results by kind. Only applies when 'symbols' is included in kinds. " +
+            "Valid values: module, namespace, class, interface, trait, mixin, enum, enum_member, " +
+            "function, component, method, constructor, property, field, variable, constant, type_alias, parameter.",
+          ),
       },
     },
-    withToolError(async ({ query, project_id, kinds }) => {
+    withToolError(async ({ query, project_id, kinds, symbol_kinds }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
@@ -123,11 +152,16 @@ export function registerSearchCodebaseTool(
       let results: CodebaseSearchResponse;
 
       try {
+        const searchQuery: Record<string, string> = { q: query };
+        if (symbol_kinds && symbol_kinds.length > 0) {
+          searchQuery.symbolKinds = symbol_kinds.join(",");
+        }
+
         results = await client.request<CodebaseSearchResponse>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
           {
             authRequired: true,
-            query: { q: query },
+            query: searchQuery,
           },
         );
       } catch (error) {

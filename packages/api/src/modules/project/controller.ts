@@ -619,6 +619,7 @@ export function createProjectController(fastify: FastifyInstance) {
       const results = await repoParseGraphService.searchProjectMap(
         latestMapWithSource.importRecord.id,
         normalizedQuery,
+        query.symbolKinds,
       );
 
       return reply.success({
