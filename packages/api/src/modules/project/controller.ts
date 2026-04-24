@@ -550,9 +550,16 @@ export function createProjectController(fastify: FastifyInstance) {
         throw fastify.httpErrors.notFound("Project import not found");
       }
 
-      const insights = await repoParseGraphService.getProjectInsights(
-        latestMapWithSource.importRecord.id,
-      );
+      const importId = latestMapWithSource.importRecord.id;
+      const cacheKey = `insights:${importId}`;
+      const cached = await fastify.redis.get(cacheKey);
+
+      if (cached) {
+        return reply.success(JSON.parse(cached));
+      }
+
+      const insights = await repoParseGraphService.getProjectInsights(importId);
+      await fastify.redis.set(cacheKey, JSON.stringify(insights), "EX", 86400);
 
       return reply.success(insights);
     },
