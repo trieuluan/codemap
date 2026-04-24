@@ -545,6 +545,9 @@ function resolveRelativeTargetPath(
       candidates.push(`${basePath}.${extension}`);
       candidates.push(`${basePath}/index.${extension}`);
     }
+  } else if (path.posix.extname(basePath) === ".js") {
+    const stem = basePath.slice(0, -3);
+    candidates.push(`${stem}.ts`, `${stem}.tsx`);
   }
 
   const resolvedPath = candidates.find((candidate) =>
