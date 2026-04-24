@@ -19,7 +19,9 @@
       "Bash(npm uninstall *)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "mcp__codemap-mcp-dev__wait_for_auth"
+      "mcp__codemap-mcp-dev__wait_for_auth",
+      "mcp__codemap-mcp-dev__search_codebase",
+      "mcp__codemap-mcp-dev__get_file"
     ]
   },
   "enableAllProjectMcpServers": true,
