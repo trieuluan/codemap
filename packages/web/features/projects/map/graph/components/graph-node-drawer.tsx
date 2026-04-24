@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { ArrowRight, FileCode2, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { browserProjectsApi } from "@/features/projects/api";
@@ -630,6 +630,7 @@ export function GraphNodeDrawer({
         {node && (
           <>
             <SheetHeader className="shrink-0 border-b px-5 py-4">
+              <SheetTitle className="sr-only">{getFileName(node.path)}</SheetTitle>
               <div className="flex items-start justify-between gap-8">
                 <div className="min-w-0 pr-6">
                   <div className="flex flex-wrap items-center gap-2">
