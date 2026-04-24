@@ -1,5 +1,6 @@
 import type { Job } from "bullmq";
 import type IORedis from "ioredis";
+import simpleGit from "simple-git";
 import { db } from "../../../db";
 import { enqueueProjectParseJob } from "../../../lib/project-parse-queue";
 import { createProjectMapPersistence } from "../map/map-persistence";
@@ -210,6 +211,12 @@ export async function runProjectImport(
           stagedWorkspacePath: materializedSource.workspacePath,
         });
       retainedWorkspacePath = retainedWorkspace.workspacePath;
+
+      // Fetch full history after promote so git diff across commits works
+      simpleGit(retainedWorkspace.workspacePath)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .fetch(["--unshallow"])
+        .catch(() => {});
 
       await projectService.saveImportSourceMetadata({
         projectImportId: importRecord.id,
