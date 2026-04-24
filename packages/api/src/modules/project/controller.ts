@@ -15,12 +15,14 @@ import {
 import { createRepoParseGraphService } from "./parse/repo-parse-graph";
 import { createProjectService } from "./service";
 import { getProjectGitDiff } from "./map/git-diff";
+import { reparseFileIfStale } from "./parse/file-reparse.service";
 import {
   createProjectBodySchema,
   createProjectFromGithubBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
   projectFileContentQuerySchema,
+  projectFileReparseBodySchema,
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
   projectParamsSchema,
@@ -771,6 +773,56 @@ export function createProjectController(fastify: FastifyInstance) {
 
         throw error;
       }
+    },
+
+    reparseProjectFile: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const { path: filePath, content, contentHash } =
+        projectFileReparseBodySchema.parse(request.body);
+
+      const normalizedPath = (() => {
+        try {
+          return normalizeRepositoryFilePath(filePath);
+        } catch {
+          throw fastify.httpErrors.badRequest("Invalid file path");
+        }
+      })();
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource?.importRecord) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      const { importRecord } = latestMapWithSource;
+
+      const fileRecord = await repoParseGraphService.getFileByPath(
+        importRecord.id,
+        normalizedPath,
+      );
+
+      if (!fileRecord) {
+        throw fastify.httpErrors.notFound(
+          `File not found in project: ${normalizedPath}`,
+        );
+      }
+
+      const result = await reparseFileIfStale(
+        fastify.db,
+        importRecord,
+        fileRecord,
+        content,
+        contentHash,
+      );
+
+      return reply.success(result);
     },
 
   };

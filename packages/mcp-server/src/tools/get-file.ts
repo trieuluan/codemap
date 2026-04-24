@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { text, withToolError } from "../lib/tool-response.js";
-import { readWorkspaceProjectId } from "../lib/workspace-project.js";
-import type { FileContent, BlastRadius } from "../lib/api-types.js";
+import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
+import type { FileContent, BlastRadius, FileReparseResult } from "../lib/api-types.js";
 
 // ─── types from /map/files/parse ─────────────────────────────────────────────
 
@@ -318,6 +320,25 @@ export function registerGetFileTool(
             "No project ID provided and no linked project found for this workspace.\n" +
               "Run create_project first to link this workspace to a CodeMap project.",
           );
+        }
+
+        // ── Lazy reparse: if local file differs from stored hash, trigger reparse ──
+        const workspacePath = await readWorkspacePath();
+        const localAbsolutePath = `${workspacePath}/${filePath}`;
+        try {
+          const localContent = await readFile(localAbsolutePath, "utf8");
+          const localHash = createHash("sha256").update(localContent).digest("hex");
+
+          await client.request<FileReparseResult>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/reparse`,
+            {
+              authRequired: true,
+              method: "POST",
+              body: { path: filePath, content: localContent, contentHash: localHash },
+            },
+          );
+        } catch {
+          // Best-effort — if file not found locally or BE rejects, use existing data
         }
 
         const sections = include ?? ["content", "outline"];

@@ -203,6 +203,11 @@ export interface ProjectInsightsSummary {
   };
 }
 
+export interface FileReparseResult {
+  reparsed: boolean;
+  reason?: "already_fresh";
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;
