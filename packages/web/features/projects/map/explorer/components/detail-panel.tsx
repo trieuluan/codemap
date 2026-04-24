@@ -178,6 +178,39 @@ function getResolutionKindLabel(value: string) {
   }
 }
 
+function getTitleBadgeClassName(kind: string) {
+  switch (kind) {
+    // import kinds
+    case "import":
+      return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300";
+    case "export from":
+      return "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300";
+    case "dynamic import":
+      return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300";
+    case "require":
+      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300";
+    // symbol kinds
+    case "component":
+      return "border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950 dark:text-pink-300";
+    case "function":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300";
+    case "class":
+      return "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300";
+    case "interface":
+      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300";
+    case "type alias":
+    case "type_alias":
+      return "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300";
+    case "enum":
+      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300";
+    case "variable":
+    case "constant":
+      return "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400";
+    default:
+      return "";
+  }
+}
+
 function getResolutionKindBadgeClassName(value: string) {
   switch (value) {
     case "relative_path":
@@ -325,7 +358,13 @@ function RelationshipList({
           <div className="flex flex-wrap items-center gap-2">
             <GitBranch className="size-4 text-muted-foreground" />
             <p className="break-all font-medium text-foreground">{item.title}</p>
-            <Badge variant="secondary" className="capitalize">
+            <Badge
+              variant="outline"
+              className={cn(
+                "capitalize border font-medium shadow-sm",
+                getTitleBadgeClassName(item.titleBadge) || "border-border bg-muted text-foreground",
+              )}
+            >
               {item.titleBadge}
             </Badge>
             {item.resolutionLabel ? (
