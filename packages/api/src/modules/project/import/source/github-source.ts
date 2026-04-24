@@ -285,13 +285,18 @@ export async function materializeGithubRepositorySource(
       buildGithubCloneUrl(source.reference, options?.accessToken),
       workspacePath,
       [
-      "--depth",
-      "100",
-      "--single-branch",
-      "--branch",
-      source.branch,
+        "--depth",
+        "1",
+        "--single-branch",
+        "--branch",
+        source.branch,
       ],
     );
+
+    // Fetch full history so git diff across commits works
+    await simpleGit(workspacePath)
+      .env("GIT_TERMINAL_PROMPT", "0")
+      .fetch(["--unshallow"]);
   } catch (error) {
     await rm(workspaceRoot, { recursive: true, force: true });
 
