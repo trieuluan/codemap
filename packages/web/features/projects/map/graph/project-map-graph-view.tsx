@@ -1,26 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  Copy,
-  ExternalLink,
-  FileCode2,
-  FolderTree,
-  GitBranch,
-  Home,
-  Loader2,
-  Search,
-  Zap,
-} from "lucide-react";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import type {
   ProjectMapGraphNode,
   ProjectMapGraphResponse,
@@ -35,14 +15,16 @@ import {
   type GraphRelationMode,
 } from "./utils/graph-layout";
 import { GraphNodeDrawer } from "./components/graph-node-drawer";
-
-const GraphCanvas = dynamic(
-  () =>
-    import("./components/graph-canvas").then((m) => ({
-      default: m.GraphCanvas,
-    })),
-  { ssr: false },
-);
+import { ProjectMapGraphCanvasShell } from "./project-map-graph-canvas-shell";
+import { ProjectMapGraphSidebar } from "./project-map-graph-sidebar";
+import {
+  findGraphNodeById,
+  findGraphNodeByPath,
+  getBlastRadiusSummary,
+  getFolderBreadcrumb,
+  getParentFolder,
+  type GraphMode,
+} from "./project-map-graph-shared";
 
 interface ProjectMapGraphViewProps {
   projectId: string;
@@ -50,113 +32,12 @@ interface ProjectMapGraphViewProps {
   initialFocusFile?: string | null;
 }
 
-type GraphMode = "overview" | "structure" | "focus";
-
-const RELATION_MODE_LABEL: Record<GraphRelationMode, string> = {
-  all: "All direct",
-  incoming: "Incoming",
-  outgoing: "Outgoing",
-  cycles: "Cycles",
-  "blast-radius": "Blast radius",
-};
-
-const RELATION_MODE_ICON: Record<GraphRelationMode, ReactNode> = {
-  all: <GitBranch className="size-3.5" />,
-  incoming: <ArrowDown className="size-3.5" />,
-  outgoing: <ArrowUp className="size-3.5" />,
-  cycles: <Search className="size-3.5" />,
-  "blast-radius": <Zap className="size-3.5" />,
-};
-
-function getBlastRadiusSummary(
-  graphData: ProjectMapGraphResponse,
-  nodeId: string | null,
-) {
-  if (!nodeId) {
-    return null;
-  }
-
-  const reverseEdgesByTarget = new Map<
-    string,
-    ProjectMapGraphResponse["edges"]
-  >();
-
-  for (const edge of graphData.edges) {
-    const items = reverseEdgesByTarget.get(edge.target) ?? [];
-    items.push(edge);
-    reverseEdgesByTarget.set(edge.target, items);
-  }
-
-  const visited = new Set<string>([nodeId]);
-  const impactedIds = new Set<string>();
-  const queue: Array<{ nodeId: string; depth: number }> = [
-    { nodeId, depth: 0 },
-  ];
-  let directCount = 0;
-  let maxDepth = 0;
-  let hasCycles = false;
-
-  while (queue.length > 0) {
-    const currentItem = queue.shift();
-
-    if (!currentItem) {
-      continue;
-    }
-
-    for (const edge of reverseEdgesByTarget.get(currentItem.nodeId) ?? []) {
-      if (visited.has(edge.source)) {
-        hasCycles = true;
-        continue;
-      }
-
-      const nextDepth = currentItem.depth + 1;
-      visited.add(edge.source);
-      impactedIds.add(edge.source);
-      directCount += nextDepth === 1 ? 1 : 0;
-      maxDepth = Math.max(maxDepth, nextDepth);
-      queue.push({ nodeId: edge.source, depth: nextDepth });
-    }
-  }
-
-  return {
-    impactedIds,
-    totalCount: impactedIds.size,
-    directCount,
-    maxDepth,
-    hasCycles,
-  };
-}
-
-function getParentFolder(folderPath: string | null): string | null {
-  if (!folderPath || folderPath === "(root)") {
-    return null;
-  }
-
-  const segments = folderPath.split("/");
-
-  if (segments.length <= 1) {
-    return null;
-  }
-
-  return segments.slice(0, -1).join("/");
-}
-
-function getFolderBreadcrumb(folderPath: string | null): string[] {
-  if (!folderPath || folderPath === "(root)") {
-    return ["Project"];
-  }
-
-  return ["Project", ...folderPath.split("/")];
-}
-
 export function ProjectMapGraphView({
   projectId,
   graphData,
   initialFocusFile,
 }: ProjectMapGraphViewProps) {
-  const initialFocusNode = initialFocusFile
-    ? (graphData.nodes.find((n) => n.path === initialFocusFile) ?? null)
-    : null;
+  const initialFocusNode = findGraphNodeByPath(graphData.nodes, initialFocusFile);
 
   const [mode, setMode] = useState<GraphMode>(initialFocusNode ? "focus" : "overview");
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -233,10 +114,10 @@ export function ProjectMapGraphView({
     [graphData.cycles],
   );
 
-  const drawerNode: ProjectMapGraphNode | null = useMemo(() => {
-    if (!drawerNodeId) return null;
-    return graphData.nodes.find((node) => node.id === drawerNodeId) ?? null;
-  }, [drawerNodeId, graphData.nodes]);
+  const drawerNode: ProjectMapGraphNode | null = useMemo(
+    () => findGraphNodeById(graphData.nodes, drawerNodeId),
+    [drawerNodeId, graphData.nodes],
+  );
   const drawerCycles = useMemo(() => {
     if (!drawerNodeId) return [];
     return graphData.cycles.filter((cycle) =>
@@ -244,14 +125,14 @@ export function ProjectMapGraphView({
     );
   }, [drawerNodeId, graphData.cycles]);
 
-  const focusedNode = useMemo(() => {
-    if (!focusedNodeId) return null;
-    return graphData.nodes.find((node) => node.id === focusedNodeId) ?? null;
-  }, [focusedNodeId, graphData.nodes]);
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) return null;
-    return graphData.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  }, [selectedNodeId, graphData.nodes]);
+  const focusedNode = useMemo(
+    () => findGraphNodeById(graphData.nodes, focusedNodeId),
+    [focusedNodeId, graphData.nodes],
+  );
+  const selectedNode = useMemo(
+    () => findGraphNodeById(graphData.nodes, selectedNodeId),
+    [selectedNodeId, graphData.nodes],
+  );
   const selectedBlastRadius = useMemo(
     () => getBlastRadiusSummary(graphData, selectedNodeId),
     [graphData, selectedNodeId],
@@ -418,7 +299,7 @@ export function ProjectMapGraphView({
   }, []);
 
   const handleSelectByPath = (path: string) => {
-    const node = graphData.nodes.find((item) => item.path === path);
+    const node = findGraphNodeByPath(graphData.nodes, path);
 
     if (node) {
       setMode("focus");
@@ -462,463 +343,45 @@ export function ProjectMapGraphView({
   return (
     <>
       <div className="flex gap-4" style={{ height: "calc(100vh - 280px)" }}>
-        <aside className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border border-border/70 bg-card p-4">
-          {mode === "overview" ? (
-            <>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Folder overview
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Start from top-level folders, then drill into the structure one
-                level at a time.
-              </p>
-              <Separator />
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Folders</span>
-                  <span className="font-mono">
-                    {graphData.stats.folderCount}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Cross-folder edges</span>
-                  <span className="font-mono">
-                    {graphData.stats.folderEdgeCount}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Files</span>
-                  <span className="font-mono">{graphData.stats.nodeCount}</span>
-                </div>
-              </div>
-            </>
-          ) : mode === "structure" ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start gap-2"
-                onClick={backOneLevel}
-              >
-                <ArrowLeft className="size-4" />
-                Back one level
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start gap-2"
-                onClick={backToOverview}
-              >
-                <Home className="size-4" />
-                Back to overview
-              </Button>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Structure drilldown
-                </p>
-                <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                  {breadcrumb.map((segment, index) => (
-                    <span
-                      key={`${segment}-${index}`}
-                      className="flex items-center gap-1"
-                    >
-                      {index > 0 ? <span>/</span> : null}
-                      <span
-                        className={
-                          index === breadcrumb.length - 1
-                            ? "font-mono font-semibold text-foreground"
-                            : "font-mono"
-                        }
-                      >
-                        {segment}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
+        <ProjectMapGraphSidebar
+          projectId={projectId}
+          mode={mode}
+          graphData={graphData}
+          breadcrumb={breadcrumb}
+          structureLayout={structureLayout}
+          focusLayout={focusLayout}
+          selectedFolder={selectedFolder}
+          focusedNode={focusedNode}
+          selectedNode={selectedNode}
+          selectedBlastRadius={selectedBlastRadius}
+          selectedNodeCycles={selectedNodeCycles}
+          allCycleNodeIds={allCycleNodeIds}
+          relationMode={relationMode}
+          onBackOneLevel={backOneLevel}
+          onBackToOverview={backToOverview}
+          onBackToStructure={backToStructure}
+          onRelationModeChange={handleRelationModeChange}
+          onFocusSelectedNode={handleFocusSelectedNode}
+          onOpenDrawer={handleOpenDrawer}
+          onCopyPath={handleCopyPath}
+        />
 
-              <Separator />
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Child folders</span>
-                  <span className="font-mono">
-                    {structureLayout?.childFolderCount ?? 0}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Direct files</span>
-                  <span className="font-mono">
-                    {structureLayout?.directFileCount ?? 0}
-                  </span>
-                </div>
-              </div>
-
-              {structureLayout?.hiddenDirectFileCount ? (
-                <div className="rounded-lg border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
-                  Showing the most connected direct files first.{" "}
-                  <span className="font-medium text-foreground">
-                    {structureLayout.hiddenDirectFileCount}
-                  </span>{" "}
-                  quieter files are hidden in this level.
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start gap-2"
-                onClick={backToStructure}
-              >
-                <ArrowLeft className="size-4" />
-                Back to structure
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="justify-start gap-2"
-                onClick={backToOverview}
-              >
-                <Home className="size-4" />
-                Back to overview
-              </Button>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  File focus
-                </p>
-                <p className="break-all font-mono text-sm text-foreground">
-                  {focusedNode?.path ?? "Selected file"}
-                </p>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Left side shows files that use this file. Right side shows
-                  files this file imports.
-                </p>
-              </div>
-
-              <Separator />
-              <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Used by</span>
-                  <span className="font-mono">
-                    {focusedNode?.incomingCount ?? 0}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Imports</span>
-                  <span className="font-mono">
-                    {focusedNode?.outgoingCount ?? 0}
-                  </span>
-                </div>
-                <p className="pt-1 text-[11px] leading-relaxed">
-                  Arrows always point from the importing file to the imported
-                  file.
-                </p>
-              </div>
-
-              {focusLayout?.smartDefault ? (
-                <div className="rounded-lg border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
-                  Showing{" "}
-                  <span className="font-medium text-foreground">
-                    {focusLayout.smartDefault.shownCount}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-medium text-foreground">
-                    {focusLayout.smartDefault.totalCount}
-                  </span>{" "}
-                  {focusLayout.smartDefault.mode === "blast-radius"
-                    ? "closest impacted files."
-                    : "strongest related files."}
-                </div>
-              ) : null}
-              {relationMode === "cycles" ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                  Circular dependency path
-                </div>
-              ) : null}
-              {relationMode === "blast-radius" && selectedBlastRadius ? (
-                <div className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
-                  <p className="font-medium text-fuchsia-100">
-                    Blast radius: {selectedBlastRadius.totalCount} impacted
-                    files
-                  </p>
-                  <p className="mt-1 text-fuchsia-100/75">
-                    Reverse dependency closure: files that import this file,
-                    then files importing those files.
-                  </p>
-                </div>
-              ) : null}
-            </>
-          )}
-
-          {selectedNode ? (
-            <>
-              <Separator />
-              <div className="space-y-3 rounded-lg border border-border/70 bg-background/70 p-3">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Selected file
-                    </p>
-                    {allCycleNodeIds.has(selectedNode.id) ? (
-                      <Badge
-                        variant="outline"
-                        className="border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
-                      >
-                        Cycle
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="break-all font-mono text-xs font-medium text-foreground">
-                    {selectedNode.path}
-                  </p>
-                  <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                    {selectedNode.language ? (
-                      <span>{selectedNode.language}</span>
-                    ) : null}
-                    <span>↓ {selectedNode.incomingCount} used by</span>
-                    <span>↑ {selectedNode.outgoingCount} imports</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Left/importers are files depending on this file.
-                    Right/dependencies are files this file depends on.
-                  </p>
-                  {selectedBlastRadius ? (
-                    <div className="mt-2 grid grid-cols-3 gap-1 text-center text-[10px] text-muted-foreground">
-                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
-                        <p className="font-mono font-semibold text-foreground">
-                          {selectedBlastRadius.totalCount}
-                        </p>
-                        <p>impact</p>
-                      </div>
-                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
-                        <p className="font-mono font-semibold text-foreground">
-                          {selectedBlastRadius.directCount}
-                        </p>
-                        <p>direct</p>
-                      </div>
-                      <div className="rounded-md bg-muted/60 px-1.5 py-1">
-                        <p className="font-mono font-semibold text-foreground">
-                          {selectedBlastRadius.maxDepth}
-                        </p>
-                        <p>depth</p>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(
-                    [
-                      "all",
-                      "incoming",
-                      "outgoing",
-                      "cycles",
-                      "blast-radius",
-                    ] as GraphRelationMode[]
-                  ).map((item) => (
-                    <Button
-                      key={item}
-                      type="button"
-                      variant={relationMode === item ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 justify-start gap-1.5 px-2 text-[11px]"
-                      onClick={() => handleRelationModeChange(item)}
-                    >
-                      {RELATION_MODE_ICON[item]}
-                      {RELATION_MODE_LABEL[item]}
-                    </Button>
-                  ))}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 w-full justify-start gap-1.5 px-2 text-xs"
-                    onClick={() => handleFocusSelectedNode(relationMode)}
-                  >
-                    <Search className="size-3.5" />
-                    Focus relations
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-full justify-start gap-1.5 px-2 text-xs"
-                    onClick={() => handleOpenDrawer(selectedNode.id)}
-                  >
-                    <FileCode2 className="size-3.5" />
-                    Details
-                  </Button>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 justify-start gap-1.5 px-2 text-xs"
-                      onClick={() => handleCopyPath(selectedNode.path)}
-                    >
-                      <Copy className="size-3.5" />
-                      Copy
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 justify-start gap-1.5 px-2 text-xs"
-                      asChild
-                    >
-                      <Link
-                        href={`/projects/${projectId}/map?path=${encodeURIComponent(
-                          selectedNode.path,
-                        )}`}
-                        target="_blank"
-                      >
-                        <ExternalLink className="size-3.5" />
-                        Mapping
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-
-                {relationMode === "cycles" &&
-                selectedNodeCycles.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    This file is not part of a detected cycle.
-                  </p>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-
-          <div className="mt-auto space-y-2 border-t border-border/70 pt-3 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>File nodes</span>
-              <span className="font-mono">{graphData.stats.nodeCount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>File edges</span>
-              <span className="font-mono">{graphData.stats.edgeCount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Cycles</span>
-              <span className="font-mono">{graphData.stats.cycleCount}</span>
-            </div>
-          </div>
-        </aside>
-
-        <div className="relative flex-1 overflow-hidden rounded-lg border border-border/70 bg-card">
-          {isLayouting ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Computing layout...
-              </p>
-            </div>
-          ) : activeLayout && activeLayout.nodes.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <p className="text-sm font-medium text-foreground">
-                {mode === "overview"
-                  ? "No folder graph available"
-                  : mode === "structure"
-                    ? "No immediate children found"
-                    : "No related files found"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {mode === "overview"
-                  ? "No cross-folder dependencies were indexed yet."
-                  : mode === "structure"
-                    ? "This folder may only contain files without indexed semantic data."
-                    : "This file has no indexed internal dependency edges yet."}
-              </p>
-            </div>
-          ) : activeLayout ? (
-            <>
-              {mode === "overview" && graphData.stats.folderEdgeCount === 0 ? (
-                <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2">
-                  <div className="rounded-full border border-border/70 bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                    No cross-folder dependencies found. Showing folder nodes
-                    only.
-                  </div>
-                </div>
-              ) : null}
-              {mode === "structure" || mode === "focus" ? (
-                <div className="absolute right-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2 rounded-full border border-border/70 bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                  {mode === "structure" ? (
-                    <span className="flex items-center gap-1.5">
-                      <FolderTree className="size-3.5" />
-                      External badges = outside this folder
-                    </span>
-                  ) : null}
-                  <span>
-                    Direction:{" "}
-                    <span className="font-medium text-foreground">
-                      importing file
-                    </span>{" "}
-                    →{" "}
-                    <span className="font-medium text-foreground">
-                      imported file
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-0.5 w-5 rounded-full bg-sky-400" />
-                    selected → imports
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-0.5 w-5 rounded-full border-t-2 border-dashed border-orange-400" />
-                    used by → selected
-                  </span>
-                  {relationMode === "blast-radius" ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-0.5 w-5 rounded-full bg-fuchsia-400" />
-                      blast radius
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              {mode === "focus" ? (
-                <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-full border border-border/70 bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Left:
-                    </span>{" "}
-                    used by / importers
-                  </span>
-                  <span className="text-muted-foreground/50">|</span>
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Center:
-                    </span>{" "}
-                    selected file
-                  </span>
-                  <span className="text-muted-foreground/50">|</span>
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Right:
-                    </span>{" "}
-                    imports / dependencies
-                  </span>
-                </div>
-              ) : null}
-              <GraphCanvas
-                nodes={activeLayout.nodes}
-                edges={activeLayout.edges}
-                cycleNodeIds={activeCycleNodeIds}
-                selectedNodeId={selectedNodeId}
-                highlightedNodeIds={highlightedNodeIds}
-                activeRelationMode={relationMode}
-                projectId={projectId}
-                enableFocusLayout={mode !== "structure" || !selectedNodeId}
-                onNodeClick={handleNodeClick}
-                onNodeDoubleClick={handleNodeDoubleClick}
-                onOpenDrawer={handleOpenDrawer}
-                onCopyPath={handleCopyPath}
-                onExpandCluster={handleExpandCluster}
-              />
-            </>
-          ) : null}
-        </div>
+        <ProjectMapGraphCanvasShell
+          mode={mode}
+          graphData={graphData}
+          activeLayout={activeLayout}
+          activeCycleNodeIds={activeCycleNodeIds}
+          selectedNodeId={selectedNodeId}
+          highlightedNodeIds={highlightedNodeIds}
+          relationMode={relationMode}
+          projectId={projectId}
+          isLayouting={isLayouting}
+          onNodeClick={handleNodeClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          onOpenDrawer={handleOpenDrawer}
+          onCopyPath={handleCopyPath}
+          onExpandCluster={handleExpandCluster}
+        />
       </div>
 
       <GraphNodeDrawer

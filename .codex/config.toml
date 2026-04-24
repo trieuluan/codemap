@@ -55,3 +55,9 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.search_codebase]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.trigger_reimport]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.wait_for_import]
+approval_mode = "approve"
