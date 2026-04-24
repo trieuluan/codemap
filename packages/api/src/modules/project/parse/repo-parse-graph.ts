@@ -75,7 +75,7 @@ function toPathBaseName(filePath: string) {
 
 const MONOREPO_ROOT_SEGMENTS = new Set(["packages", "apps", "libs", "services"]);
 
-function toTopLevelFolder(filePath: string) {
+function toTopLevelFolder(filePath: string, monorepoAware = false) {
   if (!filePath.includes("/")) {
     return "(root)";
   }
@@ -83,7 +83,7 @@ function toTopLevelFolder(filePath: string) {
   const parts = filePath.split("/");
   const first = parts[0] || "(root)";
 
-  if (MONOREPO_ROOT_SEGMENTS.has(first) && parts[1]) {
+  if (monorepoAware && MONOREPO_ROOT_SEGMENTS.has(first) && parts[1]) {
     return `${first}/${parts[1]}`;
   }
 
@@ -1265,7 +1265,7 @@ export function createRepoParseGraphService(database: Database) {
         });
 
         if (file.isParseable) {
-          const topFolder = toTopLevelFolder(file.path);
+          const topFolder = toTopLevelFolder(file.path, true);
           folderCounts.set(topFolder, (folderCounts.get(topFolder) ?? 0) + 1);
         }
       }
