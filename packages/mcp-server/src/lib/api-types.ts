@@ -202,6 +202,19 @@ export interface ProjectInsightsSummary {
   };
 }
 
+// --- File Sync ---
+
+export interface FileSyncResult {
+  synced: boolean;
+  reason: "updated" | "already_fresh";
+  updatedAt: string;
+  stats?: {
+    symbols: number;
+    imports: number;
+    exports: number;
+  };
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;

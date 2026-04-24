@@ -36,6 +36,12 @@ export const projectFileContentQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000),
 });
 
+export const projectFileSyncBodySchema = z.object({
+  path: z.string().trim().min(1).max(2000),
+  content: z.string().max(4 * 1024 * 1024), // 4 MB limit
+  localUpdatedAt: z.iso.datetime().optional(),
+});
+
 export const projectMapSearchQuerySchema = z.object({
   q: z.string().trim().min(0).max(200),
 });

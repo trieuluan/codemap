@@ -79,7 +79,7 @@ interface TypeScriptCompilerOptionsConfig {
   paths?: Record<string, string[]>;
 }
 
-interface WorkspaceFileCandidate {
+export interface WorkspaceFileCandidate {
   path: string;
   absolutePath: string;
   dirPath: string;
@@ -103,7 +103,8 @@ interface WorkspaceFileCandidate {
 }
 
 interface ParsedSymbolDraft {
-  localKey: string;
+  localKey: string;   // filePath#kind:displayName — name-based, for export/occurrence linking
+  stableKey: string;  // filePath#kind:displayName:line — unique per location, for DB constraint
   displayName: string;
   kind: RepoSymbolInsert["kind"];
   language: string;
@@ -173,12 +174,21 @@ async function reportProjectParseProgress(
   });
 }
 
-function normalizeExtension(fileName: string) {
+function buildStableSymbolKey(
+  filePath: string,
+  kind: string,
+  displayName: string,
+  line: number,
+) {
+  return `${filePath}#${kind}:${displayName}:${line}`;
+}
+
+export function normalizeExtension(fileName: string) {
   const extension = path.extname(fileName).slice(1).trim().toLowerCase();
   return extension || null;
 }
 
-function inferLanguage(extension: string | null) {
+export function inferLanguage(extension: string | null) {
   if (!extension) {
     return null;
   }
@@ -186,7 +196,7 @@ function inferLanguage(extension: string | null) {
   return SOURCE_LANGUAGE_BY_EXTENSION[extension] ?? null;
 }
 
-function inferMimeType(extension: string | null) {
+export function inferMimeType(extension: string | null) {
   if (!extension) {
     return null;
   }
@@ -216,7 +226,7 @@ async function readSampleBuffer(filePath: string, sizeBytes: number) {
   }
 }
 
-function buildFileSha256(content: Buffer | string) {
+export function buildFileSha256(content: Buffer | string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
@@ -390,7 +400,7 @@ async function readTypeScriptCompilerOptionsConfig(
   }
 }
 
-async function loadTypeScriptResolverConfigs(
+export async function loadTypeScriptResolverConfigs(
   workspacePath: string,
 ): Promise<TypeScriptResolverConfig[]> {
   const configRelativePaths = ["tsconfig.json", "jsconfig.json"];
@@ -1067,6 +1077,7 @@ function parseTypeScriptOrJavaScriptFile(
 
       semantics.symbols.push({
         localKey,
+        stableKey: buildStableSymbolKey(file.path, pattern.kind, displayName, lineNumber),
         displayName,
         kind: pattern.kind,
         language: file.language!,
@@ -1241,6 +1252,7 @@ function parseDartFile(
 
       semantics.symbols.push({
         localKey: buildLocalSymbolKey(file.path, pattern.kind, displayName),
+        stableKey: buildStableSymbolKey(file.path, pattern.kind, displayName, lineNumber),
         displayName,
         kind: pattern.kind,
         language: file.language!,
@@ -1286,6 +1298,7 @@ function parsePhpFile(
 
       semantics.symbols.push({
         localKey: buildLocalSymbolKey(file.path, "namespace", namespace),
+        stableKey: buildStableSymbolKey(file.path, "namespace", namespace, lineNumber),
         displayName: namespace,
         kind: "namespace",
         language: file.language!,
@@ -1350,6 +1363,7 @@ function parsePhpFile(
 
       semantics.symbols.push({
         localKey: buildLocalSymbolKey(file.path, pattern.kind, displayName),
+        stableKey: buildStableSymbolKey(file.path, pattern.kind, displayName, lineNumber),
         displayName,
         kind: pattern.kind,
         language: file.language!,
@@ -1520,7 +1534,7 @@ export async function runProjectParse(
           symbolDrafts.push({
             projectImportId: importId,
             fileId: fileRow.id,
-            stableSymbolKey: symbol.localKey,
+            stableSymbolKey: symbol.stableKey,
             localSymbolKey: symbol.localKey,
             displayName: symbol.displayName,
             kind: symbol.kind,

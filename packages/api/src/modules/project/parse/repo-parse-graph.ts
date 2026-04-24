@@ -227,6 +227,147 @@ export function createRepoParseGraphService(database: Database) {
       return inserted;
     },
 
+    /**
+     * Incrementally re-syncs a single file's parse data.
+     *
+     * Deletes only the records *owned* by this file (symbols, outgoing import
+     * edges, exports, issues) and replaces them with freshly parsed data.
+     * Inbound edges (other files importing this file) are intentionally kept
+     * so that reverse dependency analysis stays accurate.
+     */
+    async clearAndResyncFileData(
+      projectImportId: string,
+      fileRecord: ProjectFileRecord,
+      data: {
+        contentSha256: string | null;
+        lineCount: number | null;
+        symbols: RepoSymbolInsert[];
+        importEdges: Array<RepoImportEdgeInsert & { localKey: string }>;
+        exports: Array<RepoExportInsert & { symbolLocalKey?: string; sourceImportLocalKey?: string }>;
+        issues: RepoParseIssueInsert[];
+        externalSymbols: RepoExternalSymbolInsert[];
+      },
+    ): Promise<ProjectFileRecord> {
+      const fileId = fileRecord.id;
+
+      // Step 1: clear old per-file records in a transaction
+      await database.transaction(async (tx) => {
+        await tx
+          .delete(repoExport)
+          .where(eq(repoExport.fileId, fileId));
+        await tx
+          .delete(repoImportEdge)
+          .where(eq(repoImportEdge.sourceFileId, fileId));
+        await tx
+          .delete(repoSymbol)
+          .where(eq(repoSymbol.fileId, fileId)); // cascade → repoSymbolOccurrence
+        await tx
+          .delete(repoParseIssue)
+          .where(
+            and(
+              eq(repoParseIssue.projectImportId, projectImportId),
+              eq(repoParseIssue.fileId, fileId),
+            ),
+          );
+      });
+
+      // Step 2: update repoFile metadata
+      const [updatedFile] = await database
+        .update(repoFile)
+        .set({
+          contentSha256: data.contentSha256,
+          lineCount: data.lineCount,
+          parseStatus: "parsed",
+          updatedAt: new Date(),
+        })
+        .where(eq(repoFile.id, fileId))
+        .returning();
+
+      if (!updatedFile) throw new Error(`repoFile not found: ${fileId}`);
+
+      // Step 3: insert new symbols + occurrences
+      const savedSymbols = data.symbols.length > 0
+        ? await database.insert(repoSymbol).values(data.symbols).returning()
+        : [];
+
+      const symbolIdByLocalKey = new Map(
+        savedSymbols
+          .map((s) => [s.localSymbolKey, s.id] as const)
+          .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1])),
+      );
+
+      const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
+      for (const symbol of data.symbols) {
+        const symbolId = symbol.localSymbolKey
+          ? symbolIdByLocalKey.get(symbol.localSymbolKey)
+          : null;
+        const location =
+          (symbol.extraJson as { line: number; col: number } | null) ?? null;
+
+        if (!symbolId || !location) continue;
+
+        occurrenceDrafts.push({
+          projectImportId,
+          fileId,
+          symbolId,
+          occurrenceRole: "definition",
+          startLine: location.line,
+          startCol: location.col,
+          endLine: location.line,
+          endCol: location.col + symbol.displayName.length,
+          syntaxKind: symbol.kind,
+          snippetPreview: symbol.signature,
+          extraJson: null,
+        });
+      }
+
+      if (occurrenceDrafts.length > 0) {
+        await database.insert(repoSymbolOccurrence).values(occurrenceDrafts);
+      }
+
+      // Step 4: insert new import edges
+      const savedImportEdges = data.importEdges.length > 0
+        ? await database
+            .insert(repoImportEdge)
+            .values(data.importEdges.map(({ localKey: _lk, ...edge }) => edge))
+            .returning()
+        : [];
+
+      const importEdgeIdByLocalKey = new Map<string, string>();
+      data.importEdges.forEach((draft, i) => {
+        const saved = savedImportEdges[i];
+        if (saved) importEdgeIdByLocalKey.set(draft.localKey, saved.id);
+      });
+
+      // Step 5: insert new exports
+      if (data.exports.length > 0) {
+        await database.insert(repoExport).values(
+          data.exports.map(({ symbolLocalKey, sourceImportLocalKey, ...exp }) => ({
+            ...exp,
+            symbolId: symbolLocalKey ? (symbolIdByLocalKey.get(symbolLocalKey) ?? null) : null,
+            sourceImportEdgeId: sourceImportLocalKey
+              ? (importEdgeIdByLocalKey.get(sourceImportLocalKey) ?? null)
+              : null,
+          })),
+        );
+      }
+
+      // Step 6: insert new issues
+      if (data.issues.length > 0) {
+        await database.insert(repoParseIssue).values(data.issues);
+      }
+
+      // Step 7: upsert external symbols (may already exist from other files)
+      if (data.externalSymbols.length > 0) {
+        await database
+          .insert(repoExternalSymbol)
+          .values(data.externalSymbols)
+          .onConflictDoNothing();
+      }
+
+      return updatedFile;
+    },
+
     async listFiles(
       projectImportId: string,
       options?: {

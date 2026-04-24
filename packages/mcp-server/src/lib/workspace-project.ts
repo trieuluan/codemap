@@ -33,6 +33,14 @@ export async function readWorkspaceProjectId(
 }
 
 /**
+ * Returns the resolved workspace root path (git repo root, or cwd as fallback).
+ */
+export async function readWorkspacePath(cwd = process.cwd()): Promise<string> {
+  const workspace = await tryGetCurrentWorkspaceInfo(cwd);
+  return workspace?.repoRootPath ?? cwd;
+}
+
+/**
  * Saves a CodeMap project ID into `.codemap/mcp.json` at the given workspace root.
  * Merges with any existing fields in the file so auth config is preserved.
  */

@@ -1,10 +1,11 @@
+import { stat, readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { text, withToolError } from "../lib/tool-response.js";
-import { readWorkspaceProjectId } from "../lib/workspace-project.js";
-import type { FileContent, BlastRadius } from "../lib/api-types.js";
+import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
+import type { FileContent, BlastRadius, FileSyncResult } from "../lib/api-types.js";
 
 // ─── types from /map/files/parse ─────────────────────────────────────────────
 
@@ -289,6 +290,32 @@ export function registerGetFileTool(
             "No project ID provided and no linked project found for this workspace.\n" +
               "Run create_project first to link this workspace to a CodeMap project.",
           );
+        }
+
+        // ── Auto-sync: push local file to BE if it's newer than what BE has ──
+        const workspacePath = await readWorkspacePath();
+        const localAbsolutePath = `${workspacePath}/${filePath}`;
+
+        try {
+          const localStat = await stat(localAbsolutePath);
+          const localMtime = localStat.mtime;
+          const localContent = await readFile(localAbsolutePath, "utf8");
+
+          await client.request<FileSyncResult>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/sync`,
+            {
+              authRequired: true,
+              method: "POST",
+              body: {
+                path: filePath,
+                content: localContent,
+                localUpdatedAt: localMtime.toISOString(),
+              },
+            },
+          );
+        } catch {
+          // Sync is best-effort — if file doesn't exist locally or BE rejects,
+          // just proceed with whatever data BE has.
         }
 
         const sections = include ?? ["content", "outline"];
