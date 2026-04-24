@@ -73,8 +73,21 @@ function toPathBaseName(filePath: string) {
   return lastSegment.replace(/\.[^.]+$/, "");
 }
 
+const MONOREPO_ROOT_SEGMENTS = new Set(["packages", "apps", "libs", "services"]);
+
 function toTopLevelFolder(filePath: string) {
-  return filePath.includes("/") ? filePath.split("/")[0] || "(root)" : "(root)";
+  if (!filePath.includes("/")) {
+    return "(root)";
+  }
+
+  const parts = filePath.split("/");
+  const first = parts[0] || "(root)";
+
+  if (MONOREPO_ROOT_SEGMENTS.has(first) && parts[1]) {
+    return `${first}/${parts[1]}`;
+  }
+
+  return first;
 }
 
 function buildEntryLikeReason(
@@ -91,9 +104,15 @@ function buildEntryLikeReason(
     reasons.push("high-signal index file");
   }
 
+  const pathParts = path.split("/");
+  const isMonorepoSrc =
+    MONOREPO_ROOT_SEGMENTS.has(pathParts[0] ?? "") &&
+    pathParts[2] === "src" &&
+    pathParts.length === 4;
+
   if (!path.includes("/")) {
     reasons.push("root-level file");
-  } else if (path.startsWith("src/") || path.startsWith("app/")) {
+  } else if (path.startsWith("src/") || path.startsWith("app/") || isMonorepoSrc) {
     reasons.push("top-level source path");
   }
 
@@ -1375,10 +1394,20 @@ export function createRepoParseGraphService(database: Database) {
             score += 3;
           }
 
+          const pathParts = item.path.split("/");
+          const isMonorepoSrc =
+            MONOREPO_ROOT_SEGMENTS.has(pathParts[0] ?? "") &&
+            pathParts[2] === "src" &&
+            pathParts.length === 4;
+
           if (!item.path.includes("/")) {
             score += 2;
-          } else if (item.path.startsWith("src/") || item.path.startsWith("app/")) {
-            score += 1;
+          } else if (
+            item.path.startsWith("src/") ||
+            item.path.startsWith("app/") ||
+            isMonorepoSrc
+          ) {
+            score += 2;
           }
 
           if (item.outgoingCount >= 5) {
