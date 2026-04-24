@@ -244,9 +244,14 @@ export function registerGetFileTool(
         "Returns detailed information about a file in the CodeMap project. " +
         "Default includes source code (content) and a full outline: imports, " +
         "imported-by, exports, and symbols with signatures and line numbers. " +
-        "Add blast_radius to also see impact analysis (which files would be " +
-        "affected if this file changed). Content and parse data are fetched in " +
-        "parallel. project_id is optional if this workspace was linked via create_project.",
+        "Add blast_radius when you need impact analysis — use it before editing a file " +
+        "to understand how many files depend on it (directly or transitively), or when " +
+        "the user asks about the impact/risk of changing a file, wants to know blast radius, " +
+        "or asks which files would break if this file changed. " +
+        "blast_radius is NOT needed for general file exploration — only include it when " +
+        "the task involves assessing change risk or editing a shared/utility file. " +
+        "Content and parse data are fetched in parallel. " +
+        "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         path: z
           .string()
@@ -266,7 +271,9 @@ export function registerGetFileTool(
           .describe(
             "Sections to include. Default: [content, outline]. " +
               "outline covers imports, imported-by, exports, and symbols. " +
-              "Add blast_radius for impact analysis.",
+              "Add blast_radius when assessing change risk: before editing a shared file, " +
+              "when asked about impact/blast radius, or when a file has many dependents. " +
+              "Omit blast_radius for routine file reading — it adds latency.",
           ),
         blast_radius_max_files: z
           .number()
