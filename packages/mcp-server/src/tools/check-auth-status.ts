@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { getMcpWhoAmI } from "../lib/mcp-auth.js";
+import { text, errorContent } from "../lib/tool-response.js";
 
 export function registerCheckAuthStatusTool(
   server: McpServer,
@@ -16,48 +17,29 @@ export function registerCheckAuthStatusTool(
     },
     async () => {
       if (!config.apiToken) {
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `Not authenticated.\nAPI URL: ${config.apiUrl}\n` +
-                "Call `start_auth_flow` to begin browser login, then `wait_for_auth` after the user completes authorization. " +
-                "For CLI usage, run `codemap-mcp login`.",
-            },
-          ],
-        };
+        return text(
+          `Not authenticated.\nAPI URL: ${config.apiUrl}\n` +
+          "Call `start_auth_flow` to begin browser login, then `wait_for_auth` after the user completes authorization. " +
+          "For CLI usage, run `codemap-mcp login`.",
+        );
       }
 
       try {
         const response = await getMcpWhoAmI(config);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: [
-                "Authenticated with CodeMap.",
-                `API URL: ${response.apiUrl}`,
-                response.user.email ? `Email: ${response.user.email}` : null,
-                response.user.name ? `Name: ${response.user.name}` : null,
-                response.user.id ? `User ID: ${response.user.id}` : null,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-            },
-          ],
-        };
+        return text(
+          [
+            "Authenticated with CodeMap.",
+            `API URL: ${response.apiUrl}`,
+            response.user.email ? `Email: ${response.user.email}` : null,
+            response.user.name ? `Name: ${response.user.name}` : null,
+            response.user.id ? `User ID: ${response.user.id}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : String(error),
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(error);
       }
     },
   );

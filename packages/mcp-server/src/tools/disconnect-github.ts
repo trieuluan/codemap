@@ -1,11 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
-import { requestCodeMapApi, toToolErrorContent } from "../lib/codemap-api.js";
+import { createCodeMapClient } from "../lib/codemap-api.js";
+import { text, withToolError } from "../lib/tool-response.js";
 
 export function registerDisconnectGithubTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
+  const client = createCodeMapClient(config);
+
   server.registerTool(
     "disconnect_github",
     {
@@ -16,28 +19,15 @@ export function registerDisconnectGithubTool(
         "Only call this when the user explicitly asks to disconnect or revoke GitHub access.",
       inputSchema: {},
     },
-    async () => {
-      try {
-        await requestCodeMapApi<{ disconnected: true }>(
-          config,
-          "/github/disconnect",
-          {
-            method: "DELETE",
-            authRequired: true,
-          },
-        );
+    withToolError(async () => {
+      await client.request<{ disconnected: true }>("/github/disconnect", {
+        method: "DELETE",
+        authRequired: true,
+      });
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: "GitHub account disconnected successfully. CodeMap no longer has access to the user's GitHub repositories.",
-            },
-          ],
-        };
-      } catch (error) {
-        return toToolErrorContent(error);
-      }
-    },
+      return text(
+        "GitHub account disconnected successfully. CodeMap no longer has access to the user's GitHub repositories.",
+      );
+    }),
   );
 }

@@ -1,12 +1,15 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
-import { requestCodeMapApi, toToolErrorContent } from "../lib/codemap-api.js";
+import { createCodeMapClient } from "../lib/codemap-api.js";
+import { text, withToolError } from "../lib/tool-response.js";
 
 export function registerGetFileOutlineTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
+  const client = createCodeMapClient(config);
+
   server.registerTool(
     "get_file_outline",
     {
@@ -16,10 +19,7 @@ export function registerGetFileOutlineTool(
         "Use this instead of reading the raw file when you only need to understand the structure of a file. " +
         "Significantly fewer tokens than the full file content.",
       inputSchema: {
-        project_id: z
-          .string()
-          .uuid()
-          .describe("UUID of the CodeMap project"),
+        project_id: z.string().uuid().describe("UUID of the CodeMap project"),
         file_path: z
           .string()
           .min(1)
@@ -29,32 +29,20 @@ export function registerGetFileOutlineTool(
           ),
       },
     },
-    async ({ project_id, file_path }) => {
-      try {
-        const data = await requestCodeMapApi<{ outline?: string }>(
-          config,
-          `/projects/${encodeURIComponent(project_id)}/map/files/outline`,
-          {
-            query: {
-              path: file_path,
-            },
-            authRequired: true,
-          },
-        );
-        const outline = data?.outline;
+    withToolError(async ({ project_id, file_path }) => {
+      const data = await client.request<{ outline?: string }>(
+        `/projects/${encodeURIComponent(project_id)}/map/files/outline`,
+        {
+          query: { path: file_path },
+          authRequired: true,
+        },
+      );
 
-        if (!outline) {
-          return {
-            content: [{ type: "text", text: "No outline available for this file." }],
-          };
-        }
-
-        return {
-          content: [{ type: "text", text: outline }],
-        };
-      } catch (error) {
-        return toToolErrorContent(error);
+      if (!data?.outline) {
+        return text("No outline available for this file.");
       }
-    },
+
+      return text(data.outline);
+    }),
   );
 }
