@@ -901,8 +901,11 @@ export function DetailPanel({
                                 {symbol.displayName}
                               </span>
                               <Badge
-                                variant="secondary"
-                                className="capitalize"
+                                variant="outline"
+                                className={cn(
+                                  "capitalize border font-medium shadow-sm",
+                                  getTitleBadgeClassName(symbol.kind.replace(/_/g, " ")) || "border-border bg-muted text-foreground",
+                                )}
                               >
                                 {symbol.kind.replace(/_/g, " ")}
                               </Badge>
