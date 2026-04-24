@@ -70,9 +70,10 @@ function buildContextText(
   lines.push("- list_projects — list all accessible projects");
   lines.push("- get_project — get current project status and metadata");
   lines.push("- get_project_map — browse the full file tree");
-  lines.push("- search_codebase — find files, symbols, and exports by keyword");
-  lines.push("- get_file — read a file: content, symbol outline, and/or blast radius (impact analysis)");
+  lines.push("- search_codebase — find files, symbols, and exports by keyword; results include symbol signatures");
+  lines.push("- get_file — read a file: content, symbol outline, and/or blast radius (impact analysis). Auto-reparses if local file has changed since last import.");
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
+  lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
   lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
 
