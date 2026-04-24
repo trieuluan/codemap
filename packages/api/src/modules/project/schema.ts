@@ -34,6 +34,8 @@ export const projectParamsSchema = z.object({
 
 export const projectFileContentQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000),
+  startLine: z.coerce.number().int().min(1).optional(),
+  endLine: z.coerce.number().int().min(1).optional(),
 });
 
 export const projectFileSyncBodySchema = z.object({

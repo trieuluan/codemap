@@ -248,6 +248,8 @@ async function getWorkspaceFileStats(
 export async function getProjectFilePreview(input: {
   workspacePath: string;
   treeNode: ProjectTreeNode;
+  startLine?: number;
+  endLine?: number;
 }): Promise<ProjectFilePreviewResult> {
   const metadata = getPreviewMetadata(input.treeNode);
 
@@ -311,12 +313,21 @@ export async function getProjectFilePreview(input: {
       );
     }
 
+    let content = await readFile(absoluteFilePath, "utf8");
+
+    if (input.startLine !== undefined || input.endLine !== undefined) {
+      const allLines = content.split(/\r?\n/);
+      const from = Math.max((input.startLine ?? 1) - 1, 0);
+      const to = Math.min(input.endLine ?? allLines.length, allLines.length);
+      content = allLines.slice(from, to).join("\n");
+    }
+
     return {
       ...metadata,
       kind: "text",
       mimeType: inferMimeType(input.treeNode.extension),
       status: "ready",
-      content: await readFile(absoluteFilePath, "utf8"),
+      content,
       sizeBytes: fileStats.size,
       reason: null,
     };

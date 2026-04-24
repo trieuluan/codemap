@@ -76,7 +76,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildContentSection(file: FileContent): string {
+function buildContentSection(file: FileContent, startLine?: number, endLine?: number): string {
   const parts: string[] = [];
   if (file.language) parts.push(`Language: ${file.language}`);
   if (file.sizeBytes != null) parts.push(`Size: ${formatBytes(file.sizeBytes)}`);
@@ -87,8 +87,11 @@ function buildContentSection(file: FileContent): string {
       const content = file.content ?? "";
       const lineCount = content.split("\n").length;
       const lang = file.extension?.replace(".", "") ?? "";
+      const rangeLabel = startLine !== undefined || endLine !== undefined
+        ? ` | Lines: ${startLine ?? 1}–${endLine ?? "EOF"}`
+        : ` | Lines: ${lineCount}`;
       return [
-        meta ? `${meta} | Lines: ${lineCount}` : `Lines: ${lineCount}`,
+        meta ? `${meta}${rangeLabel}` : `Lines: ${lineCount}`,
         "",
         `\`\`\`${lang}`,
         content,
@@ -285,10 +288,29 @@ export function registerGetFileTool(
           .describe(
             "Max affected files to list when blast_radius is included (default 20).",
           ),
+        start_line: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            "First line to include in content (1-based, inclusive). " +
+              "Use with end_line to read a specific range instead of the full file. " +
+              "Combine with outline symbol line numbers to read just the function/class you need.",
+          ),
+        end_line: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            "Last line to include in content (1-based, inclusive). " +
+              "Omit to read from start_line to end of file.",
+          ),
       },
     },
     withToolError(
-      async ({ path: filePath, project_id, include, blast_radius_max_files }) => {
+      async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line }) => {
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
 
@@ -336,7 +358,14 @@ export function registerGetFileTool(
           wantContent
             ? client.request<FileContent>(
                 `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/content`,
-                { authRequired: true, query: { path: filePath } },
+                {
+                  authRequired: true,
+                  query: {
+                    path: filePath,
+                    ...(start_line !== undefined && { startLine: String(start_line) }),
+                    ...(end_line !== undefined && { endLine: String(end_line) }),
+                  },
+                },
               )
             : Promise.resolve(null),
 
@@ -380,7 +409,7 @@ export function registerGetFileTool(
             contentResult.status === "fulfilled" &&
             contentResult.value
           ) {
-            output.push(buildContentSection(contentResult.value as FileContent));
+            output.push(buildContentSection(contentResult.value as FileContent, start_line, end_line));
           } else if (contentResult.status === "rejected") {
             output.push(
               `Failed to load: ${(contentResult.reason as Error).message}`,

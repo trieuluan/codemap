@@ -330,6 +330,8 @@ export function createProjectController(fastify: FastifyInstance) {
       const preview = await getProjectFilePreview({
         workspacePath: latestMapWithSource.importRecord.sourceWorkspacePath,
         treeNode,
+        startLine: query.startLine,
+        endLine: query.endLine,
       });
 
       return reply.success(preview);
