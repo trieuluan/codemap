@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   repoExport,
   repoFile,
@@ -8,7 +8,6 @@ import {
   repoSymbolRelationship,
 } from "../../../../db/schema";
 import type {
-  RepoSymbolKind,
   RepoSymbolOccurrenceRole,
 } from "../../../../db/schema/repo-parse-schema";
 import type {
@@ -17,8 +16,6 @@ import type {
   ProjectFileBlastRadius,
   ProjectFileSymbolRecord,
   ProjectInsightsCycleCandidate,
-  ProjectSymbol,
-  ProjectSymbolRelationshipRecord,
 } from "../types/repo-parse-graph.types";
 import { pickBestOccurrence, tarjanSCC } from "./utils";
 
@@ -53,48 +50,6 @@ export function createFileQueryService(database: Database) {
           eq(repoFile.path, filePath),
         ),
       });
-    },
-
-    async listSymbols(
-      projectImportId: string,
-      options?: { fileId?: string; kind?: RepoSymbolKind },
-    ): Promise<ProjectSymbol[]> {
-      const filters = [eq(repoSymbol.projectImportId, projectImportId)];
-
-      if (options?.fileId) filters.push(eq(repoSymbol.fileId, options.fileId));
-      if (options?.kind) filters.push(eq(repoSymbol.kind, options.kind));
-
-      const symbols = await database.query.repoSymbol.findMany({
-        where: and(...filters),
-        with: { file: true, parentSymbol: true },
-        orderBy: [asc(repoSymbol.fileId), asc(repoSymbol.displayName)],
-      });
-
-      return symbols.map((symbol) => ({
-        id: symbol.id,
-        projectImportId: symbol.projectImportId,
-        fileId: symbol.fileId,
-        filePath: symbol.file?.path ?? null,
-        stableSymbolKey: symbol.stableSymbolKey,
-        localSymbolKey: symbol.localSymbolKey,
-        displayName: symbol.displayName,
-        kind: symbol.kind,
-        language: symbol.language,
-        visibility: symbol.visibility,
-        isExported: symbol.isExported,
-        isDefaultExport: symbol.isDefaultExport,
-        signature: symbol.signature,
-        returnType: symbol.returnType,
-        parentSymbolId: symbol.parentSymbolId,
-        parentSymbolName: symbol.parentSymbol?.displayName ?? null,
-        ownerSymbolKey: symbol.ownerSymbolKey,
-        docJson: symbol.docJson,
-        typeJson: symbol.typeJson,
-        modifiersJson: symbol.modifiersJson,
-        extraJson: symbol.extraJson,
-        createdAt: symbol.createdAt,
-        updatedAt: symbol.updatedAt,
-      }));
     },
 
     async listFileSymbols(
@@ -209,48 +164,6 @@ export function createFileQueryService(database: Database) {
         endCol: item.endCol,
         extraJson: item.extraJson,
         createdAt: item.createdAt,
-      }));
-    },
-
-    async listRelationshipsForSymbol(
-      projectImportId: string,
-      symbolId: string,
-      options?: {
-        onlyImplementations?: boolean;
-        onlyReferences?: boolean;
-        onlyTypeDefinitions?: boolean;
-      },
-    ): Promise<ProjectSymbolRelationshipRecord[]> {
-      const filters = [
-        eq(repoSymbolRelationship.projectImportId, projectImportId),
-        eq(repoSymbolRelationship.fromSymbolId, symbolId),
-      ];
-
-      if (options?.onlyImplementations) filters.push(eq(repoSymbolRelationship.isImplementation, true));
-      if (options?.onlyReferences) filters.push(eq(repoSymbolRelationship.isReference, true));
-      if (options?.onlyTypeDefinitions) filters.push(eq(repoSymbolRelationship.isTypeDefinition, true));
-
-      const relationships = await database.query.repoSymbolRelationship.findMany({
-        where: and(...filters),
-        with: { fromSymbol: true, toSymbol: true },
-        orderBy: [desc(repoSymbolRelationship.createdAt)],
-      });
-
-      return relationships.map((relationship) => ({
-        id: relationship.id,
-        projectImportId: relationship.projectImportId,
-        fromSymbolId: relationship.fromSymbolId,
-        fromSymbolName: relationship.fromSymbol.displayName,
-        toSymbolId: relationship.toSymbolId,
-        toSymbolName: relationship.toSymbol?.displayName ?? null,
-        toExternalSymbolKey: relationship.toExternalSymbolKey,
-        relationshipKind: relationship.relationshipKind,
-        isReference: relationship.isReference,
-        isImplementation: relationship.isImplementation,
-        isTypeDefinition: relationship.isTypeDefinition,
-        isDefinition: relationship.isDefinition,
-        extraJson: relationship.extraJson,
-        createdAt: relationship.createdAt,
       }));
     },
 
