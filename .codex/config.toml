@@ -64,3 +64,9 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.get_diff]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.ping]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.list_projects]
+approval_mode = "approve"
