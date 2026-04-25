@@ -115,6 +115,7 @@ export async function runProjectImport(
   // For pre-materialized sources, metadata is already saved by the controller.
   let sourceMetadataSaved = isPreMaterialized;
   let importPhaseCompleted = false;
+  let parseJobQueued = false;
 
   try {
     if (isPreMaterialized) {
@@ -242,12 +243,19 @@ export async function runProjectImport(
     await enqueueProjectParseJob(context.redisConnection, {
       importId: importRecord.id,
     });
+    parseJobQueued = true;
 
+    await projectService.markParseAsQueued(importRecord.id);
     await projectService.markImportAsCompleted(importRecord.id);
     importPhaseCompleted = true;
     await reportProjectImportProgress(context, 100, "completed");
   } catch (error) {
-    if (!importPhaseCompleted && retainedWorkspacePath && !isPreMaterialized) {
+    if (
+      !importPhaseCompleted &&
+      !parseJobQueued &&
+      retainedWorkspacePath &&
+      !isPreMaterialized
+    ) {
       await repositoryWorkspaceService.removeWorkspaceByPath(
         retainedWorkspacePath,
       );
@@ -257,7 +265,7 @@ export async function runProjectImport(
       }
     }
 
-    if (importPhaseCompleted) {
+    if (importPhaseCompleted || parseJobQueued) {
       await projectService.markParseAsFailed(
         importRecord.id,
         toImportFailureMessage(error),

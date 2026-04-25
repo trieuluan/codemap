@@ -19,6 +19,7 @@ function ImportStatusIcon({ status }: { status: ProjectImport["status"] }) {
       return <AlertCircle className="size-4 text-destructive" />;
     case "running":
       return <LoaderCircle className="size-4 animate-spin text-blue-500" />;
+    case "queued":
     case "pending":
       return <Clock3 className="size-4 text-muted-foreground" />;
     default:

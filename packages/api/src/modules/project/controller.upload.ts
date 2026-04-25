@@ -140,6 +140,9 @@ export function createProjectUploadController(fastify: FastifyInstance) {
         );
       }
 
+      createdImport =
+        (await service.markImportAsQueued(createdImport.id)) ?? createdImport;
+
       return reply.success(
         {
           project,

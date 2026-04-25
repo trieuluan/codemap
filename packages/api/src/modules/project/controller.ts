@@ -67,6 +67,8 @@ export function createProjectController(fastify: FastifyInstance) {
         "Unable to start import job",
       );
     }
+
+    return service.markImportAsQueued(projectImportId);
   }
 
   return {
@@ -177,9 +179,9 @@ export function createProjectController(fastify: FastifyInstance) {
         throw fastify.httpErrors.notFound("Project not found");
       }
 
-      await enqueueImportOrFail(request, createdImport.id);
+      const queuedImport = await enqueueImportOrFail(request, createdImport.id);
 
-      return reply.success(createdImport, 201);
+      return reply.success(queuedImport ?? createdImport, 201);
     },
 
     createProjectFromGithub: async (
@@ -218,12 +220,12 @@ export function createProjectController(fastify: FastifyInstance) {
         );
       }
 
-      await enqueueImportOrFail(request, createdImport.id);
+      const queuedImport = await enqueueImportOrFail(request, createdImport.id);
 
       return reply.success(
         {
           project,
-          import: createdImport,
+          import: queuedImport ?? createdImport,
         },
         201,
       );

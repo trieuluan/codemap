@@ -107,19 +107,35 @@ function buildContextText(
         "symbols before answering questions about the code.",
     );
   } else if (project.status === "importing") {
-    lines.push(
-      "An import is currently in progress. Use wait_for_import to wait until " +
-        "it completes before searching the codebase.",
-    );
+    if (latestImport?.parseStatus === "queued") {
+      lines.push(
+        "The import phase is complete and the parse job is queued. " +
+          "Call wait_for_import to wait for semantic analysis before relying " +
+          "on symbol/export results.",
+      );
+    } else {
+      lines.push(
+        "An import is currently in progress. Use wait_for_import to wait until " +
+          "it completes before searching the codebase.",
+      );
+    }
   } else if (
     project.status === "ready" &&
     latestImport?.parseStatus !== "completed"
   ) {
-    lines.push(
-      "The codebase snapshot is ready but semantic analysis is still running " +
-        `(parse status: ${latestImport?.parseStatus ?? "unknown"}). ` +
-        "File search is available but symbol/export results may be incomplete.",
-    );
+    if (latestImport?.parseStatus === "queued") {
+      lines.push(
+        "The codebase snapshot is ready and the parse job is queued. " +
+          "Call wait_for_import to wait for semantic analysis before relying " +
+          "on symbol/export results.",
+      );
+    } else {
+      lines.push(
+        "The codebase snapshot is ready but semantic analysis is still running " +
+          `(parse status: ${latestImport?.parseStatus ?? "unknown"}). ` +
+          "File search is available but symbol/export results may be incomplete.",
+      );
+    }
   } else {
     lines.push(
       "The project has not been fully imported yet. Run trigger_reimport to " +

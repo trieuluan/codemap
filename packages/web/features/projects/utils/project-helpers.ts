@@ -86,6 +86,8 @@ export function getProjectImportStatusLabel(status: ProjectImportStatus) {
   switch (status) {
     case "pending":
       return "Pending";
+    case "queued":
+      return "Queued";
     case "running":
       return "Running";
     case "completed":
@@ -102,6 +104,8 @@ export function getProjectImportParseStatusLabel(
 ) {
   switch (status) {
     case "pending":
+      return "Pending";
+    case "queued":
       return "Queued";
     case "running":
       return "Analyzing";

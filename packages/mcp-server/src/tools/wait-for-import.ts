@@ -21,14 +21,20 @@ function formatResult(imp: ProjectImportDetail, timedOut: boolean): string {
   if (timedOut) {
     return [
       `Import is still in progress (status: ${imp.status}, parse: ${imp.parseStatus}).`,
+      imp.parseStatus === "queued"
+        ? "Parse job is queued and waiting for a worker."
+        : null,
       "Call wait_for_import again to continue waiting.",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   if (imp.status === "completed") {
     return [
       "Import completed successfully.",
       `Parse status: ${imp.parseStatus}`,
+      imp.parseStatus === "queued"
+        ? "Parse job is queued and waiting for a worker."
+        : null,
       imp.branch ? `Branch: ${imp.branch}` : null,
       imp.commitSha ? `Commit: ${imp.commitSha.slice(0, 8)}` : null,
       imp.completedAt

@@ -35,8 +35,19 @@ export interface GithubStatus {
   connectedAt?: string;
 }
 
-export type ImportStatus = "pending" | "running" | "completed" | "failed";
-export type ParseStatus = "pending" | "running" | "completed" | "failed" | "partial";
+export type ImportStatus =
+  | "pending"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+export type ParseStatus =
+  | "pending"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "partial";
 
 export interface ProjectImportDetail {
   id: string;

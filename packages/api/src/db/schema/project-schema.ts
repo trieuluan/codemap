@@ -45,6 +45,7 @@ export const projectProviderEnum = pgEnum("project_provider", [
 
 export const projectImportStatusEnum = pgEnum("project_import_status", [
   "pending",
+  "queued",
   "running",
   "completed",
   "failed",
@@ -52,6 +53,7 @@ export const projectImportStatusEnum = pgEnum("project_import_status", [
 
 export const repoParseStatusEnum = pgEnum("repo_parse_status", [
   "pending",
+  "queued",
   "running",
   "completed",
   "failed",

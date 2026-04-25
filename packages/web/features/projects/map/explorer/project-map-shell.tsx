@@ -89,6 +89,7 @@ export function ProjectMapShell({
   const isImportProcessing =
     project.status === "importing" ||
     latestImport?.status === "pending" ||
+    latestImport?.status === "queued" ||
     latestImport?.status === "running";
   const {
     query,

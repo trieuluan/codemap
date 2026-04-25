@@ -8,11 +8,13 @@ export type ProjectStatus =
 export type ProjectProvider = "github" | "local_workspace";
 export type ProjectImportStatus =
   | "pending"
+  | "queued"
   | "running"
   | "completed"
   | "failed";
 export type ProjectImportParseStatus =
   | "pending"
+  | "queued"
   | "running"
   | "completed"
   | "failed"

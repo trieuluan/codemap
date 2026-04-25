@@ -17,6 +17,8 @@ function statusBadgeClassName(status?: ProjectImport["status"]) {
   switch (status) {
     case "pending":
       return "border-amber-500/20 bg-amber-500/10 text-amber-700";
+    case "queued":
+      return "border-sky-500/20 bg-sky-500/10 text-sky-700";
     case "running":
       return "border-blue-500/20 bg-blue-500/10 text-blue-700";
     case "completed":
@@ -32,6 +34,8 @@ function parseStatusBadgeClassName(status?: ProjectImport["parseStatus"]) {
   switch (status) {
     case "pending":
       return "border-amber-500/20 bg-amber-500/10 text-amber-700";
+    case "queued":
+      return "border-sky-500/20 bg-sky-500/10 text-sky-700";
     case "running":
       return "border-blue-500/20 bg-blue-500/10 text-blue-700";
     case "completed":
@@ -59,7 +63,9 @@ export function ImportProgress({
     latestImport?.parseStatus,
   );
   const isImportComplete = latestImport?.status === "completed";
+  const isImportQueued = latestImport?.status === "queued";
   const isImportRunning = latestImport?.status === "running";
+  const isParseQueued = latestImport?.parseStatus === "queued";
   const isParseRunning = latestImport?.parseStatus === "running";
   const isParseComplete = latestImport?.parseStatus === "completed";
   const isParsePartial = latestImport?.parseStatus === "partial";
@@ -70,6 +76,7 @@ export function ImportProgress({
       label: "Import queued",
       status:
         latestImport?.status === "pending" ||
+        latestImport?.status === "queued" ||
         latestImport?.status === "running" ||
         latestImport?.status === "completed"
           ? "complete"
@@ -84,7 +91,13 @@ export function ImportProgress({
     },
     {
       label: "Repository import",
-      status: isImportRunning ? "loading" : isImportComplete ? "complete" : "pending",
+      status: isImportRunning
+        ? "loading"
+        : isImportComplete
+          ? "complete"
+          : isImportQueued
+            ? "loading"
+            : "pending",
       details: latestImport?.branch
         ? `${project.name} · ${latestImport.branch}`
         : project.name,
@@ -92,7 +105,7 @@ export function ImportProgress({
     {
       label: "Semantic analysis",
       status:
-        isParseRunning
+        isParseQueued || isParseRunning
           ? "loading"
           : isParseComplete || isParsePartial
             ? "complete"
@@ -141,7 +154,7 @@ export function ImportProgress({
       <div className="space-y-4">
         <div>
           <h3 className="text-base font-semibold text-foreground">
-            {project.status === "importing" || isParseRunning
+            {project.status === "importing" || isParseQueued || isParseRunning
               ? "Analyzing repository"
               : "Import status"}
           </h3>

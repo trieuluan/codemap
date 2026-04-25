@@ -371,7 +371,7 @@ export function createProjectService(database: Database) {
       const activeImport = await database.query.projectImport.findFirst({
         where: and(
           eq(projectImport.projectId, projectId),
-          inArray(projectImport.status, ["pending", "running"]),
+          inArray(projectImport.status, ["pending", "queued", "running"]),
         ),
         columns: {
           id: true,
@@ -406,6 +406,19 @@ export function createProjectService(database: Database) {
       });
 
       return createdImport;
+    },
+
+    async markImportAsQueued(projectImportId: string) {
+      const [queuedImport] = await database
+        .update(projectImport)
+        .set({
+          status: "queued",
+          errorMessage: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return queuedImport ?? null;
     },
 
     async markImportAsRunning(
@@ -532,6 +545,21 @@ export function createProjectService(database: Database) {
       });
 
       return failedImport;
+    },
+
+    async markParseAsQueued(projectImportId: string) {
+      const [updatedImport] = await database
+        .update(projectImport)
+        .set({
+          parseStatus: "queued",
+          parseStartedAt: null,
+          parseCompletedAt: null,
+          parseError: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return updatedImport ?? null;
     },
 
     async markParseAsRunning(
@@ -792,6 +820,7 @@ export function createProjectService(database: Database) {
           eq(projectImport.status, "completed"),
           eq(projectImport.sourceAvailable, true),
           ne(projectImport.parseStatus, "pending"),
+          ne(projectImport.parseStatus, "queued"),
           ne(projectImport.parseStatus, "running"),
           options?.excludeImportId
             ? ne(projectImport.id, options.excludeImportId)

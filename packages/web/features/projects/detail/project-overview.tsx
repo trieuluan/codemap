@@ -81,6 +81,7 @@ export function ProjectOverview({
       refreshInterval: (currentImports?: ProjectImport[]) => {
         const latestImport = currentImports?.[0];
         return latestImport?.status === "pending" ||
+          latestImport?.status === "queued" ||
           latestImport?.status === "running"
           ? 3000
           : 0;

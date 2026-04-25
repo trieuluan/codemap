@@ -16,6 +16,8 @@ function statusBadgeClassName(status: ProjectImport["status"]) {
   switch (status) {
     case "pending":
       return "border-amber-500/20 bg-amber-500/10 text-amber-700";
+    case "queued":
+      return "border-sky-500/20 bg-sky-500/10 text-sky-700";
     case "running":
       return "border-blue-500/20 bg-blue-500/10 text-blue-700";
     case "completed":
@@ -31,6 +33,8 @@ function parseStatusBadgeClassName(status?: ProjectImport["parseStatus"]) {
   switch (status) {
     case "pending":
       return "border-amber-500/20 bg-amber-500/10 text-amber-700";
+    case "queued":
+      return "border-sky-500/20 bg-sky-500/10 text-sky-700";
     case "running":
       return "border-blue-500/20 bg-blue-500/10 text-blue-700";
     case "completed":
@@ -102,6 +106,7 @@ export function ProjectMapStatusBanner({
 
   if (
     project.status === "importing" ||
+    latestImport?.status === "queued" ||
     latestImport?.status === "running" ||
     latestImport?.status === "pending"
   ) {
