@@ -7,26 +7,6 @@ type Database = typeof import("../../../../db/index.ts").db;
 
 export function createImportEdgeQueryService(database: Database) {
   return {
-    async listImportEdges(
-      projectImportId: string,
-      options?: { includeExternal?: boolean },
-    ): Promise<ProjectImportEdge[]> {
-      const edges = await database.query.repoImportEdge.findMany({
-        where: options?.includeExternal
-          ? eq(repoImportEdge.projectImportId, projectImportId)
-          : and(
-              eq(repoImportEdge.projectImportId, projectImportId),
-              eq(repoImportEdge.isResolved, true),
-            ),
-        with: { sourceFile: true, targetFile: true },
-        orderBy: [asc(repoImportEdge.sourceFileId), asc(repoImportEdge.startLine)],
-      });
-
-      return edges
-        .filter((edge) => options?.includeExternal || edge.targetFile !== null)
-        .map(toImportEdge);
-    },
-
     async listFileImportEdges(
       projectImportId: string,
       fileId: string,
