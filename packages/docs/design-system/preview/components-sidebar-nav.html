@@ -1,0 +1,32 @@
+<!doctype html><html class="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="_card.css"><title>Sidebar nav</title></head><body><div class="card" style="padding:0">
+  <div style="display:flex">
+    <aside style="width:220px;background:var(--sidebar);border-right:1px solid var(--sidebar-border);padding:12px;display:flex;flex-direction:column;gap:6px;height:auto">
+      <div style="padding:8px 12px;display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="width:24px;height:24px;border-radius:6px;background:var(--foreground);display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--background)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 5-5"/><circle cx="20" cy="7" r="2" fill="var(--background)"/></svg>
+        </div>
+        <span style="font-weight:600;letter-spacing:-0.01em">CodeMap</span>
+      </div>
+      <a style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:6px;background:var(--sidebar-accent);color:var(--sidebar-accent-foreground);font:500 13px var(--font-sans);text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        Overview
+      </a>
+      <a style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:6px;color:color-mix(in oklch, var(--sidebar-foreground) 70%, transparent);font:500 13px var(--font-sans);text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.5C2 6 3 5 4.5 5h4.05a2 2 0 0 1 1.42.59l.96.96A2 2 0 0 0 12.34 7H19.5C21 7 22 8 22 9.5v8c0 1.5-1 2.5-2.5 2.5h-15C3 20 2 19 2 17.5z"/></svg>
+        Projects
+      </a>
+      <a style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:6px;color:color-mix(in oklch, var(--sidebar-foreground) 70%, transparent);font:500 13px var(--font-sans);text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        API
+      </a>
+      <a style="display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:6px;color:color-mix(in oklch, var(--sidebar-foreground) 70%, transparent);font:500 13px var(--font-sans);text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        Team
+      </a>
+    </aside>
+    <div style="flex:1;padding:18px 22px">
+      <div class="eyebrow">Sidebar nav · w-64 · hover bumps to bg-sidebar-accent</div>
+      <div style="margin-top:8px;font-size:13px;color:var(--muted-foreground);max-width:340px">Active item is filled, inactive items are 70% opacity foreground. Icons size-4 inline with label. The "Settings" + "Help" pair sits at the bottom with `mt-auto`.</div>
+    </div>
+  </div>
+</div></body></html>
