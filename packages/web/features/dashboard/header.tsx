@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Bell, Moon, Search, Sun } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MobileSidebar } from "./mobile-sidebar";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/components/ui/use-toast";
+import { useState } from "react";
 
 interface DashboardHeaderProps {
   title?: string;
@@ -35,6 +37,7 @@ function getUserInitials(name?: string | null, email?: string | null) {
 export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
   const userName = user?.name?.trim() || "CodeMap User";
@@ -80,6 +83,20 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
             className="w-64 bg-secondary border-border pl-8"
           />
         </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+        >
+          {theme === "dark" ? (
+            <Sun className="size-4" />
+          ) : (
+            <Moon className="size-4" />
+          )}
+          <span className="sr-only">Toggle theme</span>
+        </Button>
 
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="size-4" />
