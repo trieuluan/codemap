@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import type { Project, ProjectImport } from "../lib/api-types.js";
 
 interface ProjectListItem extends Project {
@@ -74,17 +74,25 @@ export function registerListProjectsTool(
         : projects;
 
       if (filtered.length === 0) {
-        return text(
-          status
+        const summary = status
             ? `No projects with status "${status}" found.`
-            : "No projects found. Create one with create_project or create_project_from_github.",
-        );
+            : "No projects found. Create one with create_project or create_project_from_github.";
+
+        return success(summary, {
+          items: [],
+          total: 0,
+          statusFilter: status ?? null,
+        });
       }
 
       const header = `${filtered.length} project${filtered.length !== 1 ? "s" : ""}${status ? ` (${status})` : ""}`;
       const body = filtered.map(formatProject).join("\n\n");
 
-      return text(`${header}\n\n${body}`);
+      return success(`${header}\n\n${body}`, {
+        items: filtered,
+        total: filtered.length,
+        statusFilter: status ?? null,
+      });
     }),
   );
 }

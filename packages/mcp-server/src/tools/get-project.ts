@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectDetail } from "../lib/api-types.js";
 
@@ -50,12 +50,19 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
     },
     withToolError(async ({ project_id }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+      const linkedWorkspace = !project_id;
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          linkedWorkspace,
+          projectId: null,
+          found: false,
+          project: null,
+        });
       }
 
       let project: ProjectDetail;
@@ -69,16 +76,27 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
         const message = error instanceof Error ? error.message : String(error);
 
         if (message.includes("404")) {
-          return text(
+          const summary =
             `Project not found: ${resolvedProjectId}\n` +
-              "Check that the project ID is correct and you have access to it.",
-          );
+            "Check that the project ID is correct and you have access to it.";
+
+          return success(summary, {
+            linkedWorkspace,
+            projectId: resolvedProjectId,
+            found: false,
+            project: null,
+          });
         }
 
         throw error;
       }
 
-      return text(formatProject(project));
+      return success(formatProject(project), {
+        linkedWorkspace,
+        projectId: resolvedProjectId,
+        found: true,
+        project,
+      });
     }),
   );
 }

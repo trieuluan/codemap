@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectMapSnapshot, ProjectMapTreeNode } from "../lib/api-types.js";
 
@@ -85,10 +85,18 @@ export function registerGetProjectMapTool(
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          projectId: null,
+          available: false,
+          folder: folder ?? null,
+          snapshot: null,
+          counts: { files: 0, dirs: 0 },
+          tree: null,
+        });
       }
 
       let snapshot: ProjectMapSnapshot;
@@ -102,10 +110,18 @@ export function registerGetProjectMapTool(
         const message = error instanceof Error ? error.message : String(error);
 
         if (message.includes("404")) {
-          return text(
+          const summary =
             `Project not found or not yet imported: ${resolvedProjectId}\n` +
-              "Run trigger_reimport to index the project first.",
-          );
+            "Run trigger_reimport to index the project first.";
+
+          return success(summary, {
+            projectId: resolvedProjectId,
+            available: false,
+            folder: folder ?? null,
+            snapshot: null,
+            counts: { files: 0, dirs: 0 },
+            tree: null,
+          });
         }
 
         throw error;
@@ -116,10 +132,23 @@ export function registerGetProjectMapTool(
       if (folder) {
         const subtree = findSubtree(root, folder);
         if (!subtree) {
-          return text(
+          const summary =
             `Folder not found: ${folder}\n` +
-              "Check the path and make sure it exists in the project.",
-          );
+            "Check the path and make sure it exists in the project.";
+
+          return success(summary, {
+            projectId: resolvedProjectId,
+            available: true,
+            folder,
+            snapshot: {
+              id: snapshot.id,
+              importId: snapshot.importId,
+              createdAt: snapshot.createdAt,
+              updatedAt: snapshot.updatedAt,
+            },
+            counts: { files: 0, dirs: 0 },
+            tree: null,
+          });
         }
         root = subtree;
       }
@@ -135,7 +164,19 @@ export function registerGetProjectMapTool(
 
       renderTree(root, "", lines);
 
-      return text(lines.join("\n"));
+      return success(lines.join("\n"), {
+        projectId: resolvedProjectId,
+        available: true,
+        folder: folder ?? null,
+        snapshot: {
+          id: snapshot.id,
+          importId: snapshot.importId,
+          createdAt: snapshot.createdAt,
+          updatedAt: snapshot.updatedAt,
+        },
+        counts: { files, dirs },
+        tree: root,
+      });
     }),
   );
 }

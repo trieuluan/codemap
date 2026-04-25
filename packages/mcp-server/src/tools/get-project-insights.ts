@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectInsightsSummary } from "../lib/api-types.js";
 
@@ -54,10 +54,16 @@ export function registerGetProjectInsightsTool(
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          projectId: null,
+          available: false,
+          sections: sections ?? null,
+          insights: null,
+        });
       }
 
       let insights: ProjectInsightsSummary;
@@ -70,10 +76,16 @@ export function registerGetProjectInsightsTool(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes("404")) {
-          return text(
+          const summary =
             `Project not found or not yet imported: ${resolvedProjectId}\n` +
-              "Run trigger_reimport to index the project first.",
-          );
+            "Run trigger_reimport to index the project first.";
+
+          return success(summary, {
+            projectId: resolvedProjectId,
+            available: false,
+            sections: sections ?? null,
+            insights: null,
+          });
         }
         throw error;
       }
@@ -195,7 +207,12 @@ export function registerGetProjectInsightsTool(
         lines.push("");
       }
 
-      return text(lines.join("\n"));
+      return success(lines.join("\n"), {
+        projectId: resolvedProjectId,
+        available: true,
+        sections: sections ?? null,
+        insights,
+      });
     }),
   );
 }

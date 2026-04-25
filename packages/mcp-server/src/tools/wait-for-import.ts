@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectImportDetail } from "../lib/api-types.js";
 
@@ -51,6 +51,23 @@ function formatResult(imp: ProjectImportDetail, timedOut: boolean): string {
     .join("\n");
 }
 
+function buildResultData(
+  projectId: string,
+  imp: ProjectImportDetail | null,
+  timedOut: boolean,
+) {
+  return {
+    projectId,
+    import: imp,
+    status: imp?.status ?? "missing",
+    parseStatus: imp?.parseStatus ?? null,
+    timedOut,
+    completed: imp ? isDone(imp.status) : false,
+    commit: imp?.commitSha ?? null,
+    completedAt: imp?.completedAt ?? null,
+  };
+}
+
 export function registerWaitForImportTool(
   server: McpServer,
   config: McpServerConfig,
@@ -86,10 +103,20 @@ export function registerWaitForImportTool(
       const resolvedProjectId = project_id ?? await readWorkspaceProjectId();
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-          "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          projectId: null,
+          import: null,
+          status: "missing",
+          parseStatus: null,
+          timedOut: false,
+          completed: false,
+          commit: null,
+          completedAt: null,
+        });
       }
 
       const maxWaitMs = timeout_ms ?? DEFAULT_TIMEOUT_MS;
@@ -104,16 +131,25 @@ export function registerWaitForImportTool(
         const latest = imports[0];
 
         if (!latest) {
-          return text("No imports found for this project.");
+          return success(
+            "No imports found for this project.",
+            buildResultData(resolvedProjectId, null, false),
+          );
         }
 
         if (isDone(latest.status)) {
-          return text(formatResult(latest, false));
+          return success(
+            formatResult(latest, false),
+            buildResultData(resolvedProjectId, latest, false),
+          );
         }
 
         const elapsed = Date.now() - startedAt;
         if (elapsed + POLL_INTERVAL_MS >= maxWaitMs) {
-          return text(formatResult(latest, true));
+          return success(
+            formatResult(latest, true),
+            buildResultData(resolvedProjectId, latest, true),
+          );
         }
 
         await sleep(POLL_INTERVAL_MS);

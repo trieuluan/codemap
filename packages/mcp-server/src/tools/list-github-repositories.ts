@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import type { GithubRepository } from "../lib/api-types.js";
 
 function formatRepositoryList(repositories: GithubRepository[], heading: string) {
@@ -51,7 +51,15 @@ export function registerListGithubRepositoriesTool(
         },
       );
 
-      return text(formatRepositoryList(repositories, "Accessible GitHub repositories:"));
+      return success(
+        formatRepositoryList(repositories, "Accessible GitHub repositories:"),
+        {
+          items: repositories,
+          total: repositories.length,
+          limit: limit ?? null,
+          query: null,
+        },
+      );
     }),
   );
 }
@@ -83,7 +91,18 @@ export function registerSearchGithubRepositoriesTool(
         },
       );
 
-      return text(formatRepositoryList(repositories, `GitHub repositories matching "${query}":`));
+      return success(
+        formatRepositoryList(
+          repositories,
+          `GitHub repositories matching "${query}":`,
+        ),
+        {
+          items: repositories,
+          total: repositories.length,
+          limit: limit ?? null,
+          query,
+        },
+      );
     }),
   );
 }

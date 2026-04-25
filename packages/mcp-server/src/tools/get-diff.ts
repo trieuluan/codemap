@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 
 type DiffFileStatus = "added" | "modified" | "deleted" | "renamed" | "copied";
@@ -88,17 +88,27 @@ export function registerGetDiffTool(server: McpServer, config: McpServerConfig) 
     },
     withToolError(async ({ from, to, include_patch, project_id }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+      const includePatch = Boolean(include_patch);
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          projectId: null,
+          available: false,
+          from,
+          to: to ?? "HEAD",
+          includePatch,
+          totalChanged: 0,
+          files: [],
+        });
       }
 
       const query: Record<string, string> = { from };
       if (to) query.to = to;
-      if (include_patch) query.includePatch = "true";
+      if (includePatch) query.includePatch = "true";
 
       let result: ProjectDiffResponse;
 
@@ -111,19 +121,44 @@ export function registerGetDiffTool(server: McpServer, config: McpServerConfig) 
         const message = error instanceof Error ? error.message : String(error);
 
         if (message.includes("404")) {
-          return text(`Project not found: ${resolvedProjectId}`);
+          return success(`Project not found: ${resolvedProjectId}`, {
+            projectId: resolvedProjectId,
+            available: false,
+            from,
+            to: to ?? "HEAD",
+            includePatch,
+            totalChanged: 0,
+            files: [],
+          });
         }
         if (message.includes("422")) {
-          return text(
+          const summary =
             "Retained workspace is not available for this project. " +
-              "Re-import the project to restore git access.",
-          );
+            "Re-import the project to restore git access.";
+
+          return success(summary, {
+            projectId: resolvedProjectId,
+            available: false,
+            from,
+            to: to ?? "HEAD",
+            includePatch,
+            totalChanged: 0,
+            files: [],
+          });
         }
 
         throw error;
       }
 
-      return text(buildOutput(result, Boolean(include_patch)));
+      return success(buildOutput(result, includePatch), {
+        projectId: resolvedProjectId,
+        available: true,
+        from: result.from,
+        to: result.to,
+        includePatch,
+        totalChanged: result.files.length,
+        files: result.files,
+      });
     }),
   );
 }
