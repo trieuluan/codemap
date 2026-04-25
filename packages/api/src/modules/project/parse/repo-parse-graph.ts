@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import {
   projectImport,
   repoExport,
@@ -67,7 +67,7 @@ function splitQueryTokens(query: string): string[] {
   return Array.from(tokens);
 }
 
-function getSearchRank(value: string, query: string) {
+function getSearchRank(value: string, query: string, trgmScore = 0) {
   const normalizedValue = value.trim().toLowerCase();
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -89,6 +89,11 @@ function getSearchRank(value: string, query: string) {
 
   if (isSubsequenceMatch(normalizedValue, normalizedQuery)) {
     return 3;
+  }
+
+  if (trgmScore > 0) {
+    // rank 4.x — lower trgmScore → worse match (score is 0–1, higher is better)
+    return 4 + (1 - trgmScore);
   }
 
   return Number.MAX_SAFE_INTEGER;
@@ -2051,41 +2056,83 @@ export function createRepoParseGraphService(database: Database) {
       const symbolTokenFilter = or(...tokenPatterns.map((p) => ilike(repoSymbol.displayName, p)))!;
       const exportTokenFilter = or(...tokenPatterns.map((p) => ilike(repoExport.exportName, p)))!;
 
+      const trgmThreshold = 0.1;
+      const fileTrgmFilter = gt(
+        sql<number>`word_similarity(${normalizedQuery}, ${repoFile.path})`,
+        trgmThreshold,
+      );
+      const symbolTrgmFilter = gt(
+        sql<number>`word_similarity(${normalizedQuery}, ${repoSymbol.displayName})`,
+        trgmThreshold,
+      );
+      const exportTrgmFilter = gt(
+        sql<number>`word_similarity(${normalizedQuery}, ${repoExport.exportName})`,
+        trgmThreshold,
+      );
+
       const [fileMatches, symbolMatches, exportMatches] = await Promise.all([
-        database.query.repoFile.findMany({
-          where: and(
-            eq(repoFile.projectImportId, projectImportId),
-            fileTokenFilter,
-          ),
-          orderBy: [asc(repoFile.path)],
-          limit: 50,
-        }),
-        database.query.repoSymbol.findMany({
-          where: and(
-            eq(repoSymbol.projectImportId, projectImportId),
-            symbolTokenFilter,
-            symbolKinds && symbolKinds.length > 0
-              ? inArray(repoSymbol.kind, symbolKinds)
-              : undefined,
-          ),
-          with: {
-            file: true,
-            parentSymbol: true,
-          },
-          orderBy: [asc(repoSymbol.displayName), asc(repoSymbol.fileId)],
-          limit: 50,
-        }),
-        database.query.repoExport.findMany({
-          where: and(
-            eq(repoExport.projectImportId, projectImportId),
-            exportTokenFilter,
-          ),
-          with: {
-            file: true,
-          },
-          orderBy: [asc(repoExport.exportName), asc(repoExport.fileId)],
-          limit: 50,
-        }),
+        database
+          .select({
+            id: repoFile.id,
+            projectImportId: repoFile.projectImportId,
+            path: repoFile.path,
+            language: repoFile.language,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoFile.path})`,
+          })
+          .from(repoFile)
+          .where(
+            and(
+              eq(repoFile.projectImportId, projectImportId),
+              or(fileTokenFilter, fileTrgmFilter),
+            ),
+          )
+          .orderBy(asc(repoFile.path))
+          .limit(50),
+        database
+          .select({
+            id: repoSymbol.id,
+            projectImportId: repoSymbol.projectImportId,
+            fileId: repoSymbol.fileId,
+            displayName: repoSymbol.displayName,
+            kind: repoSymbol.kind,
+            signature: repoSymbol.signature,
+            parentSymbolId: repoSymbol.parentSymbolId,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoSymbol.displayName})`,
+          })
+          .from(repoSymbol)
+          .where(
+            and(
+              eq(repoSymbol.projectImportId, projectImportId),
+              or(symbolTokenFilter, symbolTrgmFilter),
+              symbolKinds && symbolKinds.length > 0
+                ? inArray(repoSymbol.kind, symbolKinds)
+                : undefined,
+            ),
+          )
+          .orderBy(asc(repoSymbol.displayName))
+          .limit(50),
+        database
+          .select({
+            id: repoExport.id,
+            projectImportId: repoExport.projectImportId,
+            fileId: repoExport.fileId,
+            symbolId: repoExport.symbolId,
+            exportName: repoExport.exportName,
+            startLine: repoExport.startLine,
+            startCol: repoExport.startCol,
+            endLine: repoExport.endLine,
+            endCol: repoExport.endCol,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoExport.exportName})`,
+          })
+          .from(repoExport)
+          .where(
+            and(
+              eq(repoExport.projectImportId, projectImportId),
+              or(exportTokenFilter, exportTrgmFilter),
+            ),
+          )
+          .orderBy(asc(repoExport.exportName))
+          .limit(50),
       ]);
 
       const symbolIds = symbolMatches.map((symbol) => symbol.id);
@@ -2094,9 +2141,20 @@ export function createRepoParseGraphService(database: Database) {
         .filter((symbolId): symbolId is string => Boolean(symbolId));
       const allSymbolIds = [...new Set([...symbolIds, ...exportSymbolIds])];
 
-      const occurrences =
+      const allFileIds = [
+        ...new Set([
+          ...symbolMatches.map((s) => s.fileId).filter(Boolean),
+          ...exportMatches.map((e) => e.fileId),
+        ]),
+      ] as string[];
+
+      const allParentSymbolIds = symbolMatches
+        .map((s) => s.parentSymbolId)
+        .filter((id): id is string => Boolean(id));
+
+      const [occurrences, fileRecords, parentSymbolRecords] = await Promise.all([
         allSymbolIds.length > 0
-          ? await database.query.repoSymbolOccurrence.findMany({
+          ? database.query.repoSymbolOccurrence.findMany({
               where: and(
                 eq(repoSymbolOccurrence.projectImportId, projectImportId),
                 inArray(repoSymbolOccurrence.symbolId, allSymbolIds),
@@ -2106,7 +2164,23 @@ export function createRepoParseGraphService(database: Database) {
                 asc(repoSymbolOccurrence.startCol),
               ],
             })
-          : [];
+          : Promise.resolve([]),
+        allFileIds.length > 0
+          ? database.query.repoFile.findMany({
+              where: inArray(repoFile.id, allFileIds),
+              columns: { id: true, path: true },
+            })
+          : Promise.resolve([]),
+        allParentSymbolIds.length > 0
+          ? database.query.repoSymbol.findMany({
+              where: inArray(repoSymbol.id, allParentSymbolIds),
+              columns: { id: true, displayName: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const fileById = new Map(fileRecords.map((f) => [f.id, f]));
+      const parentSymbolById = new Map(parentSymbolRecords.map((s) => [s.id, s]));
 
       const occurrencePriority = new Map<RepoSymbolOccurrenceRole, number>([
         ["definition", 0],
@@ -2146,7 +2220,7 @@ export function createRepoParseGraphService(database: Database) {
           kind: "file" as const,
           path: file.path,
           language: file.language,
-          rank: getSearchRank(file.path, normalizedQuery),
+          rank: getSearchRank(file.path, normalizedQuery, file.trgmScore),
         }))
         .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER)
         .sort((left, right) => {
@@ -2160,9 +2234,12 @@ export function createRepoParseGraphService(database: Database) {
         .map(({ rank: _rank, ...item }) => item);
 
       const symbols = symbolMatches
-        .filter((symbol) => symbol.file?.path)
         .map((symbol) => {
+          const filePath = symbol.fileId ? fileById.get(symbol.fileId)?.path ?? "" : "";
           const occurrence = bestOccurrenceBySymbolId.get(symbol.id);
+          const parentSymbolName = symbol.parentSymbolId
+            ? parentSymbolById.get(symbol.parentSymbolId)?.displayName ?? null
+            : null;
 
           return {
             kind: "symbol" as const,
@@ -2170,13 +2247,13 @@ export function createRepoParseGraphService(database: Database) {
             displayName: symbol.displayName,
             symbolKind: symbol.kind,
             signature: symbol.signature ?? null,
-            filePath: symbol.file?.path ?? "",
-            parentSymbolName: symbol.parentSymbol?.displayName ?? null,
+            filePath,
+            parentSymbolName,
             startLine: occurrence?.startLine ?? null,
             startCol: occurrence?.startCol ?? null,
             endLine: occurrence?.endLine ?? null,
             endCol: occurrence?.endCol ?? null,
-            rank: getSearchRank(symbol.displayName, normalizedQuery),
+            rank: getSearchRank(symbol.displayName, normalizedQuery, symbol.trgmScore),
           };
         })
         .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER && item.filePath)
@@ -2200,6 +2277,7 @@ export function createRepoParseGraphService(database: Database) {
 
       const exports = exportMatches
         .map((item) => {
+          const filePath = fileById.get(item.fileId)?.path ?? "";
           const occurrence = item.symbolId
             ? bestOccurrenceBySymbolId.get(item.symbolId)
             : null;
@@ -2208,7 +2286,7 @@ export function createRepoParseGraphService(database: Database) {
             kind: "export" as const,
             id: item.id,
             exportName: item.exportName,
-            filePath: item.file.path,
+            filePath,
             symbolId: item.symbolId,
             symbolStartLine: occurrence?.startLine ?? null,
             symbolStartCol: occurrence?.startCol ?? null,
@@ -2218,7 +2296,7 @@ export function createRepoParseGraphService(database: Database) {
             startCol: item.startCol,
             endLine: item.endLine,
             endCol: item.endCol,
-            rank: getSearchRank(item.exportName, normalizedQuery),
+            rank: getSearchRank(item.exportName, normalizedQuery, item.trgmScore),
           };
         })
         .filter((item) => item.rank !== Number.MAX_SAFE_INTEGER)
