@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 
 export function registerDisconnectGithubTool(
   server: McpServer,
@@ -25,8 +25,12 @@ export function registerDisconnectGithubTool(
         authRequired: true,
       });
 
-      return text(
+      return success(
         "GitHub account disconnected successfully. CodeMap no longer has access to the user's GitHub repositories.",
+        {
+          disconnected: true,
+          provider: "github",
+        },
       );
     }),
   );

@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
 import type { FileContent, BlastRadius, FileReparseResult } from "../lib/api-types.js";
 
@@ -330,10 +330,24 @@ export function registerGetFileTool(
           project_id ?? (await readWorkspaceProjectId());
 
         if (!resolvedProjectId) {
-          return text(
+          const summary =
             "No project ID provided and no linked project found for this workspace.\n" +
-              "Run create_project first to link this workspace to a CodeMap project.",
-          );
+            "Run create_project first to link this workspace to a CodeMap project.";
+
+          return success(summary, {
+            projectId: null,
+            path: filePath,
+            found: false,
+            sections: include ?? ["content", "outline"],
+            range: {
+              startLine: start_line ?? null,
+              endLine: end_line ?? null,
+            },
+            content: null,
+            outline: null,
+            blastRadius: null,
+            errors: ["missing_project_id"],
+          });
         }
 
         // ── Lazy reparse: if local file differs from stored hash, trigger reparse ──
@@ -400,25 +414,42 @@ export function registerGetFileTool(
                 : null;
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes("404")) {
-            return text(
+            const summary =
               `File not found: ${filePath}\n` +
-                "Check that the path is correct and relative to the repository root.",
-            );
+              "Check that the path is correct and relative to the repository root.";
+
+            return success(summary, {
+              projectId: resolvedProjectId,
+              path: filePath,
+              found: false,
+              sections,
+              range: {
+                startLine: start_line ?? null,
+                endLine: end_line ?? null,
+              },
+              content: null,
+              outline: null,
+              blastRadius: null,
+              errors: ["file_not_found"],
+            });
           }
           throw err;
         }
 
         const output: string[] = [`# ${filePath}`, ""];
+        const content =
+          contentResult.status === "fulfilled" ? contentResult.value : null;
+        const parse =
+          parseResult.status === "fulfilled" ? parseResult.value : null;
+        const errors: string[] = [];
 
         // Content
         if (wantContent) {
           output.push("## Content");
-          if (
-            contentResult.status === "fulfilled" &&
-            contentResult.value
-          ) {
-            output.push(buildContentSection(contentResult.value as FileContent, start_line, end_line));
+          if (content) {
+            output.push(buildContentSection(content, start_line, end_line));
           } else if (contentResult.status === "rejected") {
+            errors.push(`content: ${(contentResult.reason as Error).message}`);
             output.push(
               `Failed to load: ${(contentResult.reason as Error).message}`,
             );
@@ -429,14 +460,10 @@ export function registerGetFileTool(
         // Outline (imports + importedBy + exports + symbols)
         if (sections.includes("outline")) {
           output.push("## Outline");
-          if (
-            parseResult.status === "fulfilled" &&
-            parseResult.value
-          ) {
-            output.push(
-              buildOutlineSection(parseResult.value as FileParseResponse),
-            );
+          if (parse) {
+            output.push(buildOutlineSection(parse));
           } else if (parseResult.status === "rejected") {
+            errors.push(`outline: ${(parseResult.reason as Error).message}`);
             output.push(
               `Failed to load: ${(parseResult.reason as Error).message}`,
             );
@@ -447,15 +474,15 @@ export function registerGetFileTool(
         // Blast radius (from the same parse response)
         if (wantBlastRadius) {
           output.push("## Blast Radius");
-          if (
-            parseResult.status === "fulfilled" &&
-            parseResult.value
-          ) {
-            const br = (parseResult.value as FileParseResponse).blastRadius;
+          if (parse) {
+            const br = parse.blastRadius;
             output.push(
               buildBlastRadiusSection(br, blast_radius_max_files),
             );
           } else if (parseResult.status === "rejected") {
+            errors.push(
+              `blast_radius: ${(parseResult.reason as Error).message}`,
+            );
             output.push(
               `Failed to load: ${(parseResult.reason as Error).message}`,
             );
@@ -463,7 +490,43 @@ export function registerGetFileTool(
           output.push("");
         }
 
-        return text(output.join("\n").trimEnd());
+        return success(output.join("\n").trimEnd(), {
+          projectId: resolvedProjectId,
+          path: filePath,
+          found: Boolean(content || parse),
+          sections,
+          range: {
+            startLine: start_line ?? null,
+            endLine: end_line ?? null,
+          },
+          content: content
+            ? {
+                path: content.path,
+                name: content.name,
+                type: content.type,
+                extension: content.extension,
+                language: content.language,
+                kind: content.kind,
+                mimeType: content.mimeType,
+                status: content.status,
+                sizeBytes: content.sizeBytes,
+                reason: content.reason,
+                content: content.content,
+              }
+            : null,
+          outline: parse
+            ? {
+                file: parse.file,
+                imports: parse.imports,
+                importedBy: parse.importedBy,
+                exports: parse.exports,
+                symbols: parse.symbols,
+                cycles: parse.cycles,
+              }
+            : null,
+          blastRadius: wantBlastRadius && parse ? parse.blastRadius : null,
+          errors,
+        });
       },
     ),
   );

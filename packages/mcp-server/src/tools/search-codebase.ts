@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
   CodebaseSearchResponse,
@@ -142,10 +142,21 @@ export function registerSearchCodebaseTool(
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
-        return text(
+        const summary =
           "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-        );
+          "Run create_project first to link this workspace to a CodeMap project.";
+
+        return success(summary, {
+          projectId: null,
+          query,
+          kinds: kinds ?? ["files", "symbols", "exports"],
+          symbolKinds: symbol_kinds ?? null,
+          files: [],
+          symbols: [],
+          exports: [],
+          total: 0,
+          found: false,
+        });
       }
 
       const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
@@ -169,16 +180,42 @@ export function registerSearchCodebaseTool(
         const message = error instanceof Error ? error.message : String(error);
 
         if (message.includes("404")) {
-          return text(
+          const summary =
             `Project not found: ${resolvedProjectId}\n` +
-              "Check that the project ID is correct and the project has been imported.",
-          );
+            "Check that the project ID is correct and the project has been imported.";
+
+          return success(summary, {
+            projectId: resolvedProjectId,
+            query,
+            kinds: Array.from(activeKinds),
+            symbolKinds: symbol_kinds ?? null,
+            files: [],
+            symbols: [],
+            exports: [],
+            total: 0,
+            found: false,
+          });
         }
 
         throw error;
       }
 
-      return text(buildOutput(query, results, activeKinds));
+      const files = activeKinds.has("files") ? results.files : [];
+      const symbols = activeKinds.has("symbols") ? results.symbols : [];
+      const exports = activeKinds.has("exports") ? results.exports : [];
+      const total = files.length + symbols.length + exports.length;
+
+      return success(buildOutput(query, results, activeKinds), {
+        projectId: resolvedProjectId,
+        query,
+        kinds: Array.from(activeKinds),
+        symbolKinds: symbol_kinds ?? null,
+        files,
+        symbols,
+        exports,
+        total,
+        found: total > 0,
+      });
     }),
   );
 }

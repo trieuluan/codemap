@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isSupportedUrl, openUrlInBrowser } from "../lib/open-url.js";
+import { errorContent, success } from "../lib/tool-response.js";
 
 export function registerOpenUrlTool(server: McpServer) {
   server.registerTool(
@@ -21,25 +22,15 @@ export function registerOpenUrlTool(server: McpServer) {
       try {
         await openUrlInBrowser(url);
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: Failed to open URL. ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(
+          `Failed to open URL. ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Opened URL in the default browser: ${url}`,
-          },
-        ],
-      };
+      return success(`Opened URL in the default browser: ${url}`, {
+        opened: true,
+        url,
+      });
     },
   );
 }
