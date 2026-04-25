@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import {
-  projectImport,
   repoExport,
   repoExternalSymbol,
   repoFile,
@@ -26,19 +25,6 @@ type Database = typeof import("../../../../db/index.ts").db;
 
 export function createWriteService(database: Database) {
   return {
-    async updateImportParseMetadata(
-      projectImportId: string,
-      values: Partial<typeof projectImport.$inferInsert>,
-    ) {
-      const [updatedImport] = await database
-        .update(projectImport)
-        .set(values)
-        .where(eq(projectImport.id, projectImportId))
-        .returning();
-
-      return updatedImport ?? null;
-    },
-
     async saveFiles(files: RepoFileInsert[]) {
       if (files.length === 0) {
         return [] as ProjectFileRecord[];
