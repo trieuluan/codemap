@@ -96,22 +96,6 @@ export function createProjectService(database: Database) {
     });
   }
 
-  async function getOwnedProjectByWorkspaceSource(
-    ownerUserId: string,
-    localWorkspacePath: string,
-  ) {
-    return database.query.project.findFirst({
-      where: and(
-        eq(project.ownerUserId, ownerUserId),
-        eq(project.provider, "local_workspace"),
-        eq(
-          project.localWorkspacePath,
-          normalizeLocalWorkspacePath(localWorkspacePath),
-        ),
-      ),
-    });
-  }
-
   return {
     async createProject(ownerUserId: string, input: CreateProjectBody) {
       const baseSlug = slugifyProjectName(input.slug ?? input.name);
@@ -812,6 +796,20 @@ export function createProjectService(database: Database) {
           options?.excludeImportId
             ? ne(projectImport.id, options.excludeImportId)
             : undefined,
+        ),
+        orderBy: [desc(projectImport.completedAt), desc(projectImport.createdAt)],
+      });
+    },
+
+    async listSupersededImportsWithSource(
+      projectId: string,
+      currentImportId: string,
+    ) {
+      return database.query.projectImport.findMany({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          ne(projectImport.id, currentImportId),
+          eq(projectImport.sourceAvailable, true),
         ),
         orderBy: [desc(projectImport.completedAt), desc(projectImport.createdAt)],
       });

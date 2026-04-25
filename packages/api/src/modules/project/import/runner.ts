@@ -212,11 +212,17 @@ export async function runProjectImport(
         });
       retainedWorkspacePath = retainedWorkspace.workspacePath;
 
-      // Fetch full history after promote so git diff across commits works
+      // Fetch full history after promote so git diff across commits works.
+      // Keep this non-blocking so import latency stays bounded.
       simpleGit(retainedWorkspace.workspacePath)
         .env("GIT_TERMINAL_PROMPT", "0")
         .fetch(["--unshallow"])
-        .catch(() => {});
+        .catch((error) => {
+          console.warn(
+            "Unable to fetch full history for retained project workspace",
+            error,
+          );
+        });
 
       await projectService.saveImportSourceMetadata({
         projectImportId: importRecord.id,
@@ -228,9 +234,6 @@ export async function runProjectImport(
       sourceMetadataSaved = true;
     }
 
-    await projectService.markImportAsCompleted(importRecord.id);
-    importPhaseCompleted = true;
-
     if (!context?.redisConnection) {
       throw new Error("Redis connection is required to enqueue parse jobs");
     }
@@ -239,40 +242,10 @@ export async function runProjectImport(
     await enqueueProjectParseJob(context.redisConnection, {
       importId: importRecord.id,
     });
+
+    await projectService.markImportAsCompleted(importRecord.id);
+    importPhaseCompleted = true;
     await reportProjectImportProgress(context, 100, "completed");
-
-    const previousSuccessfulImport =
-      await projectService.getLatestSuccessfulImportWithSource(
-        projectRecord.id,
-        {
-          excludeImportId: importRecord.id,
-        },
-      );
-
-    if (previousSuccessfulImport?.sourceWorkspacePath) {
-      try {
-        await repositoryWorkspaceService.removeWorkspaceByPath(
-          previousSuccessfulImport.sourceWorkspacePath,
-        );
-        await projectService.clearImportSourceMetadata(
-          previousSuccessfulImport.id,
-        );
-      } catch (cleanupError) {
-        console.error(
-          "Unable to clean up superseded retained project workspace",
-          cleanupError,
-        );
-      }
-    }
-
-    try {
-      await projectService.deleteSupersededImports(
-        projectRecord.id,
-        importRecord.id,
-      );
-    } catch (cleanupError) {
-      console.error("Unable to delete superseded project imports", cleanupError);
-    }
   } catch (error) {
     if (!importPhaseCompleted && retainedWorkspacePath && !isPreMaterialized) {
       await repositoryWorkspaceService.removeWorkspaceByPath(

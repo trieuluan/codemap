@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadEnv } from "../config/load-env";
 import type { ProjectImportJobPayload } from "../lib/project-import-queue.js";
+import { readPositiveIntegerEnv } from "./worker-env.js";
 
 loadEnv();
 
@@ -24,6 +25,10 @@ export async function startProjectImportWorker() {
       enableReadyCheck: false,
     },
   );
+  const concurrency = readPositiveIntegerEnv(
+    "PROJECT_IMPORT_WORKER_CONCURRENCY",
+    2,
+  );
 
   const worker = new Worker<ProjectImportJobPayload>(
     getProjectImportQueueName(),
@@ -35,7 +40,7 @@ export async function startProjectImportWorker() {
     },
     {
       connection: workerConnection,
-      concurrency: 2,
+      concurrency,
     },
   );
 
@@ -56,7 +61,7 @@ export async function startProjectImportWorker() {
   }
 
   console.log(
-    `Project import worker started on queue "${getProjectImportQueueName()}"`,
+    `Project import worker started on queue "${getProjectImportQueueName()}" with concurrency ${concurrency}`,
   );
 
   return {

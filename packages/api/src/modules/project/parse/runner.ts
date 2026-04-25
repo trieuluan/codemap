@@ -13,6 +13,7 @@ import type {
   RepoSymbolOccurrenceInsert,
   RepoSymbolRelationshipInsert,
 } from "../../../db/schema";
+import { createRepositoryWorkspaceService } from "../import/repository-workspace";
 import { normalizeRepositoryFilePath } from "../map/file-preview";
 import { createProjectService } from "../service";
 import { createRepoParseGraphService } from "./repo-parse-graph";
@@ -160,6 +161,7 @@ interface ParsedWorkspaceSemantics {
 
 const projectService = createProjectService(db);
 const repoParseGraphService = createRepoParseGraphService(db);
+const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
 function toParseFailureMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) {
@@ -182,6 +184,40 @@ async function reportProjectParseProgress(
     progress,
     stage,
   });
+}
+
+async function cleanupSupersededProjectImports(
+  projectId: string,
+  currentImportId: string,
+) {
+  const supersededImports = await projectService.listSupersededImportsWithSource(
+    projectId,
+    currentImportId,
+  );
+
+  for (const supersededImport of supersededImports) {
+    if (!supersededImport.sourceWorkspacePath) {
+      continue;
+    }
+
+    try {
+      await repositoryWorkspaceService.removeWorkspaceByPath(
+        supersededImport.sourceWorkspacePath,
+      );
+      await projectService.clearImportSourceMetadata(supersededImport.id);
+    } catch (cleanupError) {
+      console.error(
+        "Unable to clean up superseded retained project workspace",
+        cleanupError,
+      );
+    }
+  }
+
+  try {
+    await projectService.deleteSupersededImports(projectId, currentImportId);
+  } catch (cleanupError) {
+    console.error("Unable to delete superseded project imports", cleanupError);
+  }
 }
 
 function buildStableSymbolKey(
@@ -1555,7 +1591,7 @@ export async function runProjectParse(
     throw new Error(`Project import not found: ${importId}`);
   }
 
-  const { importRecord } = importDetails;
+  const { importRecord, projectRecord } = importDetails;
 
   if (!importRecord.sourceAvailable || !importRecord.sourceWorkspacePath) {
     const errorMessage =
@@ -1882,6 +1918,9 @@ export async function runProjectParse(
         parseStatsJson,
       });
     }
+
+    await reportProjectParseProgress(context, 96, "cleaning-superseded-source");
+    await cleanupSupersededProjectImports(projectRecord.id, importId);
 
     await reportProjectParseProgress(context, 100, "completed");
   } catch (error) {

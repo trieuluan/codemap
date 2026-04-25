@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadEnv } from "../config/load-env";
 import type { ProjectParseJobPayload } from "../lib/project-parse-queue.js";
+import { readPositiveIntegerEnv } from "./worker-env.js";
 
 loadEnv();
 
@@ -24,6 +25,10 @@ export async function startProjectParseWorker() {
       enableReadyCheck: false,
     },
   );
+  const concurrency = readPositiveIntegerEnv(
+    "PROJECT_PARSE_WORKER_CONCURRENCY",
+    2,
+  );
 
   const worker = new Worker<ProjectParseJobPayload>(
     getProjectParseQueueName(),
@@ -32,7 +37,7 @@ export async function startProjectParseWorker() {
     },
     {
       connection: workerConnection,
-      concurrency: 2,
+      concurrency,
     },
   );
 
@@ -53,7 +58,7 @@ export async function startProjectParseWorker() {
   }
 
   console.log(
-    `Project parse worker started on queue "${getProjectParseQueueName()}"`,
+    `Project parse worker started on queue "${getProjectParseQueueName()}" with concurrency ${concurrency}`,
   );
 
   return {
