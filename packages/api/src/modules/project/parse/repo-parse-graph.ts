@@ -2044,8 +2044,8 @@ export function createRepoParseGraphService(database: Database) {
         };
       }
 
-      const queryTokens = splitQueryTokens(normalizedQuery);
-      const tokenPatterns = queryTokens.map((t) => `%${t}%`);
+      const queryTokens = splitQueryTokens(query.trim());
+      const tokenPatterns = queryTokens.map((t) => `%${t.toLowerCase()}%`);
 
       const fileTokenFilter = or(...tokenPatterns.map((p) => ilike(repoFile.path, p)))!;
       const symbolTokenFilter = or(...tokenPatterns.map((p) => ilike(repoSymbol.displayName, p)))!;
