@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { clearGlobalAuthConfig, type McpServerConfig } from "../config.js";
+import { errorContent, success } from "../lib/tool-response.js";
 
 export function registerLogoutTool(
   server: McpServer,
@@ -19,33 +20,15 @@ export function registerLogoutTool(
         config.apiToken = null;
         config.user = null;
         config.auth = null;
+        const data = {
+          authenticated: false,
+          apiUrl: config.apiUrl,
+          message: "Cleared stored CodeMap MCP credentials.",
+        };
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  authenticated: false,
-                  apiUrl: config.apiUrl,
-                  message: "Cleared stored CodeMap MCP credentials.",
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
+        return success(JSON.stringify(data, null, 2), data);
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : String(error),
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(error);
       }
     },
   );

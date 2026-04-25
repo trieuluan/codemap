@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import type { ProjectSourceImportResult } from "../lib/api-types.js";
 import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
 
@@ -54,22 +54,33 @@ export function registerCreateProjectFromGithubTool(
 
       await saveWorkspaceProjectId(process.cwd(), result.project.id);
 
-      return text(
-        [
-          "GitHub source project import started successfully.",
-          `Project: ${result.project.name} (${result.project.id})`,
-          `Provider: ${result.project.provider ?? "unknown"}`,
-          result.project.repositoryUrl
-            ? `Repository: ${result.project.repositoryUrl}`
-            : null,
-          `Import: ${result.import.id}`,
-          `Branch: ${result.import.branch ?? default_branch ?? "default"}`,
-          `Import status: ${result.import.status}`,
-          `Parse status: ${result.import.parseStatus}`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+      const summary = [
+        "GitHub source project import started successfully.",
+        `Project: ${result.project.name} (${result.project.id})`,
+        `Provider: ${result.project.provider ?? "unknown"}`,
+        result.project.repositoryUrl
+          ? `Repository: ${result.project.repositoryUrl}`
+          : null,
+        `Import: ${result.import.id}`,
+        `Branch: ${result.import.branch ?? default_branch ?? "default"}`,
+        `Import status: ${result.import.status}`,
+        `Parse status: ${result.import.parseStatus}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return success(summary, {
+        project: result.project,
+        import: result.import,
+        source: {
+          provider: "github",
+          repositoryUrl: repository_url,
+          externalRepoId: external_repo_id ?? null,
+          defaultBranch: default_branch ?? null,
+          branch: branch ?? null,
+        },
+        workspaceProjectIdSaved: true,
+      });
     }),
   );
 }

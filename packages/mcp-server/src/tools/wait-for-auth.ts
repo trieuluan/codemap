@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { pollMcpAuthUntilDone } from "../lib/mcp-auth.js";
+import { errorContent, success } from "../lib/tool-response.js";
 
 const LOCAL_WAIT_TIMEOUT_MS = 45_000;
 
@@ -33,38 +34,20 @@ export function registerWaitForAuthTool(
               : result.status === "expired"
                 ? "Authorization session expired before login completed."
                 : "Authorization request was denied.";
+        const data = {
+          authenticated: result.authenticated,
+          status: result.status,
+          apiUrl: result.apiUrl,
+          user: result.user,
+          expiresAt: result.expiresAt,
+          timedOut: result.timedOut ?? false,
+          sessionId,
+          message,
+        };
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  authenticated: result.authenticated,
-                  status: result.status,
-                  apiUrl: result.apiUrl,
-                  user: result.user,
-                  expiresAt: result.expiresAt,
-                  timedOut: result.timedOut ?? false,
-                  sessionId,
-                  message,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
+        return success(JSON.stringify(data, null, 2), data);
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : String(error),
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(error);
       }
     },
   );

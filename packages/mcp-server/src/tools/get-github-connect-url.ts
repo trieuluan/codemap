@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, errorContent, withToolError } from "../lib/tool-response.js";
+import { errorContent, success, withToolError } from "../lib/tool-response.js";
 import { openUrlInBrowser } from "../lib/open-url.js";
 
 export function registerGetGithubConnectUrlTool(
@@ -32,17 +32,21 @@ export function registerGetGithubConnectUrlTool(
 
       await openUrlInBrowser(data.url);
 
-      return text(
-        [
-          "GitHub authorization page has been opened in the browser.",
-          "",
-          "If the browser did not open automatically, the user can navigate to this URL manually:",
-          "",
-          data.url,
-          "",
-          "Once the user completes the authorization, call check_github_connection again to confirm the connection was successful.",
-        ].join("\n"),
-      );
+      const summary = [
+        "GitHub authorization page has been opened in the browser.",
+        "",
+        "If the browser did not open automatically, the user can navigate to this URL manually:",
+        "",
+        data.url,
+        "",
+        "Once the user completes the authorization, call check_github_connection again to confirm the connection was successful.",
+      ].join("\n");
+
+      return success(summary, {
+        url: data.url,
+        openedBrowser: true,
+        provider: "github",
+      });
     }),
   );
 }

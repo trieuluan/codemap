@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { text, withToolError } from "../lib/tool-response.js";
+import { success, withToolError } from "../lib/tool-response.js";
 import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 import { zipWorkspaceFolder } from "../lib/workspace-zip.js";
 import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
@@ -48,19 +48,29 @@ export function registerCreateProjectTool(
         });
 
         if (!githubStatus.connected) {
-          return text(
-            [
-              "GitHub is not connected to this CodeMap account.",
-              "",
-              "For private repositories, please connect GitHub first:",
-              "  1. Call get_github_connect_url — it will open the browser automatically.",
-              "  2. Complete the authorization flow.",
-              "  3. Call create_project again.",
-              "",
-              "If the repository is public, you can also call create_project_from_github directly",
-              `with repository_url: "${workspace.remoteUrl}".`,
-            ].join("\n"),
-          );
+          const summary = [
+            "GitHub is not connected to this CodeMap account.",
+            "",
+            "For private repositories, please connect GitHub first:",
+            "  1. Call get_github_connect_url — it will open the browser automatically.",
+            "  2. Complete the authorization flow.",
+            "  3. Call create_project again.",
+            "",
+            "If the repository is public, you can also call create_project_from_github directly",
+            `with repository_url: "${workspace.remoteUrl}".`,
+          ].join("\n");
+
+          return success(summary, {
+            created: false,
+            actionRequired: "connect_github",
+            source: {
+              provider: "github",
+              repositoryUrl: workspace.remoteUrl,
+              branch: branch ?? workspace.branch,
+            },
+            project: null,
+            import: null,
+          });
         }
 
         const result = await client.request<ProjectSourceImportResult>(
@@ -83,18 +93,30 @@ export function registerCreateProjectTool(
           result.project.id,
         ).catch(() => undefined); // non-fatal
 
-        return text(
-          [
-            "Project import started from GitHub repository.",
-            `Project: ${result.project.name} (${result.project.id})`,
-            `Repository: ${workspace.remoteUrl}`,
-            `Branch: ${result.import.branch ?? workspace.branch}`,
-            `Import status: ${result.import.status}`,
-            `Parse status: ${result.import.parseStatus}`,
-            "",
-            `Project ID saved to workspace — future tools will use it automatically.`,
-          ].join("\n"),
-        );
+        const summary = [
+          "Project import started from GitHub repository.",
+          `Project: ${result.project.name} (${result.project.id})`,
+          `Repository: ${workspace.remoteUrl}`,
+          `Branch: ${result.import.branch ?? workspace.branch}`,
+          `Import status: ${result.import.status}`,
+          `Parse status: ${result.import.parseStatus}`,
+          "",
+          `Project ID saved to workspace — future tools will use it automatically.`,
+        ].join("\n");
+
+        return success(summary, {
+          created: true,
+          actionRequired: null,
+          source: {
+            provider: "github",
+            repositoryUrl: workspace.remoteUrl,
+            branch: result.import.branch ?? workspace.branch,
+            workspaceRootPath: workspace.repoRootPath ?? process.cwd(),
+          },
+          project: result.project,
+          import: result.import,
+          workspaceProjectIdSaved: true,
+        });
       }
 
       // ── Path B: no git remote → upload flow ────────────────────────────────
@@ -102,29 +124,53 @@ export function registerCreateProjectTool(
       const folderName = name ?? path.basename(folderPath) ?? "uploaded-project";
 
       if (!upload_confirmed) {
-        return text(
-          [
-            `This workspace has no git remote (${folderPath}).`,
-            "CodeMap needs to upload the source code to analyze it.",
-            "",
-            "The following will be automatically excluded before upload:",
-            "  • Artifact directories: node_modules, dist, build, .next, .git, coverage, .turbo, etc.",
-            "  • Sensitive files: .env*, *.pem, *.key, *.p12, *.pfx, *.keystore, secrets.*, credentials.*, etc.",
-            "  • Sensitive directories: .aws/, .ssh/, .gnupg/",
-            "  • Files listed in .gitignore",
-            "",
-            "Do you consent to uploading this source code to CodeMap for analysis?",
-            "Call create_project again with upload_confirmed: true to proceed.",
-          ].join("\n"),
-        );
+        const summary = [
+          `This workspace has no git remote (${folderPath}).`,
+          "CodeMap needs to upload the source code to analyze it.",
+          "",
+          "The following will be automatically excluded before upload:",
+          "  • Artifact directories: node_modules, dist, build, .next, .git, coverage, .turbo, etc.",
+          "  • Sensitive files: .env*, *.pem, *.key, *.p12, *.pfx, *.keystore, secrets.*, credentials.*, etc.",
+          "  • Sensitive directories: .aws/, .ssh/, .gnupg/",
+          "  • Files listed in .gitignore",
+          "",
+          "Do you consent to uploading this source code to CodeMap for analysis?",
+          "Call create_project again with upload_confirmed: true to proceed.",
+        ].join("\n");
+
+        return success(summary, {
+          created: false,
+          actionRequired: "confirm_upload",
+          source: {
+            provider: "upload",
+            folderPath,
+            name: folderName,
+          },
+          project: null,
+          import: null,
+          uploadConfirmed: false,
+        });
       }
 
       // User confirmed — zip and upload
       const { buffer, addedCount, skippedSensitive } = await zipWorkspaceFolder(folderPath);
 
       if (addedCount === 0) {
-        return text(
+        return success(
           "No files to upload after applying exclusion filters. Check that the workspace folder contains source files.",
+          {
+            created: false,
+            actionRequired: "add_source_files",
+            source: {
+              provider: "upload",
+              folderPath,
+              name: folderName,
+            },
+            project: null,
+            import: null,
+            filesIncluded: 0,
+            excludedSensitive: skippedSensitive,
+          },
         );
       }
 
@@ -142,23 +188,37 @@ export function registerCreateProjectTool(
 
       await saveWorkspaceProjectId(folderPath, result.project.id).catch(() => undefined); // non-fatal
 
-      return text(
-        [
-          "Source code uploaded and project import started.",
-          `Project: ${result.project.name} (${result.project.id})`,
-          `Files included: ${addedCount}`,
-          skippedSensitive.length > 0
-            ? `Excluded sensitive files/dirs: ${skippedSensitive.join(", ")}`
-            : null,
-          `Branch: ${result.import.branch ?? branch ?? "main"}`,
-          `Import status: ${result.import.status}`,
-          `Parse status: ${result.import.parseStatus}`,
-          "",
-          `Project ID saved to workspace — future tools will use it automatically.`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+      const summary = [
+        "Source code uploaded and project import started.",
+        `Project: ${result.project.name} (${result.project.id})`,
+        `Files included: ${addedCount}`,
+        skippedSensitive.length > 0
+          ? `Excluded sensitive files/dirs: ${skippedSensitive.join(", ")}`
+          : null,
+        `Branch: ${result.import.branch ?? branch ?? "main"}`,
+        `Import status: ${result.import.status}`,
+        `Parse status: ${result.import.parseStatus}`,
+        "",
+        `Project ID saved to workspace — future tools will use it automatically.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return success(summary, {
+        created: true,
+        actionRequired: null,
+        source: {
+          provider: "upload",
+          folderPath,
+          name: folderName,
+          branch: result.import.branch ?? branch ?? "main",
+        },
+        project: result.project,
+        import: result.import,
+        filesIncluded: addedCount,
+        excludedSensitive: skippedSensitive,
+        workspaceProjectIdSaved: true,
+      });
     }),
   );
 }

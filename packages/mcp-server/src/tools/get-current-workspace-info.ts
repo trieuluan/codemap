@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getCurrentWorkspaceInfo } from "../lib/workspace-git.js";
+import { errorContent, success } from "../lib/tool-response.js";
 
 export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
   server.registerTool(
@@ -14,34 +15,23 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
     async () => {
       try {
         const workspace = await getCurrentWorkspaceInfo();
+        const summary = [
+          "Current workspace Git repository detected.",
+          `Repo: ${workspace.repoName}`,
+          `Root: ${workspace.repoRootPath}`,
+          `Branch: ${workspace.branch}`,
+          `Commit: ${workspace.commitSha}`,
+          workspace.remoteUrl ? `Remote: ${workspace.remoteUrl}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: [
-                "Current workspace Git repository detected.",
-                `Repo: ${workspace.repoName}`,
-                `Root: ${workspace.repoRootPath}`,
-                `Branch: ${workspace.branch}`,
-                `Commit: ${workspace.commitSha}`,
-                workspace.remoteUrl ? `Remote: ${workspace.remoteUrl}` : null,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-            },
-          ],
-        };
+        return success(summary, {
+          detected: true,
+          workspace,
+        });
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : String(error),
-            },
-          ],
-          isError: true,
-        };
+        return errorContent(error);
       }
     },
   );
