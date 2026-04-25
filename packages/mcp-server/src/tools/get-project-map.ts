@@ -79,9 +79,17 @@ export function registerGetProjectMapTool(
           .describe(
             "Show only this sub-folder, e.g. 'src/components'. Omit for the full tree.",
           ),
+        include_raw_tree: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "Include the raw tree JSON in the response data. Defaults to false. " +
+            "Enable only when a client needs to programmatically traverse the tree.",
+          ),
       },
     },
-    withToolError(async ({ project_id, folder }) => {
+    withToolError(async ({ project_id, folder, include_raw_tree }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
@@ -175,7 +183,7 @@ export function registerGetProjectMapTool(
           updatedAt: snapshot.updatedAt,
         },
         counts: { files, dirs },
-        tree: root,
+        tree: include_raw_tree ? root : null,
       });
     }),
   );

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import {
   projectImport,
   repoExport,
@@ -45,6 +45,28 @@ export type * from "./types/repo-parse-graph.types";
 
 type Database = typeof import("../../../db").db;
 
+function isSubsequenceMatch(value: string, query: string): boolean {
+  let qi = 0;
+  for (let vi = 0; vi < value.length && qi < query.length; vi++) {
+    if (value[vi] === query[qi]) qi++;
+  }
+  return qi === query.length;
+}
+
+function splitQueryTokens(query: string): string[] {
+  const tokens = new Set<string>();
+  tokens.add(query);
+  // split camelCase/PascalCase into lowercase words
+  const words = query
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[\s_\-./]+/)
+    .filter((w) => w.length >= 2);
+  for (const w of words) tokens.add(w);
+  return Array.from(tokens);
+}
+
 function getSearchRank(value: string, query: string) {
   const normalizedValue = value.trim().toLowerCase();
   const normalizedQuery = query.trim().toLowerCase();
@@ -63,6 +85,10 @@ function getSearchRank(value: string, query: string) {
 
   if (normalizedValue.includes(normalizedQuery)) {
     return 2;
+  }
+
+  if (isSubsequenceMatch(normalizedValue, normalizedQuery)) {
+    return 3;
   }
 
   return Number.MAX_SAFE_INTEGER;
@@ -2018,13 +2044,18 @@ export function createRepoParseGraphService(database: Database) {
         };
       }
 
-      const containsPattern = `%${normalizedQuery}%`;
+      const queryTokens = splitQueryTokens(normalizedQuery);
+      const tokenPatterns = queryTokens.map((t) => `%${t}%`);
+
+      const fileTokenFilter = or(...tokenPatterns.map((p) => ilike(repoFile.path, p)))!;
+      const symbolTokenFilter = or(...tokenPatterns.map((p) => ilike(repoSymbol.displayName, p)))!;
+      const exportTokenFilter = or(...tokenPatterns.map((p) => ilike(repoExport.exportName, p)))!;
 
       const [fileMatches, symbolMatches, exportMatches] = await Promise.all([
         database.query.repoFile.findMany({
           where: and(
             eq(repoFile.projectImportId, projectImportId),
-            ilike(repoFile.path, containsPattern),
+            fileTokenFilter,
           ),
           orderBy: [asc(repoFile.path)],
           limit: 50,
@@ -2032,7 +2063,7 @@ export function createRepoParseGraphService(database: Database) {
         database.query.repoSymbol.findMany({
           where: and(
             eq(repoSymbol.projectImportId, projectImportId),
-            ilike(repoSymbol.displayName, containsPattern),
+            symbolTokenFilter,
             symbolKinds && symbolKinds.length > 0
               ? inArray(repoSymbol.kind, symbolKinds)
               : undefined,
@@ -2047,7 +2078,7 @@ export function createRepoParseGraphService(database: Database) {
         database.query.repoExport.findMany({
           where: and(
             eq(repoExport.projectImportId, projectImportId),
-            ilike(repoExport.exportName, containsPattern),
+            exportTokenFilter,
           ),
           with: {
             file: true,
