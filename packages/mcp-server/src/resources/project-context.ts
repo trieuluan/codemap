@@ -78,6 +78,24 @@ function buildContextText(
   lines.push("- wait_for_import — wait until an import finishes");
 
   lines.push("");
+  lines.push("## Structured Tool Responses");
+  lines.push("Most CodeMap MCP tools return both human-readable text and structured data:");
+  lines.push("- summary — short text for humans and fallback clients");
+  lines.push("- data — machine-readable source of truth for agent workflow decisions");
+  lines.push("- isError — only for unexpected tool/API failures");
+  lines.push("");
+  lines.push(
+    "Prefer structuredContent.data when deciding what to do next. Do not parse " +
+      "summary text when data has an explicit field such as authenticated, " +
+      "connected, found, total, status, parseStatus, timedOut, or completed.",
+  );
+  lines.push(
+    "Valid states such as no results, missing project link, not authenticated, " +
+      "not connected, or import already running may be returned as successful " +
+      "tool results with data fields explaining the state.",
+  );
+
+  lines.push("");
   lines.push("## Instructions");
 
   if (
@@ -108,6 +126,15 @@ function buildContextText(
         "index the codebase.",
     );
   }
+
+  lines.push("");
+  lines.push("## Recommended Workflow");
+  lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
+  lines.push("- Use get_project or list_projects to confirm the active project.");
+  lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
+  lines.push("- Use get_file with content and outline for targeted code reading.");
+  lines.push("- Add blast_radius to get_file before risky edits to shared files.");
+  lines.push("- After code changes are pushed, call trigger_reimport, then wait_for_import.");
 
   return lines.join("\n");
 }
@@ -146,6 +173,8 @@ export function registerProjectContextResource(
                 "Run one of the following tools to link a project:",
                 "- create_project — import a local folder",
                 "- create_project_from_github — import a GitHub repository",
+                "",
+                "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions and treat summary text as a human-readable fallback.",
               ].join("\n"),
             },
           ],
