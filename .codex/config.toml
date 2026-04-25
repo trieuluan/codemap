@@ -61,3 +61,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.wait_for_import]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_diff]
+approval_mode = "approve"
