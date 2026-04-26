@@ -75,8 +75,8 @@ function buildContextText(
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
   lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
   lines.push("- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase");
-  lines.push("- find_callers — find all files that import a specific symbol from a given file; empty result = potential dead code");
-  lines.push("- find_usages — find all definitions and caller files for a symbol across the entire codebase");
+  lines.push("- find_callers — find static callers/usages of a symbol from a given file, with occurrence ranges, evidence, confidence, and parse staleness metadata");
+  lines.push("- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase, with confidence metadata");
   lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
 
@@ -153,8 +153,8 @@ function buildContextText(
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
   lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
   lines.push("- Add blast_radius to get_file before risky edits to shared files.");
-  lines.push("- Use find_callers to check if a symbol is used before deleting it (empty callers = safe to remove).");
-  lines.push("- Use find_usages to locate all definitions + caller files when refactoring a symbol.");
+  lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
+  lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol.");
   lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
   lines.push("- After code changes are pushed, call trigger_reimport, then wait_for_import.");
 
