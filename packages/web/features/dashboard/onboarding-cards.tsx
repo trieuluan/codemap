@@ -22,13 +22,15 @@ interface OnboardingStep {
   href: string
 }
 
+// Demo data — first two steps marked complete to show progress.
+// Replace with real onboarding state from user/account when backend is ready.
 const steps: OnboardingStep[] = [
   {
     id: "connect-project",
     title: "Connect a project",
     description: "Import your first repository to get started",
     icon: GitBranch,
-    completed: false,
+    completed: true,
     href: "/dashboard/projects/new",
   },
   {
@@ -36,7 +38,7 @@ const steps: OnboardingStep[] = [
     title: "Configure API",
     description: "Set up your API keys and endpoints",
     icon: Settings,
-    completed: false,
+    completed: true,
     href: "/dashboard/api",
   },
   {

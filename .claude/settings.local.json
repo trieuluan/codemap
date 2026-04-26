@@ -24,7 +24,11 @@
       "mcp__codemap-mcp-dev__get_file",
       "mcp__codemap-mcp-dev__wait_for_import",
       "mcp__codemap-mcp-dev__trigger_reimport",
-      "mcp__codemap-mcp-dev__ping"
+      "mcp__codemap-mcp-dev__ping",
+      "Bash(git -C /Users/louis/Development/codemap add packages/api/src/modules/project/parse/graph/search.ts)",
+      "Bash(git -C /Users/louis/Development/codemap commit -m ' *)",
+      "Bash(git -C /Users/louis/Development/codemap push)",
+      "Bash(git -C /Users/louis/Development/codemap add packages/mcp-server/src/tools/get-file.ts)"
     ]
   },
   "enableAllProjectMcpServers": true,

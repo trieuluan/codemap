@@ -12,12 +12,14 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+        // OUTLINE: bumped border + subtle tinted bg in dark, so it reads as a button on near-black surfaces.
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+          'border border-border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-foreground/20 dark:bg-foreground/[0.04] dark:hover:border-foreground/30 dark:hover:bg-foreground/[0.08]',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        // GHOST: still no bg at rest, but hover bg is now strong enough to feel intentional in dark mode.
         ghost:
-          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
+          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-foreground/[0.08]',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
