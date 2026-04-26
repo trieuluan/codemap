@@ -53,6 +53,7 @@ interface ParseSymbol {
   isExported: boolean;
   parentSymbolName: string | null;
   startLine: number | null;
+  endLine: number | null;
 }
 
 interface ParseCycle {
@@ -215,6 +216,54 @@ function buildOutlineSection(parse: FileParseResponse): string {
   return lines.join("\n");
 }
 
+function buildSymbolBodiesSection(
+  parse: FileParseResponse,
+  fullContent: string,
+  symbolNames: string[],
+): string {
+  const lines = fullContent.split("\n");
+  const totalLines = lines.length;
+
+  // Sort symbols by startLine so we can infer endLine from next sibling
+  const sorted = [...parse.symbols]
+    .filter((s) => s.startLine != null)
+    .sort((a, b) => (a.startLine ?? 0) - (b.startLine ?? 0));
+
+  const output: string[] = [];
+
+  for (const name of symbolNames) {
+    const sym = parse.symbols.find(
+      (s) => s.displayName.toLowerCase() === name.toLowerCase(),
+    );
+
+    if (!sym || sym.startLine == null) {
+      output.push(`### ${name}\n_Symbol not found in file._\n`);
+      continue;
+    }
+
+    // endLine: use stored value if available, else infer from next symbol's startLine
+    let endLine = sym.endLine ?? null;
+    if (endLine == null) {
+      const idx = sorted.findIndex((s) => s.id === sym.id);
+      const next = sorted[idx + 1];
+      endLine = next?.startLine != null ? next.startLine - 1 : totalLines;
+    }
+
+    const startIdx = sym.startLine - 1;
+    const endIdx = Math.min(endLine - 1, totalLines - 1);
+    const body = lines.slice(startIdx, endIdx + 1).join("\n");
+    const lang = parse.file.language?.toLowerCase().replace("typescript", "ts").replace("javascript", "js") ?? "";
+
+    output.push(`### ${sym.displayName} · ${sym.kind} · line ${sym.startLine}–${endLine}`);
+    output.push("```" + lang);
+    output.push(body);
+    output.push("```");
+    output.push("");
+  }
+
+  return output.join("\n");
+}
+
 function buildBlastRadiusSection(br: BlastRadius, maxFiles: number): string {
   const lines: string[] = [
     `Direct dependents:   ${br.directCount}`,
@@ -283,15 +332,24 @@ export function registerGetFileTool(
             "CodeMap project UUID. Auto-resolved from workspace if omitted.",
           ),
         include: z
-          .array(z.enum(["content", "outline", "blast_radius"]))
+          .array(z.enum(["content", "outline", "blast_radius", "symbols"]))
           .optional()
           .default(["content", "outline"])
           .describe(
             "Sections to include. Default: [content, outline]. " +
-              "outline covers imports, imported-by, exports, and symbols. " +
+              "outline covers imports, imported-by, exports, and symbols with signatures. " +
+              "symbols fetches full source body of specific symbols listed in symbol_names — " +
+              "use this instead of content+start_line/end_line when you know which functions/classes to read. " +
               "Add blast_radius when assessing change risk: before editing a shared file, " +
               "when asked about impact/blast radius, or when a file has many dependents. " +
               "Omit blast_radius for routine file reading — it adds latency.",
+          ),
+        symbol_names: z
+          .array(z.string().min(1))
+          .optional()
+          .describe(
+            "Symbol names to fetch full source bodies for. Only used when 'symbols' is in include. " +
+              "Example: [\"parseDartFile\", \"parsePhpFile\"]. Case-insensitive.",
           ),
         blast_radius_max_files: z
           .number()
@@ -325,7 +383,7 @@ export function registerGetFileTool(
       },
     },
     withToolError(
-      async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line }) => {
+      async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line, symbol_names }) => {
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
 
@@ -370,10 +428,11 @@ export function registerGetFileTool(
         }
 
         const sections = include ?? ["content", "outline"];
-        const wantContent = sections.includes("content");
+        const wantSymbols = sections.includes("symbols") && (symbol_names?.length ?? 0) > 0;
+        const wantContent = sections.includes("content") || wantSymbols;
         // outline and blast_radius both come from /files/parse — one call covers both
         const wantParse =
-          sections.includes("outline") || sections.includes("blast_radius");
+          sections.includes("outline") || sections.includes("blast_radius") || wantSymbols;
         const wantBlastRadius = sections.includes("blast_radius");
 
         const [contentResult, parseResult] = await Promise.allSettled([
@@ -467,6 +526,17 @@ export function registerGetFileTool(
             output.push(
               `Failed to load: ${(parseResult.reason as Error).message}`,
             );
+          }
+          output.push("");
+        }
+
+        // Symbol bodies
+        if (wantSymbols && symbol_names && symbol_names.length > 0) {
+          output.push("## Symbols");
+          if (parse && content?.content) {
+            output.push(buildSymbolBodiesSection(parse, content.content, symbol_names));
+          } else if (!parse || !content?.content) {
+            output.push("_Symbol bodies unavailable — file content or parse data missing._");
           }
           output.push("");
         }
