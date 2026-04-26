@@ -67,11 +67,18 @@ function buildContextText(
 
   lines.push("");
   lines.push("## Available Tools");
+  lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
+  lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
+  lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub access for repository imports");
   lines.push("- list_projects — list all accessible projects");
   lines.push("- get_project — get current project status and metadata");
+  lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
+  lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
+  lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository");
+  lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; results include symbol signatures");
-  lines.push("- suggest_edit_locations — suggest likely files and symbols to inspect/edit for a natural-language task; use before get_file when unsure where to start");
+  lines.push("- suggest_edit_locations — deterministic candidate generator for likely files and symbols to inspect/edit for a natural-language task; use before get_file when unsure where to start");
   lines.push("- get_file — read a file with include modes: content, outline (symbol list), symbols (extract specific symbol bodies by name), blast_radius (impact analysis). Auto-reparses if local file has changed since last import.");
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
   lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
@@ -150,15 +157,19 @@ function buildContextText(
   lines.push("");
   lines.push("## Recommended Workflow");
   lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
+  lines.push("- If not authenticated, call start_auth_flow and then wait_for_auth after the user approves the browser prompt.");
+  lines.push("- If GitHub access is needed and disconnected, call get_github_connect_url; GitHub is optional for MCP auth but required for private GitHub repository imports.");
   lines.push("- Use get_project or list_projects to confirm the active project.");
-  lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files.");
+  lines.push("- Use get_current_workspace_info before create_project when linking the current workspace.");
+  lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files. Treat results as candidates, not final truth; prefer high-confidence entries with concrete signals and relevantSymbols.");
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
   lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
-  lines.push("- Add blast_radius to get_file before risky edits to shared files.");
+  lines.push("- Add blast_radius to get_file before risky edits to shared files, services, schemas, or MCP tools; do not request blast_radius for routine file reading.");
   lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
   lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol.");
   lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
-  lines.push("- After code changes are pushed, call trigger_reimport, then wait_for_import.");
+  lines.push("- If suggest/search results look stale, a new file is missing, or local edits changed semantics, call trigger_reimport, then wait_for_import.");
+  lines.push("- If search or suggest_edit_locations returns no useful results, retry with narrower domain terms, call get_project_map to inspect folders, or reimport if the index may be stale.");
 
   return lines.join("\n");
 }
