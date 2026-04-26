@@ -241,13 +241,11 @@ function buildSymbolBodiesSection(
       continue;
     }
 
-    // endLine: use stored value if available, else infer from next symbol's startLine
-    let endLine = sym.endLine ?? null;
-    if (endLine == null) {
-      const idx = sorted.findIndex((s) => s.id === sym.id);
-      const next = sorted[idx + 1];
-      endLine = next?.startLine != null ? next.startLine - 1 : totalLines;
-    }
+    // endLine is the occurrence end (same line as startLine), not function body end.
+    // Always infer body end from the next sibling symbol's startLine.
+    const idx = sorted.findIndex((s) => s.id === sym.id);
+    const next = sorted[idx + 1];
+    const endLine = next?.startLine != null ? next.startLine - 1 : totalLines;
 
     const startIdx = sym.startLine - 1;
     const endIdx = Math.min(endLine - 1, totalLines - 1);
@@ -502,8 +500,8 @@ export function registerGetFileTool(
           parseResult.status === "fulfilled" ? parseResult.value : null;
         const errors: string[] = [];
 
-        // Content
-        if (wantContent) {
+        // Content — skip if only fetched to support symbols section
+        if (sections.includes("content")) {
           output.push("## Content");
           if (content) {
             output.push(buildContentSection(content, start_line, end_line));
