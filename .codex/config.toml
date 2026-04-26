@@ -76,3 +76,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.start_auth_flow]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.suggest_edit_locations]
+approval_mode = "approve"

@@ -4,6 +4,7 @@ import type {
   ProjectEditLocationNextTool,
   ProjectEditLocationSuggestion,
   ProjectEditLocationsResponse,
+  ProjectMapSearchResponse,
   ProjectMapSearchExportResult,
   ProjectMapSearchSymbolResult,
 } from "../types/repo-parse-graph.types";
@@ -21,6 +22,17 @@ interface Candidate {
   relevantSymbols: Map<string, ProjectEditLocationSuggestion["relevantSymbols"][number]>;
 }
 
+interface EditLocationFileRecord {
+  id: string;
+  path: string;
+  language: string | null;
+}
+
+interface EditLocationGraphEdge {
+  sourceFile: EditLocationFileRecord;
+  targetFile: EditLocationFileRecord | null;
+}
+
 const STOP_WORDS = new Set([
   "add",
   "and",
@@ -31,6 +43,7 @@ const STOP_WORDS = new Set([
   "for",
   "from",
   "into",
+  "implement",
   "lam",
   "new",
   "the",
@@ -62,7 +75,7 @@ const CONVENTION_BOOSTS: Array<{
   },
   {
     pattern: /(^|\/)controller\.ts$/,
-    score: 12,
+    score: 24,
     signal: "convention:controller",
     reason: "API controller convention",
   },
@@ -74,13 +87,13 @@ const CONVENTION_BOOSTS: Array<{
   },
   {
     pattern: /(^|\/)schema\.ts$/,
-    score: 9,
+    score: 18,
     signal: "convention:schema",
     reason: "request/response schema convention",
   },
   {
     pattern: /(^|\/)tools\//,
-    score: 12,
+    score: 6,
     signal: "convention:mcp_tool",
     reason: "MCP tool convention",
   },
@@ -110,9 +123,34 @@ function pathTokenScore(path: string, tokens: string[]) {
   }, 0);
 }
 
-function getConfidence(score: number) {
-  if (score >= 80) return "high" as const;
-  if (score >= 45) return "medium" as const;
+function nameTokenScore(name: string, tokens: string[]) {
+  const nameTokens = new Set(tokenize(name));
+  let matchedCount = 0;
+
+  for (const token of tokens) {
+    if (nameTokens.has(token)) {
+      matchedCount += 1;
+    }
+  }
+
+  return matchedCount * 12;
+}
+
+function getConfidence(candidate: Candidate) {
+  const hasDirectSymbolEvidence =
+    candidate.signals.has("symbol_match") || candidate.signals.has("export_match");
+  const hasPathEvidence = candidate.signals.has("file_path_match");
+  const hasCoreConvention =
+    candidate.signals.has("convention:next_page") ||
+    candidate.signals.has("convention:controller") ||
+    candidate.signals.has("convention:service") ||
+    candidate.signals.has("convention:schema");
+
+  if (hasDirectSymbolEvidence && candidate.score >= 80) return "high" as const;
+  if (hasPathEvidence && hasCoreConvention && candidate.score >= 75) {
+    return "high" as const;
+  }
+  if (candidate.score >= 35) return "medium" as const;
   return "low" as const;
 }
 
@@ -169,11 +207,61 @@ function addRelevantSymbol(
 }
 
 function applyConventionBoosts(candidate: Candidate) {
+  const hasDirectEvidence =
+    candidate.signals.has("file_path_match") ||
+    candidate.signals.has("symbol_match") ||
+    candidate.signals.has("export_match");
+
+  if (!hasDirectEvidence) {
+    return;
+  }
+
   for (const boost of CONVENTION_BOOSTS) {
     if (!boost.pattern.test(candidate.path)) continue;
     candidate.score += boost.score;
     candidate.signals.add(boost.signal);
     candidate.reasons.add(boost.reason);
+  }
+}
+
+function tokenCoverage(path: string, tokens: string[]) {
+  const normalizedPath = path.toLowerCase();
+  if (tokens.length === 0) return 0;
+  const matchedCount = tokens.filter((token) => normalizedPath.includes(token)).length;
+  return matchedCount / tokens.length;
+}
+
+function applyBroadMatchCaps(candidate: Candidate, tokens: string[]) {
+  const hasDirectSymbolEvidence =
+    candidate.signals.has("symbol_match") || candidate.signals.has("export_match");
+  const hasCoreConvention =
+    candidate.signals.has("convention:next_page") ||
+    candidate.signals.has("convention:controller") ||
+    candidate.signals.has("convention:service") ||
+    candidate.signals.has("convention:schema");
+  const hasOnlyBroadPathEvidence =
+    candidate.signals.has("file_path_match") &&
+    !hasDirectSymbolEvidence &&
+    tokenCoverage(candidate.path, tokens) <= 0.35;
+
+  if (hasOnlyBroadPathEvidence && candidate.signals.has("convention:mcp_tool")) {
+    candidate.score = Math.min(candidate.score, 70);
+    candidate.signals.add("broad_path_match");
+    candidate.reasons.add("broad path-only match");
+  }
+
+  if (candidate.signals.has("graph_neighbor") && !hasDirectSymbolEvidence) {
+    candidate.score = Math.min(candidate.score, 68);
+  }
+
+  if (
+    hasDirectSymbolEvidence &&
+    !hasCoreConvention &&
+    tokenCoverage(candidate.path, tokens) <= 0.2
+  ) {
+    candidate.score = Math.min(candidate.score, 78);
+    candidate.signals.add("weak_direct_match");
+    candidate.reasons.add("weak direct match");
   }
 }
 
@@ -214,6 +302,109 @@ function buildReason(candidate: Candidate) {
   }
 
   return "matched task terms in indexed code map";
+}
+
+export function buildEditLocationSuggestions(input: {
+  query: string;
+  searchResults: ProjectMapSearchResponse;
+  fileRecords: EditLocationFileRecord[];
+  graphEdges: EditLocationGraphEdge[];
+  limit: number;
+}): ProjectEditLocationSuggestion[] {
+  const tokens = tokenize(input.query);
+  const fileByPath = new Map(input.fileRecords.map((file) => [file.path, file]));
+  const candidates = new Map<string, Candidate>();
+
+  for (const file of input.searchResults.files) {
+    const record = fileByPath.get(file.path);
+    const candidate = getOrCreateCandidate(candidates, {
+      id: record?.id ?? null,
+      path: file.path,
+      language: file.language,
+    });
+    if (addSignalScore(candidate, "file_path_match", 32, 6)) {
+      candidate.score += pathTokenScore(file.path, tokens);
+    }
+    candidate.reasons.add("file path matches task terms");
+  }
+
+  for (const symbol of input.searchResults.symbols) {
+    const record = fileByPath.get(symbol.filePath);
+    const candidate = getOrCreateCandidate(candidates, {
+      id: record?.id ?? null,
+      path: symbol.filePath,
+      language: record?.language ?? null,
+    });
+    if (addSignalScore(candidate, "symbol_match", 62, 8)) {
+      candidate.score += pathTokenScore(symbol.filePath, tokens);
+    }
+    candidate.score += nameTokenScore(symbol.displayName, tokens);
+    candidate.reasons.add(`symbol match: ${symbol.displayName}`);
+    addRelevantSymbol(candidate, symbol);
+  }
+
+  for (const exportResult of input.searchResults.exports) {
+    const record = fileByPath.get(exportResult.filePath);
+    const candidate = getOrCreateCandidate(candidates, {
+      id: record?.id ?? null,
+      path: exportResult.filePath,
+      language: record?.language ?? null,
+    });
+    if (addSignalScore(candidate, "export_match", 50, 6)) {
+      candidate.score += pathTokenScore(exportResult.filePath, tokens);
+    }
+    candidate.score += nameTokenScore(exportResult.exportName, tokens);
+    candidate.reasons.add(`export match: ${exportResult.exportName}`);
+    addRelevantSymbol(candidate, exportResult);
+  }
+
+  for (const candidate of Array.from(candidates.values())) {
+    applyConventionBoosts(candidate);
+  }
+
+  const seedFileIds = new Set(
+    Array.from(candidates.values())
+      .filter((candidate) => candidate.id && candidate.score >= 50)
+      .map((candidate) => candidate.id as string),
+  );
+
+  for (const edge of input.graphEdges) {
+    for (const file of [edge.sourceFile, edge.targetFile]) {
+      if (!file || seedFileIds.has(file.id)) continue;
+
+      const candidate = getOrCreateCandidate(candidates, {
+        id: file.id,
+        path: file.path,
+        language: file.language,
+      });
+      if (addSignalScore(candidate, "graph_neighbor", 24, 0)) {
+        candidate.score += Math.min(pathTokenScore(file.path, tokens), 18);
+      }
+      candidate.reasons.add("near a high-confidence match in import graph");
+      applyConventionBoosts(candidate);
+    }
+  }
+
+  for (const candidate of Array.from(candidates.values())) {
+    applyBroadMatchCaps(candidate, tokens);
+  }
+
+  return Array.from(candidates.values())
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.path.localeCompare(right.path);
+    })
+    .slice(0, input.limit)
+    .map((candidate) => ({
+      path: candidate.path,
+      language: candidate.language,
+      confidence: getConfidence(candidate),
+      score: Math.round(candidate.score),
+      reason: buildReason(candidate),
+      signals: Array.from(candidate.signals).sort(),
+      relevantSymbols: Array.from(candidate.relevantSymbols.values()).slice(0, 8),
+      suggestedNextTools: buildSuggestedNextTools(candidate),
+    }));
 }
 
 export function createEditLocationsService(database: Database) {
@@ -269,65 +460,17 @@ export function createEditLocationsService(database: Database) {
               },
             })
           : [];
-      const fileByPath = new Map(fileRecords.map((file) => [file.path, file]));
-      const candidates = new Map<string, Candidate>();
-
-      for (const file of searchResults.files) {
-        const record = fileByPath.get(file.path);
-        const candidate = getOrCreateCandidate(candidates, {
-          id: record?.id ?? null,
-          path: file.path,
-          language: file.language,
-        });
-        if (addSignalScore(candidate, "file_path_match", 50, 8)) {
-          candidate.score += pathTokenScore(file.path, tokens);
-        }
-        candidate.reasons.add("file path matches task terms");
-      }
-
-      for (const symbol of searchResults.symbols) {
-        const record = fileByPath.get(symbol.filePath);
-        const candidate = getOrCreateCandidate(candidates, {
-          id: record?.id ?? null,
-          path: symbol.filePath,
-          language: record?.language ?? null,
-        });
-        if (addSignalScore(candidate, "symbol_match", 65, 12)) {
-          candidate.score += pathTokenScore(symbol.filePath, tokens);
-        }
-        candidate.reasons.add(`symbol match: ${symbol.displayName}`);
-        addRelevantSymbol(candidate, symbol);
-      }
-
-      for (const exportResult of searchResults.exports) {
-        const record = fileByPath.get(exportResult.filePath);
-        const candidate = getOrCreateCandidate(candidates, {
-          id: record?.id ?? null,
-          path: exportResult.filePath,
-          language: record?.language ?? null,
-        });
-        if (addSignalScore(candidate, "export_match", 50, 10)) {
-          candidate.score += pathTokenScore(exportResult.filePath, tokens);
-        }
-        candidate.reasons.add(`export match: ${exportResult.exportName}`);
-        addRelevantSymbol(candidate, exportResult);
-      }
-
-      for (const candidate of candidates.values()) {
-        candidate.score += pathTokenScore(candidate.path, tokens);
-        applyConventionBoosts(candidate);
-      }
-
       const seedFileIds = Array.from(
         new Set(
-          Array.from(candidates.values())
-            .filter((candidate) => candidate.id && candidate.score >= 50)
-            .map((candidate) => candidate.id as string),
+          fileRecords
+            .filter((file) => matchedPaths.includes(file.path))
+            .map((file) => file.id),
         ),
       );
 
+      let graphEdges: EditLocationGraphEdge[] = [];
       if (seedFileIds.length > 0) {
-        const edges = await database.query.repoImportEdge.findMany({
+        graphEdges = await database.query.repoImportEdge.findMany({
           where: and(
             eq(repoImportEdge.projectImportId, input.projectImportId),
             eq(repoImportEdge.isResolved, true),
@@ -342,41 +485,15 @@ export function createEditLocationsService(database: Database) {
           },
           limit: 200,
         });
-
-        for (const edge of edges) {
-          for (const file of [edge.sourceFile, edge.targetFile]) {
-            if (!file || seedFileIds.includes(file.id)) continue;
-
-            const candidate = getOrCreateCandidate(candidates, {
-              id: file.id,
-              path: file.path,
-              language: file.language,
-            });
-            if (addSignalScore(candidate, "graph_neighbor", 22, 0)) {
-              candidate.score += pathTokenScore(file.path, tokens);
-            }
-            candidate.reasons.add("near a high-confidence match in import graph");
-            applyConventionBoosts(candidate);
-          }
-        }
       }
 
-      const suggestions = Array.from(candidates.values())
-        .sort((left, right) => {
-          if (right.score !== left.score) return right.score - left.score;
-          return left.path.localeCompare(right.path);
-        })
-        .slice(0, input.limit)
-        .map((candidate) => ({
-          path: candidate.path,
-          language: candidate.language,
-          confidence: getConfidence(candidate.score),
-          score: Math.round(candidate.score),
-          reason: buildReason(candidate),
-          signals: Array.from(candidate.signals).sort(),
-          relevantSymbols: Array.from(candidate.relevantSymbols.values()).slice(0, 8),
-          suggestedNextTools: buildSuggestedNextTools(candidate),
-        }));
+      const suggestions = buildEditLocationSuggestions({
+        query,
+        searchResults,
+        fileRecords,
+        graphEdges,
+        limit: input.limit,
+      });
 
       return {
         query,
