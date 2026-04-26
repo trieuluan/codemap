@@ -28,6 +28,7 @@ export interface ParsedImportDraft {
   moduleSpecifier: string;
   importKind: RepoImportEdgeInsert["importKind"];
   isTypeOnly: boolean;
+  importedNames: string[];
   line: number;
   col: number;
   endCol: number;

@@ -40,6 +40,7 @@ export interface ProjectImportEdge {
   targetExternalSymbolKey: string | null;
   moduleSpecifier: string;
   importKind: RepoImportKind;
+  importedNames: string[];
   isTypeOnly: boolean;
   isResolved: boolean;
   resolutionKind: RepoImportResolutionKind;

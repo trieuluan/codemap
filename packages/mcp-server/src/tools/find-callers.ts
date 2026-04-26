@@ -11,6 +11,7 @@ interface ParseImportedBy {
   sourceFilePath: string;
   moduleSpecifier: string;
   importKind: string;
+  importedNames: string[];
   resolutionKind: string;
   startLine: number;
   startCol: number;
@@ -108,15 +109,21 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         });
       }
 
-      // Filter importedBy to those that actually import this symbol
-      // Since we don't have named-import tracking, all importedBy files are potential callers
-      const callers = parse.importedBy.map((imp) => ({
-        filePath: imp.sourceFilePath,
-        moduleSpecifier: imp.moduleSpecifier,
-        importKind: imp.importKind,
-        startLine: imp.startLine,
-        startCol: imp.startCol,
-      }));
+      // Filter importedBy to those that actually import this symbol by name.
+      // If importedNames is empty (wildcard/default/dynamic import), include as potential caller.
+      const callers = parse.importedBy
+        .filter((imp) =>
+          imp.importedNames.length === 0 ||
+          imp.importedNames.some((n) => n.toLowerCase() === symbol_name.toLowerCase()),
+        )
+        .map((imp) => ({
+          filePath: imp.sourceFilePath,
+          moduleSpecifier: imp.moduleSpecifier,
+          importKind: imp.importKind,
+          importedNames: imp.importedNames,
+          startLine: imp.startLine,
+          startCol: imp.startCol,
+        }));
 
       const isExported = Boolean(exportEntry);
       const lines: string[] = [
@@ -132,7 +139,8 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
       } else {
         lines.push(`Found ${callers.length} caller(s):`);
         for (const caller of callers) {
-          lines.push(`  ${caller.filePath}:${caller.startLine} (${caller.importKind}: '${caller.moduleSpecifier}')`);
+          const names = caller.importedNames.length > 0 ? ` { ${caller.importedNames.join(", ")} }` : "";
+          lines.push(`  ${caller.filePath}:${caller.startLine} (${caller.importKind}${names}: '${caller.moduleSpecifier}')`);
         }
       }
 

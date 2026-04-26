@@ -214,6 +214,7 @@ export function parseTypeScriptOrJavaScriptFile(
       importKind: ParsedImportDraft["importKind"],
       isTypeOnly: boolean,
       matchIndex: number,
+      importedNames: string[] = [],
     ) => {
       const isRelative = moduleSpecifier.startsWith(".");
       const aliasResolution = !isRelative
@@ -229,6 +230,7 @@ export function parseTypeScriptOrJavaScriptFile(
         moduleSpecifier,
         importKind,
         isTypeOnly,
+        importedNames,
         line: lineNumber,
         col: matchIndex,
         endCol: matchIndex + moduleSpecifier.length,
@@ -260,7 +262,11 @@ export function parseTypeScriptOrJavaScriptFile(
     for (const match of line.matchAll(/\bimport\s+(type\s+)?(?:[^'"]+?\s+from\s+)?["']([^"']+)["']/g)) {
       const moduleSpecifier = match[2];
       if (!moduleSpecifier) continue;
-      pushImport(moduleSpecifier, "import", Boolean(match[1]), match.index ?? 0);
+      const namedMatch = match[0].match(/\{([^}]+)\}/);
+      const importedNames = namedMatch
+        ? namedMatch[1].split(",").map((s) => s.trim().replace(/^type\s+/, "").replace(/\s+as\s+\S+$/, "").trim()).filter(Boolean)
+        : [];
+      pushImport(moduleSpecifier, "import", Boolean(match[1]), match.index ?? 0, importedNames);
     }
 
     for (const match of line.matchAll(/\brequire\(\s*["']([^"']+)["']\s*\)/g)) {

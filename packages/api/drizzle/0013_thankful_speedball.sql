@@ -1,0 +1,1 @@
+ALTER TABLE "repo_import_edge" ADD COLUMN "imported_names" text[] DEFAULT '{}' NOT NULL;

@@ -186,6 +186,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
             targetExternalSymbolKey: importEdge.targetExternalSymbolKey,
             moduleSpecifier: importEdge.moduleSpecifier,
             importKind: importEdge.importKind,
+            importedNames: importEdge.importedNames,
             isTypeOnly: importEdge.isTypeOnly,
             isResolved: Boolean(targetFile || importEdge.targetExternalSymbolKey),
             resolutionKind: importEdge.resolutionKind,

@@ -53,6 +53,7 @@ export function parsePhpFile(
         moduleSpecifier: namespace,
         importKind: "use",
         isTypeOnly: false,
+        importedNames: [],
         line: lineNumber,
         col: Math.max(col, 0),
         endCol: Math.max(col, 0) + namespace.length,

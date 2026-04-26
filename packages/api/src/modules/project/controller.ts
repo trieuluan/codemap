@@ -458,6 +458,7 @@ export function createProjectController(fastify: FastifyInstance) {
           sourceFilePath: item.sourceFilePath,
           moduleSpecifier: item.moduleSpecifier,
           importKind: item.importKind,
+          importedNames: item.importedNames,
           resolutionKind: item.resolutionKind,
           startLine: item.startLine,
           startCol: item.startCol + 1,

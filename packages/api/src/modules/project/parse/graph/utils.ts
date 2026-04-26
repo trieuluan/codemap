@@ -108,6 +108,7 @@ export function toImportEdge(
     targetExternalSymbolKey: string | null;
     moduleSpecifier: string;
     importKind: ProjectImportEdge["importKind"];
+    importedNames: string[];
     isTypeOnly: boolean;
     isResolved: boolean;
     resolutionKind: ProjectImportEdge["resolutionKind"];
@@ -130,6 +131,7 @@ export function toImportEdge(
     targetExternalSymbolKey: edge.targetExternalSymbolKey,
     moduleSpecifier: edge.moduleSpecifier,
     importKind: edge.importKind,
+    importedNames: edge.importedNames,
     isTypeOnly: edge.isTypeOnly,
     isResolved: edge.isResolved,
     resolutionKind: edge.resolutionKind,

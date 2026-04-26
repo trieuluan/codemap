@@ -36,6 +36,7 @@ export function parseDartFile(
         moduleSpecifier,
         importKind,
         isTypeOnly: false,
+        importedNames: [],
         line: lineNumber,
         col: match.index ?? 0,
         endCol: (match.index ?? 0) + moduleSpecifier.length,

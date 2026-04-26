@@ -133,6 +133,7 @@ export async function reparseFileIfStale(
       targetExternalSymbolKey: imp.targetExternalSymbolKey,
       moduleSpecifier: imp.moduleSpecifier,
       importKind: imp.importKind,
+      importedNames: imp.importedNames,
       isTypeOnly: imp.isTypeOnly,
       isResolved: Boolean(targetFile || imp.targetExternalSymbolKey),
       resolutionKind: imp.resolutionKind,

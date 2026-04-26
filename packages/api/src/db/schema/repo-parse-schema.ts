@@ -315,6 +315,7 @@ export const repoImportEdge = pgTable(
     targetExternalSymbolKey: text("target_external_symbol_key"),
     moduleSpecifier: text("module_specifier").notNull(),
     importKind: repoImportKindEnum("import_kind").notNull(),
+    importedNames: text("imported_names").array().default([]).notNull(),
     isTypeOnly: boolean("is_type_only").default(false).notNull(),
     isResolved: boolean("is_resolved").default(false).notNull(),
     resolutionKind: repoImportResolutionKindEnum("resolution_kind").notNull(),
