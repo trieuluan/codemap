@@ -62,9 +62,9 @@ export function createSearchService(database: Database) {
       const exportTokenFilter = or(...tokenPatterns.map((p) => ilike(repoExport.exportName, p)))!;
 
       const trgmThreshold = 0.1;
-      const fileTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, ${repoFile.path})`, trgmThreshold);
-      const symbolTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, ${repoSymbol.displayName})`, trgmThreshold);
-      const exportTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, ${repoExport.exportName})`, trgmThreshold);
+      const fileTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoFile.path}))`, trgmThreshold);
+      const symbolTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoSymbol.displayName}))`, trgmThreshold);
+      const exportTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoExport.exportName}))`, trgmThreshold);
 
       const [fileMatches, symbolMatches, exportMatches] = await Promise.all([
         database
@@ -72,7 +72,7 @@ export function createSearchService(database: Database) {
             id: repoFile.id,
             path: repoFile.path,
             language: repoFile.language,
-            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoFile.path})`,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, lower(${repoFile.path}))`,
           })
           .from(repoFile)
           .where(and(eq(repoFile.projectImportId, projectImportId), or(fileTokenFilter, fileTrgmFilter)))
@@ -86,7 +86,7 @@ export function createSearchService(database: Database) {
             kind: repoSymbol.kind,
             signature: repoSymbol.signature,
             parentSymbolId: repoSymbol.parentSymbolId,
-            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoSymbol.displayName})`,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, lower(${repoSymbol.displayName}))`,
           })
           .from(repoSymbol)
           .where(and(
@@ -106,7 +106,7 @@ export function createSearchService(database: Database) {
             startCol: repoExport.startCol,
             endLine: repoExport.endLine,
             endCol: repoExport.endCol,
-            trgmScore: sql<number>`word_similarity(${normalizedQuery}, ${repoExport.exportName})`,
+            trgmScore: sql<number>`word_similarity(${normalizedQuery}, lower(${repoExport.exportName}))`,
           })
           .from(repoExport)
           .where(and(eq(repoExport.projectImportId, projectImportId), or(exportTokenFilter, exportTrgmFilter)))
