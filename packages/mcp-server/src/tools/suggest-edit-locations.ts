@@ -6,6 +6,7 @@ import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
   EditLocationConfidence,
+  EditLocationReadPlan,
   EditLocationSuggestion,
   EditLocationsResponse,
 } from "../lib/api-types.js";
@@ -24,6 +25,20 @@ function formatSymbols(suggestion: EditLocationSuggestion) {
     .join(", ");
 
   return `\n   Symbols: ${symbols}`;
+}
+
+function formatReadPlan(plan: EditLocationReadPlan) {
+  const parts: string[] = [`include=${JSON.stringify(plan.include)}`];
+  if (plan.symbolNames && plan.symbolNames.length > 0) {
+    parts.push(`symbol_names=${JSON.stringify(plan.symbolNames)}`);
+  }
+  if (plan.startLine !== undefined) {
+    parts.push(`start_line=${plan.startLine}`);
+  }
+  if (plan.endLine !== undefined) {
+    parts.push(`end_line=${plan.endLine}`);
+  }
+  return `\n   Read: get_file(path, ${parts.join(", ")})`;
 }
 
 function buildSummary(task: string, response: EditLocationsResponse) {
@@ -52,6 +67,7 @@ function buildSummary(task: string, response: EditLocationsResponse) {
       lines.push(`   Reason: ${suggestion.reason}`);
       lines.push(`   Signals: ${suggestion.signals.join(", ")}`);
       lines.push(`   Next: ${suggestion.suggestedNextTools.join(", ")}`);
+      lines.push(formatReadPlan(suggestion.readPlan));
       const symbols = formatSymbols(suggestion);
       if (symbols) lines.push(symbols);
     });

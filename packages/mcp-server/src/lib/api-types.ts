@@ -183,6 +183,15 @@ export interface EditLocationSymbol {
   endLine: number | null;
 }
 
+export type EditLocationReadInclude = "outline" | "symbols" | "content";
+
+export interface EditLocationReadPlan {
+  include: EditLocationReadInclude[];
+  symbolNames?: string[];
+  startLine?: number;
+  endLine?: number;
+}
+
 export interface EditLocationSuggestion {
   path: string;
   language: string | null;
@@ -192,6 +201,7 @@ export interface EditLocationSuggestion {
   signals: string[];
   relevantSymbols: EditLocationSymbol[];
   suggestedNextTools: EditLocationNextTool[];
+  readPlan: EditLocationReadPlan;
 }
 
 export interface EditLocationsResponse {

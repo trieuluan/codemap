@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { repoFile, repoImportEdge } from "../../../../db/schema";
 import type {
   ProjectEditLocationNextTool,
+  ProjectEditLocationReadPlan,
   ProjectEditLocationSuggestion,
   ProjectEditLocationsResponse,
   ProjectMapSearchResponse,
@@ -359,6 +360,27 @@ function buildSuggestedNextTools(candidate: Candidate): ProjectEditLocationNextT
   return Array.from(new Set(tools));
 }
 
+function buildReadPlan(candidate: Candidate): ProjectEditLocationReadPlan {
+  const symbolNames = Array.from(candidate.relevantSymbols.values())
+    .slice(0, 5)
+    .map((s) => s.name);
+
+  if (symbolNames.length > 0) {
+    return { include: ["symbols"], symbolNames };
+  }
+
+  const hasDirectEvidence =
+    candidate.signals.has("file_path_match") ||
+    candidate.signals.has("symbol_match") ||
+    candidate.signals.has("export_match");
+
+  if (hasDirectEvidence) {
+    return { include: ["outline"] };
+  }
+
+  return { include: ["outline"] };
+}
+
 function buildReason(candidate: Candidate) {
   const reasons = Array.from(candidate.reasons).slice(0, 3);
   if (reasons.length > 0) {
@@ -477,6 +499,7 @@ export function buildEditLocationSuggestions(input: {
       ].sort(),
       relevantSymbols: Array.from(candidate.relevantSymbols.values()).slice(0, 8),
       suggestedNextTools: buildSuggestedNextTools(candidate),
+      readPlan: buildReadPlan(candidate),
     }));
 }
 

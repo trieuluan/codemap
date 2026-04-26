@@ -346,6 +346,18 @@ export interface ProjectEditLocationSymbol {
   endLine: number | null;
 }
 
+export type ProjectEditLocationReadInclude =
+  | "outline"
+  | "symbols"
+  | "content";
+
+export interface ProjectEditLocationReadPlan {
+  include: ProjectEditLocationReadInclude[];
+  symbolNames?: string[];
+  startLine?: number;
+  endLine?: number;
+}
+
 export interface ProjectEditLocationSuggestion {
   path: string;
   language: string | null;
@@ -355,6 +367,7 @@ export interface ProjectEditLocationSuggestion {
   signals: string[];
   relevantSymbols: ProjectEditLocationSymbol[];
   suggestedNextTools: ProjectEditLocationNextTool[];
+  readPlan: ProjectEditLocationReadPlan;
 }
 
 export interface ProjectEditLocationsResponse {
