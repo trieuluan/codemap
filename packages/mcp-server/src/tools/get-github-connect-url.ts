@@ -39,13 +39,14 @@ export function registerGetGithubConnectUrlTool(
         "",
         data.url,
         "",
-        "Once the user completes the authorization, call check_github_connection again to confirm the connection was successful.",
+        "Once the user completes the optional GitHub authorization, call check_github_connection again to confirm the connection.",
       ].join("\n");
 
       return success(summary, {
         url: data.url,
         openedBrowser: true,
         provider: "github",
+        nextAction: "check_github_connection",
       });
     }),
   );

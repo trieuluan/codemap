@@ -35,6 +35,21 @@ type GithubRepository = {
   };
 };
 
+interface GithubOAuthState {
+  userId: string;
+  returnTo: string | null;
+}
+
+export class GithubOAuthCallbackError extends Error {
+  returnTo: string | null;
+
+  constructor(message: string, returnTo?: string | null) {
+    super(message);
+    this.name = "GithubOAuthCallbackError";
+    this.returnTo = returnTo ?? null;
+  }
+}
+
 export function createGithubService(
   db: Db,
   redis: Redis | null,
@@ -60,25 +75,59 @@ export function createGithubService(
   }
   // ── OAuth state helpers ────────────────────────────────────────────────────
 
-  async function createOAuthState(userId: string): Promise<string> {
+  async function createOAuthState(
+    userId: string,
+    returnTo?: string | null,
+  ): Promise<string> {
     const redisClient = requireRedis();
     const state = randomUUID();
+    const value: GithubOAuthState = {
+      userId,
+      returnTo: returnTo ?? null,
+    };
     await redisClient.setex(
       `${GITHUB_STATE_KEY_PREFIX}${state}`,
       OAUTH_STATE_TTL_SECONDS,
-      userId,
+      JSON.stringify(value),
     );
     return state;
   }
 
-  async function consumeOAuthState(state: string): Promise<string | null> {
+  async function consumeOAuthState(
+    state: string,
+  ): Promise<GithubOAuthState | null> {
     const redisClient = requireRedis();
     const key = `${GITHUB_STATE_KEY_PREFIX}${state}`;
-    const userId = await redisClient.get(key);
-    if (userId) {
+    const rawState = await redisClient.get(key);
+    if (rawState) {
       await redisClient.del(key);
     }
-    return userId;
+
+    if (!rawState) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(rawState) as Partial<GithubOAuthState>;
+      if (typeof parsed.userId === "string") {
+        return {
+          userId: parsed.userId,
+          returnTo:
+            typeof parsed.returnTo === "string" ? parsed.returnTo : null,
+        };
+      }
+    } catch {
+      // Older OAuth states stored only the user id.
+      return {
+        userId: rawState,
+        returnTo: null,
+      };
+    }
+
+    return {
+      userId: rawState,
+      returnTo: null,
+    };
   }
 
   // ── GitHub API helpers ─────────────────────────────────────────────────────
@@ -176,48 +225,62 @@ export function createGithubService(
       return `https://github.com/login/oauth/authorize?${params.toString()}`;
     },
 
-    async generateConnectUrl(userId: string): Promise<string> {
-      const state = await createOAuthState(userId);
+    async generateConnectUrl(
+      userId: string,
+      options?: { returnTo?: string | null },
+    ): Promise<string> {
+      const state = await createOAuthState(userId, options?.returnTo ?? null);
       return this.buildConnectUrl(userId, state);
     },
 
     async handleCallback(
       code: string,
       state: string,
-    ): Promise<{ userId: string; githubLogin: string }> {
-      const userId = await consumeOAuthState(state);
+    ): Promise<{ userId: string; githubLogin: string; returnTo: string | null }> {
+      const oauthState = await consumeOAuthState(state);
 
-      if (!userId) {
+      if (!oauthState) {
         throw new Error("INVALID_OR_EXPIRED_STATE");
       }
 
-      const tokenData = await exchangeCodeForToken(code);
-      const githubUser = await fetchGithubUser(tokenData.access_token);
+      try {
+        const tokenData = await exchangeCodeForToken(code);
+        const githubUser = await fetchGithubUser(tokenData.access_token);
 
-      await db
-        .insert(userGithubConnection)
-        .values({
-          id: randomUUID(),
-          userId,
-          githubUserId: githubUser.id,
-          githubLogin: githubUser.login,
-          accessToken: tokenData.access_token,
-          tokenType: tokenData.token_type,
-          scope: tokenData.scope,
-        })
-        .onConflictDoUpdate({
-          target: userGithubConnection.userId,
-          set: {
+        await db
+          .insert(userGithubConnection)
+          .values({
+            id: randomUUID(),
+            userId: oauthState.userId,
             githubUserId: githubUser.id,
             githubLogin: githubUser.login,
             accessToken: tokenData.access_token,
             tokenType: tokenData.token_type,
             scope: tokenData.scope,
-            updatedAt: new Date(),
-          },
-        });
+          })
+          .onConflictDoUpdate({
+            target: userGithubConnection.userId,
+            set: {
+              githubUserId: githubUser.id,
+              githubLogin: githubUser.login,
+              accessToken: tokenData.access_token,
+              tokenType: tokenData.token_type,
+              scope: tokenData.scope,
+              updatedAt: new Date(),
+            },
+          });
 
-      return { userId, githubLogin: githubUser.login };
+        return {
+          userId: oauthState.userId,
+          githubLogin: githubUser.login,
+          returnTo: oauthState.returnTo,
+        };
+      } catch (error) {
+        throw new GithubOAuthCallbackError(
+          error instanceof Error ? error.message : "GITHUB_CALLBACK_FAILED",
+          oauthState.returnTo,
+        );
+      }
     },
 
     async getConnection(userId: string) {

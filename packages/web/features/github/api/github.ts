@@ -6,8 +6,10 @@ export function browserGithubApi() {
     getStatus: () =>
       requestApi<GithubConnectionStatus>("/github/status"),
 
-    getConnectUrl: () =>
-      requestApi<GithubConnectUrlResponse>("/github/connect"),
+    getConnectUrl: (returnTo?: string) =>
+      requestApi<GithubConnectUrlResponse>("/github/connect", {
+        queryParams: { returnTo },
+      }),
 
     disconnect: () =>
       requestApi<{ disconnected: boolean }>("/github/disconnect", {

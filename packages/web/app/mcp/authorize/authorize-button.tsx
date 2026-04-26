@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requestApi } from "@/lib/api/client";
 
 export function AuthorizeButton({ sessionId }: { sessionId: string }) {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export function AuthorizeButton({ sessionId }: { sessionId: string }) {
         },
       });
       setIsApproved(true);
+      router.refresh();
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to approve MCP login.",

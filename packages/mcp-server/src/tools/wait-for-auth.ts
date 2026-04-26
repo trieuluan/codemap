@@ -28,11 +28,11 @@ export function registerWaitForAuthTool(
 
         const message =
           result.status === "authorized"
-            ? "CodeMap MCP authentication completed successfully."
+            ? "CodeMap MCP authentication completed successfully. GitHub setup is optional; call check_github_connection if the next workflow needs repository access."
             : result.status === "pending"
-              ? `Authorization is still pending after ${Math.round(LOCAL_WAIT_TIMEOUT_MS / 1000)} seconds. Ask the user to complete browser login, then call wait_for_auth again.`
+              ? `Authorization is still pending after ${Math.round(LOCAL_WAIT_TIMEOUT_MS / 1000)} seconds. Ask the user to complete browser login and approve MCP access, then call wait_for_auth again.`
               : result.status === "expired"
-                ? "Authorization session expired before login completed."
+                ? "Authorization session expired before login completed. Call start_auth_flow to create a new browser login link."
                 : "Authorization request was denied.";
         const data = {
           authenticated: result.authenticated,

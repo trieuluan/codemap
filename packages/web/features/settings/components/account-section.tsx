@@ -233,7 +233,7 @@ export function AccountSection() {
 
       <AlertDialog
         open={confirmOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           setConfirmOpen(open);
           if (!open) setConfirmText("");
         }}

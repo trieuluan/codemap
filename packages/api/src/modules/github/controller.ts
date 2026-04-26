@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { createGithubService } from "./service";
+import { createGithubService, GithubOAuthCallbackError } from "./service";
 import {
   githubCallbackQuerySchema,
+  githubConnectQuerySchema,
   githubRepositoriesQuerySchema,
 } from "./schema";
 
@@ -32,6 +33,54 @@ function getAuthenticatedUserId(
   }
 
   return userId;
+}
+
+function getWebAppUrl() {
+  return (
+    process.env.WEB_APP_URL ??
+    process.env.BETTER_AUTH_URL?.replace("://api.", "://").replace(
+      ":3001",
+      ":3000",
+    ) ??
+    "http://localhost:3000"
+  );
+}
+
+function normalizeSafeReturnTo(returnTo?: string | null) {
+  if (!returnTo) {
+    return null;
+  }
+
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(returnTo, "http://codemap.local");
+    if (parsed.origin !== "http://codemap.local") {
+      return null;
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function buildWebRedirect(
+  webUrl: string,
+  returnTo: string | null | undefined,
+  params: Record<string, string>,
+) {
+  const baseUrl = webUrl.replace(/\/+$/, "");
+  const target = normalizeSafeReturnTo(returnTo) ?? "/dashboard";
+  const url = new URL(target, baseUrl);
+
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  return url.toString();
 }
 
 export function createGithubController(fastify: FastifyInstance) {
@@ -66,13 +115,16 @@ export function createGithubController(fastify: FastifyInstance) {
      */
     getConnectUrl: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
+      const query = githubConnectQuerySchema.parse(request.query ?? {});
       const service = createGithubService(
         fastify.db,
         fastify.redis,
         getGithubConfig(fastify),
       );
 
-      const url = await service.generateConnectUrl(userId);
+      const url = await service.generateConnectUrl(userId, {
+        returnTo: normalizeSafeReturnTo(query.returnTo),
+      });
 
       return reply.success({ url });
     },
@@ -118,28 +170,27 @@ export function createGithubController(fastify: FastifyInstance) {
       const query = githubCallbackQuerySchema.safeParse(request.query ?? {});
 
       if (!query.success) {
-        const webUrl =
-          process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ??
-          "http://localhost:3000";
+        const webUrl = getWebAppUrl();
         return reply.redirect(
-          `${webUrl}/dashboard?github_error=invalid_request`,
+          buildWebRedirect(webUrl, null, { github_error: "invalid_request" }),
         );
       }
 
       const config = getGithubConfig(fastify);
       const service = createGithubService(fastify.db, fastify.redis, config);
-      const webUrl =
-        process.env.BETTER_AUTH_URL?.replace(":3001", ":3000") ??
-        "http://localhost:3000";
+      const webUrl = getWebAppUrl();
 
       try {
-        const { githubLogin } = await service.handleCallback(
+        const { githubLogin, returnTo } = await service.handleCallback(
           query.data.code,
           query.data.state,
         );
 
         return reply.redirect(
-          `${webUrl}/dashboard?github_connected=1&login=${encodeURIComponent(githubLogin)}`,
+          buildWebRedirect(webUrl, returnTo, {
+            github_connected: "1",
+            login: githubLogin,
+          }),
         );
       } catch (error) {
         request.log.error({ error }, "GitHub OAuth callback failed");
@@ -148,8 +199,12 @@ export function createGithubController(fastify: FastifyInstance) {
           error instanceof Error && error.message === "INVALID_OR_EXPIRED_STATE"
             ? "expired_state"
             : "token_exchange_failed";
+        const returnTo =
+          error instanceof GithubOAuthCallbackError ? error.returnTo : null;
 
-        return reply.redirect(`${webUrl}/dashboard?github_error=${message}`);
+        return reply.redirect(
+          buildWebRedirect(webUrl, returnTo, { github_error: message }),
+        );
       }
     },
 

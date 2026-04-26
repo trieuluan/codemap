@@ -3,6 +3,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { getMcpWhoAmI } from "../lib/mcp-auth.js";
 import { success, errorContent } from "../lib/tool-response.js";
+import type { GithubStatus } from "../lib/api-types.js";
 
 export function registerCheckAuthStatusTool(
   server: McpServer,
@@ -22,7 +23,7 @@ export function registerCheckAuthStatusTool(
       if (!config.apiToken) {
         const summary =
           `Not authenticated.\nAPI URL: ${config.apiUrl}\n` +
-          "Call `start_auth_flow` to begin browser login, then `wait_for_auth` after the user completes authorization. " +
+          "Next action: call `start_auth_flow` to begin browser login, then `wait_for_auth` after the user completes authorization. " +
           "For CLI usage, run `codemap-mcp login`.";
 
         return success(summary, {
@@ -35,12 +36,31 @@ export function registerCheckAuthStatusTool(
 
       try {
         const response = await getMcpWhoAmI(client);
+        let github: GithubStatus | null = null;
+        let githubCheckError: string | null = null;
+
+        try {
+          github = await client.request<GithubStatus>("/github/status", {
+            authRequired: true,
+          });
+        } catch (error) {
+          githubCheckError =
+            error instanceof Error ? error.message : "Unable to check GitHub";
+        }
+
         const summary = [
           "Authenticated with CodeMap.",
           `API URL: ${response.apiUrl}`,
           response.user.email ? `Email: ${response.user.email}` : null,
           response.user.name ? `Name: ${response.user.name}` : null,
           response.user.id ? `User ID: ${response.user.id}` : null,
+          github?.connected
+            ? `GitHub: connected as @${github.githubLogin}`
+            : "GitHub: not connected",
+          github?.connected
+            ? "Next action: use CodeMap tools normally."
+            : "Next action: GitHub is optional; call `get_github_connect_url` if repository import needs GitHub access.",
+          githubCheckError ? `GitHub status check: ${githubCheckError}` : null,
         ]
           .filter(Boolean)
           .join("\n");
@@ -50,6 +70,14 @@ export function registerCheckAuthStatusTool(
           apiUrl: response.apiUrl,
           user: response.user,
           loginRequired: false,
+          github: github ?? {
+            connected: false,
+            githubLogin: null,
+            checkError: githubCheckError,
+          },
+          nextAction: github?.connected
+            ? "ready"
+            : "optional_github_connect",
         });
       } catch (error) {
         return errorContent(error);

@@ -35,8 +35,8 @@ export function registerCheckGithubConnectionTool(
       if (!data.connected) {
         const summary =
           "GitHub is NOT connected.\n\n" +
-          "The user has not authorized CodeMap to access their GitHub account. " +
-          "Call get_github_connect_url to get an authorization link, then ask the user to open it in their browser.";
+          "GitHub is optional for MCP auth, but needed for workflows that import or inspect GitHub repositories. " +
+          "Next action: call get_github_connect_url to open the authorization page if repository access is needed.";
 
         return success(summary, {
           connected: false,
@@ -45,6 +45,7 @@ export function registerCheckGithubConnectionTool(
           scope: null,
           scopes,
           connectedAt: null,
+          nextAction: "optional_connect_github",
         });
       }
 
@@ -66,6 +67,7 @@ export function registerCheckGithubConnectionTool(
         scope: data.scope ?? null,
         scopes,
         connectedAt: data.connectedAt ?? null,
+        nextAction: "ready",
       });
     }),
   );

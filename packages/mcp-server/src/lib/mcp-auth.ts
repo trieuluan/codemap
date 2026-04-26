@@ -23,6 +23,9 @@ export interface AuthStatusResponse {
   deviceName: string | null;
   apiUrl: string;
   user?: McpConfigUser | null;
+  apiKeyReady?: boolean;
+  apiKeyClaimed?: boolean;
+  apiKeyDeliveredAt?: string | null;
 }
 
 export interface ClaimAuthResponse {

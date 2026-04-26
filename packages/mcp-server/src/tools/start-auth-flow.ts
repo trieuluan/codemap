@@ -23,8 +23,8 @@ export function registerStartAuthFlowTool(
         const startResponse = await startMcpLogin(client);
         const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);
         const message = openedBrowser
-          ? "Browser opened for CodeMap authorization. After the user completes login, call wait_for_auth with this sessionId."
-          : "Authorization URL generated. Ask the user to open the URL, then call wait_for_auth with this sessionId.";
+          ? "Browser opened for CodeMap authorization. The page may also offer optional GitHub setup. After the user approves MCP access, call wait_for_auth with this sessionId."
+          : "Authorization URL generated. Ask the user to open the URL; the page may also offer optional GitHub setup. After they approve MCP access, call wait_for_auth with this sessionId.";
         const data = {
           sessionId: startResponse.sessionId,
           authorizeUrl: startResponse.authorizeUrl,

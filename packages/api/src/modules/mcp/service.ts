@@ -38,6 +38,9 @@ interface McpAuthStatusResult {
   deviceName: string | null;
   apiUrl: string;
   user?: McpAuthSessionRecord["user"];
+  apiKeyReady: boolean;
+  apiKeyClaimed: boolean;
+  apiKeyDeliveredAt: string | null;
 }
 
 interface McpAuthClaimResult extends McpAuthStatusResult {
@@ -263,6 +266,10 @@ export function createMcpService(
           clientName: null,
           deviceName: null,
           apiUrl,
+          user: null,
+          apiKeyReady: false,
+          apiKeyClaimed: false,
+          apiKeyDeliveredAt: null,
         };
       }
 
@@ -276,6 +283,10 @@ export function createMcpService(
           clientName: session.clientName,
           deviceName: session.deviceName,
           apiUrl: session.apiUrl,
+          user: session.user,
+          apiKeyReady: Boolean(session.apiKey),
+          apiKeyClaimed: Boolean(session.apiKeyDeliveredAt),
+          apiKeyDeliveredAt: session.apiKeyDeliveredAt,
         };
       }
 
@@ -287,6 +298,9 @@ export function createMcpService(
         deviceName: session.deviceName,
         apiUrl: session.apiUrl,
         user: session.user,
+        apiKeyReady: Boolean(session.apiKey),
+        apiKeyClaimed: Boolean(session.apiKeyDeliveredAt),
+        apiKeyDeliveredAt: session.apiKeyDeliveredAt,
       };
 
       return response;
@@ -320,6 +334,9 @@ export function createMcpService(
         deviceName: session.deviceName,
         apiUrl: session.apiUrl,
         user: session.user,
+        apiKeyReady: Boolean(session.apiKey),
+        apiKeyClaimed: Boolean(session.apiKeyDeliveredAt),
+        apiKeyDeliveredAt: session.apiKeyDeliveredAt,
         apiKey: session.apiKey,
       };
 
