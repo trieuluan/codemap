@@ -18,9 +18,19 @@ export interface ProjectImport {
   branch: string | null;
   commitSha: string | null;
   parseStatus: string;
+  parseTool?: string | null;
+  parseToolVersion?: string | null;
+  parseStartedAt?: string | null;
+  parseCompletedAt?: string | null;
   completedAt: string | null;
   errorMessage: string | null;
   parseError: string | null;
+  startedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  indexedFileCount?: number;
+  indexedSymbolCount?: number;
+  indexedEdgeCount?: number;
 }
 
 export interface ProjectSourceImportResult {
@@ -78,8 +88,15 @@ export interface TriggerImportResult {
   id: string;
   projectId: string;
   status: ImportStatus;
+  parseStatus?: ParseStatus;
   branch: string | null;
+  commitSha?: string | null;
+  errorMessage?: string | null;
+  parseError?: string | null;
+  startedAt?: string;
+  completedAt?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ProjectMapTreeNode {

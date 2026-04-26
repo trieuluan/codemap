@@ -78,6 +78,7 @@ export function registerTriggerReimportTool(
             import: null,
             reason: "import_already_running",
             branch: branch ?? null,
+            nextAction: "wait_for_import",
           });
         }
 
@@ -103,7 +104,7 @@ export function registerTriggerReimportTool(
         `Import ID: ${result.id}`,
         `Status: ${result.status}`,
         result.branch ? `Branch: ${result.branch}` : null,
-        "Call wait_for_import to track progress.",
+        "Next action: call wait_for_import to track progress.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -114,6 +115,7 @@ export function registerTriggerReimportTool(
         import: result,
         reason: null,
         branch: result.branch ?? branch ?? null,
+        nextAction: "wait_for_import",
       });
     }),
   );

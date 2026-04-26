@@ -5,8 +5,9 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectDetail } from "../lib/api-types.js";
+import { describeImportHealth, getProjectImportHealth } from "../lib/import-health.js";
 
-function formatProject(p: ProjectDetail): string {
+function formatProject(p: ProjectDetail, health: Awaited<ReturnType<typeof getProjectImportHealth>>): string {
   const lines: string[] = [
     `Name: ${p.name}`,
     `ID: ${p.id}`,
@@ -25,6 +26,8 @@ function formatProject(p: ProjectDetail): string {
   }
 
   lines.push(`Created: ${new Date(p.createdAt).toLocaleString()}`);
+  lines.push("");
+  lines.push(describeImportHealth(health));
 
   return lines.join("\n");
 }
@@ -91,11 +94,14 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
         throw error;
       }
 
-      return success(formatProject(project), {
+      const health = await getProjectImportHealth(client, resolvedProjectId, project);
+
+      return success(formatProject(project, health), {
         linkedWorkspace,
         projectId: resolvedProjectId,
         found: true,
         project,
+        health,
       });
     }),
   );

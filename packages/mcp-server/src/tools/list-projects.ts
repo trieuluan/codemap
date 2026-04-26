@@ -3,10 +3,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
-import type { Project, ProjectImport } from "../lib/api-types.js";
+import type { Project, ProjectImportDetail } from "../lib/api-types.js";
+import { buildImportHealth, formatShortCommit } from "../lib/import-health.js";
+import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 
 interface ProjectListItem extends Project {
-  latestImport?: ProjectImport | null;
+  latestImport?: ProjectImportDetail | null;
+  health?: ReturnType<typeof buildImportHealth>;
 }
 
 function formatProject(p: ProjectListItem, index: number): string {
@@ -30,10 +33,23 @@ function formatProject(p: ProjectListItem, index: number): string {
         ? `, parse: ${imp.parseStatus}`
         : "";
     lines.push(`   Latest import: ${imp.status}${parseInfo}`);
+    if (imp.commitSha) lines.push(`   Import commit: ${formatShortCommit(imp.commitSha)}`);
     if (imp.completedAt) {
       lines.push(
         `   Last imported: ${new Date(imp.completedAt).toLocaleString()}`,
       );
+    }
+  } else {
+    lines.push("   Latest import: none");
+  }
+
+  if (p.health) {
+    lines.push(`   Index health: ${p.health.state}`);
+    if (p.health.commitComparison.status === "different") {
+      lines.push("   Local commit differs from indexed commit.");
+    }
+    if (p.health.nextAction !== "none") {
+      lines.push(`   Next action: ${p.health.nextAction}`);
     }
   }
 
@@ -85,12 +101,22 @@ export function registerListProjectsTool(
         });
       }
 
-      const header = `${filtered.length} project${filtered.length !== 1 ? "s" : ""}${status ? ` (${status})` : ""}`;
-      const body = filtered.map(formatProject).join("\n\n");
+      const workspace = await tryGetCurrentWorkspaceInfo();
+      const items = filtered.map((project) => ({
+        ...project,
+        health: buildImportHealth({
+          latestImport: project.latestImport ?? null,
+          workspace,
+          project,
+        }),
+      }));
+
+      const header = `${items.length} project${items.length !== 1 ? "s" : ""}${status ? ` (${status})` : ""}`;
+      const body = items.map(formatProject).join("\n\n");
 
       return success(`${header}\n\n${body}`, {
-        items: filtered,
-        total: filtered.length,
+        items,
+        total: items.length,
         statusFilter: status ?? null,
       });
     }),

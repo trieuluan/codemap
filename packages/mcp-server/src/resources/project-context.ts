@@ -3,6 +3,12 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectDetail, ProjectImportDetail } from "../lib/api-types.js";
+import {
+  buildImportHealth,
+  describeImportHealth,
+  type ImportHealth,
+} from "../lib/import-health.js";
+import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 
 const RESOURCE_URI = "codemap://project/context";
 
@@ -19,6 +25,7 @@ function formatProvider(provider: string | null): string {
 function buildContextText(
   project: ProjectDetail,
   latestImport: ProjectImportDetail | null,
+  health: ImportHealth,
 ): string {
   const lines: string[] = [
     "# CodeMap Project Context",
@@ -66,6 +73,10 @@ function buildContextText(
   }
 
   lines.push("");
+  lines.push("## Index Health");
+  lines.push(describeImportHealth(health));
+
+  lines.push("");
   lines.push("## Available Tools");
   lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
   lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
@@ -111,11 +122,18 @@ function buildContextText(
 
   if (
     project.status === "ready" &&
-    latestImport?.parseStatus === "completed"
+    latestImport?.parseStatus === "completed" &&
+    !health.isStale
   ) {
     lines.push(
       "The codebase is fully indexed. Use search_codebase to locate files and " +
         "symbols before answering questions about the code.",
+    );
+  } else if (health.isStale) {
+    lines.push(
+      "The local workspace commit differs from the latest indexed commit. " +
+        "Call trigger_reimport, then wait_for_import before relying on search " +
+        "or symbol results for recent code changes.",
     );
   } else if (project.status === "importing") {
     if (latestImport?.parseStatus === "queued") {
@@ -244,13 +262,15 @@ export function registerProjectContextResource(
       }
 
       const latestImport = imports[0] ?? null;
+      const workspace = await tryGetCurrentWorkspaceInfo();
+      const health = buildImportHealth({ latestImport, workspace, project });
 
       return {
         contents: [
           {
             uri: uri.href,
             mimeType: "text/plain",
-            text: buildContextText(project, latestImport),
+            text: buildContextText(project, latestImport, health),
           },
         ],
       };
