@@ -5,6 +5,7 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import type { ProjectSourceImportResult } from "../lib/api-types.js";
 import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 export function registerCreateProjectFromGithubTool(
   server: McpServer,
@@ -52,7 +53,11 @@ export function registerCreateProjectFromGithubTool(
         },
       );
 
-      await saveWorkspaceProjectId(process.cwd(), result.project.id);
+      const resolvedWorkspace = await resolveWorkspace({ project: result.project });
+      await saveWorkspaceProjectId(
+        resolvedWorkspace.workspaceRootPath,
+        result.project.id,
+      );
 
       const summary = [
         "GitHub source project import started successfully.",
@@ -65,6 +70,7 @@ export function registerCreateProjectFromGithubTool(
         `Branch: ${result.import.branch ?? default_branch ?? "default"}`,
         `Import status: ${result.import.status}`,
         `Parse status: ${result.import.parseStatus}`,
+        "Next action: call wait_for_import until indexing is ready.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -80,6 +86,7 @@ export function registerCreateProjectFromGithubTool(
           branch: branch ?? null,
         },
         workspaceProjectIdSaved: true,
+        nextAction: "wait_for_import",
       });
     }),
   );

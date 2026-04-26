@@ -58,7 +58,7 @@ export function registerCheckAuthStatusTool(
             ? `GitHub: connected as @${github.githubLogin}`
             : "GitHub: not connected",
           github?.connected
-            ? "Next action: use CodeMap tools normally."
+            ? "Next action: call get_project to check project/index health, or create_project if this workspace is not linked yet."
             : "Next action: GitHub is optional; call `get_github_connect_url` if repository import needs GitHub access.",
           githubCheckError ? `GitHub status check: ${githubCheckError}` : null,
         ]

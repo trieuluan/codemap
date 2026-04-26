@@ -274,3 +274,44 @@ test("edit location ranking respects limit and keeps broad path-only tool matche
   assert.equal(ranked.length, 2);
   assert.ok(ranked.every((item) => item.confidence !== "high"));
 });
+
+test("edit location ranking demotes generic UI symbols for broad roadmap prompts", () => {
+  const files = [
+    file("f1", "packages/mcp-server/src/lib/import-health.ts"),
+    file("f2", "packages/mcp-server/src/resources/project-context.ts"),
+    file("f3", "packages/api/src/modules/project/parse/graph/edit-locations.ts"),
+    file("f4", "packages/web/components/ui/context-menu.tsx"),
+    file("f5", "packages/web/components/ui/button.tsx"),
+  ];
+
+  const ranked = suggestions({
+    query: "improve CodeMap MCP app next roadmap auth github onboarding search usages project context eval fixtures",
+    files,
+    searchResults: {
+      files: [fileResult(files[0]!.path), fileResult(files[1]!.path), fileResult(files[2]!.path)],
+      symbols: [
+        symbol("s1", "buildImportHealth", files[0]!.path),
+        symbol("s2", "registerProjectContextResource", files[1]!.path),
+        symbol("s3", "buildEditLocationSuggestions", files[2]!.path),
+        symbol("s4", "ContextMenu", files[3]!.path, "component"),
+        symbol("s5", "Button", files[4]!.path, "component"),
+      ],
+      exports: [
+        exportResult("e1", "buildImportHealth", files[0]!.path, "s1"),
+        exportResult("e2", "buildEditLocationSuggestions", files[2]!.path, "s3"),
+      ],
+    },
+  });
+
+  assertTopIncludes(ranked, 3, [files[0]!.path, files[1]!.path, files[2]!.path]);
+
+  const genericItems = ranked.filter((item) =>
+    [files[3]!.path, files[4]!.path].includes(item.path),
+  );
+  assert.ok(genericItems.every((item) => item.confidence !== "high"));
+  assert.ok(
+    genericItems.every((item) =>
+      item.signals.some((signal) => signal === "demoted:generic_symbol"),
+    ),
+  );
+});

@@ -8,7 +8,7 @@ import {
   describeImportHealth,
   type ImportHealth,
 } from "../lib/import-health.js";
-import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 const RESOURCE_URI = "codemap://project/context";
 
@@ -178,6 +178,9 @@ function buildContextText(
   lines.push("- If not authenticated, call start_auth_flow and then wait_for_auth after the user approves the browser prompt.");
   lines.push("- If GitHub access is needed and disconnected, call get_github_connect_url; GitHub is optional for MCP auth but required for private GitHub repository imports.");
   lines.push("- Use get_project or list_projects to confirm the active project.");
+  lines.push("- If get_project reports health.nextAction as trigger_reimport, call trigger_reimport and then wait_for_import.");
+  lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
+  lines.push("- If no project is linked, call create_project first; it will detect GitHub remotes or ask for upload confirmation.");
   lines.push("- Use get_current_workspace_info before create_project when linking the current workspace.");
   lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files. Treat results as candidates, not final truth; prefer high-confidence entries with concrete signals and relevantSymbols.");
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
@@ -262,8 +265,13 @@ export function registerProjectContextResource(
       }
 
       const latestImport = imports[0] ?? null;
-      const workspace = await tryGetCurrentWorkspaceInfo();
-      const health = buildImportHealth({ latestImport, workspace, project });
+      const resolvedWorkspace = await resolveWorkspace({ project });
+      const health = buildImportHealth({
+        latestImport,
+        workspace: resolvedWorkspace.workspace,
+        workspaceResolution: resolvedWorkspace.resolution,
+        project,
+      });
 
       return {
         contents: [

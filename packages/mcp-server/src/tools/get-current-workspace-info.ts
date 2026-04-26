@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 import { errorContent, success } from "../lib/tool-response.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
   server.registerTool(
@@ -14,7 +14,22 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
     },
     async () => {
       try {
-        const workspace = await getCurrentWorkspaceInfo();
+        const resolvedWorkspace = await resolveWorkspace();
+        const { workspace } = resolvedWorkspace;
+
+        if (!workspace) {
+          return success(
+            "No Git workspace detected. Project creation can still use upload flow if create_project is called with upload confirmation.",
+            {
+              detected: false,
+              workspace: null,
+              workspaceRootPath: resolvedWorkspace.workspaceRootPath,
+              resolution: resolvedWorkspace.resolution,
+              nextAction: "create_project",
+            },
+          );
+        }
+
         const summary = [
           "Current workspace Git repository detected.",
           `Repo: ${workspace.repoName}`,
@@ -29,6 +44,9 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
         return success(summary, {
           detected: true,
           workspace,
+          workspaceRootPath: resolvedWorkspace.workspaceRootPath,
+          resolution: resolvedWorkspace.resolution,
+          nextAction: "create_project",
         });
       } catch (error) {
         return errorContent(error);

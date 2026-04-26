@@ -1,5 +1,9 @@
 import type { CodeMapClient } from "./codemap-api.js";
-import { tryGetCurrentWorkspaceInfo, type CurrentWorkspaceInfo } from "./workspace-git.js";
+import type { CurrentWorkspaceInfo } from "./workspace-git.js";
+import {
+  resolveWorkspace,
+  type ResolvedWorkspace,
+} from "./workspace-resolver.js";
 import type { ProjectImportDetail } from "./api-types.js";
 
 type ProjectLike = {
@@ -30,6 +34,7 @@ export interface ImportHealth {
   nextAction: ImportHealthNextAction;
   latestImport: ProjectImportDetail | null;
   workspace: CurrentWorkspaceInfo | null;
+  workspaceResolution: ResolvedWorkspace["resolution"] | null;
   commitComparison: {
     status: "same" | "different" | "unknown";
     importCommit: string | null;
@@ -38,7 +43,23 @@ export interface ImportHealth {
 }
 
 function normalizeRepositoryUrl(value: string) {
-  return value.trim().replace(/\.git$/i, "").replace(/\/+$/, "");
+  const trimmed = value.trim().replace(/\.git$/i, "").replace(/\/+$/, "");
+  const githubSshMatch = /^git@github\.com:(.+)$/i.exec(trimmed);
+
+  if (githubSshMatch?.[1]) {
+    return `github.com/${githubSshMatch[1].toLowerCase()}`;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname.toLowerCase() === "github.com") {
+      return `github.com/${url.pathname.replace(/^\/+/, "").toLowerCase()}`;
+    }
+  } catch {
+    // Non-URL remotes fall through to basic normalized string comparison.
+  }
+
+  return trimmed.toLowerCase();
 }
 
 function shouldCompareWorkspaceCommit(
@@ -100,11 +121,15 @@ function compareCommits(
 export function buildImportHealth(input: {
   latestImport: ProjectImportDetail | null;
   workspace: CurrentWorkspaceInfo | null;
+  workspaceResolution?: ResolvedWorkspace["resolution"] | null;
   project?: ProjectLike | null;
 }): ImportHealth {
   const { latestImport, workspace, project } = input;
   const comparableWorkspace = shouldCompareWorkspaceCommit(project, workspace)
     ? workspace
+    : null;
+  const workspaceResolution = comparableWorkspace
+    ? input.workspaceResolution ?? null
     : null;
   const commitComparison = compareCommits(latestImport, comparableWorkspace);
 
@@ -117,6 +142,7 @@ export function buildImportHealth(input: {
       nextAction: "trigger_reimport",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -130,6 +156,7 @@ export function buildImportHealth(input: {
       nextAction: "inspect_import_error",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -143,6 +170,7 @@ export function buildImportHealth(input: {
       nextAction: "wait_for_import",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -160,6 +188,7 @@ export function buildImportHealth(input: {
       nextAction: "wait_for_import",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -177,6 +206,7 @@ export function buildImportHealth(input: {
       nextAction: "trigger_reimport",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -190,6 +220,7 @@ export function buildImportHealth(input: {
       nextAction: "none",
       latestImport,
       workspace: comparableWorkspace,
+      workspaceResolution,
       commitComparison,
     };
   }
@@ -202,6 +233,7 @@ export function buildImportHealth(input: {
     nextAction: "wait_for_import",
     latestImport,
     workspace: comparableWorkspace,
+    workspaceResolution,
     commitComparison,
   };
 }
@@ -211,12 +243,17 @@ export async function getProjectImportHealth(
   projectId: string,
   project?: ProjectLike | null,
 ) {
-  const [latestImport, workspace] = await Promise.all([
+  const [latestImport, resolvedWorkspace] = await Promise.all([
     fetchLatestProjectImport(client, projectId),
-    tryGetCurrentWorkspaceInfo(),
+    resolveWorkspace({ project }),
   ]);
 
-  return buildImportHealth({ latestImport, workspace, project });
+  return buildImportHealth({
+    latestImport,
+    workspace: resolvedWorkspace.workspace,
+    workspaceResolution: resolvedWorkspace.resolution,
+    project,
+  });
 }
 
 export function formatShortCommit(commit: string | null | undefined) {
@@ -232,6 +269,7 @@ export function describeImportHealth(health: ImportHealth) {
     health.workspace?.commitSha
       ? `Local commit: ${formatShortCommit(health.workspace.commitSha)}`
       : null,
+    health.workspaceResolution ? `Workspace: ${health.workspaceResolution}` : null,
     health.commitComparison.status === "different"
       ? "Local workspace differs from the latest indexed commit."
       : null,

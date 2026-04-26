@@ -5,7 +5,7 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import type { Project, ProjectImportDetail } from "../lib/api-types.js";
 import { buildImportHealth, formatShortCommit } from "../lib/import-health.js";
-import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 interface ProjectListItem extends Project {
   latestImport?: ProjectImportDetail | null;
@@ -101,12 +101,13 @@ export function registerListProjectsTool(
         });
       }
 
-      const workspace = await tryGetCurrentWorkspaceInfo();
+      const resolvedWorkspace = await resolveWorkspace();
       const items = filtered.map((project) => ({
         ...project,
         health: buildImportHealth({
           latestImport: project.latestImport ?? null,
-          workspace,
+          workspace: resolvedWorkspace.workspace,
+          workspaceResolution: resolvedWorkspace.resolution,
           project,
         }),
       }));

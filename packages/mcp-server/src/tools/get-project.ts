@@ -32,6 +32,36 @@ function formatProject(p: ProjectDetail, health: Awaited<ReturnType<typeof getPr
   return lines.join("\n");
 }
 
+function buildRecommendedWorkflow(health: Awaited<ReturnType<typeof getProjectImportHealth>>) {
+  if (health.nextAction === "trigger_reimport") {
+    return [
+      "Call trigger_reimport to refresh the CodeMap index.",
+      "Call wait_for_import until parseStatus is completed.",
+      "Use suggest_edit_locations or search_codebase before reading files.",
+    ];
+  }
+
+  if (health.nextAction === "wait_for_import") {
+    return [
+      "Call wait_for_import until import and parse complete.",
+      "Use get_project again to confirm health is ready.",
+    ];
+  }
+
+  if (health.nextAction === "inspect_import_error") {
+    return [
+      "Inspect latestImport.errorMessage and latestImport.parseError.",
+      "Fix the import source or parser issue, then call trigger_reimport.",
+    ];
+  }
+
+  return [
+    "Use suggest_edit_locations for broad implementation tasks.",
+    "Use search_codebase for known files, symbols, or exports.",
+    "Use get_file with outline before reading large files.",
+  ];
+}
+
 export function registerGetProjectTool(server: McpServer, config: McpServerConfig) {
   const client = createCodeMapClient(config);
 
@@ -65,6 +95,7 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
           projectId: null,
           found: false,
           project: null,
+          nextAction: "create_project",
         });
       }
 
@@ -88,6 +119,7 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
             projectId: resolvedProjectId,
             found: false,
             project: null,
+            nextAction: "create_project",
           });
         }
 
@@ -102,6 +134,14 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
         found: true,
         project,
         health,
+        projectContext: {
+          project,
+          latestImport: health.latestImport,
+          health,
+          workspace: health.workspace,
+          recommendedNextAction: health.nextAction,
+          recommendedWorkflow: buildRecommendedWorkflow(health),
+        },
       });
     }),
   );

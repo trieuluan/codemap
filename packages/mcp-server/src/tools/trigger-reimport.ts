@@ -50,6 +50,7 @@ export function registerTriggerReimportTool(
           import: null,
           reason: "missing_project_id",
           branch: branch ?? null,
+          nextAction: "create_project",
         });
       }
 
@@ -93,6 +94,7 @@ export function registerTriggerReimportTool(
             import: null,
             reason: "project_not_found",
             branch: branch ?? null,
+            nextAction: "create_project",
           });
         }
 

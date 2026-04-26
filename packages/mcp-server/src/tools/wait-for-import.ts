@@ -10,7 +10,7 @@ import {
   describeImportHealth,
   isImportDone,
 } from "../lib/import-health.js";
-import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 const POLL_INTERVAL_MS = 3_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -141,6 +141,7 @@ export function registerWaitForImportTool(
           completed: false,
           commit: null,
           completedAt: null,
+          nextAction: "create_project",
         });
       }
 
@@ -160,10 +161,11 @@ export function registerWaitForImportTool(
         const latest = imports[0];
 
         if (!latest) {
-          const workspace = await tryGetCurrentWorkspaceInfo();
+          const resolvedWorkspace = await resolveWorkspace({ project });
           const health = buildImportHealth({
             latestImport: null,
-            workspace,
+            workspace: resolvedWorkspace.workspace,
+            workspaceResolution: resolvedWorkspace.resolution,
             project,
           });
           return success(
@@ -175,10 +177,11 @@ export function registerWaitForImportTool(
         }
 
         if (isDone(latest.status)) {
-          const workspace = await tryGetCurrentWorkspaceInfo();
+          const resolvedWorkspace = await resolveWorkspace({ project });
           const health = buildImportHealth({
             latestImport: latest,
-            workspace,
+            workspace: resolvedWorkspace.workspace,
+            workspaceResolution: resolvedWorkspace.resolution,
             project,
           });
           return success(
@@ -189,10 +192,11 @@ export function registerWaitForImportTool(
 
         const elapsed = Date.now() - startedAt;
         if (elapsed + POLL_INTERVAL_MS >= maxWaitMs) {
-          const workspace = await tryGetCurrentWorkspaceInfo();
+          const resolvedWorkspace = await resolveWorkspace({ project });
           const health = buildImportHealth({
             latestImport: latest,
-            workspace,
+            workspace: resolvedWorkspace.workspace,
+            workspaceResolution: resolvedWorkspace.resolution,
             project,
           });
           return success(

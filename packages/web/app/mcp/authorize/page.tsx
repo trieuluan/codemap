@@ -329,6 +329,14 @@ export default async function McpAuthorizePage({
               <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
                 Authorization complete. Return to your AI tool.
               </div>
+              <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
+                <div className="font-medium">Project setup continues in your AI tool</div>
+                <p className="mt-1 text-muted-foreground">
+                  CodeMap MCP can now check this workspace, link or create a
+                  project, import the repository, and wait until indexing is
+                  ready.
+                </p>
+              </div>
               <GithubNotice
                 status={githubStatus}
                 sessionId={sessionId}

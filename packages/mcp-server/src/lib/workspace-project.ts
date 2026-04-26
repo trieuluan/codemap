@@ -4,6 +4,58 @@ import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
 
 const WORKSPACE_CONFIG_FILE = ".codemap/mcp.json";
 
+export interface WorkspaceProjectConfig {
+  projectId: string | null;
+  workspaceRootPath: string | null;
+}
+
+async function readWorkspaceProjectConfigAt(configPath: string) {
+  const raw = await readFile(configPath, "utf8");
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+  return {
+    projectId:
+      typeof parsed.projectId === "string" && parsed.projectId.trim()
+        ? parsed.projectId.trim()
+        : null,
+    workspaceRootPath:
+      typeof parsed.workspaceRootPath === "string" &&
+      parsed.workspaceRootPath.trim()
+        ? parsed.workspaceRootPath.trim()
+        : null,
+  };
+}
+
+export async function readWorkspaceProjectConfig(
+  cwd = process.cwd(),
+): Promise<WorkspaceProjectConfig> {
+  const candidateRoots = new Set<string>([cwd]);
+
+  const workspace = await tryGetCurrentWorkspaceInfo(cwd);
+  if (workspace?.repoRootPath) {
+    candidateRoots.add(workspace.repoRootPath);
+  }
+
+  for (const root of candidateRoots) {
+    try {
+      const config = await readWorkspaceProjectConfigAt(
+        path.join(root, WORKSPACE_CONFIG_FILE),
+      );
+      return {
+        ...config,
+        workspaceRootPath: config.workspaceRootPath ?? root,
+      };
+    } catch {
+      // Try the next candidate root.
+    }
+  }
+
+  return {
+    projectId: null,
+    workspaceRootPath: workspace?.repoRootPath ?? null,
+  };
+}
+
 /**
  * Reads the CodeMap project ID linked to a workspace directory.
  * Looks for a `projectId` field inside `.codemap/mcp.json` at the repo root.
@@ -12,30 +64,15 @@ const WORKSPACE_CONFIG_FILE = ".codemap/mcp.json";
 export async function readWorkspaceProjectId(
   cwd = process.cwd(),
 ): Promise<string | null> {
-  try {
-    // Prefer the git repo root over cwd so the config is always found
-    // at the same place regardless of which subdirectory the agent is in.
-    const workspace = await tryGetCurrentWorkspaceInfo(cwd);
-    const root = workspace?.repoRootPath ?? cwd;
-    const configPath = path.join(root, WORKSPACE_CONFIG_FILE);
-
-    const raw = await readFile(configPath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-
-    if (typeof parsed.projectId === "string" && parsed.projectId.trim()) {
-      return parsed.projectId.trim();
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+  return (await readWorkspaceProjectConfig(cwd)).projectId;
 }
 
 /**
  * Returns the resolved workspace root path (git repo root, or cwd as fallback).
  */
 export async function readWorkspacePath(cwd = process.cwd()): Promise<string> {
+  const config = await readWorkspaceProjectConfig(cwd);
+  if (config.workspaceRootPath) return config.workspaceRootPath;
   const workspace = await tryGetCurrentWorkspaceInfo(cwd);
   return workspace?.repoRootPath ?? cwd;
 }
@@ -61,7 +98,7 @@ export async function saveWorkspaceProjectId(
   await mkdir(path.dirname(configPath), { recursive: true });
   await writeFile(
     configPath,
-    `${JSON.stringify({ ...existing, projectId }, null, 2)}\n`,
+    `${JSON.stringify({ ...existing, projectId, workspaceRootPath: workspaceRoot }, null, 2)}\n`,
     "utf8",
   );
 }

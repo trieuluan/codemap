@@ -4,9 +4,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
-import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 import { zipWorkspaceFolder } from "../lib/workspace-zip.js";
 import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
+import { resolveWorkspace } from "../lib/workspace-resolver.js";
 import type { GithubStatus, ProjectSourceImportResult } from "../lib/api-types.js";
 
 export function registerCreateProjectTool(
@@ -39,7 +39,8 @@ export function registerCreateProjectTool(
       },
     },
     withToolError(async ({ name, description, branch, upload_confirmed }) => {
-      const workspace = await tryGetCurrentWorkspaceInfo();
+      const resolvedWorkspace = await resolveWorkspace();
+      const workspace = resolvedWorkspace.workspace;
 
       // ── Path A: workspace has a git remote → clone flow ────────────────────
       if (workspace?.remoteUrl) {
@@ -70,6 +71,7 @@ export function registerCreateProjectTool(
             },
             project: null,
             import: null,
+            nextAction: "get_github_connect_url",
           });
         }
 
@@ -102,6 +104,7 @@ export function registerCreateProjectTool(
           `Parse status: ${result.import.parseStatus}`,
           "",
           `Project ID saved to workspace — future tools will use it automatically.`,
+          "Next action: call wait_for_import until indexing is ready.",
         ].join("\n");
 
         return success(summary, {
@@ -116,6 +119,7 @@ export function registerCreateProjectTool(
           project: result.project,
           import: result.import,
           workspaceProjectIdSaved: true,
+          nextAction: "wait_for_import",
         });
       }
 
@@ -149,6 +153,7 @@ export function registerCreateProjectTool(
           project: null,
           import: null,
           uploadConfirmed: false,
+          nextAction: "create_project",
         });
       }
 
@@ -200,6 +205,7 @@ export function registerCreateProjectTool(
         `Parse status: ${result.import.parseStatus}`,
         "",
         `Project ID saved to workspace — future tools will use it automatically.`,
+        "Next action: call wait_for_import until indexing is ready.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -218,6 +224,7 @@ export function registerCreateProjectTool(
         filesIncluded: addedCount,
         excludedSensitive: skippedSensitive,
         workspaceProjectIdSaved: true,
+        nextAction: "wait_for_import",
       });
     }),
   );

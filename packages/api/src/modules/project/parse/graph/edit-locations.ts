@@ -18,6 +18,7 @@ interface Candidate {
   language: string | null;
   score: number;
   signals: Set<string>;
+  demotedSignals: Set<string>;
   reasons: Set<string>;
   relevantSymbols: Map<string, ProjectEditLocationSuggestion["relevantSymbols"][number]>;
 }
@@ -36,23 +37,61 @@ interface EditLocationGraphEdge {
 const STOP_WORDS = new Set([
   "add",
   "and",
+  "app",
   "are",
   "cho",
   "code",
+  "codebase",
+  "component",
+  "components",
+  "context",
   "cua",
   "for",
   "from",
   "into",
   "implement",
   "lam",
+  "mcp",
   "new",
+  "project",
   "the",
   "this",
   "tool",
   "tools",
+  "update",
   "v1",
   "vao",
   "with",
+]);
+
+const GENERIC_SYMBOL_NAMES = new Set([
+  "accordion",
+  "alert",
+  "button",
+  "card",
+  "checkbox",
+  "command",
+  "context",
+  "contextmenu",
+  "contextmenucontent",
+  "contextmenuitem",
+  "contextmenuportal",
+  "dialog",
+  "dropdownmenu",
+  "form",
+  "input",
+  "label",
+  "menu",
+  "popover",
+  "portal",
+  "provider",
+  "select",
+  "separator",
+  "sheet",
+  "switch",
+  "tabs",
+  "toast",
+  "tooltip",
 ]);
 
 const CONVENTION_BOOSTS: Array<{
@@ -175,11 +214,40 @@ function getOrCreateCandidate(
     language: input.language ?? null,
     score: 0,
     signals: new Set(),
+    demotedSignals: new Set(),
     reasons: new Set(),
     relevantSymbols: new Map(),
   };
   candidates.set(input.path, candidate);
   return candidate;
+}
+
+function isGenericSymbolName(name: string) {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return GENERIC_SYMBOL_NAMES.has(normalized);
+}
+
+function applyGenericSymbolDemotion(
+  candidate: Candidate,
+  symbolName: string,
+  tokens: string[],
+) {
+  if (!isGenericSymbolName(symbolName)) return;
+
+  const hasPathEvidence = candidate.signals.has("file_path_match");
+  const hasTaskPathCoverage = tokenCoverage(candidate.path, tokens) > 0.2;
+  const hasCoreConvention =
+    candidate.signals.has("convention:next_page") ||
+    candidate.signals.has("convention:controller") ||
+    candidate.signals.has("convention:service") ||
+    candidate.signals.has("convention:schema") ||
+    candidate.signals.has("convention:mcp_tool");
+
+  if (hasPathEvidence || hasTaskPathCoverage || hasCoreConvention) return;
+
+  candidate.score = Math.min(candidate.score, 34);
+  candidate.demotedSignals.add("generic_symbol");
+  candidate.reasons.add(`generic symbol match: ${symbolName}`);
 }
 
 function addRelevantSymbol(
@@ -341,6 +409,7 @@ export function buildEditLocationSuggestions(input: {
     candidate.score += nameTokenScore(symbol.displayName, tokens);
     candidate.reasons.add(`symbol match: ${symbol.displayName}`);
     addRelevantSymbol(candidate, symbol);
+    applyGenericSymbolDemotion(candidate, symbol.displayName, tokens);
   }
 
   for (const exportResult of input.searchResults.exports) {
@@ -356,6 +425,7 @@ export function buildEditLocationSuggestions(input: {
     candidate.score += nameTokenScore(exportResult.exportName, tokens);
     candidate.reasons.add(`export match: ${exportResult.exportName}`);
     addRelevantSymbol(candidate, exportResult);
+    applyGenericSymbolDemotion(candidate, exportResult.exportName, tokens);
   }
 
   for (const candidate of Array.from(candidates.values())) {
@@ -401,7 +471,10 @@ export function buildEditLocationSuggestions(input: {
       confidence: getConfidence(candidate),
       score: Math.round(candidate.score),
       reason: buildReason(candidate),
-      signals: Array.from(candidate.signals).sort(),
+      signals: [
+        ...Array.from(candidate.signals),
+        ...Array.from(candidate.demotedSignals).map((signal) => `demoted:${signal}`),
+      ].sort(),
       relevantSymbols: Array.from(candidate.relevantSymbols.values()).slice(0, 8),
       suggestedNextTools: buildSuggestedNextTools(candidate),
     }));
