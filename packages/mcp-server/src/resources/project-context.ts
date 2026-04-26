@@ -71,9 +71,12 @@ function buildContextText(
   lines.push("- get_project — get current project status and metadata");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; results include symbol signatures");
-  lines.push("- get_file — read a file: content, symbol outline, and/or blast radius (impact analysis). Auto-reparses if local file has changed since last import.");
+  lines.push("- get_file — read a file with include modes: content, outline (symbol list), symbols (extract specific symbol bodies by name), blast_radius (impact analysis). Auto-reparses if local file has changed since last import.");
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
   lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
+  lines.push("- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase");
+  lines.push("- find_callers — find all files that import a specific symbol from a given file; empty result = potential dead code");
+  lines.push("- find_usages — find all definitions and caller files for a symbol across the entire codebase");
   lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
 
@@ -148,8 +151,11 @@ function buildContextText(
   lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
   lines.push("- Use get_project or list_projects to confirm the active project.");
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
-  lines.push("- Use get_file with content and outline for targeted code reading.");
+  lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
   lines.push("- Add blast_radius to get_file before risky edits to shared files.");
+  lines.push("- Use find_callers to check if a symbol is used before deleting it (empty callers = safe to remove).");
+  lines.push("- Use find_usages to locate all definitions + caller files when refactoring a symbol.");
+  lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
   lines.push("- After code changes are pushed, call trigger_reimport, then wait_for_import.");
 
   return lines.join("\n");
