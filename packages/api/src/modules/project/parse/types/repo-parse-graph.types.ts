@@ -4,6 +4,7 @@ import type {
   RepoImportKind,
   RepoImportResolutionKind,
   RepoSymbolKind,
+  RepoSymbolOccurrenceRole,
   RepoSymbolRelationshipKind,
   RepoSymbolVisibility,
 } from "../../../../db/schema";
@@ -327,4 +328,77 @@ export interface ProjectMapSearchResponse {
   files: ProjectMapSearchFileResult[];
   symbols: ProjectMapSearchSymbolResult[];
   exports: ProjectMapSearchExportResult[];
+}
+
+export type ProjectSymbolUsageConfidence =
+  | "definite"
+  | "probable"
+  | "potential"
+  | "text_only";
+
+export interface ProjectSymbolUsageRange {
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+export interface ProjectSymbolUsageTarget {
+  id: string;
+  displayName: string;
+  symbolKind: RepoSymbolKind;
+  signature: string | null;
+  fileId: string | null;
+  filePath: string | null;
+  parentSymbolId: string | null;
+  parentSymbolName: string | null;
+  isExported: boolean;
+  isDefaultExport: boolean;
+  range: ProjectSymbolUsageRange | null;
+}
+
+export interface ProjectSymbolOccurrenceUsage {
+  id: string;
+  fileId: string;
+  filePath: string;
+  role: RepoSymbolOccurrenceRole;
+  range: ProjectSymbolUsageRange;
+  syntaxKind: string | null;
+  snippetPreview: string | null;
+  confidence: ProjectSymbolUsageConfidence;
+}
+
+export interface ProjectSymbolCaller {
+  fileId: string;
+  filePath: string;
+  evidence:
+    | "symbol_relationship"
+    | "named_import"
+    | "namespace_or_wildcard_import"
+    | "occurrence";
+  relationshipKind?: RepoSymbolRelationshipKind;
+  importKind?: RepoImportKind;
+  moduleSpecifier?: string;
+  importedNames?: string[];
+  occurrenceRole?: RepoSymbolOccurrenceRole;
+  range: ProjectSymbolUsageRange | null;
+  confidence: ProjectSymbolUsageConfidence;
+  snippetPreview?: string | null;
+}
+
+export interface ProjectSymbolUsagesResponse {
+  target: ProjectSymbolUsageTarget;
+  definitions: ProjectSymbolOccurrenceUsage[];
+  usages: ProjectSymbolOccurrenceUsage[];
+  callers: ProjectSymbolCaller[];
+  totals: {
+    definitions: number;
+    usages: number;
+    callers: number;
+  };
+  meta: {
+    projectImportId: string;
+    source: "repo_parse_graph";
+    staleness: "latest_import";
+  };
 }

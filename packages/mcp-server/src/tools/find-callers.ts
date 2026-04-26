@@ -4,41 +4,10 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import type { SymbolUsagesResponse } from "../lib/api-types.js";
 
-interface ParseImportedBy {
-  id: string;
-  sourceFileId: string;
-  sourceFilePath: string;
-  moduleSpecifier: string;
-  importKind: string;
-  importedNames: string[];
-  resolutionKind: string;
-  startLine: number;
-  startCol: number;
-  endLine: number;
-  endCol: number;
-}
-
-interface ParseExport {
-  id: string;
-  exportName: string;
-  exportKind: string;
-  symbolDisplayName: string | null;
-  startLine: number;
-}
-
-interface ParseSymbol {
-  id: string;
-  displayName: string;
-  kind: string;
-  startLine: number | null;
-}
-
-interface FileParseResponse {
-  file: { path: string; language: string | null };
-  importedBy: ParseImportedBy[];
-  exports: ParseExport[];
-  symbols: ParseSymbol[];
+function formatRange(range: { startLine: number; startCol: number } | null) {
+  return range ? `${range.startLine}:${range.startCol}` : "?:?";
 }
 
 export function registerFindCallersTool(server: McpServer, config: McpServerConfig) {
@@ -49,11 +18,9 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
     {
       title: "Find Callers",
       description:
-        "Find all files that import a specific symbol from a given file. " +
-        "Returns file-level callers — files that have an import statement pointing to the source file " +
-        "and importing the specified symbol name. " +
-        "Useful for understanding impact before refactoring, and for dead code detection " +
-        "(if result is empty, the symbol has no callers and may be dead code). " +
+        "Find callers/usages of a symbol from a given file. " +
+        "Returns occurrence-level ranges, import evidence, confidence, and parse staleness metadata. " +
+        "Callers are static analysis results, not guaranteed runtime call graph edges. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         path: z
@@ -63,7 +30,7 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         symbol_name: z
           .string()
           .min(1)
-          .describe("Name of the symbol to find callers for. Case-sensitive."),
+          .describe("Name of the symbol to find callers for."),
         project_id: z
           .string()
           .uuid()
@@ -76,32 +43,7 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
 
       if (!resolvedProjectId) {
         return success("No project ID provided and no linked project found.", {
-          projectId: null, path: filePath, symbolName: symbol_name, found: false, callers: [],
-        });
-      }
-
-      const parse = await client.request<FileParseResponse>(
-        `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
-        { authRequired: true, query: { path: filePath } },
-      );
-
-      // Verify symbol exists in this file
-      const symbol = parse.symbols.find(
-        (s) => s.displayName === symbol_name,
-      );
-      const exportEntry = parse.exports.find(
-        (e) => (e.symbolDisplayName ?? e.exportName) === symbol_name,
-      );
-
-      if (!symbol && !exportEntry) {
-        const output = [
-          `Symbol '${symbol_name}' not found in ${filePath}.`,
-          "",
-          `Available symbols: ${parse.symbols.map((s) => s.displayName).join(", ") || "(none)"}`,
-        ].join("\n");
-
-        return success(output, {
-          projectId: resolvedProjectId,
+          projectId: null,
           path: filePath,
           symbolName: symbol_name,
           found: false,
@@ -109,38 +51,44 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         });
       }
 
-      // Filter importedBy to those that actually import this symbol by name.
-      // If importedNames is empty (wildcard/default/dynamic import), include as potential caller.
-      const callers = parse.importedBy
-        .filter((imp) =>
-          imp.importedNames.length === 0 ||
-          imp.importedNames.some((n) => n.toLowerCase() === symbol_name.toLowerCase()),
-        )
-        .map((imp) => ({
-          filePath: imp.sourceFilePath,
-          moduleSpecifier: imp.moduleSpecifier,
-          importKind: imp.importKind,
-          importedNames: imp.importedNames,
-          startLine: imp.startLine,
-          startCol: imp.startCol,
-        }));
+      const result = await client.request<SymbolUsagesResponse>(
+        `/projects/${encodeURIComponent(resolvedProjectId)}/map/symbol-usages`,
+        {
+          authRequired: true,
+          query: {
+            symbolName: symbol_name,
+            path: filePath,
+          },
+        },
+      );
 
-      const isExported = Boolean(exportEntry);
       const lines: string[] = [
         `Callers of '${symbol_name}' in ${filePath}`,
-        `Symbol exported: ${isExported ? "yes" : "no (not exported — only accessible within file)"}`,
+        `Symbol exported: ${result.target.isExported ? "yes" : "no"}`,
+        `Confidence data: ${result.meta.source}, ${result.meta.staleness}, parse=${result.meta.parseStatus ?? "unknown"}`,
         "",
       ];
 
-      if (callers.length === 0) {
-        lines.push(isExported
-          ? "No callers found — this symbol may be dead code or used only externally."
-          : "No callers found — symbol is not exported and not referenced from other files.");
+      if (result.callers.length === 0) {
+        lines.push(
+          result.target.isExported
+            ? "No callers found. Symbol may be unused, entry-like, or used outside parsed code."
+            : "No callers found. Symbol is not exported and has no parsed external usages.",
+        );
       } else {
-        lines.push(`Found ${callers.length} caller(s):`);
-        for (const caller of callers) {
-          const names = caller.importedNames.length > 0 ? ` { ${caller.importedNames.join(", ")} }` : "";
-          lines.push(`  ${caller.filePath}:${caller.startLine} (${caller.importKind}${names}: '${caller.moduleSpecifier}')`);
+        lines.push(`Found ${result.callers.length} caller(s):`);
+        for (const caller of result.callers.slice(0, 50)) {
+          const names = caller.importedNames?.length
+            ? ` { ${caller.importedNames.join(", ")} }`
+            : "";
+          const source =
+            caller.moduleSpecifier !== undefined
+              ? ` from '${caller.moduleSpecifier}'`
+              : "";
+          const snippet = caller.snippetPreview ? ` - ${caller.snippetPreview}` : "";
+          lines.push(
+            `  ${caller.filePath}:${formatRange(caller.range)} [${caller.confidence}/${caller.evidence}${names}${source}]${snippet}`,
+          );
         }
       }
 
@@ -149,9 +97,13 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         path: filePath,
         symbolName: symbol_name,
         found: true,
-        isExported,
-        callers,
-        totalCallers: callers.length,
+        target: result.target,
+        callers: result.callers,
+        usages: result.usages,
+        definitions: result.definitions,
+        totalCallers: result.totals.callers,
+        totalUsages: result.totals.usages,
+        meta: result.meta,
       });
     }),
   );

@@ -26,6 +26,8 @@ import {
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
   projectParamsSchema,
+  projectSymbolParamsSchema,
+  projectSymbolUsagesQuerySchema,
   updateProjectBodySchema,
 } from "./schema";
 
@@ -634,6 +636,100 @@ export function createProjectController(fastify: FastifyInstance) {
           startCol: item.startCol + 1,
           endCol: item.endCol + 1,
         })),
+      });
+    },
+
+    getProjectSymbolUsagesById: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId, symbolId } = projectSymbolParamsSchema.parse(
+        request.params,
+      );
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource?.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const result = await repoParseGraphService.getSymbolUsagesById(
+        latestMapWithSource.importRecord.id,
+        symbolId,
+      );
+
+      if (!result) {
+        throw fastify.httpErrors.notFound("Symbol not found");
+      }
+
+      return reply.success({
+        ...result,
+        meta: {
+          ...result.meta,
+          projectId,
+          mapSnapshotId: latestMapWithSource.mapSnapshot.id,
+          importStatus: latestMapWithSource.importRecord.status,
+          parseStatus: latestMapWithSource.importRecord.parseStatus,
+          parsedAt: latestMapWithSource.importRecord.parseCompletedAt ?? null,
+        },
+      });
+    },
+
+    findProjectSymbolUsages: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectSymbolUsagesQuerySchema.parse(request.query ?? {});
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource?.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      let normalizedPath: string | undefined;
+
+      if (query.path) {
+        try {
+          normalizedPath = normalizeRepositoryFilePath(query.path);
+        } catch (error) {
+          throw fastify.httpErrors.badRequest(
+            error instanceof Error ? error.message : "Invalid file path",
+          );
+        }
+      }
+
+      const result = await repoParseGraphService.findSymbolUsages(
+        latestMapWithSource.importRecord.id,
+        {
+          symbolName: query.symbolName,
+          filePath: normalizedPath,
+        },
+      );
+
+      if (!result) {
+        throw fastify.httpErrors.notFound("Symbol not found");
+      }
+
+      return reply.success({
+        ...result,
+        meta: {
+          ...result.meta,
+          projectId,
+          mapSnapshotId: latestMapWithSource.mapSnapshot.id,
+          importStatus: latestMapWithSource.importRecord.status,
+          parseStatus: latestMapWithSource.importRecord.parseStatus,
+          parsedAt: latestMapWithSource.importRecord.parseCompletedAt ?? null,
+        },
       });
     },
 

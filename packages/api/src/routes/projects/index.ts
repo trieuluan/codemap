@@ -36,6 +36,14 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.post("/:projectId/map/files/reparse", controller.reparseProjectFile);
   fastify.get("/:projectId/map/files/raw", controller.getProjectRawFile);
   fastify.get("/:projectId/map/search", controller.searchProjectMap);
+  fastify.get(
+    "/:projectId/map/symbol-usages",
+    controller.findProjectSymbolUsages,
+  );
+  fastify.get(
+    "/:projectId/map/symbols/:symbolId/usages",
+    controller.getProjectSymbolUsagesById,
+  );
   fastify.get("/:projectId/map/diff", controller.getProjectDiff);
   fastify.get("/:projectId/map/analysis", controller.getProjectAnalysis);
   fastify.get("/:projectId/map/insights", controller.getProjectInsights);

@@ -6,6 +6,7 @@ import { createGraphService } from "./graph/graph";
 import { createImportEdgeQueryService } from "./graph/import-edge-queries";
 import { createInsightsService } from "./graph/insights";
 import { createSearchService } from "./graph/search";
+import { createSymbolUsagesService } from "./graph/symbol-usages";
 import { createWriteService } from "./graph/write";
 
 type Database = typeof import("../../../db/index.ts").db;
@@ -18,6 +19,7 @@ export function createRepoParseGraphService(database: Database) {
     ...createInsightsService(database),
     ...createGraphService(database),
     ...createSearchService(database),
+    ...createSymbolUsagesService(database),
     ...createDiffService(database),
   };
 }

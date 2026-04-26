@@ -28,7 +28,9 @@
       "Bash(git -C /Users/louis/Development/codemap add packages/api/src/modules/project/parse/graph/search.ts)",
       "Bash(git -C /Users/louis/Development/codemap commit -m ' *)",
       "Bash(git -C /Users/louis/Development/codemap push)",
-      "Bash(git -C /Users/louis/Development/codemap add packages/mcp-server/src/tools/get-file.ts)"
+      "Bash(git -C /Users/louis/Development/codemap add packages/mcp-server/src/tools/get-file.ts)",
+      "mcp__codemap-mcp-dev__get_current_workspace_info",
+      "mcp__codemap-mcp-dev__get_project_map"
     ]
   },
   "enableAllProjectMcpServers": true,

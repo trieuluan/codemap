@@ -24,6 +24,10 @@ export const projectParamsSchema = z.object({
   projectId: z.uuid(),
 });
 
+export const projectSymbolParamsSchema = projectParamsSchema.extend({
+  symbolId: z.uuid(),
+});
+
 export const projectFileContentQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000),
   startLine: z.coerce.number().int().min(1).optional(),
@@ -51,6 +55,11 @@ export const projectMapSearchQuerySchema = z.object({
     (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
     z.array(z.enum(REPO_SYMBOL_KIND_VALUES)).optional(),
   ),
+});
+
+export const projectSymbolUsagesQuerySchema = z.object({
+  symbolName: z.string().trim().min(1).max(255),
+  path: z.string().trim().min(1).max(2000).optional(),
 });
 
 export const createProjectFromGithubBodySchema = z.object({
@@ -135,6 +144,7 @@ export const createProjectImportBodySchema = projectImportInsertSchema
 export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
 export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
+export type ProjectSymbolParams = z.infer<typeof projectSymbolParamsSchema>;
 export type CreateProjectImportBody = z.infer<
   typeof createProjectImportBodySchema
 >;
@@ -144,6 +154,9 @@ export type ProjectFileContentQuery = z.infer<
   typeof projectFileContentQuerySchema
 >;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
+export type ProjectSymbolUsagesQuery = z.infer<
+  typeof projectSymbolUsagesQuerySchema
+>;
 export type ProjectMapDiffQuery = z.infer<typeof projectMapDiffQuerySchema>;
 export type CreateProjectFromGithubBody = z.infer<
   typeof createProjectFromGithubBodySchema

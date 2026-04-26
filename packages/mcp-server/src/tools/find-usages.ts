@@ -4,41 +4,29 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
-import type { SearchSymbolResult, SearchExportResult } from "../lib/api-types.js";
+import type {
+  CodebaseSearchResponse,
+  SearchSymbolResult,
+  SymbolUsagesResponse,
+} from "../lib/api-types.js";
 
-interface CodebaseSearchResponse {
-  files: unknown[];
-  symbols: SearchSymbolResult[];
-  exports: SearchExportResult[];
+function formatRange(range: { startLine: number; startCol: number } | null) {
+  return range ? `${range.startLine}:${range.startCol}` : "?:?";
 }
 
-interface ParseImportedBy {
-  sourceFilePath: string;
-  moduleSpecifier: string;
-  importKind: string;
-  importedNames: string[];
-  startLine: number;
-}
-
-interface ParseSymbol {
-  displayName: string;
-  kind: string;
-  startLine: number | null;
-  isExported: boolean;
-}
-
-interface ParseExport {
-  exportName: string;
-  exportKind: string;
-  symbolDisplayName: string | null;
-  startLine: number;
-}
-
-interface FileParseResponse {
-  file: { path: string; language: string | null; lineCount: number | null };
-  importedBy: ParseImportedBy[];
-  symbols: ParseSymbol[];
-  exports: ParseExport[];
+function formatUsageLine(
+  usage: {
+    filePath: string;
+    range: { startLine: number; startCol: number } | null;
+    confidence: string;
+    role?: string;
+    evidence?: string;
+    snippetPreview?: string | null;
+  },
+) {
+  const label = usage.role ?? usage.evidence ?? "usage";
+  const snippet = usage.snippetPreview ? ` - ${usage.snippetPreview}` : "";
+  return `  ${usage.filePath}:${formatRange(usage.range)} [${usage.confidence}/${label}]${snippet}`;
 }
 
 export function registerFindUsagesTool(server: McpServer, config: McpServerConfig) {
@@ -49,11 +37,8 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
     {
       title: "Find Usages",
       description:
-        "Find all known usages of a symbol across the codebase. " +
-        "Returns: (1) definition location, (2) files that import the symbol by name. " +
-        "Uses named import tracking — only files that explicitly import the symbol are returned. " +
-        "Files using wildcard or default imports are included as potential callers. " +
-        "Use find_callers for a focused single-file lookup. " +
+        "Find known usages of a symbol across the codebase. " +
+        "Returns definitions, occurrence-level usages, callers, confidence, and parse staleness metadata. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         symbol_name: z
@@ -72,118 +57,109 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
 
       if (!resolvedProjectId) {
         return success("No project ID provided and no linked project found.", {
-          projectId: null, symbolName: symbol_name, found: false, usages: [],
+          projectId: null,
+          symbolName: symbol_name,
+          found: false,
+          definitions: [],
+          usages: [],
+          callers: [],
         });
       }
 
-      // Search for the symbol across codebase
       const searchResult = await client.request<CodebaseSearchResponse>(
         `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
         { authRequired: true, query: { q: symbol_name } },
       );
 
       const exactSymbols = searchResult.symbols.filter(
-        (s) => s.displayName === symbol_name,
-      );
-      const exactExports = searchResult.exports.filter(
-        (e) => e.exportName === symbol_name,
+        (symbol): symbol is SearchSymbolResult =>
+          symbol.displayName === symbol_name && Boolean(symbol.id),
       );
 
-      if (exactSymbols.length === 0 && exactExports.length === 0) {
+      if (exactSymbols.length === 0) {
         return success(`Symbol '${symbol_name}' not found in codebase.`, {
           projectId: resolvedProjectId,
           symbolName: symbol_name,
           found: false,
           definitions: [],
-          importedBy: [],
+          usages: [],
+          callers: [],
         });
       }
 
-      // Fetch importedBy for each file where symbol is defined
-      const definitionFiles = [
-        ...new Set(exactSymbols.map((s) => s.filePath).filter(Boolean)),
-      ];
-
-      const importedByResults = await Promise.allSettled(
-        definitionFiles.map((filePath) =>
-          client.request<FileParseResponse>(
-            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
-            { authRequired: true, query: { path: filePath } },
+      const usageResults = await Promise.all(
+        exactSymbols.map((symbol) =>
+          client.request<SymbolUsagesResponse>(
+            `/projects/${encodeURIComponent(
+              resolvedProjectId,
+            )}/map/symbols/${encodeURIComponent(symbol.id)}/usages`,
+            { authRequired: true },
           ),
         ),
       );
 
-      const allImportedBy: Array<{ definedIn: string; callerFile: string; moduleSpecifier: string; importKind: string; importedNames: string[]; startLine: number }> = [];
+      const lines: string[] = [
+        `Usages of '${symbol_name}'`,
+        `Matched symbols: ${usageResults.length}`,
+        "",
+      ];
 
-      for (let i = 0; i < definitionFiles.length; i++) {
-        const result = importedByResults[i];
-        const defFile = definitionFiles[i];
-        if (result.status === "fulfilled" && defFile) {
-          for (const imp of result.value.importedBy) {
-            const importedNames = imp.importedNames ?? [];
-            if (
-              importedNames.length > 0 &&
-              !importedNames.some((n) => n.toLowerCase() === symbol_name.toLowerCase())
-            ) {
-              continue;
-            }
-            allImportedBy.push({
-              definedIn: defFile,
-              callerFile: imp.sourceFilePath,
-              moduleSpecifier: imp.moduleSpecifier,
-              importKind: imp.importKind,
-              importedNames,
-              startLine: imp.startLine,
-            });
+      for (const result of usageResults) {
+        const target = result.target;
+        lines.push(
+          `## ${target.displayName} (${target.symbolKind}) in ${target.filePath ?? "(unknown file)"}:${formatRange(target.range)}`,
+        );
+        if (target.signature) lines.push(`  ${target.signature}`);
+        lines.push(
+          `  Confidence data: ${result.meta.source}, ${result.meta.staleness}, parse=${result.meta.parseStatus ?? "unknown"}`,
+        );
+
+        lines.push("", `  Definitions (${result.totals.definitions})`);
+        if (result.definitions.length === 0) {
+          lines.push("  (none)");
+        } else {
+          for (const definition of result.definitions.slice(0, 10)) {
+            lines.push(formatUsageLine(definition));
           }
         }
-      }
 
-      // Build output
-      const lines: string[] = [`Usages of '${symbol_name}'`, ""];
-
-      // Definitions
-      lines.push(`## Definitions (${exactSymbols.length})`);
-      if (exactSymbols.length === 0) {
-        lines.push("  (none found — may be re-exported only)");
-      } else {
-        for (const sym of exactSymbols) {
-          lines.push(`  ${sym.filePath}:${sym.startLine ?? "?"} [${sym.symbolKind}]`);
-          if (sym.signature) lines.push(`  \`${sym.signature}\``);
+        lines.push("", `  Occurrence usages (${result.totals.usages})`);
+        if (result.usages.length === 0) {
+          lines.push("  (none)");
+        } else {
+          for (const usage of result.usages.slice(0, 25)) {
+            lines.push(formatUsageLine(usage));
+          }
         }
-      }
 
-      // Exports
-      if (exactExports.length > 0) {
-        lines.push("", `## Exports (${exactExports.length})`);
-        for (const exp of exactExports) {
-          lines.push(`  ${exp.filePath}:${exp.startLine}`);
+        lines.push("", `  Callers (${result.totals.callers})`);
+        if (result.callers.length === 0) {
+          lines.push("  No callers found.");
+        } else {
+          for (const caller of result.callers.slice(0, 25)) {
+            lines.push(formatUsageLine(caller));
+          }
         }
+        lines.push("");
       }
 
-      // Callers
-      lines.push("", `## Callers (${allImportedBy.length})`);
-      if (allImportedBy.length === 0) {
-        lines.push("  No callers found — symbol may be dead code or entry point.");
-      } else {
-        for (const usage of allImportedBy) {
-          const names = usage.importedNames.length > 0 ? ` { ${usage.importedNames.join(", ")} }` : "";
-          lines.push(`  ${usage.callerFile}:${usage.startLine}${names} ← '${usage.moduleSpecifier}'`);
-        }
-      }
-
-      return success(lines.join("\n"), {
+      return success(lines.join("\n").trim(), {
         projectId: resolvedProjectId,
         symbolName: symbol_name,
         found: true,
-        definitions: exactSymbols.map((s) => ({
-          filePath: s.filePath,
-          startLine: s.startLine,
-          kind: s.symbolKind,
-          signature: s.signature,
-        })),
-        importedBy: allImportedBy,
-        totalCallers: allImportedBy.length,
+        results: usageResults,
+        totalDefinitions: usageResults.reduce(
+          (sum, item) => sum + item.totals.definitions,
+          0,
+        ),
+        totalUsages: usageResults.reduce(
+          (sum, item) => sum + item.totals.usages,
+          0,
+        ),
+        totalCallers: usageResults.reduce(
+          (sum, item) => sum + item.totals.callers,
+          0,
+        ),
       });
     }),
   );
