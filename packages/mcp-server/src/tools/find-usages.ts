@@ -16,6 +16,7 @@ interface ParseImportedBy {
   sourceFilePath: string;
   moduleSpecifier: string;
   importKind: string;
+  importedNames: string[];
   startLine: number;
 }
 
@@ -49,9 +50,9 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
       title: "Find Usages",
       description:
         "Find all known usages of a symbol across the codebase. " +
-        "Returns: (1) definition location, (2) files that import the containing file. " +
-        "Note: this is file-level usage tracking — it shows which files import the symbol's file, " +
-        "not exact call sites within those files. " +
+        "Returns: (1) definition location, (2) files that import the symbol by name. " +
+        "Uses named import tracking — only files that explicitly import the symbol are returned. " +
+        "Files using wildcard or default imports are included as potential callers. " +
         "Use find_callers for a focused single-file lookup. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
@@ -112,18 +113,26 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
         ),
       );
 
-      const allImportedBy: Array<{ definedIn: string; callerFile: string; moduleSpecifier: string; importKind: string; startLine: number }> = [];
+      const allImportedBy: Array<{ definedIn: string; callerFile: string; moduleSpecifier: string; importKind: string; importedNames: string[]; startLine: number }> = [];
 
       for (let i = 0; i < definitionFiles.length; i++) {
         const result = importedByResults[i];
         const defFile = definitionFiles[i];
         if (result.status === "fulfilled" && defFile) {
           for (const imp of result.value.importedBy) {
+            const importedNames = imp.importedNames ?? [];
+            if (
+              importedNames.length > 0 &&
+              !importedNames.some((n) => n.toLowerCase() === symbol_name.toLowerCase())
+            ) {
+              continue;
+            }
             allImportedBy.push({
               definedIn: defFile,
               callerFile: imp.sourceFilePath,
               moduleSpecifier: imp.moduleSpecifier,
               importKind: imp.importKind,
+              importedNames,
               startLine: imp.startLine,
             });
           }
@@ -152,13 +161,14 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
         }
       }
 
-      // Callers (file-level)
-      lines.push("", `## Files importing this symbol's file (${allImportedBy.length})`);
+      // Callers
+      lines.push("", `## Callers (${allImportedBy.length})`);
       if (allImportedBy.length === 0) {
         lines.push("  No callers found — symbol may be dead code or entry point.");
       } else {
         for (const usage of allImportedBy) {
-          lines.push(`  ${usage.callerFile}:${usage.startLine} ← '${usage.moduleSpecifier}'`);
+          const names = usage.importedNames.length > 0 ? ` { ${usage.importedNames.join(", ")} }` : "";
+          lines.push(`  ${usage.callerFile}:${usage.startLine}${names} ← '${usage.moduleSpecifier}'`);
         }
       }
 
