@@ -4,7 +4,6 @@ import {
   buildLocalSymbolKey,
   buildStableSymbolKey,
   buildImportLocalKey,
-  maskCommentsAndTemplateLiterals,
   resolveRelativeTargetPath,
   resolveTsconfigAliasTargetPath,
   createExternalSymbolDraft,
@@ -17,31 +16,229 @@ import type {
   ParsedWorkspaceSemantics,
 } from "./types";
 
-function extractSymbolsWithAst(
-  file: WorkspaceFileCandidate,
-): { symbols: ParsedSymbolDraft[]; relationships: ParsedRelationshipDraft[] } {
-  const content = file.content ?? "";
-  const sourceFile = ts.createSourceFile(
+function createSourceFile(file: WorkspaceFileCandidate): ts.SourceFile {
+  return ts.createSourceFile(
     file.baseName,
-    content,
+    file.content ?? "",
     ts.ScriptTarget.Latest,
     true,
     file.extension === "tsx" || file.extension === "jsx"
       ? ts.ScriptKind.TSX
       : ts.ScriptKind.TS,
   );
+}
 
+function getLineCol(
+  sourceFile: ts.SourceFile,
+  pos: number,
+): { line: number; col: number } {
+  const lc = sourceFile.getLineAndCharacterOfPosition(pos);
+  return { line: lc.line + 1, col: lc.character };
+}
+
+// ─── Import/export extraction ─────────────────────────────────────────────────
+
+function extractImportsWithAst(
+  file: WorkspaceFileCandidate,
+  sourceFile: ts.SourceFile,
+  filePathSet: Set<string>,
+  projectImportId: string,
+  workspacePath: string,
+  resolverConfigs: TypeScriptResolverConfig[],
+): Pick<ParsedWorkspaceSemantics, "imports" | "exports" | "issues" | "externalSymbols"> {
+  const imports: ParsedImportDraft[] = [];
+  const exports: ParsedWorkspaceSemantics["exports"] = [];
+  const issues: ParsedWorkspaceSemantics["issues"] = [];
+  const externalSymbols: ParsedWorkspaceSemantics["externalSymbols"] = [];
+
+  const pushImport = (
+    moduleSpecifier: string,
+    importKind: ParsedImportDraft["importKind"],
+    isTypeOnly: boolean,
+    startPos: number,
+    importedNames: string[],
+  ): string => {
+    const { line, col } = getLineCol(sourceFile, startPos);
+    const isRelative = moduleSpecifier.startsWith(".");
+    const aliasResolution = !isRelative
+      ? resolveTsconfigAliasTargetPath(workspacePath, file.path, moduleSpecifier, file.language!, filePathSet, resolverConfigs)
+      : null;
+    const resolution = isRelative
+      ? resolveRelativeTargetPath(file.path, moduleSpecifier, file.language!, filePathSet)
+      : (aliasResolution ?? { resolvedPath: null, attemptedPath: null });
+    const importLocalKey = buildImportLocalKey(file.path, importKind, moduleSpecifier, line, col);
+
+    imports.push({
+      localKey: importLocalKey,
+      moduleSpecifier,
+      importKind,
+      isTypeOnly,
+      importedNames,
+      line,
+      col,
+      endCol: col + moduleSpecifier.length,
+      resolutionKind: isRelative
+        ? resolution.resolvedPath ? "relative_path" : "unresolved"
+        : aliasResolution?.resolvedPath ? "tsconfig_alias"
+        : aliasResolution?.matched ? "unresolved" : "package",
+      targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
+      targetExternalSymbolKey: isRelative || aliasResolution?.matched
+        ? null
+        : `${file.language?.toLowerCase()}:${moduleSpecifier}`,
+    });
+
+    if (!isRelative && !aliasResolution?.matched) {
+      externalSymbols.push(createExternalSymbolDraft(projectImportId, file.language!, moduleSpecifier));
+    } else if (!resolution.resolvedPath) {
+      issues.push({
+        projectImportId,
+        severity: "warning",
+        code: "UNRESOLVED_IMPORT",
+        message: `Unable to resolve module "${moduleSpecifier}" from ${file.path}`,
+        detailJson: { filePath: file.path, moduleSpecifier },
+      });
+    }
+
+    return importLocalKey;
+  };
+
+  function getModuleSpecifier(node: ts.ImportDeclaration | ts.ExportDeclaration): string | null {
+    const spec = node.moduleSpecifier;
+    if (!spec || !ts.isStringLiteral(spec)) return null;
+    return spec.text;
+  }
+
+  function extractNamedBindings(clause: ts.NamedImports | ts.NamedExports): string[] {
+    return clause.elements.map((el) => {
+      // el.name is the local alias; el.propertyName is the original — we want the original
+      if ("propertyName" in el && el.propertyName) {
+        return (el.propertyName as ts.Identifier).text;
+      }
+      return (el.name as ts.Identifier).text;
+    });
+  }
+
+  ts.forEachChild(sourceFile, (node) => {
+    // import ... from '...'
+    if (ts.isImportDeclaration(node)) {
+      const specifier = getModuleSpecifier(node);
+      if (!specifier) return;
+
+      const isTypeOnly = node.importClause?.isTypeOnly ?? false;
+      const clause = node.importClause;
+      const importedNames: string[] = [];
+
+      if (clause) {
+        // import Foo from '...' — default import, no named
+        // import { A, B } from '...'
+        if (clause.namedBindings) {
+          if (ts.isNamedImports(clause.namedBindings)) {
+            importedNames.push(...extractNamedBindings(clause.namedBindings));
+          }
+          // import * as ns — namespace import, importedNames stays []
+        }
+      }
+
+      pushImport(specifier, "import", isTypeOnly, node.getStart(sourceFile), importedNames);
+      return;
+    }
+
+    // export { A } from '...' / export * from '...' / export { A } (local)
+    if (ts.isExportDeclaration(node)) {
+      const specifier = getModuleSpecifier(node);
+      const { line, col } = getLineCol(sourceFile, node.getStart(sourceFile));
+      const endCol = col + node.getWidth(sourceFile);
+
+      if (!specifier) {
+        // export { A, B } — local, no from
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          for (const el of node.exportClause.elements) {
+            const localName = el.propertyName?.text ?? el.name.text;
+            const exportName = el.name.text;
+            exports.push({
+              exportName,
+              exportKind: "named",
+              line,
+              col,
+              endCol,
+              symbolLocalKey: buildLocalSymbolKey(file.path, "variable", localName),
+            });
+          }
+        }
+        return;
+      }
+
+      const isTypeOnly = node.isTypeOnly;
+
+      if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+        // export { A, B } from '...'
+        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node.getStart(sourceFile), []);
+        for (const el of node.exportClause.elements) {
+          exports.push({
+            exportName: el.name.text,
+            exportKind: "re_export",
+            line,
+            col,
+            endCol,
+            sourceImportLocalKey: importLocalKey,
+            targetExternalSymbolKey: specifier.startsWith(".") ? null : `${file.language?.toLowerCase()}:${specifier}`,
+          });
+        }
+      } else {
+        // export * from '...'
+        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node.getStart(sourceFile), []);
+        exports.push({
+          exportName: "*",
+          exportKind: "wildcard",
+          line,
+          col,
+          endCol,
+          sourceImportLocalKey: importLocalKey,
+          targetExternalSymbolKey: specifier.startsWith(".") ? null : `${file.language?.toLowerCase()}:${specifier}`,
+        });
+      }
+      return;
+    }
+
+    // require('...') and import('...') via CallExpression — walk full subtree
+    function walkForCalls(n: ts.Node) {
+      if (ts.isCallExpression(n)) {
+        const expr = n.expression;
+        const args = n.arguments;
+        if (args.length === 1 && ts.isStringLiteral(args[0])) {
+          const specifier = (args[0] as ts.StringLiteral).text;
+          if (ts.isIdentifier(expr) && expr.text === "require") {
+            pushImport(specifier, "require", false, n.getStart(sourceFile), []);
+          } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
+            pushImport(specifier, "dynamic_import", false, n.getStart(sourceFile), []);
+          }
+        }
+      }
+      ts.forEachChild(n, walkForCalls);
+    }
+
+    // Only walk statements that aren't import/export declarations (already handled)
+    if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) {
+      walkForCalls(node);
+    }
+  });
+
+  return { imports, exports, issues, externalSymbols };
+}
+
+// ─── Symbol extraction ────────────────────────────────────────────────────────
+
+function extractSymbolsWithAst(
+  file: WorkspaceFileCandidate,
+  sourceFile: ts.SourceFile,
+): { symbols: ParsedSymbolDraft[]; relationships: ParsedRelationshipDraft[] } {
+  const content = file.content ?? "";
   const symbols: ParsedSymbolDraft[] = [];
   const relationships: ParsedRelationshipDraft[] = [];
   const lines = content.split(/\r?\n/);
 
-  function getLineCol(pos: number): { line: number; col: number } {
-    const lc = sourceFile.getLineAndCharacterOfPosition(pos);
-    return { line: lc.line + 1, col: lc.character };
-  }
-
   function getSignature(node: ts.Node): string {
-    const { line } = getLineCol(node.getStart(sourceFile));
+    const { line } = getLineCol(sourceFile, node.getStart(sourceFile));
     return (lines[line - 1] ?? "").trim().slice(0, 200);
   }
 
@@ -60,7 +257,6 @@ function extractSymbolsWithAst(
   function getJSDoc(node: ts.Node): string | null {
     const tags = ts.getJSDocCommentsAndTags(node);
     if (tags.length === 0) return null;
-
     const parts: string[] = [];
     for (const tag of tags) {
       if (ts.isJSDoc(tag) && tag.comment) {
@@ -70,7 +266,6 @@ function extractSymbolsWithAst(
         if (text.trim()) parts.push(text.trim());
       }
     }
-
     return parts.length > 0 ? parts.join("\n").slice(0, 500) : null;
   }
 
@@ -83,8 +278,8 @@ function extractSymbolsWithAst(
   ) {
     const nameStart = content.indexOf(name, node.getStart(sourceFile));
     const { line, col } = nameStart >= 0
-      ? getLineCol(nameStart)
-      : getLineCol(node.getStart(sourceFile));
+      ? getLineCol(sourceFile, nameStart)
+      : getLineCol(sourceFile, node.getStart(sourceFile));
 
     symbols.push({
       localKey: buildLocalSymbolKey(file.path, kind, name),
@@ -168,7 +363,6 @@ function extractSymbolsWithAst(
       for (const decl of node.declarationList.declarations) {
         if (!ts.isIdentifier(decl.name)) continue;
         const name = decl.name.text;
-
         const isPascalCase = /^[A-Z]/.test(name);
         let kind: ParsedSymbolDraft["kind"] = "variable";
         if (isPascalCase) {
@@ -179,7 +373,6 @@ function extractSymbolsWithAst(
         ) {
           kind = "function";
         }
-
         pushSymbol(name, kind, decl, isExported, false);
       }
     }
@@ -189,6 +382,8 @@ function extractSymbolsWithAst(
   return { symbols, relationships };
 }
 
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
 export function parseTypeScriptOrJavaScriptFile(
   file: WorkspaceFileCandidate,
   filePathSet: Set<string>,
@@ -196,155 +391,31 @@ export function parseTypeScriptOrJavaScriptFile(
   workspacePath: string,
   resolverConfigs: TypeScriptResolverConfig[],
 ): ParsedWorkspaceSemantics {
-  const semantics: ParsedWorkspaceSemantics = {
-    symbols: [],
-    imports: [],
-    exports: [],
-    relationships: [],
-    issues: [],
-    externalSymbols: [],
+  const sourceFile = createSourceFile(file);
+
+  const { imports, exports, issues, externalSymbols } = extractImportsWithAst(
+    file, sourceFile, filePathSet, projectImportId, workspacePath, resolverConfigs,
+  );
+
+  const { symbols: astSymbols, relationships } = extractSymbolsWithAst(file, sourceFile);
+
+  const symbolExports: ParsedWorkspaceSemantics["exports"] = astSymbols
+    .filter((s) => s.isExported)
+    .map((s) => ({
+      exportName: s.isDefaultExport ? "default" : s.displayName,
+      exportKind: s.isDefaultExport ? "default" : "named",
+      line: s.line,
+      col: s.col,
+      endCol: s.endCol,
+      symbolLocalKey: s.localKey,
+    }));
+
+  return {
+    symbols: astSymbols,
+    imports,
+    exports: [...exports, ...symbolExports],
+    relationships,
+    issues,
+    externalSymbols,
   };
-  const lines = maskCommentsAndTemplateLiterals(file.content ?? "").split(/\r?\n/);
-
-  lines.forEach((line, index) => {
-    const lineNumber = index + 1;
-
-    const pushImport = (
-      moduleSpecifier: string,
-      importKind: ParsedImportDraft["importKind"],
-      isTypeOnly: boolean,
-      matchIndex: number,
-      importedNames: string[] = [],
-    ) => {
-      const isRelative = moduleSpecifier.startsWith(".");
-      const aliasResolution = !isRelative
-        ? resolveTsconfigAliasTargetPath(workspacePath, file.path, moduleSpecifier, file.language!, filePathSet, resolverConfigs)
-        : null;
-      const resolution = isRelative
-        ? resolveRelativeTargetPath(file.path, moduleSpecifier, file.language!, filePathSet)
-        : (aliasResolution ?? { resolvedPath: null, attemptedPath: null });
-      const importLocalKey = buildImportLocalKey(file.path, importKind, moduleSpecifier, lineNumber, matchIndex);
-
-      semantics.imports.push({
-        localKey: importLocalKey,
-        moduleSpecifier,
-        importKind,
-        isTypeOnly,
-        importedNames,
-        line: lineNumber,
-        col: matchIndex,
-        endCol: matchIndex + moduleSpecifier.length,
-        resolutionKind: isRelative
-          ? resolution.resolvedPath ? "relative_path" : "unresolved"
-          : aliasResolution?.resolvedPath ? "tsconfig_alias"
-          : aliasResolution?.matched ? "unresolved" : "package",
-        targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
-        targetExternalSymbolKey: isRelative || aliasResolution?.matched
-          ? null
-          : `${file.language?.toLowerCase()}:${moduleSpecifier}`,
-      });
-
-      if (!isRelative && !aliasResolution?.matched) {
-        semantics.externalSymbols.push(createExternalSymbolDraft(projectImportId, file.language!, moduleSpecifier));
-      } else if (!resolution.resolvedPath) {
-        semantics.issues.push({
-          projectImportId,
-          severity: "warning",
-          code: "UNRESOLVED_IMPORT",
-          message: `Unable to resolve module "${moduleSpecifier}" from ${file.path}`,
-          detailJson: { filePath: file.path, moduleSpecifier },
-        });
-      }
-
-      return importLocalKey;
-    };
-
-    for (const match of line.matchAll(/\bimport\s+(type\s+)?(?:[^'"]+?\s+from\s+)?["']([^"']+)["']/g)) {
-      const moduleSpecifier = match[2];
-      if (!moduleSpecifier) continue;
-      const namedMatch = match[0].match(/\{([^}]+)\}/);
-      const importedNames = namedMatch
-        ? namedMatch[1].split(",").map((s) => s.trim().replace(/^type\s+/, "").replace(/\s+as\s+\S+$/, "").trim()).filter(Boolean)
-        : [];
-      pushImport(moduleSpecifier, "import", Boolean(match[1]), match.index ?? 0, importedNames);
-    }
-
-    for (const match of line.matchAll(/\brequire\(\s*["']([^"']+)["']\s*\)/g)) {
-      if (!match[1]) continue;
-      pushImport(match[1], "require", false, match.index ?? 0);
-    }
-
-    for (const match of line.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) {
-      if (!match[1]) continue;
-      pushImport(match[1], "dynamic_import", false, match.index ?? 0);
-    }
-
-    for (const match of line.matchAll(/\bexport\s+(type\s+)?\*\s+from\s+["']([^"']+)["']/g)) {
-      if (!match[2]) continue;
-      const importLocalKey = pushImport(match[2], "export_from", Boolean(match[1]), match.index ?? 0);
-      semantics.exports.push({
-        exportName: "*",
-        exportKind: "wildcard",
-        line: lineNumber,
-        col: match.index ?? 0,
-        endCol: (match.index ?? 0) + match[0].length,
-        sourceImportLocalKey: importLocalKey,
-        targetExternalSymbolKey: match[2].startsWith(".") ? null : `${file.language?.toLowerCase()}:${match[2]}`,
-      });
-    }
-
-    for (const match of line.matchAll(/\bexport\s+(type\s+)?\{([^}]+)\}\s+from\s+["']([^"']+)["']/g)) {
-      if (!match[3]) continue;
-      const importLocalKey = pushImport(match[3], "export_from", Boolean(match[1]), match.index ?? 0);
-      const exportedItems = match[2].split(",").map((item) => item.trim()).filter(Boolean);
-
-      for (const exportedItem of exportedItems) {
-        const [, exportName] = exportedItem.match(/^(?:.+\s+as\s+)?([A-Za-z_$][\w$]*)$/) ?? [];
-        semantics.exports.push({
-          exportName: exportName ?? exportedItem,
-          exportKind: "re_export",
-          line: lineNumber,
-          col: match.index ?? 0,
-          endCol: (match.index ?? 0) + match[0].length,
-          sourceImportLocalKey: importLocalKey,
-          targetExternalSymbolKey: match[3].startsWith(".") ? null : `${file.language?.toLowerCase()}:${match[3]}`,
-        });
-      }
-    }
-
-    const namedExportMatch = line.match(/^\s*export\s+\{([^}]+)\}/);
-    if (namedExportMatch?.[1]) {
-      const exportedItems = namedExportMatch[1].split(",").map((item) => item.trim()).filter(Boolean);
-      for (const exportedItem of exportedItems) {
-        const renameMatch = exportedItem.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
-        if (!renameMatch?.[1]) continue;
-        semantics.exports.push({
-          exportName: renameMatch[2] ?? renameMatch[1],
-          exportKind: "named",
-          line: lineNumber,
-          col: line.indexOf(exportedItem),
-          endCol: line.indexOf(exportedItem) + exportedItem.length,
-          symbolLocalKey: buildLocalSymbolKey(file.path, "variable", renameMatch[1]),
-        });
-      }
-    }
-  });
-
-  const { symbols: astSymbols, relationships: astRelationships } = extractSymbolsWithAst(file);
-  for (const symbol of astSymbols) {
-    semantics.symbols.push(symbol);
-    if (symbol.isExported) {
-      semantics.exports.push({
-        exportName: symbol.isDefaultExport ? "default" : symbol.displayName,
-        exportKind: symbol.isDefaultExport ? "default" : "named",
-        line: symbol.line,
-        col: symbol.col,
-        endCol: symbol.endCol,
-        symbolLocalKey: symbol.localKey,
-      });
-    }
-  }
-  semantics.relationships.push(...astRelationships);
-
-  return semantics;
 }
