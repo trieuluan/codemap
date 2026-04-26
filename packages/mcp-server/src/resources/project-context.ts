@@ -71,6 +71,7 @@ function buildContextText(
   lines.push("- get_project — get current project status and metadata");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; results include symbol signatures");
+  lines.push("- suggest_edit_locations — suggest likely files and symbols to inspect/edit for a natural-language task; use before get_file when unsure where to start");
   lines.push("- get_file — read a file with include modes: content, outline (symbol list), symbols (extract specific symbol bodies by name), blast_radius (impact analysis). Auto-reparses if local file has changed since last import.");
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
   lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
@@ -150,6 +151,7 @@ function buildContextText(
   lines.push("## Recommended Workflow");
   lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
   lines.push("- Use get_project or list_projects to confirm the active project.");
+  lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files.");
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
   lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
   lines.push("- Add blast_radius to get_file before risky edits to shared files.");

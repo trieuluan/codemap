@@ -57,6 +57,11 @@ export const projectMapSearchQuerySchema = z.object({
   ),
 });
 
+export const projectEditLocationsQuerySchema = z.object({
+  q: z.string().trim().min(1).max(500),
+  limit: z.coerce.number().int().min(1).max(25).default(10),
+});
+
 export const projectSymbolUsagesQuerySchema = z.object({
   symbolName: z.string().trim().min(1).max(255),
   path: z.string().trim().min(1).max(2000).optional(),
@@ -154,6 +159,9 @@ export type ProjectFileContentQuery = z.infer<
   typeof projectFileContentQuerySchema
 >;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
+export type ProjectEditLocationsQuery = z.infer<
+  typeof projectEditLocationsQuerySchema
+>;
 export type ProjectSymbolUsagesQuery = z.infer<
   typeof projectSymbolUsagesQuerySchema
 >;

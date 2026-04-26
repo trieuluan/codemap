@@ -70,3 +70,9 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.list_projects]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.logout]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.start_auth_flow]
+approval_mode = "approve"

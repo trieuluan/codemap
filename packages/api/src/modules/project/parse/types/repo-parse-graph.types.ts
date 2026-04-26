@@ -330,6 +330,44 @@ export interface ProjectMapSearchResponse {
   exports: ProjectMapSearchExportResult[];
 }
 
+export type ProjectEditLocationConfidence = "high" | "medium" | "low";
+
+export type ProjectEditLocationNextTool =
+  | "get_file"
+  | "find_usages"
+  | "find_callers"
+  | "get_project_map";
+
+export interface ProjectEditLocationSymbol {
+  id: string;
+  name: string;
+  kind: string;
+  startLine: number | null;
+  endLine: number | null;
+}
+
+export interface ProjectEditLocationSuggestion {
+  path: string;
+  language: string | null;
+  confidence: ProjectEditLocationConfidence;
+  score: number;
+  reason: string;
+  signals: string[];
+  relevantSymbols: ProjectEditLocationSymbol[];
+  suggestedNextTools: ProjectEditLocationNextTool[];
+}
+
+export interface ProjectEditLocationsResponse {
+  query: string;
+  projectId: string;
+  importId: string;
+  suggestions: ProjectEditLocationSuggestion[];
+  meta: {
+    source: "deterministic_search_and_graph";
+    staleness: "latest_import";
+  };
+}
+
 export type ProjectSymbolUsageConfidence =
   | "definite"
   | "probable"

@@ -1,6 +1,7 @@
 export type * from "./types/repo-parse-graph.types";
 
 import { createDiffService } from "./graph/diff";
+import { createEditLocationsService } from "./graph/edit-locations";
 import { createFileQueryService } from "./graph/file-queries";
 import { createGraphService } from "./graph/graph";
 import { createImportEdgeQueryService } from "./graph/import-edge-queries";
@@ -19,6 +20,7 @@ export function createRepoParseGraphService(database: Database) {
     ...createInsightsService(database),
     ...createGraphService(database),
     ...createSearchService(database),
+    ...createEditLocationsService(database),
     ...createSymbolUsagesService(database),
     ...createDiffService(database),
   };

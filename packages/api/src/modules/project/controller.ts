@@ -21,6 +21,7 @@ import {
   createProjectFromGithubBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
+  projectEditLocationsQuerySchema,
   projectFileContentQuerySchema,
   projectFileReparseBodySchema,
   projectMapDiffQuerySchema,
@@ -637,6 +638,42 @@ export function createProjectController(fastify: FastifyInstance) {
           endCol: item.endCol + 1,
         })),
       });
+    },
+
+    suggestEditLocations: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectEditLocationsQuerySchema.parse(request.query ?? {});
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource?.importRecord) {
+        return reply.success({
+          query: query.q.trim(),
+          projectId,
+          importId: "",
+          suggestions: [],
+          meta: {
+            source: "deterministic_search_and_graph",
+            staleness: "latest_import",
+          },
+        });
+      }
+
+      const results = await repoParseGraphService.suggestEditLocations({
+        projectId,
+        projectImportId: latestMapWithSource.importRecord.id,
+        query: query.q,
+        limit: query.limit,
+      });
+
+      return reply.success(results);
     },
 
     getProjectSymbolUsagesById: async (

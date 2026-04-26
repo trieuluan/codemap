@@ -9,6 +9,7 @@ const MCP_AUTH_SESSION_KEY_PREFIX = "mcp:auth:session:";
 const MCP_AUTH_SESSION_TTL_SECONDS = 60 * 5;
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 const MCP_API_KEY_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 90;
+const MCP_API_KEY_NAME_MAX_LENGTH = 32;
 
 type McpAuthSessionStatus = "pending" | "authorized" | "denied";
 
@@ -108,6 +109,22 @@ function buildMcpApiKeyMetadata(input: {
   };
 }
 
+function buildMcpApiKeyName(input: {
+  clientName: string;
+  deviceName: string | null;
+}) {
+  const baseName = input.deviceName
+    ? `${input.clientName} (${input.deviceName})`
+    : input.clientName;
+  const normalizedName = baseName.replace(/\s+/g, " ").trim();
+
+  if (normalizedName.length <= MCP_API_KEY_NAME_MAX_LENGTH) {
+    return normalizedName || "CodeMap MCP";
+  }
+
+  return normalizedName.slice(0, MCP_API_KEY_NAME_MAX_LENGTH).trimEnd();
+}
+
 export function createMcpService(
   redis: Redis,
   webAppUrl: string,
@@ -198,9 +215,10 @@ export function createMcpService(
       };
     }
 
-    const keyName = input.session.deviceName
-      ? `${input.session.clientName} (${input.session.deviceName})`
-      : input.session.clientName;
+    const keyName = buildMcpApiKeyName({
+      clientName: input.session.clientName,
+      deviceName: input.session.deviceName,
+    });
     const createdKey = await auth.api.createApiKey({
       body: {
         name: keyName,

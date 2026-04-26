@@ -27,6 +27,7 @@ import { registerWaitForImportTool } from "./tools/wait-for-import.js";
 import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
+import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
 import { registerFindCallersTool } from "./tools/find-callers.js";
@@ -66,6 +67,7 @@ async function runMcpServer() {
   registerTriggerReimportTool(server, config);
   registerGetProjectTool(server, config);
   registerSearchCodebaseTool(server, config);
+  registerSuggestEditLocationsTool(server, config);
   registerGetFileTool(server, config);
   registerMoveSymbolsTool(server, config);
   registerFindCallersTool(server, config);

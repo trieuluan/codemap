@@ -150,6 +150,44 @@ export interface CodebaseSearchResponse {
   exports: SearchExportResult[];
 }
 
+export type EditLocationConfidence = "high" | "medium" | "low";
+
+export type EditLocationNextTool =
+  | "get_file"
+  | "find_usages"
+  | "find_callers"
+  | "get_project_map";
+
+export interface EditLocationSymbol {
+  id: string;
+  name: string;
+  kind: string;
+  startLine: number | null;
+  endLine: number | null;
+}
+
+export interface EditLocationSuggestion {
+  path: string;
+  language: string | null;
+  confidence: EditLocationConfidence;
+  score: number;
+  reason: string;
+  signals: string[];
+  relevantSymbols: EditLocationSymbol[];
+  suggestedNextTools: EditLocationNextTool[];
+}
+
+export interface EditLocationsResponse {
+  query: string;
+  projectId: string;
+  importId: string;
+  suggestions: EditLocationSuggestion[];
+  meta: {
+    source: "deterministic_search_and_graph";
+    staleness: "latest_import";
+  };
+}
+
 export type SymbolUsageConfidence =
   | "definite"
   | "probable"
