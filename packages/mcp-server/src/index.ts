@@ -31,9 +31,11 @@ import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
+import { registerRenameSymbolTool } from "./tools/rename-symbol.js";
 import { registerFindCallersTool } from "./tools/find-callers.js";
 import { registerFindUsagesTool } from "./tools/find-usages.js";
 import { registerGetDiffTool } from "./tools/get-diff.js";
+import { registerGetWorkingDiffTool } from "./tools/get-working-diff.js";
 import { registerGetProjectMapTool } from "./tools/get-project-map.js";
 import { registerListProjectsTool } from "./tools/list-projects.js";
 import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
@@ -72,9 +74,11 @@ async function runMcpServer() {
   registerGetFileTool(server, config);
   registerGetFilesTool(server, config);
   registerMoveSymbolsTool(server, config);
+  registerRenameSymbolTool(server, config);
   registerFindCallersTool(server, config);
   registerFindUsagesTool(server, config);
   registerGetDiffTool(server, config);
+  registerGetWorkingDiffTool(server);
   registerGetProjectMapTool(server, config);
   registerListProjectsTool(server, config);
   registerGetProjectInsightsTool(server, config);

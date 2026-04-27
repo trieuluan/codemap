@@ -97,6 +97,8 @@ function buildContextText(
   lines.push("- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase");
   lines.push("- find_callers — find static callers/usages of a symbol from a given file, with occurrence ranges, evidence, confidence, and parse staleness metadata");
   lines.push("- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase, with confidence metadata");
+  lines.push("- rename_symbol — rename a function, class, or variable across the entire codebase using the parse index; updates all call sites and import statements automatically; call trigger_reimport after");
+  lines.push("- get_working_diff — show uncommitted changes in the local workspace (staged, unstaged, untracked); use this after edits to verify what changed before committing or reimporting");
   lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
 
@@ -191,6 +193,8 @@ function buildContextText(
   lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
   lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol.");
   lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
+  lines.push("- Use rename_symbol to rename a symbol codebase-wide — provide the definition file and current name; it uses the parse index to find all occurrences and rewrites imports automatically. Call trigger_reimport after.");
+  lines.push("- Use get_working_diff after making edits to verify which files changed before committing or reimporting; prefer get_diff for comparing committed refs.");
   lines.push("- If suggest/search results look stale, a new file is missing, or local edits changed semantics, call trigger_reimport, then wait_for_import.");
   lines.push("- If search or suggest_edit_locations returns no useful results, retry with narrower domain terms, call get_project_map to inspect folders, or reimport if the index may be stale.");
 
