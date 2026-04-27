@@ -5,6 +5,7 @@ import type {
   ProjectMapGraphNode,
   ProjectMapGraphFolderNode,
 } from "@/features/projects/api";
+import { getFileName } from "./graph-utils";
 
 export interface FolderGraphLayoutResult {
   nodes: Node<ProjectMapGraphFolderNode & { zoom?: number }>[];
@@ -891,10 +892,6 @@ function detectLeafClusters({
   }
 
   return { incomingLeaves, outgoingLeaves };
-}
-
-function getFileName(path: string): string {
-  return path.split("/").pop() ?? path;
 }
 
 async function buildClusteredFocusLayout({
