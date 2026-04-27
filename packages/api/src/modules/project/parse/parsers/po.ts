@@ -1,22 +1,79 @@
-import { po } from "gettext-parser";
 import type { WorkspaceFileCandidate } from "../file-discovery";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey } from "./shared";
 import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types";
 
-export function parsePoFile(
+interface PoEntry {
+  msgid: string;
+  msgstr: string;
+  references: string[];
+  extractedComment: string | null;
+  line: number; // line number of the msgid directive
+}
+
+function emitEntry(
+  entry: PoEntry,
+  file: WorkspaceFileCandidate,
+  filePathSet: Set<string>,
+  semantics: ParsedWorkspaceSemantics,
+  projectImportId: string,
+) {
+  if (!entry.msgid) return;
+
+  const isTranslated = entry.msgstr.trim().length > 0;
+
+  semantics.symbols.push({
+    localKey: buildLocalSymbolKey(file.path, "constant", entry.msgid),
+    stableKey: buildStableSymbolKey(file.path, "constant", entry.msgid, entry.line),
+    displayName: entry.msgid,
+    kind: "constant",
+    language: file.language!,
+    signature: `msgid "${entry.msgid}"`,
+    returnType: null,
+    doc: entry.extractedComment,
+    isExported: isTranslated,
+    isDefaultExport: false,
+    line: entry.line,
+    col: 0,
+    endCol: entry.msgid.length,
+  });
+
+  for (const ref of entry.references) {
+    const colonIdx = ref.lastIndexOf(":");
+    const refPath = colonIdx > 0 ? ref.slice(0, colonIdx) : ref;
+    const candidates = [refPath, `${refPath}.py`, `${refPath}.js`];
+    const resolved = candidates.find((c) => filePathSet.has(c));
+
+    semantics.imports.push({
+      localKey: buildImportLocalKey(file.path, "include", refPath, entry.line, 0),
+      moduleSpecifier: refPath,
+      importKind: "include",
+      isTypeOnly: false,
+      importedNames: [entry.msgid],
+      line: entry.line,
+      col: 0,
+      endCol: refPath.length,
+      resolutionKind: resolved ? "relative_path" : "unresolved",
+      targetPathText: resolved ?? refPath,
+      targetExternalSymbolKey: null,
+    });
+  }
+}
+
+function makeBlankEntry(): PoEntry {
+  return { msgid: "", msgstr: "", references: [], extractedComment: null, line: 0 };
+}
+
+function unquotePo(raw: string): string {
+  return raw.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+export async function parsePoFile(
   file: WorkspaceFileCandidate,
   filePathSet: Set<string>,
   projectImportId: string,
-): ParsedWorkspaceSemantics {
+): Promise<ParsedWorkspaceSemantics> {
   const content = file.content ?? "";
   if (!content.trim()) return { ...EMPTY_SEMANTICS };
-
-  let parsed;
-  try {
-    parsed = po.parse(content);
-  } catch {
-    return { ...EMPTY_SEMANTICS };
-  }
 
   const semantics: ParsedWorkspaceSemantics = {
     symbols: [],
@@ -28,71 +85,83 @@ export function parsePoFile(
   };
 
   const lines = content.split(/\r?\n/);
+  let entry = makeBlankEntry();
+  // "msgid" | "msgstr" | "msgid_plural" | null
+  let currentField: "msgid" | "msgstr" | "msgid_plural" | null = null;
 
-  for (const contextGroup of Object.values(parsed.translations)) {
-    for (const translation of Object.values(contextGroup)) {
-      // gettext-parser includes an empty-string header entry — skip it
-      if (translation.msgid === "") continue;
+  const flush = () => {
+    // Skip header entry (msgid "")
+    if (entry.msgid) {
+      emitEntry(entry, file, filePathSet, semantics, projectImportId);
+    }
+    entry = makeBlankEntry();
+    currentField = null;
+  };
 
-      const msgid = translation.msgid;
-      const msgstr = translation.msgstr[0] ?? "";
-      const isTranslated = msgstr.trim().length > 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const lineNumber = i + 1;
 
-      // Find the line number of this msgid in the file
-      const msgidLine = lines.findIndex((l) => l.includes(`"${msgid.replace(/"/g, '\\"')}"`) && lines[lines.indexOf(l) - 1]?.startsWith("msgid")) + 1
-        || lines.findIndex((l) => l === `msgid "${msgid.replace(/"/g, '\\"')}"`) + 1
-        || 1;
+    // Blank line = end of entry
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
 
-      semantics.symbols.push({
-        localKey: buildLocalSymbolKey(file.path, "constant", msgid),
-        stableKey: buildStableSymbolKey(file.path, "constant", msgid, msgidLine),
-        displayName: msgid,
-        kind: "constant",
-        language: file.language!,
-        signature: `msgid "${msgid}"`,
-        returnType: null,
-        doc: translation.comments?.extracted ?? null,
-        isExported: isTranslated,
-        isDefaultExport: false,
-        line: msgidLine,
-        col: 0,
-        endCol: msgid.length,
-      });
+    // Extracted comment #.
+    if (line.startsWith("#.")) {
+      entry.extractedComment = line.slice(2).trim();
+      continue;
+    }
 
-      // Each `#: file:line` reference becomes an import edge back to the source file
-      const references = translation.comments?.reference ?? "";
-      const refEntries = references.split(/\s+/).filter(Boolean);
+    // Reference comment #:
+    if (line.startsWith("#:")) {
+      const refs = line.slice(2).trim().split(/\s+/).filter(Boolean);
+      entry.references.push(...refs);
+      continue;
+    }
 
-      for (const ref of refEntries) {
-        const colonIdx = ref.lastIndexOf(":");
-        const refPath = colonIdx > 0 ? ref.slice(0, colonIdx) : ref;
+    // Other comments — skip
+    if (line.startsWith("#")) {
+      continue;
+    }
 
-        // Normalize path — Frappe refs are usually relative to app root
-        const candidates = [
-          refPath,
-          refPath.endsWith(".py") ? refPath : `${refPath}.py`,
-          refPath.endsWith(".js") ? refPath : `${refPath}.js`,
-        ];
-        const resolved = candidates.find((c) => filePathSet.has(c));
+    // msgid
+    const msgidMatch = line.match(/^msgid\s+"(.*)"$/);
+    if (msgidMatch) {
+      currentField = "msgid";
+      entry.msgid = unquotePo(msgidMatch[1] ?? "");
+      entry.line = lineNumber;
+      continue;
+    }
 
-        const localKey = buildImportLocalKey(file.path, "include", refPath, msgidLine, 0);
+    // msgid_plural — treat as part of msgid for display
+    const msgidPluralMatch = line.match(/^msgid_plural\s+"(.*)"$/);
+    if (msgidPluralMatch) {
+      currentField = "msgid_plural";
+      continue;
+    }
 
-        semantics.imports.push({
-          localKey,
-          moduleSpecifier: refPath,
-          importKind: "include",
-          isTypeOnly: false,
-          importedNames: [msgid],
-          line: msgidLine,
-          col: 0,
-          endCol: refPath.length,
-          resolutionKind: resolved ? "relative_path" : "unresolved",
-          targetPathText: resolved ?? refPath,
-          targetExternalSymbolKey: null,
-        });
-      }
+    // msgstr or msgstr[n]
+    const msgstrMatch = line.match(/^msgstr(?:\[\d+\])?\s+"(.*)"$/);
+    if (msgstrMatch) {
+      currentField = "msgstr";
+      entry.msgstr = unquotePo(msgstrMatch[1] ?? "");
+      continue;
+    }
+
+    // Multiline continuation "..."
+    const continuationMatch = line.match(/^"(.*)"$/);
+    if (continuationMatch && currentField) {
+      const chunk = unquotePo(continuationMatch[1] ?? "");
+      if (currentField === "msgid") entry.msgid += chunk;
+      else if (currentField === "msgstr") entry.msgstr += chunk;
+      continue;
     }
   }
+
+  // Flush last entry
+  flush();
 
   return semantics;
 }
