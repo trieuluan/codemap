@@ -23,6 +23,9 @@ export const IGNORED_NAMES = new Set([
 ]);
 
 export const MAX_PARSE_BYTES = 2 * 1024 * 1024;
+export const MAX_PARSE_BYTES_BY_LANGUAGE: Partial<Record<string, number>> = {
+  Gettext: 10 * 1024 * 1024,
+};
 
 export const PARSE_TOOL_NAME = "codemap-regex-parser";
 export const PARSE_TOOL_VERSION = "0.1.0";
@@ -83,7 +86,8 @@ export async function collectWorkspaceFiles(
     const sample = await readSampleBuffer(absolutePath, entryStats.size);
     const isBinary = isBinaryBuffer(sample);
     const isText = !isBinary;
-    const isParseable = Boolean(language) && isText && entryStats.size <= MAX_PARSE_BYTES;
+    const maxParseBytes = (language ? MAX_PARSE_BYTES_BY_LANGUAGE[language] : undefined) ?? MAX_PARSE_BYTES;
+    const isParseable = Boolean(language) && isText && entryStats.size <= maxParseBytes;
 
     const dirPath = path.posix.dirname(relativePath) === "."
       ? ""
