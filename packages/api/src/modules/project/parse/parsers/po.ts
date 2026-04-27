@@ -98,7 +98,13 @@ export async function parsePoFile(
     currentField = null;
   };
 
+  const CHUNK_SIZE = 2000;
+
   for (let i = 0; i < lines.length; i++) {
+    // Yield to event loop every CHUNK_SIZE lines to avoid BullMQ stall detection
+    if (i > 0 && i % CHUNK_SIZE === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     const line = lines[i] ?? "";
     const lineNumber = i + 1;
 
