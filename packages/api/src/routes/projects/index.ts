@@ -4,6 +4,7 @@ import { createProjectController } from "../../modules/project/controller";
 import { createProjectUploadController } from "../../modules/project/controller.upload";
 
 const MAX_UPLOAD_SIZE = 200 * 1024 * 1024; // 200 MB
+const MAX_REPARSE_BODY_SIZE = 10 * 1024 * 1024; // 10 MB — matches Gettext .po parse limit
 
 const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   const controller = createProjectController(fastify);
@@ -33,7 +34,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.get("/:projectId", controller.getProjectById);
   fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);
   fastify.get("/:projectId/map/files/parse", controller.getProjectFileParseData);
-  fastify.post("/:projectId/map/files/reparse", controller.reparseProjectFile);
+  fastify.post("/:projectId/map/files/reparse", { bodyLimit: MAX_REPARSE_BODY_SIZE }, controller.reparseProjectFile);
   fastify.get("/:projectId/map/files/raw", controller.getProjectRawFile);
   fastify.get("/:projectId/map/search", controller.searchProjectMap);
   fastify.get("/:projectId/map/edit-locations", controller.suggestEditLocations);
