@@ -50,7 +50,8 @@ function formatSymbolKind(kind: string): string {
 
 function formatFileResult(r: SearchFileResult, index: number): string {
   const lang = r.language ? ` [${r.language}]` : "";
-  return `${index + 1}. ${r.path}${lang}`;
+  const hint = `\n   → get_file(path, include=["outline"])`;
+  return `${index + 1}. ${r.path}${lang}${hint}`;
 }
 
 function formatSymbolResult(r: SearchSymbolResult, index: number): string {
@@ -58,11 +59,13 @@ function formatSymbolResult(r: SearchSymbolResult, index: number): string {
   const location = r.startLine ? `:${r.startLine}` : "";
   const parent = r.parentSymbolName ? ` (in ${r.parentSymbolName})` : "";
   const signature = r.signature ? `\n   \`${r.signature}\`` : "";
-  return `${index + 1}. ${r.displayName}  [${kind}]${parent}\n   ${r.filePath}${location}${signature}`;
+  const hint = `\n   → get_file(path, include=["symbols"], symbol_names=["${r.displayName}"])`;
+  return `${index + 1}. ${r.displayName}  [${kind}]${parent}\n   ${r.filePath}${location}${signature}${hint}`;
 }
 
 function formatExportResult(r: SearchExportResult, index: number): string {
-  return `${index + 1}. ${r.exportName}\n   ${r.filePath}:${r.startLine}`;
+  const hint = `\n   → get_file(path, include=["symbols"], symbol_names=["${r.exportName}"])`;
+  return `${index + 1}. ${r.exportName}\n   ${r.filePath}:${r.startLine}${hint}`;
 }
 
 function buildOutput(

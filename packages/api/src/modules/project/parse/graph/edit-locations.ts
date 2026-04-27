@@ -17,6 +17,7 @@ interface Candidate {
   id: string | null;
   path: string;
   language: string | null;
+  lineCount: number | null;
   score: number;
   signals: Set<string>;
   demotedSignals: Set<string>;
@@ -28,6 +29,7 @@ interface EditLocationFileRecord {
   id: string;
   path: string;
   language: string | null;
+  lineCount: number | null;
 }
 
 interface EditLocationGraphEdge {
@@ -200,12 +202,14 @@ function getOrCreateCandidate(
     id?: string | null;
     path: string;
     language?: string | null;
+    lineCount?: number | null;
   },
 ) {
   const existing = candidates.get(input.path);
   if (existing) {
     if (!existing.id && input.id) existing.id = input.id;
     if (!existing.language && input.language) existing.language = input.language;
+    if (existing.lineCount === null && input.lineCount != null) existing.lineCount = input.lineCount;
     return existing;
   }
 
@@ -213,6 +217,7 @@ function getOrCreateCandidate(
     id: input.id ?? null,
     path: input.path,
     language: input.language ?? null,
+    lineCount: input.lineCount ?? null,
     score: 0,
     signals: new Set(),
     demotedSignals: new Set(),
@@ -360,6 +365,8 @@ function buildSuggestedNextTools(candidate: Candidate): ProjectEditLocationNextT
   return Array.from(new Set(tools));
 }
 
+const SMALL_FILE_LINE_THRESHOLD = 150;
+
 function buildReadPlan(candidate: Candidate): ProjectEditLocationReadPlan {
   const symbolNames = Array.from(candidate.relevantSymbols.values())
     .slice(0, 5)
@@ -369,13 +376,9 @@ function buildReadPlan(candidate: Candidate): ProjectEditLocationReadPlan {
     return { include: ["symbols"], symbolNames };
   }
 
-  const hasDirectEvidence =
-    candidate.signals.has("file_path_match") ||
-    candidate.signals.has("symbol_match") ||
-    candidate.signals.has("export_match");
-
-  if (hasDirectEvidence) {
-    return { include: ["outline"] };
+  const lineCount = candidate.lineCount;
+  if (lineCount !== null && lineCount <= SMALL_FILE_LINE_THRESHOLD) {
+    return { include: ["content"] };
   }
 
   return { include: ["outline"] };
@@ -411,6 +414,7 @@ export function buildEditLocationSuggestions(input: {
       id: record?.id ?? null,
       path: file.path,
       language: file.language,
+      lineCount: record?.lineCount ?? null,
     });
     if (addSignalScore(candidate, "file_path_match", 32, 6)) {
       candidate.score += pathTokenScore(file.path, tokens);
@@ -424,6 +428,7 @@ export function buildEditLocationSuggestions(input: {
       id: record?.id ?? null,
       path: symbol.filePath,
       language: record?.language ?? null,
+      lineCount: record?.lineCount ?? null,
     });
     if (addSignalScore(candidate, "symbol_match", 62, 8)) {
       candidate.score += pathTokenScore(symbol.filePath, tokens);
@@ -440,6 +445,7 @@ export function buildEditLocationSuggestions(input: {
       id: record?.id ?? null,
       path: exportResult.filePath,
       language: record?.language ?? null,
+      lineCount: record?.lineCount ?? null,
     });
     if (addSignalScore(candidate, "export_match", 50, 6)) {
       candidate.score += pathTokenScore(exportResult.filePath, tokens);
@@ -553,6 +559,7 @@ export function createEditLocationsService(database: Database) {
                 id: true,
                 path: true,
                 language: true,
+                lineCount: true,
               },
             })
           : [];

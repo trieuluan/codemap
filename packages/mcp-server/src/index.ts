@@ -29,6 +29,7 @@ import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
 import { registerGetFileTool } from "./tools/get-file.js";
+import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
 import { registerFindCallersTool } from "./tools/find-callers.js";
 import { registerFindUsagesTool } from "./tools/find-usages.js";
@@ -69,6 +70,7 @@ async function runMcpServer() {
   registerSearchCodebaseTool(server, config);
   registerSuggestEditLocationsTool(server, config);
   registerGetFileTool(server, config);
+  registerGetFilesTool(server, config);
   registerMoveSymbolsTool(server, config);
   registerFindCallersTool(server, config);
   registerFindUsagesTool(server, config);
