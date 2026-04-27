@@ -23,6 +23,21 @@ import type {
 
 type Database = typeof import("../../../../db/index.ts").db;
 
+const DB_CHUNK_SIZE = 500;
+
+async function chunkInsert<T extends Record<string, unknown>>(
+  rows: T[],
+  insertFn: (chunk: T[]) => Promise<T[]>,
+): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < rows.length; i += DB_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + DB_CHUNK_SIZE);
+    const saved = await insertFn(chunk);
+    results.push(...saved);
+  }
+  return results;
+}
+
 export function createWriteService(database: Database) {
   return {
     async saveFiles(files: RepoFileInsert[]) {
@@ -47,59 +62,52 @@ export function createWriteService(database: Database) {
     },
 
     async saveSymbols(symbols: RepoSymbolInsert[]) {
-      if (symbols.length === 0) {
-        return [] as (typeof repoSymbol.$inferSelect)[];
-      }
-
-      return database.insert(repoSymbol).values(symbols).returning();
+      if (symbols.length === 0) return [] as (typeof repoSymbol.$inferSelect)[];
+      return chunkInsert(symbols, (chunk) =>
+        database.insert(repoSymbol).values(chunk).returning(),
+      );
     },
 
     async saveOccurrences(occurrences: RepoSymbolOccurrenceInsert[]) {
-      if (occurrences.length === 0) {
-        return [] as (typeof repoSymbolOccurrence.$inferSelect)[];
-      }
-
-      return database.insert(repoSymbolOccurrence).values(occurrences).returning();
+      if (occurrences.length === 0) return [] as (typeof repoSymbolOccurrence.$inferSelect)[];
+      return chunkInsert(occurrences, (chunk) =>
+        database.insert(repoSymbolOccurrence).values(chunk).returning(),
+      );
     },
 
     async saveRelationships(relationships: RepoSymbolRelationshipInsert[]) {
-      if (relationships.length === 0) {
-        return [] as (typeof repoSymbolRelationship.$inferSelect)[];
-      }
-
-      return database.insert(repoSymbolRelationship).values(relationships).returning();
+      if (relationships.length === 0) return [] as (typeof repoSymbolRelationship.$inferSelect)[];
+      return chunkInsert(relationships, (chunk) =>
+        database.insert(repoSymbolRelationship).values(chunk).returning(),
+      );
     },
 
     async saveImportEdges(importEdges: RepoImportEdgeInsert[]) {
-      if (importEdges.length === 0) {
-        return [] as (typeof repoImportEdge.$inferSelect)[];
-      }
-
-      return database.insert(repoImportEdge).values(importEdges).returning();
+      if (importEdges.length === 0) return [] as (typeof repoImportEdge.$inferSelect)[];
+      return chunkInsert(importEdges, (chunk) =>
+        database.insert(repoImportEdge).values(chunk).returning(),
+      );
     },
 
     async saveExports(exportsToSave: RepoExportInsert[]) {
-      if (exportsToSave.length === 0) {
-        return [] as (typeof repoExport.$inferSelect)[];
-      }
-
-      return database.insert(repoExport).values(exportsToSave).returning();
+      if (exportsToSave.length === 0) return [] as (typeof repoExport.$inferSelect)[];
+      return chunkInsert(exportsToSave, (chunk) =>
+        database.insert(repoExport).values(chunk).returning(),
+      );
     },
 
     async saveParseIssues(issues: RepoParseIssueInsert[]) {
-      if (issues.length === 0) {
-        return [] as (typeof repoParseIssue.$inferSelect)[];
-      }
-
-      return database.insert(repoParseIssue).values(issues).returning();
+      if (issues.length === 0) return [] as (typeof repoParseIssue.$inferSelect)[];
+      return chunkInsert(issues, (chunk) =>
+        database.insert(repoParseIssue).values(chunk).returning(),
+      );
     },
 
     async upsertExternalSymbols(symbols: RepoExternalSymbolInsert[]) {
-      if (symbols.length === 0) {
-        return [] as (typeof repoExternalSymbol.$inferSelect)[];
-      }
-
-      return database.insert(repoExternalSymbol).values(symbols).onConflictDoNothing().returning();
+      if (symbols.length === 0) return [] as (typeof repoExternalSymbol.$inferSelect)[];
+      return chunkInsert(symbols, (chunk) =>
+        database.insert(repoExternalSymbol).values(chunk).onConflictDoNothing().returning(),
+      );
     },
 
     /**
