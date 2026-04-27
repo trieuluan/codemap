@@ -83,7 +83,7 @@ function buildContextText(
   lines.push("- Dart (.dart) — classes, mixins, enums, imports");
   lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
   lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
-  lines.push("- Gettext (.po) — translation strings indexed as `constant` symbols; msgid is displayName, isExported=true means translated, isExported=false means untranslated; each #: reference becomes an import edge to the source file");
+  lines.push("- Gettext (.po) — translation strings indexed as `constant` symbols; msgid is displayName, isExported=true means translated, isExported=false means untranslated; each #: reference becomes an import edge to the source file; size limit is 10MB (other languages: 2MB)");
   lines.push("All other file types are indexed by path only (no symbol extraction).");
 
   lines.push("");
