@@ -32,6 +32,7 @@
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^6.0.0",
+    "adm-zip": "^0.5.16",
     "argon2": "^0.44.0",
     "better-auth": "^1.6.7",
     "bullmq": "^5.73.4",
@@ -42,8 +43,9 @@
     "fastify-plugin": "^5.0.0",
     "ioredis": "^5.10.1",
     "postgres": "^3.4.8",
-    "adm-zip": "^0.5.16",
     "simple-git": "^3.36.0",
+    "tree-sitter-python": "^0.25.0",
+    "web-tree-sitter": "^0.26.8",
     "zod": "^4.3.6"
   },
   "devDependencies": {

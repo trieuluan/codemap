@@ -89,7 +89,7 @@ export async function reparseFileIfStale(
     content,
   };
 
-  const semantics = parseWorkspaceFileSemantics({
+  const semantics = await parseWorkspaceFileSemantics({
     file: fileCandidate,
     filePathSet,
     projectImportId: importRecord.id,

@@ -1,9 +1,9 @@
 import * as assert from "node:assert";
 import { test } from "node:test";
-import { parseWorkspaceFileSemantics } from "../../../src/modules/project-import/parse-runner";
+import { parseWorkspaceFileSemantics } from "../../../src/modules/project/parse/runner";
 
-test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, and exports", () => {
-  const semantics = parseWorkspaceFileSemantics({
+test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, and exports", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
     projectImportId: "import-1",
     workspacePath: "/tmp",
     resolverConfigs: [],
@@ -46,8 +46,8 @@ test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, an
   assert.equal(semantics.issues.length, 0);
 });
 
-test("parseWorkspaceFileSemantics extracts Dart imports and declarations", () => {
-  const semantics = parseWorkspaceFileSemantics({
+test("parseWorkspaceFileSemantics extracts Dart imports and declarations", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
     projectImportId: "import-1",
     workspacePath: "/tmp",
     resolverConfigs: [],
@@ -88,8 +88,8 @@ test("parseWorkspaceFileSemantics extracts Dart imports and declarations", () =>
   assert.equal(semantics.symbols[1]?.kind, "mixin");
 });
 
-test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and symbols", () => {
-  const semantics = parseWorkspaceFileSemantics({
+test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and symbols", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
     projectImportId: "import-1",
     workspacePath: "/tmp",
     resolverConfigs: [],
@@ -131,8 +131,8 @@ test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and s
   assert.equal(semantics.symbols[1]?.displayName, "ExampleService");
 });
 
-test("parseWorkspaceFileSemantics resolves tsconfig path aliases for internal imports", () => {
-  const semantics = parseWorkspaceFileSemantics({
+test("parseWorkspaceFileSemantics resolves tsconfig path aliases for internal imports", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
     projectImportId: "import-1",
     workspacePath: "/tmp/repo",
     resolverConfigs: [

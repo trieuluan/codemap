@@ -9,6 +9,7 @@ export const SOURCE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   jsx: "JavaScript",
   dart: "Dart",
   php: "PHP",
+  py: "Python",
 };
 
 export const MIME_TYPE_BY_EXTENSION: Record<string, string> = {

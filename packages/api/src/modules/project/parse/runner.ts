@@ -138,7 +138,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
       if (!fileRow) continue;
 
       try {
-        const semantics = parseWorkspaceFileSemantics({
+        const semantics = await parseWorkspaceFileSemantics({
           file: workspaceFile,
           filePathSet,
           projectImportId: importId,

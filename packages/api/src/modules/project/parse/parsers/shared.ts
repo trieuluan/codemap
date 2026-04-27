@@ -5,6 +5,7 @@ import type { TypeScriptResolverConfig } from "../ts-resolver";
 export const JS_TS_EXTENSIONS = ["ts", "tsx", "js", "jsx"];
 export const DART_EXTENSIONS = ["dart"];
 export const PHP_EXTENSIONS = ["php"];
+export const PYTHON_EXTENSIONS = ["py"];
 
 export function buildLocalSymbolKey(filePath: string, kind: string, displayName: string) {
   return `${filePath}#${kind}:${displayName}`;
@@ -36,6 +37,7 @@ export function resolveRelativeTargetPath(
   const extensions =
     language === "Dart" ? DART_EXTENSIONS
     : language === "PHP" ? PHP_EXTENSIONS
+    : language === "Python" ? PYTHON_EXTENSIONS
     : JS_TS_EXTENSIONS;
   const candidates = [basePath];
 
@@ -83,6 +85,7 @@ export function resolveTsconfigAliasTargetPath(
   const extensions =
     language === "TypeScript" || language === "JavaScript" ? JS_TS_EXTENSIONS
     : language === "Dart" ? DART_EXTENSIONS
+    : language === "Python" ? PYTHON_EXTENSIONS
     : PHP_EXTENSIONS;
 
   for (const alias of resolverConfig.pathAliases) {
@@ -195,7 +198,7 @@ export function createExternalSymbolDraft(
   return {
     projectImportId,
     symbolKey: `${language.toLowerCase()}:${moduleSpecifier}`,
-    packageManager: language === "Dart" ? "pub" : language === "PHP" ? "composer" : "npm",
+    packageManager: language === "Dart" ? "pub" : language === "PHP" ? "composer" : language === "Python" ? "pip" : "npm",
     packageName: moduleSpecifier,
     packageVersion: null,
     language,
