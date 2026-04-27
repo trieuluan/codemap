@@ -77,6 +77,26 @@ function buildContextText(
   lines.push(describeImportHealth(health));
 
   lines.push("");
+  lines.push("## Supported Languages");
+  lines.push("CodeMap parses and indexes symbols from the following languages:");
+  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports");
+  lines.push("- Dart (.dart) — classes, mixins, enums, imports");
+  lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
+  lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
+  lines.push("- Gettext (.po) — translation strings indexed as `constant` symbols; msgid is displayName, isExported=true means translated, isExported=false means untranslated; each #: reference becomes an import edge to the source file");
+  lines.push("All other file types are indexed by path only (no symbol extraction).");
+
+  lines.push("");
+  lines.push("## Translation Workflow");
+  lines.push("When working with .po translation files (e.g. for Frappe/ERPNext custom apps):");
+  lines.push("- Use search_codebase with the msgid text to find a translation string and its .po file location");
+  lines.push("- Each translation entry is indexed as a `constant` symbol: isExported=true means already translated, isExported=false means the msgstr is empty (untranslated)");
+  lines.push("- Use find_usages on a translation symbol to see which Python/JS source files reference it via #: comment lines");
+  lines.push("- Use get_file on the source file referenced by #: to understand the context before translating");
+  lines.push("- To find all untranslated strings in a .po file: use get_file with include=[\"outline\"] and filter symbols where isExported=false");
+  lines.push("- Translation strings with msgid_plural are indexed with the plural form appended; check signature for the full msgid/msgstr block");
+
+  lines.push("");
   lines.push("## Available Tools");
   lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
   lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
