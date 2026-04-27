@@ -83,18 +83,17 @@ function buildContextText(
   lines.push("- Dart (.dart) — classes, mixins, enums, imports");
   lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
   lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
-  lines.push("- Gettext (.po) — translation strings indexed as `constant` symbols; msgid is displayName, isExported=true means translated, isExported=false means untranslated; each #: reference becomes an import edge to the source file; size limit is 10MB (other languages: 2MB)");
+  lines.push("- Gettext (.po) — indexed by path only (no symbol extraction); use get_file with start_line/end_line to read specific ranges of large translation files without loading the full content");
   lines.push("All other file types are indexed by path only (no symbol extraction).");
 
   lines.push("");
   lines.push("## Translation Workflow");
   lines.push("When working with .po translation files (e.g. for Frappe/ERPNext custom apps):");
-  lines.push("- Use search_codebase with the msgid text to find a translation string and its .po file location");
-  lines.push("- Each translation entry is indexed as a `constant` symbol: isExported=true means already translated, isExported=false means the msgstr is empty (untranslated)");
-  lines.push("- Use find_usages on a translation symbol to see which Python/JS source files reference it via #: comment lines");
-  lines.push("- Use get_file on the source file referenced by #: to understand the context before translating");
-  lines.push("- To find all untranslated strings in a .po file: use get_file with include=[\"outline\"] and filter symbols where isExported=false");
-  lines.push("- Translation strings with msgid_plural are indexed with the plural form appended; check signature for the full msgid/msgstr block");
+  lines.push("- Use get_project_map to locate .po files in the project (e.g. locale/vi.po)");
+  lines.push("- Use get_file with start_line/end_line to read specific sections of a .po file — never load the full file as it can be several MB");
+  lines.push("- To find untranslated strings: read the .po file in chunks and look for entries where msgstr is empty (\"\")");
+  lines.push("- Use search_codebase to find Python/JS source files that contain the original string for context before translating");
+  lines.push("- Write translated msgstr back to the .po file using targeted edits — do not rewrite the whole file");
 
   lines.push("");
   lines.push("## Available Tools");
