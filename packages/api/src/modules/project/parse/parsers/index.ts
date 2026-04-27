@@ -2,6 +2,7 @@ import type { WorkspaceFileCandidate } from "../file-discovery";
 import type { TypeScriptResolverConfig } from "../ts-resolver";
 import { parseDartFile } from "./dart";
 import { parsePhpFile } from "./php";
+import { parsePoFile } from "./po";
 import { parsePythonFile } from "./python";
 import { parseTypeScriptOrJavaScriptFile } from "./typescript";
 import { EMPTY_SEMANTICS } from "./types";
@@ -35,6 +36,8 @@ export async function parseWorkspaceFileSemantics(input: {
       return parsePhpFile(input.file, input.projectImportId);
     case "Python":
       return parsePythonFile(input.file, input.filePathSet, input.projectImportId);
+    case "Gettext":
+      return parsePoFile(input.file, input.filePathSet, input.projectImportId);
     default:
       return { ...EMPTY_SEMANTICS };
   }

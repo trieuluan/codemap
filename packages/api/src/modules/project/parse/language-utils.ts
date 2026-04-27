@@ -10,6 +10,7 @@ export const SOURCE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   dart: "Dart",
   php: "PHP",
   py: "Python",
+  po: "Gettext",
 };
 
 export const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
