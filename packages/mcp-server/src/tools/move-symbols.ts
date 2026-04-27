@@ -6,6 +6,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
+import { escapeRegex } from "../lib/regex-utils.js";
 
 // ─── types (subset of get-file parse response) ───────────────────────────────
 
@@ -30,10 +31,6 @@ interface FileParseResponse {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 interface SymbolRange {
   name: string;

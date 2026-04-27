@@ -8,6 +8,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
+import { escapeRegex } from "../lib/regex-utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,10 +47,6 @@ interface FileParseResponse {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function renameInContent(content: string, oldName: string, newName: string): { result: string; count: number } {
   const re = new RegExp(`\\b${escapeRegex(oldName)}\\b`, "g");
