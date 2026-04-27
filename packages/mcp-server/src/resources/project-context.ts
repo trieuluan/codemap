@@ -88,9 +88,10 @@ function buildContextText(
   lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository");
   lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
   lines.push("- get_project_map — browse the full file tree");
-  lines.push("- search_codebase — find files, symbols, and exports by keyword; results include symbol signatures");
-  lines.push("- suggest_edit_locations — deterministic candidate generator for likely files and symbols to inspect/edit for a natural-language task; use before get_file when unsure where to start");
+  lines.push("- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint (→ get_file ...) showing the optimal include mode to use next");
+  lines.push("- suggest_edit_locations — deterministic candidate generator for likely files and symbols to inspect/edit for a natural-language task; each suggestion includes a readPlan field specifying the optimal get_file include mode (symbols/outline/content) — always follow readPlan instead of defaulting to content");
   lines.push("- get_file — read a file with include modes: content, outline (symbol list), symbols (extract specific symbol bodies by name), blast_radius (impact analysis). Auto-reparses if local file has changed since last import.");
+  lines.push("- get_files — batch outline fetch for up to 7 files in a single call; use after suggest_edit_locations to survey multiple candidates before deciding where to edit");
   lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
   lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
   lines.push("- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase");
@@ -182,8 +183,9 @@ function buildContextText(
   lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
   lines.push("- If no project is linked, call create_project first; it will detect GitHub remotes or ask for upload confirmation.");
   lines.push("- Use get_current_workspace_info before create_project when linking the current workspace.");
-  lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files. Treat results as candidates, not final truth; prefer high-confidence entries with concrete signals and relevantSymbols.");
-  lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code.");
+  lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files. Each suggestion includes a readPlan — always use it to call get_file with the right include mode instead of defaulting to content. Treat results as candidates, not final truth; prefer high-confidence entries.");
+  lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code. Each result includes a read hint (→ get_file ...) — follow it directly instead of calling get_file with content.");
+  lines.push("- After suggest_edit_locations returns multiple candidates, use get_files to survey all of them in one batch call (outline only), then use get_file with include: [\"symbols\"] to deep-dive the specific file you need to edit.");
   lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
   lines.push("- Add blast_radius to get_file before risky edits to shared files, services, schemas, or MCP tools; do not request blast_radius for routine file reading.");
   lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
