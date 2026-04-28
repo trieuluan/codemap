@@ -19,6 +19,7 @@ import { reparseFileIfStale } from "./parse/file-reparse.service";
 import {
   createProjectBodySchema,
   createProjectFromGithubBodySchema,
+  createProjectFromGitlabBodySchema,
   createProjectImportBodySchema,
   listProjectsQuerySchema,
   projectEditLocationsQuerySchema,
@@ -214,6 +215,49 @@ export function createProjectController(fastify: FastifyInstance) {
           );
         }
 
+        throw error;
+      }
+
+      if (!createdImport) {
+        throw fastify.httpErrors.internalServerError(
+          "Unable to create project import",
+        );
+      }
+
+      const queuedImport = await enqueueImportOrFail(request, createdImport.id);
+
+      return reply.success(
+        {
+          project,
+          import: queuedImport ?? createdImport,
+        },
+        201,
+      );
+    },
+
+    createProjectFromGitlab: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const body = createProjectFromGitlabBodySchema.parse(request.body ?? {});
+      const project = await service.createOrReuseProjectFromGitlab(userId, body);
+
+      let createdImport;
+
+      try {
+        createdImport = await service.createImport(project.id, userId, {
+          branch: body.branch,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+        ) {
+          throw fastify.httpErrors.conflict(
+            "An import is already queued or running for this project",
+          );
+        }
         throw error;
       }
 

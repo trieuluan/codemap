@@ -40,6 +40,7 @@ export const projectStatusEnum = pgEnum("project_status", [
 
 export const projectProviderEnum = pgEnum("project_provider", [
   "github",
+  "gitlab",
   "local_workspace",
 ]);
 

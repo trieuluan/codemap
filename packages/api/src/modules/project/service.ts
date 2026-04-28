@@ -4,6 +4,7 @@ import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
   CreateProjectBody,
   CreateProjectFromGithubBody,
+  CreateProjectFromGitlabBody,
   CreateProjectImportBody,
   ProjectListInclude,
   UpdateProjectBody,
@@ -276,6 +277,54 @@ export function createProjectService(database: Database) {
         repositoryUrl: normalizedRepositoryUrl,
         provider: "github",
         externalRepoId: input.externalRepoId ?? null,
+      });
+    },
+
+    async createOrReuseProjectFromGitlab(
+      ownerUserId: string,
+      input: CreateProjectFromGitlabBody,
+    ) {
+      const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
+
+      const existingProject = await database.query.project.findFirst({
+        where: and(
+          eq(project.ownerUserId, ownerUserId),
+          eq(project.provider, "gitlab"),
+          eq(project.repositoryUrl, normalizedRepositoryUrl),
+        ),
+      });
+
+      if (existingProject) {
+        const [updatedProject] = await database
+          .update(project)
+          .set({
+            name: input.name ?? existingProject.name,
+            description:
+              input.description !== undefined
+                ? (input.description ?? null)
+                : existingProject.description,
+            defaultBranch:
+              input.defaultBranch !== undefined
+                ? (input.defaultBranch ?? null)
+                : existingProject.defaultBranch,
+            repositoryUrl: normalizedRepositoryUrl,
+            provider: "gitlab",
+          })
+          .where(eq(project.id, existingProject.id))
+          .returning();
+
+        return updatedProject ?? existingProject;
+      }
+
+      return this.createProject(ownerUserId, {
+        name:
+          input.name ??
+          normalizedRepositoryUrl.split("/").filter(Boolean).at(-1) ??
+          "gitlab-project",
+        description: input.description ?? null,
+        defaultBranch: input.defaultBranch ?? null,
+        repositoryUrl: normalizedRepositoryUrl,
+        provider: "gitlab",
       });
     },
 

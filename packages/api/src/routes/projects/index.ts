@@ -12,6 +12,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
 
   fastify.post("/", controller.createProject);
   fastify.post("/from-github", controller.createProjectFromGithub);
+  fastify.post("/from-gitlab", controller.createProjectFromGitlab);
 
   // Upload route in its own encapsulated scope so the zip body parser
   // does not leak to other project routes.

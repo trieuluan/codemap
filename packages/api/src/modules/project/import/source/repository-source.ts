@@ -5,6 +5,12 @@ import {
   resolveGithubRepositorySource,
 } from "./github-source";
 import {
+  type ResolvedGitlabRepositorySource,
+  materializeGitlabRepositorySource,
+  parseGitlabRepositoryUrl,
+  resolveGitlabRepositorySource,
+} from "./gitlab-source";
+import {
   type ResolvedLocalWorkspaceSource,
   materializeLocalWorkspaceSource,
   resolveLocalWorkspaceSource,
@@ -18,6 +24,13 @@ type GithubRepositorySourceInput = {
   accessToken?: string | null;
 };
 
+type GitlabRepositorySourceInput = {
+  provider: "gitlab";
+  repositoryUrl: string;
+  preferredBranch?: string | null;
+  accessToken?: string | null;
+};
+
 type LocalWorkspaceSourceInput = {
   provider: "local_workspace";
   workspacePath: string;
@@ -26,6 +39,7 @@ type LocalWorkspaceSourceInput = {
 
 type RepositorySourceInput =
   | GithubRepositorySourceInput
+  | GitlabRepositorySourceInput
   | LocalWorkspaceSourceInput;
 
 function isResolvedLocalWorkspaceSource(
@@ -40,9 +54,20 @@ function isResolvedGithubRepositorySource(
   return "owner" in source.reference;
 }
 
+function isResolvedGitlabRepositorySource(
+  source: Awaited<ReturnType<typeof resolveRepositorySource>>,
+): source is ResolvedGitlabRepositorySource {
+  return "host" in source.reference;
+}
+
 export async function validateRepositorySourceAccess(input: RepositorySourceInput) {
   if (input.provider === "github") {
     parseGithubRepositoryUrl(input.repositoryUrl);
+    return;
+  }
+
+  if (input.provider === "gitlab") {
+    parseGitlabRepositoryUrl(input.repositoryUrl);
     return;
   }
 
@@ -52,6 +77,14 @@ export async function validateRepositorySourceAccess(input: RepositorySourceInpu
 export async function resolveRepositorySource(input: RepositorySourceInput) {
   if (input.provider === "github") {
     return resolveGithubRepositorySource({
+      repositoryUrl: input.repositoryUrl,
+      preferredBranch: input.preferredBranch,
+      accessToken: input.accessToken,
+    });
+  }
+
+  if (input.provider === "gitlab") {
+    return resolveGitlabRepositorySource({
       repositoryUrl: input.repositoryUrl,
       preferredBranch: input.preferredBranch,
       accessToken: input.accessToken,
@@ -75,6 +108,10 @@ export async function materializeRepositorySource(
 
   if (isResolvedGithubRepositorySource(source)) {
     return materializeGithubRepositorySource(source, options);
+  }
+
+  if (isResolvedGitlabRepositorySource(source)) {
+    return materializeGitlabRepositorySource(source, options);
   }
 
   throw new Error("Unsupported repository source type");

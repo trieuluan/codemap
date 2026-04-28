@@ -76,6 +76,15 @@ export const createProjectFromGithubBodySchema = z.object({
   branch: z.string().trim().min(1).max(255).optional(),
 });
 
+export const createProjectFromGitlabBodySchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  description: nullableTrimmedString.optional(),
+  repositoryUrl: z.string().trim().url().max(500),
+  accessToken: z.string().trim().min(1).max(500).optional(),
+  defaultBranch: nullableShortString.optional(),
+  branch: z.string().trim().min(1).max(255).optional(),
+});
+
 function parseIncludeQueryValue(value: unknown) {
   if (Array.isArray(value)) {
     return value
@@ -168,4 +177,7 @@ export type ProjectSymbolUsagesQuery = z.infer<
 export type ProjectMapDiffQuery = z.infer<typeof projectMapDiffQuerySchema>;
 export type CreateProjectFromGithubBody = z.infer<
   typeof createProjectFromGithubBodySchema
+>;
+export type CreateProjectFromGitlabBody = z.infer<
+  typeof createProjectFromGitlabBodySchema
 >;

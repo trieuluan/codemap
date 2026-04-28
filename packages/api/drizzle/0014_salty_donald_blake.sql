@@ -1,0 +1,1 @@
+ALTER TYPE "public"."project_provider" ADD VALUE 'gitlab' BEFORE 'local_workspace';
