@@ -6,6 +6,7 @@ import { enqueueProjectParseJob } from "../../../lib/project-parse-queue";
 import { createProjectMapPersistence } from "../map/map-persistence";
 import { buildProjectTree } from "../map/tree-builder";
 import { createGithubService } from "../../github/service";
+import { createGitlabService } from "../../gitlab/service";
 import { createProjectService } from "../service";
 import { createRepositoryWorkspaceService } from "./repository-workspace";
 import {
@@ -60,6 +61,7 @@ export async function runProjectImport(
 
   if (
     projectRecord.provider !== "github" &&
+    projectRecord.provider !== "gitlab" &&
     projectRecord.provider !== "local_workspace"
   ) {
     await projectService.markImportAsFailed(
@@ -69,10 +71,13 @@ export async function runProjectImport(
     return;
   }
 
-  if (projectRecord.provider === "github" && !projectRecord.repositoryUrl) {
+  if (
+    (projectRecord.provider === "github" || projectRecord.provider === "gitlab") &&
+    !projectRecord.repositoryUrl
+  ) {
     await projectService.markImportAsFailed(
       importRecord.id,
-      "Repository URL is missing for this GitHub project",
+      "Repository URL is missing for this project",
     );
     return;
   }
@@ -106,6 +111,12 @@ export async function runProjectImport(
   const githubAccessToken =
     projectRecord.provider === "github"
       ? await githubService.getAccessToken(projectRecord.ownerUserId)
+      : null;
+
+  const gitlabService = createGitlabService(db, context?.redisConnection ?? null);
+  const gitlabAccessToken =
+    projectRecord.provider === "gitlab"
+      ? await gitlabService.getAccessToken(projectRecord.ownerUserId)
       : null;
 
   let materializedSource: Awaited<
@@ -146,11 +157,17 @@ export async function runProjectImport(
               provider: "local_workspace",
               workspacePath: projectRecord.localWorkspacePath!,
             }
-          : {
-              provider: "github",
-              repositoryUrl: projectRecord.repositoryUrl!,
-              accessToken: githubAccessToken,
-            },
+          : projectRecord.provider === "gitlab"
+            ? {
+                provider: "gitlab",
+                repositoryUrl: projectRecord.repositoryUrl!,
+                accessToken: gitlabAccessToken,
+              }
+            : {
+                provider: "github",
+                repositoryUrl: projectRecord.repositoryUrl!,
+                accessToken: githubAccessToken,
+              },
       );
 
       await projectService.markImportAsRunning(importRecord.id, {
@@ -165,12 +182,19 @@ export async function runProjectImport(
               workspacePath: projectRecord.localWorkspacePath!,
               preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
             }
-          : {
-              provider: "github",
-              repositoryUrl: projectRecord.repositoryUrl!,
-              preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
-              accessToken: githubAccessToken,
-            },
+          : projectRecord.provider === "gitlab"
+            ? {
+                provider: "gitlab",
+                repositoryUrl: projectRecord.repositoryUrl!,
+                preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+                accessToken: gitlabAccessToken,
+              }
+            : {
+                provider: "github",
+                repositoryUrl: projectRecord.repositoryUrl!,
+                preferredBranch: importRecord.branch ?? projectRecord.defaultBranch,
+                accessToken: githubAccessToken,
+              },
       );
 
       if (!projectRecord.defaultBranch && resolvedSource.branch) {
@@ -182,7 +206,7 @@ export async function runProjectImport(
 
       await reportProjectImportProgress(context, 45, "downloading-source");
       materializedSource = await materializeRepositorySource(resolvedSource, {
-        accessToken: githubAccessToken,
+        accessToken: projectRecord.provider === "gitlab" ? gitlabAccessToken : githubAccessToken,
       });
 
       await projectService.markImportAsRunning(importRecord.id, {
