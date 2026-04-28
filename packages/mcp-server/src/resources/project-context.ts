@@ -100,13 +100,14 @@ function buildContextText(
   lines.push("## Available Tools");
   lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
   lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
-  lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub access for repository imports");
+  lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub OAuth access for GitHub repository imports");
+  lines.push("- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage optional GitLab OAuth access (gitlab.com) for GitLab repository imports");
   lines.push("- list_projects — list all accessible projects");
   lines.push("- get_project — get current project status and metadata");
   lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
   lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
-  lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository");
-  lines.push("- create_project_from_gitlab — create or reuse a CodeMap project from a GitLab repository (gitlab.com or self-hosted); requires repositoryUrl and optional accessToken (personal access token)");
+  lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository; call check_github_connection first for private repos");
+  lines.push("- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository; call check_gitlab_connection first for private repos");
   lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint (→ get_file ...) showing the optimal include mode to use next");
@@ -201,6 +202,7 @@ function buildContextText(
   lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
   lines.push("- If not authenticated, call start_auth_flow and then wait_for_auth after the user approves the browser prompt.");
   lines.push("- If GitHub access is needed and disconnected, call get_github_connect_url; GitHub is optional for MCP auth but required for private GitHub repository imports.");
+  lines.push("- If GitLab access is needed and disconnected, call get_gitlab_connect_url; required for private gitlab.com repository imports.");
   lines.push("- Use get_project or list_projects to confirm the active project.");
   lines.push("- If get_project reports health.nextAction as trigger_reimport, call trigger_reimport and then wait_for_import.");
   lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
