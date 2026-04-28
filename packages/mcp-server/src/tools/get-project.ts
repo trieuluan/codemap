@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
-import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import { readWorkspaceProjectConfig } from "../lib/workspace-project.js";
 import type { ProjectDetail } from "../lib/api-types.js";
 import {
   describeImportHealth,
@@ -86,16 +86,20 @@ export function registerGetProjectTool(
       inputSchema: {},
     },
     withToolError(async () => {
-      const resolvedProjectId = await readWorkspaceProjectId();
+      const workspaceConfig = await readWorkspaceProjectConfig();
+      const resolvedProjectId = workspaceConfig.projectId;
 
       if (!resolvedProjectId) {
         const summary =
           "No CodeMap project is linked to this workspace.\n" +
           "get_project only reads the current project saved in .codemap/mcp.json.\n" +
+          `Workspace path: ${workspaceConfig.workspaceRootPath ?? process.cwd()}\n` +
+          "Configure your MCP client to start this server with cwd set to the repo path.\n" +
           "Next action: call create_project to create or link a project for this workspace.";
 
         return success(summary, {
           linkedWorkspace: false,
+          workspaceRootPath: workspaceConfig.workspaceRootPath,
           projectId: null,
           found: false,
           project: null,
@@ -120,6 +124,7 @@ export function registerGetProjectTool(
 
           return success(summary, {
             linkedWorkspace: true,
+            workspaceRootPath: workspaceConfig.workspaceRootPath,
             projectId: resolvedProjectId,
             found: false,
             project: null,
@@ -138,6 +143,7 @@ export function registerGetProjectTool(
 
       return success(formatProject(project, health), {
         linkedWorkspace: true,
+        workspaceRootPath: workspaceConfig.workspaceRootPath,
         projectId: resolvedProjectId,
         found: true,
         project,

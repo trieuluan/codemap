@@ -29,11 +29,22 @@ async function readWorkspaceProjectConfigAt(configPath: string) {
 export async function readWorkspaceProjectConfig(
   cwd = process.cwd(),
 ): Promise<WorkspaceProjectConfig> {
-  const candidateRoots = new Set<string>([cwd]);
+  const candidateRoots = new Set<string>();
+  const workspaceRoot = process.env.WORKSPACE_ROOT?.trim();
 
-  const workspace = await tryGetCurrentWorkspaceInfo(cwd);
-  if (workspace?.repoRootPath) {
-    candidateRoots.add(workspace.repoRootPath);
+  if (workspaceRoot) {
+    candidateRoots.add(workspaceRoot);
+  }
+
+  candidateRoots.add(cwd);
+  let resolvedRepoRoot: string | null = null;
+
+  for (const root of Array.from(candidateRoots)) {
+    const workspace = await tryGetCurrentWorkspaceInfo(root);
+    if (workspace?.repoRootPath) {
+      candidateRoots.add(workspace.repoRootPath);
+      resolvedRepoRoot ??= workspace.repoRootPath;
+    }
   }
 
   for (const root of candidateRoots) {
@@ -52,7 +63,7 @@ export async function readWorkspaceProjectConfig(
 
   return {
     projectId: null,
-    workspaceRootPath: workspace?.repoRootPath ?? null,
+    workspaceRootPath: workspaceRoot ?? resolvedRepoRoot,
   };
 }
 

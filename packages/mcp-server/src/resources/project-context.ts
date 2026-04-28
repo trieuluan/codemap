@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import { readWorkspaceProjectConfig } from "../lib/workspace-project.js";
 import type { ProjectDetail, ProjectImportDetail } from "../lib/api-types.js";
 import {
   buildImportHealth,
@@ -242,7 +242,8 @@ export function registerProjectContextResource(
       mimeType: "text/plain",
     },
     async (uri) => {
-      const projectId = await readWorkspaceProjectId();
+      const workspaceConfig = await readWorkspaceProjectConfig();
+      const projectId = workspaceConfig.projectId;
 
       if (!projectId) {
         return {

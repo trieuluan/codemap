@@ -21,10 +21,17 @@ export async function resolveWorkspace(input?: {
   project?: ProjectLike | null;
 }): Promise<ResolvedWorkspace> {
   const cwd = input?.cwd ?? process.cwd();
+  const envWorkspaceRoot = process.env.WORKSPACE_ROOT?.trim() || null;
   const candidates: Array<{
     path: string;
     resolution: ResolvedWorkspace["resolution"];
-  }> = [{ path: cwd, resolution: "git" }];
+  }> = [];
+
+  if (envWorkspaceRoot) {
+    candidates.push({ path: envWorkspaceRoot, resolution: "linked_config" });
+  }
+
+  candidates.push({ path: cwd, resolution: "git" });
 
   const config = await readWorkspaceProjectConfig(cwd);
   if (config.workspaceRootPath) {
