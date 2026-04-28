@@ -103,7 +103,7 @@ function buildContextText(
   lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub OAuth access for GitHub repository imports");
   lines.push("- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage optional GitLab OAuth access (gitlab.com) for GitLab repository imports");
   lines.push("- list_projects — list all accessible projects");
-  lines.push("- get_project — get current project status and metadata");
+  lines.push("- get_project — get the current linked project from .codemap/mcp.json; call with no arguments. If no project is linked, call create_project.");
   lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
   lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
   lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository; call check_github_connection first for private repos");
@@ -203,10 +203,10 @@ function buildContextText(
   lines.push("- If not authenticated, call start_auth_flow and then wait_for_auth after the user approves the browser prompt.");
   lines.push("- If GitHub access is needed and disconnected, call get_github_connect_url; GitHub is optional for MCP auth but required for private GitHub repository imports.");
   lines.push("- If GitLab access is needed and disconnected, call get_gitlab_connect_url; required for private gitlab.com repository imports.");
-  lines.push("- Use get_project or list_projects to confirm the active project.");
+  lines.push("- Use get_project to confirm the current linked project saved in .codemap/mcp.json; do not pass project_id to get_project.");
   lines.push("- If get_project reports health.nextAction as trigger_reimport, call trigger_reimport and then wait_for_import.");
   lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
-  lines.push("- If no project is linked, call create_project first; it will detect GitHub remotes or ask for upload confirmation.");
+  lines.push("- If get_project reports no linked project, call create_project first; it will create/reuse a project, save the link into .codemap/mcp.json, start import when needed, and then you should call wait_for_import.");
   lines.push("- Use get_current_workspace_info before create_project when linking the current workspace.");
   lines.push("- Use suggest_edit_locations first for broad implementation tasks when you do not already know the relevant files. Each suggestion includes a readPlan — always use it to call get_file with the right include mode instead of defaulting to content. Treat results as candidates, not final truth; prefer high-confidence entries.");
   lines.push("- Use search_codebase before reading files when looking for symbols, exports, or feature code. Each result includes a read hint (→ get_file ...) — follow it directly instead of calling get_file with content.");
@@ -253,11 +253,14 @@ export function registerProjectContextResource(
               text: [
                 "# CodeMap Project Context",
                 "",
-                "No project linked to this workspace.",
+                "No CodeMap project is linked to this workspace.",
+                "",
+                "get_project only reads the current project saved in .codemap/mcp.json.",
+                "Next action: call create_project to create or reuse a project for this workspace and save the link.",
                 "",
                 "Run one of the following tools to link a project:",
-                "- create_project — import a local folder",
-                "- create_project_from_github — import a GitHub repository",
+                "- create_project — recommended for the current local workspace",
+                "- create_project_from_github — import a GitHub repository when you are not working from the local repo",
                 "",
                 "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions and treat summary text as a human-readable fallback.",
               ].join("\n"),

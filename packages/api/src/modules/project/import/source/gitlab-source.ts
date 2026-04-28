@@ -44,14 +44,19 @@ async function runGitCommand(args: string[]) {
     return { stdout: await git.raw(args) };
   } catch (error) {
     throw new Error(
-      error && typeof error === "object" && "message" in error && typeof error.message === "string"
+      error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof error.message === "string"
         ? error.message.trim()
         : "Git command failed",
     );
   }
 }
 
-export function parseGitlabRepositoryUrl(repositoryUrl: string): GitlabRepositoryReference {
+export function parseGitlabRepositoryUrl(
+  repositoryUrl: string,
+): GitlabRepositoryReference {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(repositoryUrl);
@@ -90,10 +95,12 @@ function buildGitlabApiBase(host: string) {
   return `https://${host}/api/v4`;
 }
 
-function buildGitlabApiHeaders(accessToken?: string | null): Record<string, string> {
+function buildGitlabApiHeaders(
+  accessToken?: string | null,
+): Record<string, string> {
   const headers: Record<string, string> = {};
   if (accessToken) {
-    headers["PRIVATE-TOKEN"] = accessToken;
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
   return headers;
 }
@@ -120,20 +127,36 @@ export async function resolveGitlabDefaultBranch(
       { headers: buildGitlabApiHeaders(accessToken) },
     );
 
-    if (response.status === 404) throw new Error("Unable to access this GitLab repository");
-    if (!response.ok) throw new Error(`Unable to resolve the default branch for this repository (${response.status})`);
+    if (response.status === 404)
+      throw new Error("Unable to access this GitLab repository");
+    if (!response.ok)
+      throw new Error(
+        `Unable to resolve the default branch for this repository (${response.status})`,
+      );
 
     const data = (await response.json()) as { default_branch?: string | null };
     const defaultBranch = data.default_branch?.trim();
-    if (!defaultBranch) throw new Error("Unable to resolve the default branch for this repository");
+    if (!defaultBranch)
+      throw new Error(
+        "Unable to resolve the default branch for this repository",
+      );
     return defaultBranch;
   }
 
-  const { stdout } = await runGitCommand(["ls-remote", "--symref", reference.normalizedUrl, "HEAD"]);
-  const headLine = stdout.split("\n").find((line) => line.startsWith("ref: refs/heads/"));
-  if (!headLine) throw new Error("Unable to resolve the default branch for this repository");
+  const { stdout } = await runGitCommand([
+    "ls-remote",
+    "--symref",
+    reference.normalizedUrl,
+    "HEAD",
+  ]);
+  const headLine = stdout
+    .split("\n")
+    .find((line) => line.startsWith("ref: refs/heads/"));
+  if (!headLine)
+    throw new Error("Unable to resolve the default branch for this repository");
   const match = headLine.match(/^ref: refs\/heads\/(.+)\s+HEAD$/);
-  if (!match?.[1]) throw new Error("Unable to resolve the default branch for this repository");
+  if (!match?.[1])
+    throw new Error("Unable to resolve the default branch for this repository");
   return match[1].trim();
 }
 
@@ -151,13 +174,27 @@ export async function verifyGitlabBranchExists(
       { headers: buildGitlabApiHeaders(accessToken) },
     );
 
-    if (response.status === 404) throw new Error(`Branch "${normalizedBranch}" does not exist in this GitLab repository`);
-    if (!response.ok) throw new Error(`Unable to verify branch "${normalizedBranch}" for this GitLab repository (${response.status})`);
+    if (response.status === 404)
+      throw new Error(
+        `Branch "${normalizedBranch}" does not exist in this GitLab repository`,
+      );
+    if (!response.ok)
+      throw new Error(
+        `Unable to verify branch "${normalizedBranch}" for this GitLab repository (${response.status})`,
+      );
     return normalizedBranch;
   }
 
-  const { stdout } = await runGitCommand(["ls-remote", "--heads", reference.normalizedUrl, normalizedBranch]);
-  if (!stdout.trim()) throw new Error(`Branch "${normalizedBranch}" does not exist in this GitLab repository`);
+  const { stdout } = await runGitCommand([
+    "ls-remote",
+    "--heads",
+    reference.normalizedUrl,
+    normalizedBranch,
+  ]);
+  if (!stdout.trim())
+    throw new Error(
+      `Branch "${normalizedBranch}" does not exist in this GitLab repository`,
+    );
   return normalizedBranch;
 }
 
@@ -170,7 +207,11 @@ export async function resolveGitlabRepositorySource(input: {
   const preferredBranch = input.preferredBranch?.trim();
 
   const branch = preferredBranch
-    ? await verifyGitlabBranchExists(reference, preferredBranch, input.accessToken)
+    ? await verifyGitlabBranchExists(
+        reference,
+        preferredBranch,
+        input.accessToken,
+      )
     : await resolveGitlabDefaultBranch(reference, input.accessToken);
 
   return { reference, branch };
@@ -181,7 +222,9 @@ export async function materializeGitlabRepositorySource(
   options?: { accessToken?: string | null },
 ): Promise<MaterializedGitlabRepository> {
   const git = simpleGit().env("GIT_TERMINAL_PROMPT", "0");
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "codemap-project-import-"));
+  const workspaceRoot = await mkdtemp(
+    path.join(os.tmpdir(), "codemap-project-import-"),
+  );
   const workspacePath = path.join(workspaceRoot, source.reference.repo);
 
   try {
@@ -193,7 +236,10 @@ export async function materializeGitlabRepositorySource(
   } catch (error) {
     await rm(workspaceRoot, { recursive: true, force: true });
     throw new Error(
-      `Unable to clone GitLab repository: ${error instanceof Error ? error.message : "unknown error"}`.slice(0, 500),
+      `Unable to clone GitLab repository: ${error instanceof Error ? error.message : "unknown error"}`.slice(
+        0,
+        500,
+      ),
     );
   }
 

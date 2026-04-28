@@ -1,13 +1,18 @@
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { ProjectDetail } from "../lib/api-types.js";
-import { describeImportHealth, getProjectImportHealth } from "../lib/import-health.js";
+import {
+  describeImportHealth,
+  getProjectImportHealth,
+} from "../lib/import-health.js";
 
-function formatProject(p: ProjectDetail, health: Awaited<ReturnType<typeof getProjectImportHealth>>): string {
+function formatProject(
+  p: ProjectDetail,
+  health: Awaited<ReturnType<typeof getProjectImportHealth>>,
+): string {
   const lines: string[] = [
     `Name: ${p.name}`,
     `ID: ${p.id}`,
@@ -20,7 +25,8 @@ function formatProject(p: ProjectDetail, health: Awaited<ReturnType<typeof getPr
   if (p.description) lines.push(`Description: ${p.description}`);
   if (p.defaultBranch) lines.push(`Default branch: ${p.defaultBranch}`);
   if (p.repositoryUrl) lines.push(`Repository: ${p.repositoryUrl}`);
-  if (p.localWorkspacePath) lines.push(`Workspace path: ${p.localWorkspacePath}`);
+  if (p.localWorkspacePath)
+    lines.push(`Workspace path: ${p.localWorkspacePath}`);
   if (p.lastImportedAt) {
     lines.push(`Last imported: ${new Date(p.lastImportedAt).toLocaleString()}`);
   }
@@ -32,7 +38,9 @@ function formatProject(p: ProjectDetail, health: Awaited<ReturnType<typeof getPr
   return lines.join("\n");
 }
 
-function buildRecommendedWorkflow(health: Awaited<ReturnType<typeof getProjectImportHealth>>) {
+function buildRecommendedWorkflow(
+  health: Awaited<ReturnType<typeof getProjectImportHealth>>,
+) {
   if (health.nextAction === "trigger_reimport") {
     return [
       "Call trigger_reimport to refresh the CodeMap index.",
@@ -62,36 +70,32 @@ function buildRecommendedWorkflow(health: Awaited<ReturnType<typeof getProjectIm
   ];
 }
 
-export function registerGetProjectTool(server: McpServer, config: McpServerConfig) {
+export function registerGetProjectTool(
+  server: McpServer,
+  config: McpServerConfig,
+) {
   const client = createCodeMapClient(config);
-
   server.registerTool(
     "get_project",
     {
       title: "Get Project",
       description:
-        "Returns details for a CodeMap project: name, status, provider, repository URL, " +
-        "default branch, and last import time. " +
-        "project_id is optional if this workspace was linked via create_project.",
-      inputSchema: {
-        project_id: z
-          .string()
-          .uuid()
-          .optional()
-          .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
-      },
+        "Returns the current linked CodeMap project for this workspace. " +
+        "The project link is read from .codemap/mcp.json after create_project saves it. " +
+        "Call this with no arguments. If no project is linked, call create_project.",
+      inputSchema: {},
     },
-    withToolError(async ({ project_id }) => {
-      const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
-      const linkedWorkspace = !project_id;
+    withToolError(async () => {
+      const resolvedProjectId = await readWorkspaceProjectId();
 
       if (!resolvedProjectId) {
         const summary =
-          "No project ID provided and no linked project found for this workspace.\n" +
-          "Run create_project first to link this workspace to a CodeMap project.";
+          "No CodeMap project is linked to this workspace.\n" +
+          "get_project only reads the current project saved in .codemap/mcp.json.\n" +
+          "Next action: call create_project to create or link a project for this workspace.";
 
         return success(summary, {
-          linkedWorkspace,
+          linkedWorkspace: false,
           projectId: null,
           found: false,
           project: null,
@@ -115,7 +119,7 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
             "Check that the project ID is correct and you have access to it.";
 
           return success(summary, {
-            linkedWorkspace,
+            linkedWorkspace: true,
             projectId: resolvedProjectId,
             found: false,
             project: null,
@@ -126,10 +130,14 @@ export function registerGetProjectTool(server: McpServer, config: McpServerConfi
         throw error;
       }
 
-      const health = await getProjectImportHealth(client, resolvedProjectId, project);
+      const health = await getProjectImportHealth(
+        client,
+        resolvedProjectId,
+        project,
+      );
 
       return success(formatProject(project, health), {
-        linkedWorkspace,
+        linkedWorkspace: true,
         projectId: resolvedProjectId,
         found: true,
         project,

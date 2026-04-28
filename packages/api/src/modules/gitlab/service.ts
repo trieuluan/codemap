@@ -62,7 +62,9 @@ export function createGitlabService(
 ) {
   function requireConfig() {
     if (!config) {
-      throw new Error("GitLab OAuth credentials are not configured on this server");
+      throw new Error(
+        "GitLab OAuth credentials are not configured on this server",
+      );
     }
     return config;
   }
@@ -74,7 +76,10 @@ export function createGitlabService(
     return redis;
   }
 
-  async function createOAuthState(userId: string, returnTo?: string | null): Promise<string> {
+  async function createOAuthState(
+    userId: string,
+    returnTo?: string | null,
+  ): Promise<string> {
     const redisClient = requireRedis();
     const state = randomUUID();
     const value: GitlabOAuthState = { userId, returnTo: returnTo ?? null };
@@ -86,7 +91,9 @@ export function createGitlabService(
     return state;
   }
 
-  async function consumeOAuthState(state: string): Promise<GitlabOAuthState | null> {
+  async function consumeOAuthState(
+    state: string,
+  ): Promise<GitlabOAuthState | null> {
     const redisClient = requireRedis();
     const key = `${GITLAB_STATE_KEY_PREFIX}${state}`;
     const rawState = await redisClient.get(key);
@@ -98,7 +105,8 @@ export function createGitlabService(
       if (typeof parsed.userId === "string") {
         return {
           userId: parsed.userId,
-          returnTo: typeof parsed.returnTo === "string" ? parsed.returnTo : null,
+          returnTo:
+            typeof parsed.returnTo === "string" ? parsed.returnTo : null,
         };
       }
     } catch {
@@ -108,7 +116,9 @@ export function createGitlabService(
     return { userId: rawState, returnTo: null };
   }
 
-  async function exchangeCodeForToken(code: string): Promise<GitlabTokenResponse> {
+  async function exchangeCodeForToken(
+    code: string,
+  ): Promise<GitlabTokenResponse> {
     const c = requireConfig();
     const body = new URLSearchParams({
       client_id: c.clientId,
@@ -156,7 +166,10 @@ export function createGitlabService(
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
-      if (!response.ok) throw new Error(`Failed to fetch GitLab repositories: ${response.status}`);
+      if (!response.ok)
+        throw new Error(
+          `Failed to fetch GitLab repositories: ${response.status}`,
+        );
 
       const data = (await response.json()) as GitlabRepository[];
       repositories.push(...data);
@@ -175,13 +188,16 @@ export function createGitlabService(
         `client_id=${encodeURIComponent(c.clientId)}`,
         `redirect_uri=${encodeURIComponent(c.callbackUrl)}`,
         `response_type=code`,
-        `scope=read_repository%20read_user`,
+        `scope=api%20read_repository%20read_user`,
         `state=${encodeURIComponent(state)}`,
       ].join("&");
       return `${GITLAB_BASE_URL}/oauth/authorize?${params}`;
     },
 
-    async generateConnectUrl(userId: string, options?: { returnTo?: string | null }): Promise<string> {
+    async generateConnectUrl(
+      userId: string,
+      options?: { returnTo?: string | null },
+    ): Promise<string> {
       const state = await createOAuthState(userId, options?.returnTo ?? null);
       return this.buildConnectUrl(userId, state);
     },
@@ -189,7 +205,11 @@ export function createGitlabService(
     async handleCallback(
       code: string,
       state: string,
-    ): Promise<{ userId: string; gitlabLogin: string; returnTo: string | null }> {
+    ): Promise<{
+      userId: string;
+      gitlabLogin: string;
+      returnTo: string | null;
+    }> {
       const oauthState = await consumeOAuthState(state);
       if (!oauthState) throw new Error("INVALID_OR_EXPIRED_STATE");
 
@@ -220,7 +240,11 @@ export function createGitlabService(
             },
           });
 
-        return { userId: oauthState.userId, gitlabLogin: gitlabUser.username, returnTo: oauthState.returnTo };
+        return {
+          userId: oauthState.userId,
+          gitlabLogin: gitlabUser.username,
+          returnTo: oauthState.returnTo,
+        };
       } catch (error) {
         throw new GitlabOAuthCallbackError(
           error instanceof Error ? error.message : "GITLAB_CALLBACK_FAILED",
@@ -251,7 +275,10 @@ export function createGitlabService(
       return conn?.accessToken ?? null;
     },
 
-    async listAccessibleRepositories(userId: string, options?: { query?: string | null; limit?: number }) {
+    async listAccessibleRepositories(
+      userId: string,
+      options?: { query?: string | null; limit?: number },
+    ) {
       const accessToken = await this.getAccessToken(userId);
       if (!accessToken) throw new Error("GITLAB_NOT_CONNECTED");
 
@@ -267,7 +294,9 @@ export function createGitlabService(
         : repositories;
 
       return filtered
-        .sort((a, b) => a.path_with_namespace.localeCompare(b.path_with_namespace))
+        .sort((a, b) =>
+          a.path_with_namespace.localeCompare(b.path_with_namespace),
+        )
         .slice(0, options?.limit ?? 25)
         .map((repo) => ({
           id: `${repo.id}`,
