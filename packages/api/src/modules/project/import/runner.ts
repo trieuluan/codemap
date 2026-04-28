@@ -119,6 +119,14 @@ export async function runProjectImport(
       ? await gitlabService.getAccessToken(projectRecord.ownerUserId)
       : null;
 
+  if (projectRecord.provider === "gitlab" && !gitlabAccessToken) {
+    await projectService.markImportAsFailed(
+      importRecord.id,
+      "GitLab account is not connected. Please connect your GitLab account before importing.",
+    );
+    return;
+  }
+
   let materializedSource: Awaited<
     ReturnType<typeof materializeRepositorySource>
   > | null = null;
