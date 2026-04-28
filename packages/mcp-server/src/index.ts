@@ -23,6 +23,7 @@ import {
 } from "./tools/list-github-repositories.js";
 import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
+import { registerCreateProjectFromGitlabTool } from "./tools/create-project-from-gitlab.js";
 import { registerWaitForImportTool } from "./tools/wait-for-import.js";
 import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
@@ -66,6 +67,7 @@ async function runMcpServer() {
   registerSearchGithubRepositoriesTool(server, config);
   registerCreateProjectTool(server, config);
   registerCreateProjectFromGithubTool(server, config);
+  registerCreateProjectFromGitlabTool(server, config);
   registerWaitForImportTool(server, config);
   registerTriggerReimportTool(server, config);
   registerGetProjectTool(server, config);
