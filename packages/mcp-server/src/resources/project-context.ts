@@ -18,6 +18,7 @@ function formatStatus(status: string): string {
 
 function formatProvider(provider: string | null): string {
   if (provider === "github") return "GitHub";
+  if (provider === "gitlab") return "GitLab";
   if (provider === "local_workspace") return "Local workspace";
   return "Unknown";
 }
@@ -105,6 +106,7 @@ function buildContextText(
   lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
   lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
   lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository");
+  lines.push("- create_project_from_gitlab — create or reuse a CodeMap project from a GitLab repository (gitlab.com or self-hosted); requires repositoryUrl and optional accessToken (personal access token)");
   lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint (→ get_file ...) showing the optimal include mode to use next");
