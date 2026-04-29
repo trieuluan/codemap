@@ -22,6 +22,7 @@
     "api-key:create": "tsx src/scripts/create-api-key.ts"
   },
   "dependencies": {
+    "@codemap/shared": "file:../shared",
     "@better-auth/api-key": "^1.6.7",
     "@bull-board/api": "^6.21.1",
     "@bull-board/fastify": "^6.21.1",

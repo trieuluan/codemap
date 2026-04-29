@@ -1,7 +1,25 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
+import {
+  createProjectFromGithubInputSchema,
+  createProjectFromGitlabInputSchema,
+  createProjectInputSchema,
+  triggerProjectImportInputSchema,
+  updateProjectInputSchema,
+  type CreateProjectFromGithubInput,
+  type CreateProjectFromGitlabInput,
+  type CreateProjectInput,
+  type ListProjectsQuery,
+  type ProjectEditLocationsQuery,
+  type ProjectFileContentQuery,
+  type ProjectImportCompareQuery,
+  type ProjectListInclude,
+  type ProjectMapSearchQuery,
+  type ProjectSymbolUsagesQuery,
+  type TriggerProjectImportInput,
+  type UpdateProjectInput,
+} from "@codemap/shared";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
-import { REPO_SYMBOL_KIND_VALUES } from "./parse/types/repo-parse-graph.types";
 
 export const projectSelectSchema = createSelectSchema(project);
 export const projectInsertSchema = createInsertSchema(project);
@@ -14,11 +32,6 @@ export const projectVisibilitySchema = projectSelectSchema.shape.visibility;
 export const projectStatusSchema = projectSelectSchema.shape.status;
 export const projectProviderSchema = projectSelectSchema.shape.provider;
 export const projectImportStatusSchema = projectImportSelectSchema.shape.status;
-export const projectListIncludeSchema = z.enum(["latestImport"]);
-
-const nullableTrimmedString = z.string().trim().min(1).max(500).nullable();
-
-const nullableShortString = z.string().trim().min(1).max(255).nullable();
 
 export const projectParamsSchema = z.object({
   projectId: z.uuid(),
@@ -26,12 +39,6 @@ export const projectParamsSchema = z.object({
 
 export const projectSymbolParamsSchema = projectParamsSchema.extend({
   symbolId: z.uuid(),
-});
-
-export const projectFileContentQuerySchema = z.object({
-  path: z.string().trim().min(1).max(2000),
-  startLine: z.coerce.number().int().min(1).optional(),
-  endLine: z.coerce.number().int().min(1).optional(),
 });
 
 export const projectFileReparseBodySchema = z.object({
@@ -49,143 +56,38 @@ export const projectMapDiffQuerySchema = z.object({
   ),
 });
 
-export const projectMapSearchQuerySchema = z.object({
-  q: z.string().trim().min(0).max(200),
-  symbolKinds: z.preprocess(
-    (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
-    z.array(z.enum(REPO_SYMBOL_KIND_VALUES)).optional(),
-  ),
-});
+export const createProjectBodySchema = createProjectInputSchema;
+export const updateProjectBodySchema = updateProjectInputSchema;
+export const createProjectFromGithubBodySchema =
+  createProjectFromGithubInputSchema;
+export const createProjectFromGitlabBodySchema =
+  createProjectFromGitlabInputSchema;
+export const createProjectImportBodySchema = triggerProjectImportInputSchema;
 
-export const projectImportCompareQuerySchema = z.object({
-  base: z.uuid(),
-  head: z.uuid(),
-});
+export {
+  listProjectsQuerySchema,
+  projectEditLocationsQuerySchema,
+  projectFileContentQuerySchema,
+  projectImportCompareQuerySchema,
+  projectListIncludeSchema,
+  projectMapSearchQuerySchema,
+  projectSymbolUsagesQuerySchema,
+} from "@codemap/shared";
 
-export const projectEditLocationsQuerySchema = z.object({
-  q: z.string().trim().min(1).max(500),
-  limit: z.coerce.number().int().min(1).max(25).default(10),
-});
-
-export const projectSymbolUsagesQuerySchema = z.object({
-  symbolName: z.string().trim().min(1).max(255),
-  path: z.string().trim().min(1).max(2000).optional(),
-});
-
-export const createProjectFromGithubBodySchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  description: nullableTrimmedString.optional(),
-  repositoryUrl: z.string().trim().url().max(500),
-  externalRepoId: nullableShortString.optional(),
-  defaultBranch: nullableShortString.optional(),
-  branch: z.string().trim().min(1).max(255).optional(),
-});
-
-export const createProjectFromGitlabBodySchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  description: nullableTrimmedString.optional(),
-  repositoryUrl: z.string().trim().url().max(500),
-  accessToken: z.string().trim().min(1).max(500).optional(),
-  defaultBranch: nullableShortString.optional(),
-  branch: z.string().trim().min(1).max(255).optional(),
-});
-
-function parseIncludeQueryValue(value: unknown) {
-  if (Array.isArray(value)) {
-    return value
-      .flatMap((item) => `${item}`.split(","))
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
-export const listProjectsQuerySchema = z.object({
-  include: z.preprocess(
-    parseIncludeQueryValue,
-    z.array(projectListIncludeSchema).default([]),
-  ),
-});
-
-export const createProjectBodySchema = projectInsertSchema
-  .omit({
-    id: true,
-    ownerUserId: true,
-    status: true,
-    lastImportedAt: true,
-    createdAt: true,
-    updatedAt: true,
-  })
-  .extend({
-    name: z.string().trim().min(1).max(120),
-    slug: z
-      .string()
-      .trim()
-      .min(2)
-      .max(140)
-      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-      .optional(),
-    description: nullableTrimmedString.optional(),
-    defaultBranch: nullableShortString.optional(),
-    repositoryUrl: z.string().trim().url().max(500).nullable().optional(),
-    localWorkspacePath: z
-      .string()
-      .trim()
-      .min(1)
-      .max(4000)
-      .nullable()
-      .optional(),
-    externalRepoId: nullableShortString.optional(),
-  });
-
-export const updateProjectBodySchema = createProjectBodySchema
-  .partial()
-  .refine((value) => Object.keys(value).length > 0, {
-    message: "At least one field must be provided",
-  });
-
-export const createProjectImportBodySchema = projectImportInsertSchema
-  .pick({
-    branch: true,
-  })
-  .extend({
-    branch: z.string().trim().min(1).max(255).optional(),
-  });
-
-export type CreateProjectBody = z.infer<typeof createProjectBodySchema>;
-export type UpdateProjectBody = z.infer<typeof updateProjectBodySchema>;
+export type CreateProjectBody = CreateProjectInput;
+export type UpdateProjectBody = UpdateProjectInput;
 export type ProjectParams = z.infer<typeof projectParamsSchema>;
 export type ProjectSymbolParams = z.infer<typeof projectSymbolParamsSchema>;
-export type CreateProjectImportBody = z.infer<
-  typeof createProjectImportBodySchema
->;
-export type ProjectListInclude = z.infer<typeof projectListIncludeSchema>;
-export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
-export type ProjectFileContentQuery = z.infer<
-  typeof projectFileContentQuerySchema
->;
-export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
-export type ProjectImportCompareQuery = z.infer<
-  typeof projectImportCompareQuerySchema
->;
-export type ProjectEditLocationsQuery = z.infer<
-  typeof projectEditLocationsQuerySchema
->;
-export type ProjectSymbolUsagesQuery = z.infer<
-  typeof projectSymbolUsagesQuerySchema
->;
+export type CreateProjectImportBody = TriggerProjectImportInput;
 export type ProjectMapDiffQuery = z.infer<typeof projectMapDiffQuerySchema>;
-export type CreateProjectFromGithubBody = z.infer<
-  typeof createProjectFromGithubBodySchema
->;
-export type CreateProjectFromGitlabBody = z.infer<
-  typeof createProjectFromGitlabBodySchema
->;
+export type CreateProjectFromGithubBody = CreateProjectFromGithubInput;
+export type CreateProjectFromGitlabBody = CreateProjectFromGitlabInput;
+export type {
+  ListProjectsQuery,
+  ProjectEditLocationsQuery,
+  ProjectFileContentQuery,
+  ProjectImportCompareQuery,
+  ProjectListInclude,
+  ProjectMapSearchQuery,
+  ProjectSymbolUsagesQuery,
+};

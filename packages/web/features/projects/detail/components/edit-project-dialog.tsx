@@ -20,6 +20,14 @@ import {
   type Project,
   updateProject,
 } from "@/features/projects/api";
+import { updateProjectInputSchema } from "@codemap/shared";
+
+type FieldErrors = Partial<
+  Record<
+    "name" | "description" | "repositoryUrl" | "defaultBranch" | "form",
+    string
+  >
+>;
 
 export function EditProjectDialog({
   project,
@@ -37,6 +45,7 @@ export function EditProjectDialog({
   const [description, setDescription] = useState(project.description ?? "");
   const [defaultBranch, setDefaultBranch] = useState(project.defaultBranch ?? "");
   const [repositoryUrl, setRepositoryUrl] = useState(project.repositoryUrl ?? "");
+  const [errors, setErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     if (open) {
@@ -44,20 +53,41 @@ export function EditProjectDialog({
       setDescription(project.description ?? "");
       setDefaultBranch(project.defaultBranch ?? "");
       setRepositoryUrl(project.repositoryUrl ?? "");
+      setErrors({});
     }
   }, [open, project]);
+
+  function firstError(errors: string[] | undefined) {
+    return errors?.[0];
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const parsed = updateProjectInputSchema.safeParse({
+      name,
+      description: description.trim() ? description : null,
+      defaultBranch: defaultBranch.trim() ? defaultBranch : null,
+      repositoryUrl: repositoryUrl.trim() ? repositoryUrl : null,
+    });
+
+    if (!parsed.success) {
+      const flattened = parsed.error.flatten();
+      setErrors({
+        name: firstError(flattened.fieldErrors.name),
+        description: firstError(flattened.fieldErrors.description),
+        defaultBranch: firstError(flattened.fieldErrors.defaultBranch),
+        repositoryUrl: firstError(flattened.fieldErrors.repositoryUrl),
+        form: firstError(flattened.formErrors),
+      });
+      return;
+    }
+
+    setErrors({});
+
     startTransition(async () => {
       try {
-        await updateProject(project.id, {
-          name,
-          description: description.trim() ? description : null,
-          defaultBranch: defaultBranch.trim() ? defaultBranch : null,
-          repositoryUrl: repositoryUrl.trim() ? repositoryUrl : null,
-        });
+        await updateProject(project.id, parsed.data);
 
         toast({
           title: "Project updated",
@@ -96,10 +126,16 @@ export function EditProjectDialog({
             <Input
               id="edit-project-name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value);
+                setErrors((current) => ({ ...current, name: undefined }));
+              }}
               required
               disabled={isPending}
             />
+            {errors.name ? (
+              <p className="text-sm text-destructive">{errors.name}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -107,9 +143,18 @@ export function EditProjectDialog({
             <Textarea
               id="edit-project-description"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => {
+                setDescription(event.target.value);
+                setErrors((current) => ({
+                  ...current,
+                  description: undefined,
+                }));
+              }}
               disabled={isPending}
             />
+            {errors.description ? (
+              <p className="text-sm text-destructive">{errors.description}</p>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -118,22 +163,47 @@ export function EditProjectDialog({
               <Input
                 id="edit-project-branch"
                 value={defaultBranch}
-                onChange={(event) => setDefaultBranch(event.target.value)}
+                onChange={(event) => {
+                  setDefaultBranch(event.target.value);
+                  setErrors((current) => ({
+                    ...current,
+                    defaultBranch: undefined,
+                  }));
+                }}
                 placeholder="main"
                 disabled={isPending}
               />
+              {errors.defaultBranch ? (
+                <p className="text-sm text-destructive">
+                  {errors.defaultBranch}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-project-repository-url">Repository URL</Label>
               <Input
                 id="edit-project-repository-url"
                 value={repositoryUrl}
-                onChange={(event) => setRepositoryUrl(event.target.value)}
+                onChange={(event) => {
+                  setRepositoryUrl(event.target.value);
+                  setErrors((current) => ({
+                    ...current,
+                    repositoryUrl: undefined,
+                  }));
+                }}
                 placeholder="https://github.com/org/repo"
                 disabled={isPending}
               />
+              {errors.repositoryUrl ? (
+                <p className="text-sm text-destructive">
+                  {errors.repositoryUrl}
+                </p>
+              ) : null}
             </div>
           </div>
+          {errors.form ? (
+            <p className="text-sm text-destructive">{errors.form}</p>
+          ) : null}
 
           <DialogFooter>
             <Button

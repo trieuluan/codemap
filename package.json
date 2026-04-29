@@ -22,7 +22,7 @@
     "build:web": "npm run build:shared && npm --workspace=@codemap/web run build",
     "preview:web": "npm --workspace=@codemap/web run start",
     "dev:mcp": "npm --workspace=@codemap/mcp-server run dev",
-    "build:mcp": "npm --workspace=@codemap/mcp-server run build",
+    "build:mcp": "npm run build:shared && npm --workspace=@codemap/mcp-server run build",
     "start:mcp": "npm --workspace=@codemap/mcp-server run start"
   },
   "devDependencies": {

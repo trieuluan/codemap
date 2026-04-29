@@ -5,9 +5,9 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 export const DEFAULT_API_URL = "https://api.codemap.dev";
 
 export interface McpConfigUser {
-  id?: string;
-  email?: string;
-  name?: string;
+  id?: string | null;
+  email?: string | null;
+  name?: string | null;
 }
 
 export interface McpConfigAuth {

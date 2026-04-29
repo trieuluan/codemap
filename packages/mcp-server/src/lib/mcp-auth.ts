@@ -1,4 +1,10 @@
 import os from "node:os";
+import type {
+  McpAuthClaimResponse,
+  McpAuthMeResponse,
+  McpAuthStatusResponse,
+  McpStartAuthResponse,
+} from "@codemap/shared";
 import {
   type McpConfigAuth,
   type McpConfigUser,
@@ -8,42 +14,10 @@ import {
 import { createCodeMapClient, type CodeMapClient } from "./codemap-api.js";
 import { openUrlInBrowser } from "./open-url.js";
 
-export interface StartAuthResponse {
-  sessionId: string;
-  authorizeUrl: string;
-  pollIntervalMs: number;
-  expiresAt: string;
-}
-
-export interface AuthStatusResponse {
-  sessionId: string;
-  status: "pending" | "authorized" | "expired" | "denied";
-  expiresAt: string | null;
-  clientName: string | null;
-  deviceName: string | null;
-  apiUrl: string;
-  user?: McpConfigUser | null;
-  apiKeyReady?: boolean;
-  apiKeyClaimed?: boolean;
-  apiKeyDeliveredAt?: string | null;
-}
-
-export interface ClaimAuthResponse {
-  sessionId: string;
-  status: "authorized";
-  expiresAt: string;
-  clientName: string;
-  deviceName: string | null;
-  apiUrl: string;
-  apiKey: string;
-  user?: McpConfigUser | null;
-}
-
-interface AuthMeResponse {
-  authenticated: true;
-  apiUrl: string;
-  user: McpConfigUser;
-}
+export type StartAuthResponse = McpStartAuthResponse;
+export type AuthStatusResponse = McpAuthStatusResponse;
+export type ClaimAuthResponse = McpAuthClaimResponse;
+type AuthMeResponse = McpAuthMeResponse;
 
 export interface WaitForAuthResult {
   authenticated: boolean;

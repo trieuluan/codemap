@@ -1,3 +1,5 @@
+export type { CreateApiKeyBody as CreateUserApiKeyInput } from "@codemap/shared";
+
 export type UserApiKeyMetadata = {
   client?: string;
   clientName?: string;
@@ -19,11 +21,6 @@ export type UserApiKeySummary = {
 };
 
 export type ListUserApiKeysResponse = UserApiKeySummary[];
-
-export type CreateUserApiKeyInput = {
-  name: string;
-  expiryPreset?: "never" | "90_days";
-};
 
 export type CreateUserApiKeyResponse = {
   apiKey: UserApiKeySummary;

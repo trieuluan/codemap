@@ -1,6 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import type {
+  CodeMapUser,
+  GithubStatus,
+  McpAuthStatusResponse,
+} from "@codemap/shared";
 import {
   AlertCircle,
   CheckCircle2,
@@ -22,37 +27,8 @@ export const metadata: Metadata = {
   description: "Authorize CodeMap MCP to access your CodeMap account",
 };
 
-type McpAuthStatus = {
-  sessionId: string;
-  status: "pending" | "authorized" | "expired" | "denied";
-  clientName: string | null;
-  deviceName: string | null;
-  expiresAt: string | null;
-  apiUrl: string;
-  user?: {
-    id: string;
-    email: string | null;
-    name: string | null;
-  } | null;
-  apiKeyReady: boolean;
-  apiKeyClaimed: boolean;
-  apiKeyDeliveredAt: string | null;
-};
-
-type SignedInUser = {
-  id: string;
-  email: string | null;
-  name: string | null;
-};
-
-type GithubStatus =
-  | { connected: false; githubLogin: null }
-  | {
-      connected: true;
-      githubLogin: string;
-      scope: string;
-      connectedAt: string;
-    };
+type McpAuthStatus = McpAuthStatusResponse;
+type SignedInUser = CodeMapUser;
 
 interface AuthorizePageProps {
   searchParams: Promise<{

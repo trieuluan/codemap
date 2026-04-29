@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import type {
+  CodeMapUser,
+  McpAuthClaimResponse,
+  McpAuthStatusResponse,
+} from "@codemap/shared";
 import { db } from "../../db";
 import { apikey } from "../../db/schema";
 import { auth } from "../../lib/auth";
@@ -24,32 +29,11 @@ interface McpAuthSessionRecord {
   apiKey: string | null;
   apiKeyCreatedAt: string | null;
   apiKeyDeliveredAt: string | null;
-  user: {
-    id: string;
-    email: string | null;
-    name: string | null;
-  } | null;
+  user: CodeMapUser | null;
 }
 
-interface McpAuthStatusResult {
-  sessionId: string;
-  status: "pending" | "authorized" | "expired" | "denied";
-  expiresAt: string | null;
-  clientName: string | null;
-  deviceName: string | null;
-  apiUrl: string;
-  user?: McpAuthSessionRecord["user"];
-  apiKeyReady: boolean;
-  apiKeyClaimed: boolean;
-  apiKeyDeliveredAt: string | null;
-}
-
-interface McpAuthClaimResult extends McpAuthStatusResult {
-  status: "authorized";
-  expiresAt: string;
-  clientName: string;
-  apiKey: string;
-}
+type McpAuthStatusResult = McpAuthStatusResponse;
+type McpAuthClaimResult = McpAuthClaimResponse;
 
 interface McpApiKeyMetadata {
   client?: string;

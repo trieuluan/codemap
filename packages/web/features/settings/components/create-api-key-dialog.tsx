@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { browserSettingsApi, type CreateUserApiKeyResponse } from "@/features/settings/api";
 import { useToast } from "@/components/ui/use-toast";
+import { createApiKeyBodySchema } from "@codemap/shared";
 
 const api = browserSettingsApi();
 
@@ -43,24 +44,35 @@ export function CreateApiKeyDialog({
   const [createdKey, setCreatedKey] = useState<CreateUserApiKeyResponse | null>(
     null,
   );
+  const [nameError, setNameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open && !isPending) {
       setName("");
       setExpiryPreset("90_days");
       setCreatedKey(null);
+      setNameError(null);
     }
   }, [isPending, open]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const parsed = createApiKeyBodySchema.safeParse({
+      name,
+      expiryPreset,
+    });
+
+    if (!parsed.success) {
+      setNameError(parsed.error.flatten().fieldErrors.name?.[0] ?? null);
+      return;
+    }
+
+    setNameError(null);
+
     startTransition(async () => {
       try {
-        const result = await api.createApiKey({
-          name: name.trim(),
-          expiryPreset,
-        });
+        const result = await api.createApiKey(parsed.data);
 
         setCreatedKey(result);
         await onCreated();
@@ -152,11 +164,17 @@ export function CreateApiKeyDialog({
                 <Input
                   id="api-key-name"
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setNameError(null);
+                  }}
                   placeholder="CodeMap MCP on Mac"
                   disabled={isPending}
                   required
                 />
+                {nameError ? (
+                  <p className="text-sm text-destructive">{nameError}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
