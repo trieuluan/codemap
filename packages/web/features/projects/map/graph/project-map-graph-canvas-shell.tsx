@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { FolderTree, Loader2 } from "lucide-react";
 import type { ProjectMapGraphResponse } from "@/features/projects/api";
 import type {
@@ -10,14 +9,7 @@ import type {
   GraphRelationMode,
 } from "./utils/graph-layout";
 import type { GraphMode } from "./project-map-graph-shared";
-
-const GraphCanvas = dynamic(
-  () =>
-    import("./components/graph-canvas").then((m) => ({
-      default: m.GraphCanvas,
-    })),
-  { ssr: false },
-);
+import { GraphCanvas } from "./components/graph-canvas";
 
 interface ProjectMapGraphCanvasShellProps {
   mode: GraphMode;
