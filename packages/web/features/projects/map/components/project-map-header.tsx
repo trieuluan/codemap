@@ -37,7 +37,7 @@ export function ProjectMapHeader({
 
   const navigateToFile = (filePath: string) => {
     router.push(
-      `/projects/${projectId}/map?path=${encodeURIComponent(filePath)}`,
+      `/projects/${projectId}/explorer?path=${encodeURIComponent(filePath)}`,
     );
   };
 
@@ -45,7 +45,7 @@ export function ProjectMapHeader({
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-1">
         <Link
-          href={`/projects/${projectId}/map`}
+          href={`/projects/${projectId}/explorer`}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm transition-colors",
             active === "mapping"
@@ -56,7 +56,7 @@ export function ProjectMapHeader({
           Mapping
         </Link>
         <Link
-          href={`/projects/${projectId}/map/insights`}
+          href={`/projects/${projectId}/insights`}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm transition-colors",
             active === "insights"
@@ -67,7 +67,7 @@ export function ProjectMapHeader({
           Insights
         </Link>
         <Link
-          href={`/projects/${projectId}/map/graph`}
+          href={`/projects/${projectId}/graph`}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm transition-colors",
             active === "graph"

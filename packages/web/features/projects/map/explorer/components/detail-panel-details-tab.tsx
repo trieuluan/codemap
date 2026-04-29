@@ -99,7 +99,7 @@ export function DetailPanelDetailsTab({
           </div>
           {file.type === "file" && file.path ? (
             <Link
-              href={`/projects/${projectId}/map/graph?file=${encodeURIComponent(file.path)}`}
+              href={`/projects/${projectId}/graph?file=${encodeURIComponent(file.path)}`}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="View in Graph"
             >

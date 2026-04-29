@@ -44,6 +44,8 @@ async function reportProjectParseProgress(
 }
 
 async function cleanupSupersededProjectImports(projectId: string, currentImportId: string) {
+  // Only remove retained source workspaces to free disk space.
+  // Parse data (repo_file, repo_symbol, repo_import_edge, etc.) is kept for import history.
   const supersededImports = await projectService.listSupersededImportsWithSource(projectId, currentImportId);
 
   for (const supersededImport of supersededImports) {
@@ -55,12 +57,6 @@ async function cleanupSupersededProjectImports(projectId: string, currentImportI
     } catch (cleanupError) {
       console.error("Unable to clean up superseded retained project workspace", cleanupError);
     }
-  }
-
-  try {
-    await projectService.deleteSupersededImports(projectId, currentImportId);
-  } catch (cleanupError) {
-    console.error("Unable to delete superseded project imports", cleanupError);
   }
 }
 

@@ -86,7 +86,7 @@ function FileInsightList({
       {items.map((item, index) => (
         <Link
           key={`${item.path}:${index}`}
-          href={`/projects/${projectId}/map?path=${encodeURIComponent(item.path)}`}
+          href={`/projects/${projectId}/explorer?path=${encodeURIComponent(item.path)}`}
           className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/40"
         >
           <div className="min-w-0 space-y-1">
@@ -222,7 +222,7 @@ export function ProjectMapInsightsView({
               {insights.entryLikeFiles.map((item, index) => (
                 <Link
                   key={`${item.path}:${index}`}
-                  href={`/projects/${project.id}/map?path=${encodeURIComponent(item.path)}`}
+                  href={`/projects/${project.id}/explorer?path=${encodeURIComponent(item.path)}`}
                   className="flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/40"
                 >
                   <div className="min-w-0 space-y-1">
@@ -271,7 +271,7 @@ export function ProjectMapInsightsView({
                     {item.paths.map((path, index) => (
                       <li key={path + index}>
                         <Link
-                          href={`/projects/${project.id}/map?path=${encodeURIComponent(path)}`}
+                          href={`/projects/${project.id}/explorer?path=${encodeURIComponent(path)}`}
                           className="break-all font-mono text-xs text-foreground underline-offset-4 hover:underline"
                         >
                           {path}

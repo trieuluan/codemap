@@ -372,7 +372,7 @@ export function ProjectMapGraphSidebar({
                   asChild
                 >
                   <Link
-                    href={`/projects/${projectId}/map?path=${encodeURIComponent(
+                    href={`/projects/${projectId}/explorer?path=${encodeURIComponent(
                       selectedNode.path,
                     )}`}
                     target="_blank"

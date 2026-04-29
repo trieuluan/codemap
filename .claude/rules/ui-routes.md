@@ -9,9 +9,9 @@
 | `/dashboard` | Overview: stats cards (Projects, API Calls, Team Members, Uptime), Getting Started checklist, Recent Activity, Quick Actions |
 | `/projects` | Project list: search bar, sort dropdown, "New Project" CTA, project cards with status badge, repo/branch/import info, "Open project" + "Open mapping" actions |
 | `/projects/[projectId]` | Project detail: status badge, Re-import / Open mapping / Edit buttons, Latest import info, Repository + branch metadata, Import history list, Quick actions sidebar |
-| `/projects/[projectId]/map` | **Mapping** — 3-tab nav (Mapping / Insights / Graph). Status banner + 3-column code explorer |
-| `/projects/[projectId]/map/insights` | **Insights** — stat summary cards, top files by imports/inbound, folder breakdown, orphan files, entry-like files, circular dependency candidates |
-| `/projects/[projectId]/map/graph` | **Graph** — interactive React Flow dependency graph with filter sidebar (language, folder, cycles-only), MiniMap, Controls |
+| `/projects/[projectId]/explorer` | **Explorer** — nav tabs (Explorer / Insights / Graph). Status banner + 3-column code explorer |
+| `/projects/[projectId]/insights` | **Insights** — stat summary cards, top files by imports/inbound, folder breakdown, orphan files, entry-like files, circular dependency candidates |
+| `/projects/[projectId]/graph` | **Graph** — interactive React Flow dependency graph with filter sidebar (language, folder, cycles-only), MiniMap, Controls |
 
 ## Global shell (authenticated)
 

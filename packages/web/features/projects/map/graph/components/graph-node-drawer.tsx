@@ -160,7 +160,7 @@ export function GraphNodeDrawer({
             <div className="shrink-0 border-t px-5 py-3">
               <Button variant="outline" size="sm" asChild>
                 <Link
-                  href={`/projects/${projectId}/map?path=${encodeURIComponent(node.path)}`}
+                  href={`/projects/${projectId}/explorer?path=${encodeURIComponent(node.path)}`}
                 >
                   Open in Mapping
                   <ArrowRight className="ml-1.5 size-3.5" />

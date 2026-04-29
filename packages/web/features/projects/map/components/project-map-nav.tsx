@@ -11,7 +11,7 @@ export function ProjectMapNav({
   return (
     <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-1">
       <Link
-        href={`/projects/${projectId}/map`}
+        href={`/projects/${projectId}/explorer`}
         className={cn(
           "rounded-md px-3 py-1.5 text-sm transition-colors",
           active === "mapping"
@@ -22,7 +22,7 @@ export function ProjectMapNav({
         Mapping
       </Link>
       <Link
-        href={`/projects/${projectId}/map/insights`}
+        href={`/projects/${projectId}/insights`}
         className={cn(
           "rounded-md px-3 py-1.5 text-sm transition-colors",
           active === "insights"
@@ -33,7 +33,7 @@ export function ProjectMapNav({
         Insights
       </Link>
       <Link
-        href={`/projects/${projectId}/map/graph`}
+        href={`/projects/${projectId}/graph`}
         className={cn(
           "rounded-md px-3 py-1.5 text-sm transition-colors",
           active === "graph"

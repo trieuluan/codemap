@@ -11,26 +11,34 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ProjectMapInsightsView } from "@/features/projects/map/insights/project-map-insights-view";
 import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
+import { ProjectMapShell } from "@/features/projects/map/explorer/project-map-shell";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
-export default async function ProjectMapInsightsPage({
+export default async function ProjectExplorerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ path?: string }>;
 }) {
   const { projectId } = await params;
+  const { path } = await searchParams;
   const api = createServerProjectsApi({
     cookieHeader: (await cookies()).toString(),
   });
 
   try {
-    const [project, imports, insights] = await Promise.all([
+    const [project, imports, mapSnapshot] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImports(projectId),
-      api.getProjectInsights(projectId),
+      api.getProjectMap(projectId).catch((error) => {
+        if (error instanceof ProjectsApiError && error.statusCode === 404) {
+          return null;
+        }
+        throw error;
+      }),
     ]);
 
     return (
@@ -51,7 +59,7 @@ export default async function ProjectMapInsightsPage({
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Insights</BreadcrumbPage>
+                <BreadcrumbPage>Explorer</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -60,17 +68,17 @@ export default async function ProjectMapInsightsPage({
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-3xl font-semibold tracking-tight">
-                  {project.name} insights
+                  {project.name} explorer
                 </h1>
                 <ProjectStatusBadge status={project.status} />
               </div>
               <p className="text-muted-foreground">
-                Review dependency and structure insights before investing in
-                graph visualizations.
+                Explore the project structure, dependency surface, and likely
+                entry points.
               </p>
               <ProjectMapHeader
                 projectId={project.id}
-                active="insights"
+                active="mapping"
                 importId={imports[0]?.id}
                 parseStatus={imports[0]?.parseStatus}
               />
@@ -85,10 +93,11 @@ export default async function ProjectMapInsightsPage({
           </div>
         </div>
 
-        <ProjectMapInsightsView
+        <ProjectMapShell
           project={project}
           imports={imports}
-          insights={insights}
+          mapSnapshot={mapSnapshot}
+          initialSelectedFilePath={path}
         />
       </div>
     );
@@ -96,7 +105,6 @@ export default async function ProjectMapInsightsPage({
     if (error instanceof ProjectsApiError && error.statusCode === 404) {
       notFound();
     }
-
     throw error;
   }
 }

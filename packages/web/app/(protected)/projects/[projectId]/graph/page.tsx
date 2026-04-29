@@ -14,12 +14,9 @@ import { ArrowLeft } from "lucide-react";
 import { ProjectMapGraphView } from "@/features/projects/map/graph/project-map-graph-view";
 import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
-import {
-  createServerProjectsApi,
-  ProjectsApiError,
-} from "@/features/projects/api";
+import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
 
-export default async function ProjectMapGraphPage({
+export default async function ProjectGraphPage({
   params,
   searchParams,
 }: {
@@ -102,7 +99,6 @@ export default async function ProjectMapGraphPage({
     if (error instanceof ProjectsApiError && error.statusCode === 404) {
       notFound();
     }
-
     throw error;
   }
 }

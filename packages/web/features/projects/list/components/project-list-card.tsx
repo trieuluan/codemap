@@ -64,7 +64,7 @@ export function ProjectListCard({
               <Link href={`/projects/${project.id}`}>Open project</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/projects/${project.id}/map`}>Open mapping</Link>
+              <Link href={`/projects/${project.id}/explorer`}>Open mapping</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -127,7 +127,7 @@ export function ProjectListCard({
           </Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link href={`/projects/${project.id}/map`}>
+          <Link href={`/projects/${project.id}/explorer`}>
             <GitBranch className="size-4" />
             Open mapping
           </Link>

@@ -172,7 +172,7 @@ export function ProjectOverview({
                 {importActionLabel}
               </Button>
               <Button variant="outline" asChild>
-                <Link href={`/projects/${project.id}/map`}>
+                <Link href={`/projects/${project.id}/explorer`}>
                   <Workflow className="size-4" />
                   Open mapping
                 </Link>
@@ -314,7 +314,7 @@ export function ProjectOverview({
               : "Add repository metadata first"}
           </Button>
           <Button variant="outline" className="w-full justify-start" asChild>
-            <Link href={`/projects/${project.id}/map`}>
+            <Link href={`/projects/${project.id}/explorer`}>
               <Workflow className="size-4" />
               Open mapping workspace
             </Link>
