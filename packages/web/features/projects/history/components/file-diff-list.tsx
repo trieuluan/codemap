@@ -58,7 +58,9 @@ function createNode(
 function changeIcon(change: FileDiffEntry["change"]) {
   switch (change) {
     case "added":
-      return <FilePlus className="size-4 text-emerald-600 dark:text-emerald-400" />;
+      return (
+        <FilePlus className="size-4 text-emerald-600 dark:text-emerald-400" />
+      );
     case "removed":
       return <FileMinus className="size-4 text-rose-600 dark:text-rose-400" />;
     case "modified":
@@ -118,9 +120,21 @@ function sortNodes(nodes: Iterable<DiffTreeNode>) {
 
 function Counts({ counts }: { counts: DiffCounts }) {
   const chips = [
-    { key: "added", value: counts.added, className: "text-emerald-700 dark:text-emerald-400" },
-    { key: "removed", value: counts.removed, className: "text-rose-700 dark:text-rose-400" },
-    { key: "modified", value: counts.modified, className: "text-amber-700 dark:text-amber-400" },
+    {
+      key: "added",
+      value: counts.added,
+      className: "text-emerald-700 dark:text-emerald-400",
+    },
+    {
+      key: "removed",
+      value: counts.removed,
+      className: "text-rose-700 dark:text-rose-400",
+    },
+    {
+      key: "modified",
+      value: counts.modified,
+      className: "text-amber-700 dark:text-amber-400",
+    },
   ] as const;
 
   return (
@@ -333,7 +347,7 @@ export function FileDiffList({ summary }: { summary: FileDiffSummary }) {
             No files match the current filter.
           </div>
         ) : (
-          <ul className="max-h-[520px] overflow-auto py-2">
+          <ul className="max-h-130 overflow-auto py-2">
             {sortNodes(tree.children.values()).map((node) => (
               <TreeNode
                 key={node.path}
