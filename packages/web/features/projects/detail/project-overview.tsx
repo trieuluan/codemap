@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   ExternalLink,
   GitBranch,
+  History,
   Pencil,
   RefreshCcw,
   Settings2,
@@ -177,6 +178,12 @@ export function ProjectOverview({
                   Open mapping
                 </Link>
               </Button>
+              <Button variant="outline" asChild>
+                <Link href={`/projects/${project.id}/history`}>
+                  <History className="size-4" />
+                  Import history
+                </Link>
+              </Button>
               <EditProjectDialog
                 project={project}
                 onUpdated={revalidateProjectDetail}
@@ -317,6 +324,12 @@ export function ProjectOverview({
             <Link href={`/projects/${project.id}/explorer`}>
               <Workflow className="size-4" />
               Open mapping workspace
+            </Link>
+          </Button>
+          <Button variant="outline" className="w-full justify-start" asChild>
+            <Link href={`/projects/${project.id}/history`}>
+              <History className="size-4" />
+              View import history
             </Link>
           </Button>
           {project.repositoryUrl ? (
