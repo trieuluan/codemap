@@ -55,6 +55,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.patch("/:projectId", controller.updateProject);
   fastify.delete("/:projectId", controller.deleteProject);
   fastify.post("/:projectId/import", controller.createImport);
+  fastify.get("/:projectId/imports/compare", controller.compareProjectImports);
   fastify.get("/:projectId/imports", controller.listImports);
 };
 

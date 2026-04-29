@@ -17,7 +17,8 @@
         "eamodio.gitlens",
         "streetsidesoftware.code-spell-checker",
         "cweijan.vscode-database-client2",
-        "openai.chatgpt"
+        "openai.chatgpt",
+        "bradlc.vscode-tailwindcss"
       ],
       "settings": {
         "editor.formatOnSave": true,

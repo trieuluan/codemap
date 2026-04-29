@@ -3,6 +3,7 @@
 import { GitCommit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LocalProjectDate } from "@/features/projects/components/local-project-date";
 import { ProjectImportStatusBadge } from "@/features/projects/components/project-import-status-badge";
 import type { ProjectImport } from "@/features/projects/api";
@@ -26,7 +27,8 @@ function describeDelta(curr: ProjectImport, prev: ProjectImport | undefined) {
   if (!prev) return null;
   const fileDelta = curr.indexedFileCount - prev.indexedFileCount;
   const symbolDelta = curr.indexedSymbolCount - prev.indexedSymbolCount;
-  return { fileDelta, symbolDelta };
+  const edgeDelta = curr.indexedEdgeCount - prev.indexedEdgeCount;
+  return { fileDelta, symbolDelta, edgeDelta };
 }
 
 function DeltaPill({ value, suffix }: { value: number; suffix: string }) {
@@ -58,11 +60,7 @@ export function ImportTimeline({
   onSetHead,
 }: Props) {
   return (
-    <ol className="relative space-y-3 pl-6">
-      <span
-        aria-hidden
-        className="absolute left-2 top-2 bottom-2 w-px bg-border"
-      />
+    <ol className="space-y-3">
       {imports.map((imp, idx) => {
         const prev = imports[idx + 1];
         const delta = describeDelta(imp, prev);
@@ -72,34 +70,7 @@ export function ImportTimeline({
         const inComparison = compareMode && (isBase || isHead);
 
         return (
-          <li key={imp.id} className="relative">
-            <span
-              aria-hidden
-              className={cn(
-                "absolute -left-[18px] top-4 grid size-4 place-items-center rounded-full border-2 bg-background",
-                inComparison
-                  ? isHead
-                    ? "border-primary"
-                    : "border-amber-500"
-                  : isSelected
-                    ? "border-primary"
-                    : "border-border",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  inComparison
-                    ? isHead
-                      ? "bg-primary"
-                      : "bg-amber-500"
-                    : isSelected
-                      ? "bg-primary"
-                      : "bg-muted-foreground/40",
-                )}
-              />
-            </span>
-
+          <li key={imp.id}>
             <div
               role="button"
               tabIndex={0}
@@ -111,52 +82,76 @@ export function ImportTimeline({
                 }
               }}
               className={cn(
-                "group block w-full rounded-lg border bg-card p-4 text-left transition",
-                "hover:border-primary/50 hover:bg-accent/40",
-                isSelected && !compareMode && "border-primary/60 bg-accent/30",
-                isHead && compareMode && "border-primary/60 bg-primary/5",
-                isBase && compareMode && "border-amber-500/60 bg-amber-500/5",
+                "group block w-full rounded-lg border bg-card p-4 text-left shadow-sm transition",
+                "hover:border-primary/40 hover:bg-accent/30",
+                isSelected && !compareMode && "border-primary/55 bg-primary/5",
+                isHead && compareMode && "border-primary/55 bg-primary/5",
+                isBase && compareMode && "border-amber-500/55 bg-amber-500/5",
               )}
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ProjectImportStatusBadge status={imp.status} />
-                    {imp.branch ? (
-                      <Badge variant="secondary" className="font-mono text-xs">
-                        {imp.branch}
-                      </Badge>
-                    ) : null}
-                    {compareMode && isBase ? (
-                      <Badge className="bg-amber-500 text-white hover:bg-amber-500">
-                        BASE
-                      </Badge>
-                    ) : null}
-                    {compareMode && isHead ? (
-                      <Badge className="bg-primary text-primary-foreground hover:bg-primary">
-                        HEAD
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <GitCommit className="size-3.5 text-muted-foreground" />
-                    <span className="font-mono text-xs text-muted-foreground">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "size-2 rounded-full",
+                        imp.status === "failed"
+                          ? "bg-destructive"
+                          : imp.status === "completed"
+                            ? "bg-emerald-500"
+                            : "bg-amber-500",
+                      )}
+                    />
+                    <span className="font-mono text-sm font-semibold">
                       {shortSha(imp.commitSha)}
                     </span>
-                    <span className="text-xs text-muted-foreground">·</span>
+                    {imp.branch ? (
+                      <span className="text-sm text-muted-foreground">
+                        {imp.branch}
+                      </span>
+                    ) : null}
+                  </div>
+                  {imp.commitMessage ? (
+                    <p className="line-clamp-2 text-sm font-medium text-foreground">
+                      {imp.commitMessage}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium text-muted-foreground">
+                      No commit message available
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 text-sm">
+                    <GitCommit className="size-3.5 text-muted-foreground" />
                     <LocalProjectDate
                       value={imp.completedAt ?? imp.startedAt}
                       className="text-xs text-muted-foreground"
                     />
+                    <ProjectImportStatusBadge status={imp.status} />
                   </div>
+                  {imp.errorMessage || imp.parseError ? (
+                    <p className="line-clamp-2 font-mono text-xs text-destructive">
+                      {imp.errorMessage ?? imp.parseError}
+                    </p>
+                  ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  {compareMode && isBase ? (
+                    <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">
+                      BASE
+                    </Badge>
+                  ) : null}
+                  {compareMode && isHead ? (
+                    <Badge variant="outline" className="border-primary/40 text-primary">
+                      HEAD
+                    </Badge>
+                  ) : null}
                   {delta ? (
-                    <>
+                    <div className="flex max-w-40 flex-wrap justify-end gap-1.5">
                       <DeltaPill value={delta.fileDelta} suffix="files" />
                       <DeltaPill value={delta.symbolDelta} suffix="sym" />
-                    </>
+                      <DeltaPill value={delta.edgeDelta} suffix="edges" />
+                    </div>
                   ) : (
                     <span className="text-xs text-muted-foreground">
                       Initial import
@@ -167,36 +162,40 @@ export function ImportTimeline({
 
               {compareMode ? (
                 <div className="mt-3 flex gap-2 border-t border-border/60 pt-3">
-                  <button
+                  <Button
                     type="button"
+                    variant={isBase ? "secondary" : "outline"}
+                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSetBase(imp.id);
                     }}
                     className={cn(
-                      "flex-1 rounded-md border px-2 py-1 text-xs font-medium transition",
+                      "flex-1",
                       isBase
-                        ? "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        : "border-border text-muted-foreground hover:border-amber-500/50 hover:text-foreground",
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-400"
+                        : "text-muted-foreground hover:border-amber-500/50 hover:text-foreground",
                     )}
                   >
                     Set as base
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant={isHead ? "secondary" : "outline"}
+                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSetHead(imp.id);
                     }}
                     className={cn(
-                      "flex-1 rounded-md border px-2 py-1 text-xs font-medium transition",
+                      "flex-1",
                       isHead
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                        : "text-muted-foreground hover:border-primary/50 hover:text-foreground",
                     )}
                   >
                     Set as head
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </div>

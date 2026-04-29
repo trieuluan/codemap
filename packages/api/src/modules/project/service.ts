@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { simpleGit } from "simple-git";
 import type { db } from "../../db";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import type {
@@ -11,6 +12,7 @@ import type {
 } from "./schema";
 
 type Database = typeof db;
+type ProjectImportRecord = typeof projectImport.$inferSelect;
 
 function slugifyProjectName(value: string) {
   const slug = value
@@ -63,6 +65,48 @@ export function createProjectService(database: Database) {
         eq(project.ownerUserId, ownerUserId),
       ),
     });
+  }
+
+  async function getCommitMessage(
+    importRecord: ProjectImportRecord,
+    fallbackWorkspacePath?: string | null,
+  ) {
+    if (!importRecord.commitSha) {
+      return null;
+    }
+
+    const workspacePath =
+      importRecord.sourceAvailable && importRecord.sourceWorkspacePath
+        ? importRecord.sourceWorkspacePath
+        : fallbackWorkspacePath;
+
+    if (!workspacePath) return null;
+
+    try {
+      const message = await simpleGit(workspacePath).show([
+        "-s",
+        "--format=%s",
+        importRecord.commitSha,
+      ]);
+      return message.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function withCommitMessages(imports: ProjectImportRecord[]) {
+    const fallbackWorkspacePath =
+      imports.find(
+        (importRecord) =>
+          importRecord.sourceAvailable && importRecord.sourceWorkspacePath,
+      )?.sourceWorkspacePath ?? null;
+
+    return Promise.all(
+      imports.map(async (importRecord) => ({
+        ...importRecord,
+        commitMessage: await getCommitMessage(importRecord, fallbackWorkspacePath),
+      })),
+    );
   }
 
   async function getOwnedProjectByGithubSource(
@@ -787,7 +831,30 @@ export function createProjectService(database: Database) {
         orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
       });
 
-      return imports;
+      return withCommitMessages(imports);
+    },
+
+    async listProjectImportsByIds(
+      projectId: string,
+      projectImportIds: string[],
+      ownerUserId: string,
+    ) {
+      const existingProject = await getOwnedProject(projectId, ownerUserId);
+
+      if (!existingProject) {
+        return null;
+      }
+
+      if (projectImportIds.length === 0) {
+        return [];
+      }
+
+      return database.query.projectImport.findMany({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          inArray(projectImport.id, projectImportIds),
+        ),
+      });
     },
 
     async getLatestProjectMap(projectId: string, ownerUserId: string) {

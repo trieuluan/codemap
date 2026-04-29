@@ -52,6 +52,7 @@ export interface ProjectImport {
   status: ProjectImportStatus;
   branch: string | null;
   commitSha: string | null;
+  commitMessage?: string | null;
   sourceStorageKey: string | null;
   sourceWorkspacePath: string | null;
   sourceAvailable: boolean;
@@ -96,6 +97,73 @@ export interface ProjectMapSnapshot {
   updatedAt: string;
 }
 
+export type ProjectParsedFileStatus =
+  | "parsed"
+  | "skipped"
+  | "too_large"
+  | "binary"
+  | "unsupported"
+  | "error"
+  | "unavailable";
+
+export type ProjectImportCompareChange = "added" | "removed" | "modified";
+
+export interface ProjectImportFileDiffEntry {
+  path: string;
+  change: ProjectImportCompareChange;
+  language: string | null;
+  extension: string | null;
+  sizeBytes: number | null;
+  lineCount: number | null;
+  parseStatus: ProjectParsedFileStatus;
+}
+
+export interface ProjectImportFileDiff {
+  added: ProjectImportFileDiffEntry[];
+  removed: ProjectImportFileDiffEntry[];
+  modified: ProjectImportFileDiffEntry[];
+  totalAdded: number;
+  totalRemoved: number;
+  totalModified: number;
+}
+
+export interface ProjectImportSymbolDiffEntry {
+  filePath: string | null;
+  symbolName: string;
+  kind: string;
+  change: Exclude<ProjectImportCompareChange, "modified">;
+}
+
+export interface ProjectImportEdgeDiffEntry {
+  source: string;
+  target: string;
+  moduleSpecifier: string;
+  importKind: string;
+  importedNames: string[];
+  isTypeOnly: boolean;
+  isResolved: boolean;
+  resolutionKind: string;
+  startLine: number;
+  startCol: number;
+  change: Exclude<ProjectImportCompareChange, "modified">;
+}
+
+export interface ProjectImportMetricDelta {
+  label: "Files" | "Symbols" | "Dependencies";
+  base: number;
+  head: number;
+  delta: number;
+}
+
+export interface ProjectImportComparison {
+  baseImportId: string;
+  headImportId: string;
+  files: ProjectImportFileDiff;
+  symbols: ProjectImportSymbolDiffEntry[];
+  edges: ProjectImportEdgeDiffEntry[];
+  metrics: ProjectImportMetricDelta[];
+}
+
 export type ProjectFileContentStatus =
   | "ready"
   | "binary"
@@ -117,15 +185,6 @@ export interface ProjectFileContent {
   sizeBytes: number | null;
   reason: string | null;
 }
-
-export type ProjectParsedFileStatus =
-  | "parsed"
-  | "skipped"
-  | "too_large"
-  | "binary"
-  | "unsupported"
-  | "error"
-  | "unavailable";
 
 export interface ProjectParsedFileDetail {
   fileId: string | null;

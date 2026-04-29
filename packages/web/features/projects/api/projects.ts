@@ -14,6 +14,7 @@ import type {
   ProjectFileParseData,
   ProjectMapInsightsResponse,
   ProjectImport,
+  ProjectImportComparison,
   ProjectListInclude,
   ProjectListItem,
   ProjectMapSnapshot,
@@ -58,6 +59,19 @@ export function createServerProjectsApi(
       return requestApi<ProjectMapSnapshot>(`/projects/${projectId}/map`, {
         cookieHeader: defaults.cookieHeader,
       });
+    },
+
+    compareProjectImports: async (
+      projectId: string,
+      input: { base: string; head: string },
+    ) => {
+      return requestApi<ProjectImportComparison>(
+        `/projects/${projectId}/imports/compare`,
+        {
+          cookieHeader: defaults.cookieHeader,
+          queryParams: input,
+        },
+      );
     },
 
     getProjectFileContent: async (projectId: string, filePath: string) => {

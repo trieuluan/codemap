@@ -25,6 +25,7 @@ import {
   projectEditLocationsQuerySchema,
   projectFileContentQuerySchema,
   projectFileReparseBodySchema,
+  projectImportCompareQuerySchema,
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
   projectParamsSchema,
@@ -291,6 +292,61 @@ export function createProjectController(fastify: FastifyInstance) {
       return reply.success(imports, 200, {
         count: imports.length,
       });
+    },
+
+    compareProjectImports: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectImportCompareQuerySchema.parse(request.query ?? {});
+
+      const imports = await service.listProjectImportsByIds(
+        projectId,
+        [query.base, query.head],
+        userId,
+      );
+
+      if (!imports) {
+        throw fastify.httpErrors.notFound("Project not found");
+      }
+
+      const importById = new Map(imports.map((item) => [item.id, item]));
+      const baseImport = importById.get(query.base);
+      const headImport = importById.get(query.head);
+
+      if (!baseImport || !headImport) {
+        throw fastify.httpErrors.notFound("One or more imports were not found");
+      }
+
+      const comparison = await repoParseGraphService.compareProjectImports(
+        query.base,
+        query.head,
+        {
+          files: {
+            label: "Files",
+            base: baseImport.indexedFileCount,
+            head: headImport.indexedFileCount,
+            delta: headImport.indexedFileCount - baseImport.indexedFileCount,
+          },
+          symbols: {
+            label: "Symbols",
+            base: baseImport.indexedSymbolCount,
+            head: headImport.indexedSymbolCount,
+            delta:
+              headImport.indexedSymbolCount - baseImport.indexedSymbolCount,
+          },
+          dependencies: {
+            label: "Dependencies",
+            base: baseImport.indexedEdgeCount,
+            head: headImport.indexedEdgeCount,
+            delta: headImport.indexedEdgeCount - baseImport.indexedEdgeCount,
+          },
+        },
+      );
+
+      return reply.success(comparison);
     },
 
     getProjectMap: async (request: FastifyRequest, reply: FastifyReply) => {

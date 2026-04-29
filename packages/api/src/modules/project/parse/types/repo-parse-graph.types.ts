@@ -116,15 +116,62 @@ export interface ProjectSymbolRelationshipRecord {
   createdAt: Date;
 }
 
-export interface ProjectImportDiff {
-  addedFiles: ProjectFileRecord[];
-  removedFiles: ProjectFileRecord[];
-  changedFiles: Array<{
-    current: ProjectFileRecord;
-    previous: ProjectFileRecord;
-  }>;
-  addedSymbolKeys: string[];
-  removedSymbolKeys: string[];
+export type ProjectImportCompareChange = "added" | "removed" | "modified";
+
+export interface ProjectImportFileDiffEntry {
+  path: string;
+  change: ProjectImportCompareChange;
+  language: string | null;
+  extension: string | null;
+  sizeBytes: number | null;
+  lineCount: number | null;
+  parseStatus: ProjectFileRecord["parseStatus"];
+}
+
+export interface ProjectImportFileDiff {
+  added: ProjectImportFileDiffEntry[];
+  removed: ProjectImportFileDiffEntry[];
+  modified: ProjectImportFileDiffEntry[];
+  totalAdded: number;
+  totalRemoved: number;
+  totalModified: number;
+}
+
+export interface ProjectImportSymbolDiffEntry {
+  filePath: string | null;
+  symbolName: string;
+  kind: RepoSymbolKind;
+  change: Exclude<ProjectImportCompareChange, "modified">;
+}
+
+export interface ProjectImportEdgeDiffEntry {
+  source: string;
+  target: string;
+  moduleSpecifier: string;
+  importKind: RepoImportKind;
+  importedNames: string[];
+  isTypeOnly: boolean;
+  isResolved: boolean;
+  resolutionKind: RepoImportResolutionKind;
+  startLine: number;
+  startCol: number;
+  change: Exclude<ProjectImportCompareChange, "modified">;
+}
+
+export interface ProjectImportMetricDelta {
+  label: "Files" | "Symbols" | "Dependencies";
+  base: number;
+  head: number;
+  delta: number;
+}
+
+export interface ProjectImportComparison {
+  baseImportId: string;
+  headImportId: string;
+  files: ProjectImportFileDiff;
+  symbols: ProjectImportSymbolDiffEntry[];
+  edges: ProjectImportEdgeDiffEntry[];
+  metrics: ProjectImportMetricDelta[];
 }
 
 export interface ProjectFileSymbolRecord {

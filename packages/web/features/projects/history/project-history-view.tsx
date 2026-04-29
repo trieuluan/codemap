@@ -2,15 +2,18 @@
 
 import useSWR from "swr";
 import { useMemo, useState } from "react";
-import { GitCompare, GitCommit, Loader2, X } from "lucide-react";
+import { ArrowLeftRight, GitCommit, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
   Empty,
@@ -18,7 +21,10 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { browserProjectsApi, type ProjectImport } from "@/features/projects/api";
+import {
+  browserProjectsApi,
+  type ProjectImport,
+} from "@/features/projects/api";
 import { LocalProjectDate } from "@/features/projects/components/local-project-date";
 import { compareProjectImports } from "./api";
 import { ImportTimeline } from "./components/import-timeline";
@@ -28,6 +34,7 @@ import {
   EdgeDiffList,
   SymbolDiffList,
 } from "./components/symbol-edge-diff-list";
+import type { MetricDelta } from "./types";
 
 interface Props {
   projectId: string;
@@ -36,6 +43,17 @@ interface Props {
 
 function shortSha(sha: string | null) {
   return sha ? sha.slice(0, 7) : "—";
+}
+
+function formatImportOption(importRecord: ProjectImport) {
+  const sha = shortSha(importRecord.commitSha);
+  const date = new Date(
+    importRecord.completedAt ?? importRecord.startedAt,
+  ).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${sha} · ${date}`;
 }
 
 export function ProjectHistoryView({ projectId, initialImports }: Props) {
@@ -64,9 +82,23 @@ export function ProjectHistoryView({ projectId, initialImports }: Props) {
     () => imports.find((i) => i.id === headId) ?? null,
     [imports, headId],
   );
+  const selectedImport =
+    imports.find((i) => i.id === selectedId) ?? imports[0]!;
+  const selectedIndex = imports.findIndex((i) => i.id === selectedImport.id);
+  const previousImport =
+    selectedIndex >= 0 ? (imports[selectedIndex + 1] ?? null) : null;
+  const importsApart =
+    base && head
+      ? Math.abs(
+          imports.findIndex((item) => item.id === base.id) -
+            imports.findIndex((item) => item.id === head.id),
+        )
+      : null;
 
   const comparisonKey =
-    compareMode && base && head ? ["compare", projectId, base.id, head.id] : null;
+    compareMode && base && head
+      ? ["compare", projectId, base.id, head.id]
+      : null;
 
   const { data: comparison, isLoading: isCompareLoading } = useSWR(
     comparisonKey,
@@ -88,42 +120,103 @@ export function ProjectHistoryView({ projectId, initialImports }: Props) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-      {/* LEFT: timeline */}
-      <Card className="h-fit">
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">
-            Imports{" "}
-            <span className="ml-1 text-sm font-normal text-muted-foreground tabular-nums">
-              ({imports.length})
-            </span>
-          </CardTitle>
-          {compareMode ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCompareMode(false)}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 shadow-sm">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={compareMode ? "compare" : "single"}
+          onValueChange={(value: string) => {
+            if (!value) return;
+            const nextCompareMode = value === "compare";
+            setCompareMode(nextCompareMode);
+            if (nextCompareMode) {
+              if (!headId) setHeadId(imports[0]?.id ?? null);
+              if (!baseId) setBaseId(imports[1]?.id ?? null);
+            }
+          }}
+        >
+          <ToggleGroupItem value="single">Single</ToggleGroupItem>
+          <ToggleGroupItem
+            className="px-3"
+            value="compare"
+            disabled={imports.length < 2}
+          >
+            Compare
+          </ToggleGroupItem>
+        </ToggleGroup>
+
+        {compareMode ? (
+          <>
+            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Base
+            </label>
+            <Select
+              value={baseId ?? ""}
+              onValueChange={(value: string) => setBaseId(value || null)}
             >
-              <X className="size-4" />
-              Exit compare
-            </Button>
-          ) : (
+              <SelectTrigger className="min-w-44 data-[size=default]:h-8">
+                <SelectValue placeholder="Select base" />
+              </SelectTrigger>
+              <SelectContent>
+                {imports.map((importRecord) => (
+                  <SelectItem key={importRecord.id} value={importRecord.id}>
+                    {formatImportOption(importRecord)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
+              type="button"
               variant="outline"
-              size="sm"
+              size="icon"
+              aria-label="Swap base and head imports"
               onClick={() => {
-                setCompareMode(true);
-                if (!headId) setHeadId(imports[0]?.id ?? null);
-                if (!baseId) setBaseId(imports[1]?.id ?? null);
+                setBaseId(headId);
+                setHeadId(baseId);
               }}
-              disabled={imports.length < 2}
+              className="size-8"
+              disabled={!baseId || !headId}
             >
-              <GitCompare className="size-4" />
-              Compare
+              <ArrowLeftRight className="size-4" />
             </Button>
-          )}
-        </CardHeader>
-        <CardContent>
+            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Head
+            </label>
+            <Select
+              value={headId ?? ""}
+              onValueChange={(value: string) => setHeadId(value || null)}
+            >
+              <SelectTrigger className="min-w-44 data-[size=default]:h-8">
+                <SelectValue placeholder="Select head" />
+              </SelectTrigger>
+              <SelectContent>
+                {imports.map((importRecord) => (
+                  <SelectItem key={importRecord.id} value={importRecord.id}>
+                    {formatImportOption(importRecord)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {importsApart !== null ? (
+              <span className="ml-auto text-sm text-muted-foreground">
+                {importsApart.toLocaleString()} import
+                {importsApart === 1 ? "" : "s"} apart
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span className="ml-auto text-xs text-muted-foreground">
+            Click an import on the left for full details. Switch to{" "}
+            <strong className="text-foreground">Compare </strong>
+            to diff two imports.
+          </span>
+        )}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="space-y-3">
           <ImportTimeline
             imports={imports}
             selectedId={selectedId}
@@ -134,30 +227,23 @@ export function ProjectHistoryView({ projectId, initialImports }: Props) {
             onSetBase={setBaseId}
             onSetHead={setHeadId}
           />
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* RIGHT: detail or compare */}
-      <div className="space-y-6">
-        {compareMode ? (
-          <CompareDetail
-            base={base}
-            head={head}
-            isLoading={isCompareLoading}
-            comparison={comparison}
-          />
-        ) : (
-          <SingleImportDetail
-            imp={imports.find((i) => i.id === selectedId) ?? imports[0]!}
-            previous={
-              imports[
-                imports.findIndex(
-                  (i) => i.id === (selectedId ?? imports[0]!.id),
-                ) + 1
-              ] ?? null
-            }
-          />
-        )}
+        <div className="space-y-4">
+          {compareMode ? (
+            <CompareDetail
+              base={base}
+              head={head}
+              isLoading={isCompareLoading}
+              comparison={comparison}
+            />
+          ) : (
+            <SingleImportDetail
+              imp={selectedImport}
+              previous={previousImport}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -172,7 +258,7 @@ function SingleImportDetail({
   imp: ProjectImport;
   previous: ProjectImport | null;
 }) {
-  const metrics = previous
+  const metrics: MetricDelta[] | null = previous
     ? [
         {
           label: "Files",
@@ -207,9 +293,12 @@ function SingleImportDetail({
             </Badge>
           ) : null}
         </div>
-        <CardTitle className="text-xl">
-          Import details
-        </CardTitle>
+        <CardTitle className="text-xl">Import details</CardTitle>
+        {imp.commitMessage ? (
+          <p className="text-base font-medium text-foreground">
+            {imp.commitMessage}
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           {imp.completedAt ? "Completed" : "Started"}{" "}
           <LocalProjectDate
@@ -320,6 +409,26 @@ function CompareDetail({
             className="text-xs text-muted-foreground"
           />
         </div>
+        {base.commitMessage || head.commitMessage ? (
+          <div className="grid gap-2 text-sm md:grid-cols-2">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Base commit
+              </p>
+              <p className="mt-1 line-clamp-2 text-foreground">
+                {base.commitMessage ?? "No commit message available"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Head commit
+              </p>
+              <p className="mt-1 line-clamp-2 text-foreground">
+                {head.commitMessage ?? "No commit message available"}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-6">
         {isLoading || !comparison ? (

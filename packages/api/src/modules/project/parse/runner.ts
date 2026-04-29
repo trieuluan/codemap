@@ -284,7 +284,9 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     const importEdgeIdByLocalKey = new Map<string, string>();
     importEdgeDrafts.forEach((draft, index) => {
       const savedImportEdge = savedImportEdges[index];
-      if (savedImportEdge) importEdgeIdByLocalKey.set(draft.localKey, savedImportEdge.id);
+      if (savedImportEdge?.id) {
+        importEdgeIdByLocalKey.set(draft.localKey, savedImportEdge.id);
+      }
     });
 
     await repoParseGraphService.saveExports(

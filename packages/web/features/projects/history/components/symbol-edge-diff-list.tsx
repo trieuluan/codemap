@@ -1,7 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, FunctionSquare, Hash } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCircle2,
+  FunctionSquare,
+  Hash,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import {
   Empty,
   EmptyDescription,
@@ -17,9 +24,7 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
         <EmptyHeader>
           <EmptyTitle>No symbol changes detected</EmptyTitle>
           <EmptyDescription>
-            Symbol-level diff requires per-import symbol indexing. Once the
-            backend exposes <code className="font-mono text-xs">/imports/:id/symbols-per-file</code>,
-            this view will populate automatically.
+            No added or removed symbols were found between these imports.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -30,9 +35,10 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
     <ul className="divide-y rounded-lg border bg-card">
       {symbols.map((entry, idx) => {
         const positive = entry.change === "added";
+        const filePath = entry.filePath ?? "Unknown file";
         return (
           <li
-            key={`${entry.filePath}-${entry.symbolName}-${idx}`}
+            key={`${filePath}-${entry.symbolName}-${idx}`}
             className={cn(
               "flex items-center gap-3 border-l-2 px-4 py-2.5",
               positive
@@ -54,7 +60,7 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
                 </span>
               </p>
               <p className="font-mono text-xs text-muted-foreground truncate">
-                {entry.filePath}
+                {filePath}
               </p>
             </div>
             <span className="shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
@@ -74,9 +80,8 @@ export function EdgeDiffList({ edges }: { edges: EdgeDiffEntry[] }) {
         <EmptyHeader>
           <EmptyTitle>No dependency edge changes</EmptyTitle>
           <EmptyDescription>
-            Edge-level diff requires per-import edge listing. Once
-            <code className="mx-1 font-mono text-xs">/imports/:id/edges</code>
-            is available, added/removed imports will appear here.
+            No added or removed dependency edges were found between these
+            imports.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -87,30 +92,71 @@ export function EdgeDiffList({ edges }: { edges: EdgeDiffEntry[] }) {
     <ul className="divide-y rounded-lg border bg-card">
       {edges.map((entry, idx) => {
         const positive = entry.change === "added";
+        const importedLabel =
+          entry.importedNames.length > 0
+            ? entry.importedNames.slice(0, 4).join(", ")
+            : null;
         return (
           <li
-            key={`${entry.source}-${entry.target}-${idx}`}
+            key={`${entry.source}-${entry.target}-${entry.moduleSpecifier}-${idx}`}
             className={cn(
-              "flex items-center gap-3 border-l-2 px-4 py-2.5 text-sm",
+              "grid gap-3 border-l-2 px-4 py-3 text-sm md:grid-cols-[minmax(0,1fr)_auto]",
               positive
                 ? "border-l-emerald-500/40 bg-emerald-500/5"
                 : "border-l-rose-500/40 bg-rose-500/5",
             )}
           >
-            {positive ? (
-              <ArrowUp className="size-4 text-emerald-500" />
-            ) : (
-              <ArrowDown className="size-4 text-rose-500" />
-            )}
-            <span className="font-mono text-xs truncate flex-1">
-              {entry.source}{" "}
-              <span className="text-muted-foreground">→</span>{" "}
-              <span className="text-foreground">{entry.target}</span>
-            </span>
-            <Hash className="size-3 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
-              {entry.importKind}
-            </span>
+            <div className="min-w-0 space-y-2">
+              <div className="flex min-w-0 items-center gap-2">
+                {positive ? (
+                  <ArrowUp className="size-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <ArrowDown className="size-4 shrink-0 text-rose-500" />
+                )}
+                <span className="truncate font-mono text-xs">
+                  {entry.source}
+                </span>
+                <span className="text-muted-foreground">→</span>
+                <span className="truncate font-mono text-xs text-foreground">
+                  {entry.target}
+                </span>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-2 pl-6">
+                <Badge variant={positive ? "default" : "destructive"}>
+                  {entry.change}
+                </Badge>
+                <Badge variant="outline">{entry.importKind}</Badge>
+                {entry.isTypeOnly ? (
+                  <Badge variant="secondary">type-only</Badge>
+                ) : null}
+                {entry.isResolved ? (
+                  <Badge variant="secondary" className="gap-1">
+                    <CheckCircle2 className="size-3" />
+                    resolved
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">unresolved</Badge>
+                )}
+                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                  {entry.moduleSpecifier}
+                </span>
+              </div>
+
+              {importedLabel ? (
+                <p className="truncate pl-6 font-mono text-xs text-muted-foreground">
+                  imports {importedLabel}
+                  {entry.importedNames.length > 4 ? "..." : ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-1 self-start font-mono text-xs text-muted-foreground md:justify-end">
+              <Hash className="size-3" />
+              <span>
+                L{entry.startLine}:{entry.startCol}
+              </span>
+            </div>
           </li>
         );
       })}

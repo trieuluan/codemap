@@ -61,8 +61,12 @@ export default async function ProjectHistoryPage({
               Import history
             </h1>
             <p className="text-sm text-muted-foreground">
-              Compare snapshots of <span className="font-medium text-foreground">{project.name}</span>{" "}
-              over time — file, symbol and dependency changes between any two imports.
+              Compare snapshots of{" "}
+              <span className="font-medium text-foreground">
+                {project.name}
+              </span>{" "}
+              over time — file, symbol and dependency changes between any two
+              imports.
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
@@ -72,7 +76,6 @@ export default async function ProjectHistoryPage({
             </Link>
           </Button>
         </div>
-
         <ProjectHistoryView projectId={project.id} initialImports={imports} />
       </div>
     );
