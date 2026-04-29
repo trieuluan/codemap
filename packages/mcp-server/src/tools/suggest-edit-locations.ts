@@ -89,8 +89,12 @@ export function registerSuggestEditLocationsTool(
       title: "Suggest Edit Locations",
       description:
         "Suggests likely files and symbols to inspect or edit for a natural-language task. " +
-        "Use this before get_file when you do not know where to start. " +
+        "Use this for broad tasks when you do not know which files are relevant. " +
+        "For narrow tasks with known keywords (function name, file name), use search_codebase first — it is faster. " +
         "This tool is deterministic and does not edit code or generate patches. " +
+        "IMPORTANT: each suggestion includes a readPlan field — always follow it when calling get_file " +
+        "instead of defaulting to include=[\"content\"]. The readPlan specifies the optimal include mode " +
+        "(symbols/outline/content) to avoid loading unnecessary data. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         task: z

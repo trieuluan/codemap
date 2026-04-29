@@ -16,7 +16,10 @@ export function registerCheckAuthStatusTool(
     {
       title: "Check Auth Status",
       description:
-        "Checks whether this CodeMap MCP server is authenticated with CodeMap and which user it is currently using.",
+        "Checks whether this CodeMap MCP server is authenticated with CodeMap and which user it is currently using. " +
+        "Returns data.authenticated (boolean), data.user (object), and data.nextAction with one of: " +
+        "'ready' (authenticated, proceed to get_project), " +
+        "'optional_github_connect' (authenticated but GitHub not connected — GitHub is optional unless importing private GitHub repos).",
       inputSchema: {},
     },
     async () => {

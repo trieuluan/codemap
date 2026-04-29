@@ -173,10 +173,9 @@ export function registerGetWorkingDiffTool(server: McpServer) {
     {
       title: "Get Working Tree Diff",
       description:
-        "Show uncommitted changes in the local workspace — both staged and unstaged. " +
-        "Use this to see what you (or another tool) just modified before committing or " +
-        "before calling trigger_reimport. Unlike get_diff which compares two git refs, " +
-        "this reads the live working tree so it reflects changes that haven't been committed yet. " +
+        "Show uncommitted local changes — staged, unstaged, and untracked files. " +
+        "Use this after making edits to verify what changed before committing or calling trigger_reimport. " +
+        "For changes between committed git refs (commits, branches, tags), use get_diff instead. " +
         "Returns a grouped list of staged, unstaged, and untracked files with optional patch content.",
       inputSchema: {
         include_patch: z

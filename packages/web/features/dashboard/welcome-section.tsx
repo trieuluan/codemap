@@ -1,11 +1,13 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Book } from "lucide-react"
+import { authClient } from "@/lib/auth-client"
 
-interface WelcomeSectionProps {
-  userName?: string
-}
+export function WelcomeSection() {
+  const { data: session } = authClient.useSession()
+  const userName = session?.user?.name?.split(" ")[0] ?? "there"
 
-export function WelcomeSection({ userName = "there" }: WelcomeSectionProps) {
   return (
     <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="space-y-1">

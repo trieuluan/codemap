@@ -37,8 +37,10 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
     {
       title: "Find Usages",
       description:
-        "Find known usages of a symbol across the codebase. " +
-        "Returns definitions, occurrence-level usages, callers, confidence, and parse staleness metadata. " +
+        "Find all known references to a symbol across the codebase — definitions, in-file occurrences, and callers. " +
+        "Use this when you need a complete picture of where a symbol is used. " +
+        "Use find_callers instead when you only need to know which files import or call this symbol. " +
+        "Results per category are capped at 25; check totalUsages and totalCallers in data for full counts. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         symbol_name: z
@@ -143,23 +145,18 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
         lines.push("");
       }
 
+      const totalUsages = usageResults.reduce((sum, item) => sum + item.totals.usages, 0);
+      const totalCallers = usageResults.reduce((sum, item) => sum + item.totals.callers, 0);
+
       return success(lines.join("\n").trim(), {
         projectId: resolvedProjectId,
         symbolName: symbol_name,
         found: true,
         results: usageResults,
-        totalDefinitions: usageResults.reduce(
-          (sum, item) => sum + item.totals.definitions,
-          0,
-        ),
-        totalUsages: usageResults.reduce(
-          (sum, item) => sum + item.totals.usages,
-          0,
-        ),
-        totalCallers: usageResults.reduce(
-          (sum, item) => sum + item.totals.callers,
-          0,
-        ),
+        totalDefinitions: usageResults.reduce((sum, item) => sum + item.totals.definitions, 0),
+        totalUsages,
+        totalCallers,
+        truncated: usageResults.some((r) => r.usages.length >= 25 || r.callers.length >= 25),
       });
     }),
   );

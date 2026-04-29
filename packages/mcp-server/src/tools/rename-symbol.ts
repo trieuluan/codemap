@@ -82,6 +82,8 @@ export function registerRenameSymbolTool(server: McpServer, config: McpServerCon
         "word-boundary matching, and updates import statements automatically. " +
         "More precise than a raw text search because it uses the symbol's known definition " +
         "location to anchor the rename, then updates every call site. " +
+        "When the parse index is unavailable, falls back to text-based search across all tracked files — " +
+        "check data.method in the response: 'index_based' is precise, 'text_based' may have false positives. " +
         "After renaming, call trigger_reimport to refresh the index. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
@@ -240,6 +242,8 @@ export function registerRenameSymbolTool(server: McpServer, config: McpServerCon
         lines.push("\nRun trigger_reimport to refresh the CodeMap index.");
       }
 
+      const renameMethod = (!usages && !parse) ? "text_based" : "index_based";
+
       return success(lines.join("\n"), {
         file,
         symbol,
@@ -248,6 +252,7 @@ export function registerRenameSymbolTool(server: McpServer, config: McpServerCon
         totalOccurrences,
         warnings,
         renameInFileOnly: rename_in_file_only,
+        method: renameMethod,
       });
     }),
   );

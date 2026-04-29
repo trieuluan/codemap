@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 
 type Visibility = "private" | "internal" | "public";
 
@@ -62,10 +63,21 @@ function FormRow({
   );
 }
 
+function getInitials(name: string | null | undefined) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function AccountSection() {
-  // Local-only state — wire up to a real mutate when the API exists.
-  const [name, setName] = useState("John Le");
-  const email = "john@codemap.dev";
+  const { data: session } = authClient.useSession();
+  const user = session?.user;
+
+  const [name, setName] = useState<string | undefined>(undefined);
   const [visibility, setVisibility] = useState<Visibility>("private");
   const [emailNotif, setEmailNotif] = useState(true);
   const [importNotif, setImportNotif] = useState(true);
@@ -73,6 +85,10 @@ export function AccountSection() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const confirmPhrase = "delete my account";
+
+  const displayName = name ?? user?.name ?? "";
+  const displayEmail = user?.email ?? "";
+  const initials = getInitials(user?.name);
 
   return (
     <>
@@ -87,7 +103,7 @@ export function AccountSection() {
         <CardContent>
           <div className="flex items-center gap-4 border-b border-border pb-4">
             <Avatar className="size-14">
-              <AvatarFallback className="text-base">JL</AvatarFallback>
+              <AvatarFallback className="text-base">{initials}</AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-1">
               <p className="text-sm font-medium">Avatar</p>
@@ -110,7 +126,7 @@ export function AccountSection() {
           >
             <Input
               id="account-name"
-              value={name}
+              value={displayName}
               onChange={(e) => setName(e.target.value)}
               className="max-w-sm"
             />
@@ -124,7 +140,7 @@ export function AccountSection() {
             <div className="flex items-center gap-3">
               <Input
                 id="account-email"
-                value={email}
+                value={displayEmail}
                 disabled
                 className="max-w-sm opacity-70"
               />
@@ -158,7 +174,7 @@ export function AccountSection() {
           </FormRow>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => setName(undefined)}>
               Cancel
             </Button>
             <Button size="sm">Save changes</Button>

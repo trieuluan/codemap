@@ -1,38 +1,38 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { FolderKanban, Code, Users, Activity } from "lucide-react"
 
-const stats = [
-  {
-    id: "projects",
-    label: "Projects",
-    value: "3",
-    icon: FolderKanban,
-    change: null,
-  },
-  {
-    id: "api-calls",
-    label: "API Calls",
-    value: "12.4k",
-    icon: Code,
-    change: null,
-  },
-  {
-    id: "team-members",
-    label: "Team Members",
-    value: "5",
-    icon: Users,
-    change: null,
-  },
-  {
-    id: "uptime",
-    label: "Uptime",
-    value: "100%",
-    icon: Activity,
-    change: null,
-  },
-]
+interface StatsSummaryProps {
+  projectCount: number
+}
 
-export function StatsSummary() {
+export function StatsSummary({ projectCount }: StatsSummaryProps) {
+  const stats = [
+    {
+      id: "projects",
+      label: "Projects",
+      value: String(projectCount),
+      icon: FolderKanban,
+    },
+    {
+      id: "api-calls",
+      label: "API Calls",
+      value: "—",
+      icon: Code,
+    },
+    {
+      id: "team-members",
+      label: "Team Members",
+      value: "—",
+      icon: Users,
+    },
+    {
+      id: "uptime",
+      label: "Uptime",
+      value: "—",
+      icon: Activity,
+    },
+  ]
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat) => (

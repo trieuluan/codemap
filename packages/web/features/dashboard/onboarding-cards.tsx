@@ -13,53 +13,46 @@ import {
   ArrowRight,
 } from "lucide-react"
 
-interface OnboardingStep {
-  id: string
-  title: string
-  description: string
-  icon: React.ElementType
-  completed: boolean
-  href: string
+interface OnboardingCardsProps {
+  hasProjects: boolean
 }
 
-// Demo data — first two steps marked complete to show progress.
-// Replace with real onboarding state from user/account when backend is ready.
-const steps: OnboardingStep[] = [
-  {
-    id: "connect-project",
-    title: "Connect a project",
-    description: "Import your first repository to get started",
-    icon: GitBranch,
-    completed: true,
-    href: "/dashboard/projects/new",
-  },
-  {
-    id: "configure-api",
-    title: "Configure API",
-    description: "Set up your API keys and endpoints",
-    icon: Settings,
-    completed: true,
-    href: "/dashboard/api",
-  },
-  {
-    id: "invite-team",
-    title: "Invite your team",
-    description: "Collaborate with your team members",
-    icon: Users,
-    completed: false,
-    href: "/dashboard/team",
-  },
-  {
-    id: "explore-dashboard",
-    title: "Explore the dashboard",
-    description: "Discover features and capabilities",
-    icon: Compass,
-    completed: false,
-    href: "/dashboard",
-  },
-]
+export function OnboardingCards({ hasProjects }: OnboardingCardsProps) {
+  const steps = [
+    {
+      id: "connect-project",
+      title: "Connect a project",
+      description: "Import your first repository to get started",
+      icon: GitBranch,
+      completed: hasProjects,
+      href: "/projects",
+    },
+    {
+      id: "configure-api",
+      title: "Configure API",
+      description: "Set up your API keys and endpoints",
+      icon: Settings,
+      completed: false,
+      href: "/dashboard/settings",
+    },
+    {
+      id: "invite-team",
+      title: "Invite your team",
+      description: "Collaborate with your team members",
+      icon: Users,
+      completed: false,
+      href: "/dashboard/settings",
+    },
+    {
+      id: "explore-dashboard",
+      title: "Explore the dashboard",
+      description: "Discover features and capabilities",
+      icon: Compass,
+      completed: hasProjects,
+      href: "/dashboard",
+    },
+  ]
 
-export function OnboardingCards() {
   const completedCount = steps.filter((step) => step.completed).length
   const progressPercent = (completedCount / steps.length) * 100
 

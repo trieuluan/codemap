@@ -60,9 +60,10 @@ export function registerGetDiffTool(server: McpServer, config: McpServerConfig) 
     {
       title: "Get Git Diff",
       description:
-        "Returns the list of files changed between two commits in a CodeMap project. " +
+        "Returns the list of files changed between two committed git refs (commits, branches, tags) in a CodeMap project. " +
         "Use this to understand what changed between two points in history — useful for reviewing changes, " +
         "debugging regressions, or understanding the scope of a PR. " +
+        "For uncommitted local changes (staged/unstaged), use get_working_diff instead. " +
         "Requires the project to have a retained workspace (sourceAvailable). " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {

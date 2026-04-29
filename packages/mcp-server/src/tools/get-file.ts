@@ -315,6 +315,7 @@ export function registerGetFileTool(
         "or asks which files would break if this file changed. " +
         "blast_radius is NOT needed for general file exploration — only include it when " +
         "the task involves assessing change risk or editing a shared/utility file. " +
+        "WARNING: blast_radius adds significant latency (1-2s extra per file). Do NOT include it for routine file reading. " +
         "Content and parse data are fetched in parallel. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {

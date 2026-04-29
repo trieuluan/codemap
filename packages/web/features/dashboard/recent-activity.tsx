@@ -1,93 +1,91 @@
 "use client";
 
+import useSWR from "swr";
+import { formatDistanceToNow } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
-import { Activity, GitBranch, KeyRound, UserPlus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Activity, GitBranch } from "lucide-react";
+import { browserProjectsApi, type ProjectListItem } from "@/features/projects/api";
 
-interface ActivityItem {
-  id: string;
-  type: "commit" | "deploy" | "invite" | "api" | "import";
-  message: string;
-  project?: string;
-  timestamp: string;
+function useRecentActivity() {
+  return useSWR("dashboard-activity", () =>
+    browserProjectsApi.getProjects({ include: ["latestImport"] }),
+  );
 }
 
-// Demo data — replace with real API call when backend is ready
-const activities: ActivityItem[] = [
-  {
-    id: "1",
-    type: "import",
-    message: "Import completed for codemap-web",
-    project: "codemap-web",
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "2",
-    type: "api",
-    message: "Created API key Production-MCP",
-    project: "Account",
-    timestamp: "yesterday",
-  },
-  {
-    id: "3",
-    type: "invite",
-    message: "Invited huy@codemap.dev to the workspace",
-    project: "Team",
-    timestamp: "3 days ago",
-  },
-];
-
-const iconByType: Record<ActivityItem["type"], React.ElementType> = {
-  import: GitBranch,
-  commit: GitBranch,
-  deploy: Activity,
-  api: KeyRound,
-  invite: UserPlus,
-};
+function buildActivities(projects: ProjectListItem[]) {
+  return projects
+    .filter((p): p is ProjectListItem & { latestImport: NonNullable<ProjectListItem["latestImport"]> } =>
+      p.latestImport != null,
+    )
+    .map((p) => {
+      const imp = p.latestImport;
+      const completedAt = imp.completedAt ? new Date(imp.completedAt) : null;
+      const timestamp = completedAt
+        ? formatDistanceToNow(completedAt, { addSuffix: true })
+        : "recently";
+      const statusLabel =
+        imp.status === "completed" ? "completed"
+        : imp.status === "failed" ? "failed"
+        : "in progress";
+      return {
+        id: imp.id,
+        message: `Import ${statusLabel} for ${p.name}`,
+        project: p.name,
+        timestamp,
+        sortKey: imp.completedAt ?? imp.startedAt ?? "",
+      };
+    })
+    .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+    .slice(0, 10);
+}
 
 export function RecentActivity() {
-  if (activities.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium">
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Empty
-            icon={Activity}
-            title="No activity yet"
-            description="Your recent activity will appear here once you start using CodeMap."
-          />
-        </CardContent>
-      </Card>
-    );
-  }
+  const { data: projects, isLoading } = useRecentActivity();
+  const activities = projects ? buildActivities(projects) : [];
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium">Recent Activity</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {activities.map((activity) => {
-          const Icon = iconByType[activity.type] ?? Activity;
-          return (
-            <div key={activity.id} className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-                <Icon className="size-4 text-muted-foreground" />
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="mt-0.5 size-8 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
               </div>
-              <div className="flex-1 space-y-1">
-                <p className="text-sm">{activity.message}</p>
-                <p className="text-xs text-muted-foreground">
-                  {activity.project ? `in ${activity.project} · ` : ""}
-                  {activity.timestamp}
-                </p>
+            ))}
+          </div>
+        ) : activities.length === 0 ? (
+          <Empty
+            icon={Activity}
+            title="No activity yet"
+            description="Your recent activity will appear here once you start using CodeMap."
+          />
+        ) : (
+          <div className="space-y-4">
+            {activities.map((activity) => (
+              <div key={activity.id} className="flex items-start gap-3">
+                <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
+                  <GitBranch className="size-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm">{activity.message}</p>
+                  <p className="text-xs text-muted-foreground">
+                    in {activity.project} · {activity.timestamp}
+                  </p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

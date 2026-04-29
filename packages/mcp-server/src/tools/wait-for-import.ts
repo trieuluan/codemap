@@ -106,9 +106,11 @@ export function registerWaitForImportTool(
       description:
         "Polls the latest CodeMap import for a project until it completes or times out. " +
         "Call this immediately after create_project to know when the codebase is ready to query. " +
-        "project_id is optional if this workspace was linked via create_project. " +
         "Always uses the most recent import — no need to track import IDs. " +
-        "If timedOut is reported, call again — the import is still running.",
+        "IMPORTANT: timedOut=true is a normal checkpoint, NOT a failure — the import is still running. " +
+        "When timedOut=true, call wait_for_import again immediately to keep polling. " +
+        "Only stop when completed=true or data.status === 'failed'. " +
+        "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         project_id: z
           .string()

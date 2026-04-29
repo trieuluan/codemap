@@ -18,8 +18,10 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
     {
       title: "Find Callers",
       description:
-        "Find callers/usages of a symbol from a given file. " +
-        "Returns occurrence-level ranges, import evidence, confidence, and parse staleness metadata. " +
+        "Find who calls or imports a specific symbol — returns only the files that reference this symbol, " +
+        "not internal usages within the same file. " +
+        "Use find_usages instead when you need all references including definitions and in-file occurrences. " +
+        "Results are capped at 50; check totalCallers in data to know if results were truncated. " +
         "Callers are static analysis results, not guaranteed runtime call graph edges. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
@@ -103,6 +105,7 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         definitions: result.definitions,
         totalCallers: result.totals.callers,
         totalUsages: result.totals.usages,
+        truncated: result.callers.length >= 50,
         meta: result.meta,
       });
     }),

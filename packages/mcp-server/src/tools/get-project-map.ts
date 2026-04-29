@@ -63,7 +63,8 @@ export function registerGetProjectMapTool(
       description:
         "Returns the file tree of a CodeMap project as an indented directory listing. " +
         "Use this to understand the project structure before diving into specific files. " +
-        "Optionally filter to a sub-folder or limit depth to reduce output size. " +
+        "For large repos (1000+ files), use the folder parameter to inspect a subtree instead of the full tree — " +
+        "omitting folder returns the complete tree which may be very large. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         project_id: z
