@@ -213,6 +213,18 @@ function buildContextText(
   lines.push("- If suggest/search results look stale, a new file is missing, or local edits changed semantics, call trigger_reimport, then wait_for_import.");
   lines.push("- If search or suggest_edit_locations returns no useful results, retry with narrower domain terms, call get_project_map to inspect folders, or reimport if the index may be stale.");
 
+  lines.push("");
+  lines.push("## Maintenance / Cleanup Audits");
+  lines.push("- For dead code, dead files, duplicate functions, and large-file cleanup tasks, combine CodeMap semantic tools with local static checks. MCP import graph data is the first pass; TypeScript/compiler or ripgrep checks are the confirmation pass.");
+  lines.push("- Use get_project_insights first for global signals: orphan files, cycles, top fan-out/fan-in files, parse quality, and entry-like files.");
+  lines.push("- Use get_project_map for folder-level scope, then get_files for outlines of candidate files. Avoid reading full content until a candidate is confirmed.");
+  lines.push("- Large files: use line-count shell checks such as rg --files plus wc -l, excluding generated folders (.next, dist, coverage, node_modules). Then inspect the largest files with get_file include: [\"outline\"] and split only when there is a clear concern boundary.");
+  lines.push("- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins/routes, CLI scripts, worker entrypoints, tests, generated config files, or MCP tool registration files solely because the static import graph has no importer.");
+  lines.push("- Dead functions/exports: use find_usages or find_callers on the symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage, framework conventions, test-only usage, or external public API contracts before deleting.");
+  lines.push("- Duplicate functions: exact body duplicates are strong candidates when they are in regular app code. Prefer a shared helper only when the duplicate behavior is stable and the abstraction names a real domain concept. Keep tiny duplicates or provider-specific code separate when shared code would hide meaningful differences.");
+  lines.push("- UI library components can be intentionally unused inventory. Do not delete generic components like shadcn/Radix UI wrappers just because they have no current import unless the user explicitly asks to prune UI inventory.");
+  lines.push("- After cleanup edits, run package builds and get_working_diff. If code was pushed or the user wants fresh MCP data, call trigger_reimport and wait_for_import.");
+
   return lines.join("\n");
 }
 
