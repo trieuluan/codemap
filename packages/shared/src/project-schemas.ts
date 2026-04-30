@@ -123,6 +123,11 @@ export const projectImportCompareQuerySchema = z.object({
   head: z.uuid(),
 });
 
+export const listProjectImportsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().datetime().optional(),
+});
+
 export const projectEditLocationsQuerySchema = z.object({
   q: z.string().trim().min(1).max(500),
   limit: z.coerce.number().int().min(1).max(25).default(10),
@@ -168,3 +173,4 @@ export type ProjectSymbolUsagesQuery = z.infer<
 export type CreateProjectFromUploadQuery = z.infer<
   typeof createProjectFromUploadQuerySchema
 >;
+export type ListProjectImportsQuery = z.infer<typeof listProjectImportsQuerySchema>;

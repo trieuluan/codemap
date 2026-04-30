@@ -89,6 +89,29 @@ export async function parseApiResponse<T>(response: Response) {
   return payload.data;
 }
 
+export async function parseApiResponseWithMeta<T, M extends Record<string, unknown>>(
+  response: Response,
+): Promise<{ data: T; meta: M | undefined }> {
+  const payload = (await response
+    .json()
+    .catch(() => null)) as ApiResponse<T> | null;
+
+  if (!response.ok || !payload?.success) {
+    const apiError = payload && !payload.success ? payload.error : undefined;
+
+    throw new ApiClientError(
+      apiError?.message || "Request failed",
+      response.status,
+      {
+        code: apiError?.code,
+        details: apiError?.details,
+      },
+    );
+  }
+
+  return { data: payload.data, meta: payload.meta as M | undefined };
+}
+
 export async function requestApi<T>(
   path: string,
   options: RequestApiOptions = {},

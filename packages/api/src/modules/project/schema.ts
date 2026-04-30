@@ -65,6 +65,7 @@ export const createProjectFromGitlabBodySchema =
 export const createProjectImportBodySchema = triggerProjectImportInputSchema;
 
 export {
+  listProjectImportsQuerySchema,
   listProjectsQuerySchema,
   projectEditLocationsQuerySchema,
   projectFileContentQuerySchema,

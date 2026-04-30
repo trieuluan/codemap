@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import { simpleGit } from "simple-git";
 import type { db } from "../../db";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
@@ -819,19 +819,35 @@ export function createProjectService(database: Database) {
       return updatedImport ?? null;
     },
 
-    async listImports(projectId: string, ownerUserId: string) {
+    async listImports(
+      projectId: string,
+      ownerUserId: string,
+      options?: { limit?: number; cursor?: string },
+    ) {
       const existingProject = await getOwnedProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
       }
 
+      const limit = options?.limit ?? 20;
+      const cursorDate = options?.cursor ? new Date(options.cursor) : undefined;
+
       const imports = await database.query.projectImport.findMany({
-        where: eq(projectImport.projectId, projectId),
+        where: and(
+          eq(projectImport.projectId, projectId),
+          cursorDate ? lt(projectImport.startedAt, cursorDate) : undefined,
+        ),
         orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
+        limit: limit + 1,
       });
 
-      return withCommitMessages(imports);
+      const hasMore = imports.length > limit;
+      const page = hasMore ? imports.slice(0, limit) : imports;
+      const nextCursor = hasMore ? page[page.length - 1]?.startedAt?.toISOString() : null;
+
+      const items = await withCommitMessages(page);
+      return { items, nextCursor };
     },
 
     async listProjectImportsByIds(

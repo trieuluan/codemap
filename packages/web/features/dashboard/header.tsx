@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/components/ui/use-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface DashboardHeaderProps {
   title?: string;
@@ -38,6 +38,8 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
   const userName = user?.name?.trim() || "CodeMap User";
@@ -88,9 +90,9 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
           variant="ghost"
           size="icon"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+          title={mounted ? (theme === "dark" ? "Switch to light" : "Switch to dark") : "Toggle theme"}
         >
-          {theme === "dark" ? (
+          {mounted && theme === "dark" ? (
             <Sun className="size-4" />
           ) : (
             <Moon className="size-4" />

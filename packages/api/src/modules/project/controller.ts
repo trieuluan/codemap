@@ -21,6 +21,7 @@ import {
   createProjectFromGithubBodySchema,
   createProjectFromGitlabBodySchema,
   createProjectImportBodySchema,
+  listProjectImportsQuerySchema,
   listProjectsQuerySchema,
   projectEditLocationsQuerySchema,
   projectFileContentQuerySchema,
@@ -282,15 +283,20 @@ export function createProjectController(fastify: FastifyInstance) {
     listImports: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
+      const query = listProjectImportsQuerySchema.parse(request.query ?? {});
 
-      const imports = await service.listImports(projectId, userId);
+      const result = await service.listImports(projectId, userId, {
+        limit: query.limit,
+        cursor: query.cursor,
+      });
 
-      if (!imports) {
+      if (!result) {
         throw fastify.httpErrors.notFound("Project not found");
       }
 
-      return reply.success(imports, 200, {
-        count: imports.length,
+      return reply.success(result.items, 200, {
+        count: result.items.length,
+        nextCursor: result.nextCursor,
       });
     },
 

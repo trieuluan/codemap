@@ -1,6 +1,7 @@
 import {
   ApiClientError,
   getApiBaseUrl,
+  parseApiResponseWithMeta,
   type ApiClientOptions as ServerProjectsApiOptions,
   requestApi,
 } from "@/lib/api/client";
@@ -53,6 +54,25 @@ export function createServerProjectsApi(
       return requestApi<ProjectImport[]>(`/projects/${projectId}/imports`, {
         cookieHeader: defaults.cookieHeader,
       });
+    },
+
+    getProjectImportPage: async (
+      projectId: string,
+      options?: { limit?: number; cursor?: string },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.limit) params.set("limit", String(options.limit));
+      if (options?.cursor) params.set("cursor", options.cursor);
+      const qs = params.toString();
+      const url = `${getApiBaseUrl()}/projects/${projectId}/imports${qs ? `?${qs}` : ""}`;
+      const headers = new Headers();
+      if (defaults.cookieHeader) headers.set("cookie", defaults.cookieHeader);
+      const response = await fetch(url, {
+        headers,
+        cache: "no-store",
+        credentials: typeof window === "undefined" ? "same-origin" : "include",
+      });
+      return parseApiResponseWithMeta<ProjectImport[], { nextCursor: string | null }>(response);
     },
 
     getProjectMap: async (projectId: string) => {

@@ -3,11 +3,23 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { BarChart2, Network, Search, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ProjectMapSearchDialog } from "../explorer/components/project-map-search-dialog";
 import type { ProjectImportParseStatus } from "@/features/projects/api";
+
+const NAV_ITEMS = [
+  { key: "mapping", href: (id: string) => `/projects/${id}/explorer`, icon: Workflow, label: "Explorer" },
+  { key: "insights", href: (id: string) => `/projects/${id}/insights`, icon: BarChart2, label: "Insights" },
+  { key: "graph", href: (id: string) => `/projects/${id}/graph`, icon: Network, label: "Graph" },
+] as const;
 
 export function ProjectMapHeader({
   projectId,
@@ -42,42 +54,35 @@ export function ProjectMapHeader({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/30 p-1">
-        <Link
-          href={`/projects/${projectId}/explorer`}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm transition-colors",
-            active === "mapping"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Mapping
-        </Link>
-        <Link
-          href={`/projects/${projectId}/insights`}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm transition-colors",
-            active === "insights"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Insights
-        </Link>
-        <Link
-          href={`/projects/${projectId}/graph`}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm transition-colors",
-            active === "graph"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Graph
-        </Link>
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <TooltipProvider delayDuration={300}>
+        <div className="inline-flex items-center rounded-md border border-border/70 bg-muted/30 p-0.5">
+          {NAV_ITEMS.map(({ key, href, icon: Icon, label }) => {
+            const isActive = active === key;
+            return (
+              <Tooltip key={key}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={href(projectId)}
+                    className={cn(
+                      "flex size-7 items-center justify-center rounded transition-colors",
+                      isActive
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    aria-label={label}
+                  >
+                    <Icon className="size-3.5" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {label}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
 
       <Button
         variant="outline"
