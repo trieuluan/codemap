@@ -88,15 +88,6 @@ function buildContextText(
   lines.push("All other file types are indexed by path only (no symbol extraction).");
 
   lines.push("");
-  lines.push("## Translation Workflow");
-  lines.push("When working with .po translation files (e.g. for Frappe/ERPNext custom apps):");
-  lines.push("- Use get_project_map to locate .po files in the project (e.g. locale/vi.po)");
-  lines.push("- Use get_file with start_line/end_line to read specific sections of a .po file — never load the full file as it can be several MB");
-  lines.push("- To find untranslated strings: read the .po file in chunks and look for entries where msgstr is empty (\"\")");
-  lines.push("- Use search_codebase to find Python/JS source files that contain the original string for context before translating");
-  lines.push("- Write translated msgstr back to the .po file using targeted edits — do not rewrite the whole file");
-
-  lines.push("");
   lines.push("## Available Tools");
   lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
   lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
@@ -215,6 +206,7 @@ function buildContextText(
   lines.push("- Add blast_radius to get_file before risky edits to shared files, services, schemas, or MCP tools; do not request blast_radius for routine file reading.");
   lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
   lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol.");
+  lines.push("- To find dead code: use get_file with include: [\"outline\"] and check importedBy — if empty, the file has no known importers. Then confirm with find_usages on the exported symbol. Cross-check with Bash grep for dynamic usage before deleting.");
   lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
   lines.push("- Use rename_symbol to rename a symbol codebase-wide — provide the definition file and current name; it uses the parse index to find all occurrences and rewrites imports automatically. Call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true to avoid false positives in unrelated files.");
   lines.push("- Use get_working_diff after making edits to verify which files changed before committing or reimporting; prefer get_diff for comparing committed refs.");

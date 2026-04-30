@@ -15,15 +15,28 @@ Khi cần tìm hiểu code trong project `codemap`, ưu tiên dùng MCP tools tr
 - `search_codebase` trả về đúng symbol/location cần tìm, không load code thừa
 - `get_file` cho phép đọc từng đoạn cụ thể thay vì cả file
 
+## Không dùng Agent tool cho research
+
+**Không spawn Agent/fork** cho các task có thể làm trực tiếp bằng MCP + Bash:
+- Dead code scan → `find_usages` + `Bash grep`
+- Symbol lookup → `search_codebase`
+- File audit → `get_file` outline
+- Impact analysis → `get_file` với `blast_radius`
+
+Agent tiêu quota riêng của user và chạy song song không kiểm soát được. Chỉ spawn agent khi task thực sự cần chạy nền dài (>5 phút) hoặc user yêu cầu rõ ràng.
+
 ## Ví dụ
 
 **Không nên:**
 ```
 Read(repo-parse-graph.ts)  // 1900 dòng, chỉ cần sửa 3 dòng
+Agent("audit dead code")   // tốn quota, có thể làm trực tiếp bằng MCP
 ```
 
 **Nên:**
 ```
 search_codebase("toTopLevelFolder")  // tìm location
 get_file(path, startLine, endLine)   // đọc đúng đoạn cần
+find_usages("FunctionName")          // check dead code
+Bash grep -rn "FunctionName" ...     // cross-check import
 ```
