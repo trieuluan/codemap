@@ -84,6 +84,58 @@ export interface ProjectInsightEntryLikeFile extends ProjectInsightFileEntry {
   reason: string;
 }
 
+export interface ProjectInsightLanguageEntry {
+  language: string;
+  fileCount: number;
+}
+
+export interface ProjectInsightParseStatusEntry {
+  status: ProjectParsedFileStatus;
+  fileCount: number;
+}
+
+export interface ProjectInsightFocusedEdgeFile extends ProjectInsightFileEntry {
+  moduleSpecifier: string;
+  importKind: string;
+  importedNames: string[];
+  isTypeOnly: boolean;
+  isResolved: boolean;
+  resolutionKind: string;
+}
+
+export interface ProjectInsightFocusedFile extends ProjectInsightFileEntry {
+  symbolName: string | null;
+  isOrphan: boolean;
+  isEntryLike: boolean;
+  entryLikeScore: number | null;
+  entryLikeReason: string | null;
+  cycles: ProjectInsightCycleCandidate[];
+  directImporters: ProjectInsightFocusedEdgeFile[];
+  directDependencies: ProjectInsightFocusedEdgeFile[];
+}
+
+export type ProjectInsightRecommendationSeverity = "info" | "warning" | "critical";
+export type ProjectInsightRecommendationAction =
+  | "review_cycles"
+  | "inspect_high_fan_out"
+  | "inspect_orphans"
+  | "review_parse_quality"
+  | "inspect_focused_file"
+  | "review_focused_orphan"
+  | "review_focused_entry"
+  | "review_focused_cycle"
+  | "inspect_focused_fan_out"
+  | "inspect_focused_dependents";
+
+export interface ProjectInsightRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  severity: ProjectInsightRecommendationSeverity;
+  action: ProjectInsightRecommendationAction;
+  href: string | null;
+}
+
 export interface ProjectMapInsightsResponse {
   topFilesByImportCount: ProjectInsightFileEntry[];
   topFilesByInboundDependencyCount: ProjectInsightFileEntry[];
@@ -91,6 +143,12 @@ export interface ProjectMapInsightsResponse {
   orphanFiles: ProjectInsightFileEntry[];
   entryLikeFiles: ProjectInsightEntryLikeFile[];
   circularDependencyCandidates: ProjectInsightCycleCandidate[];
+  languageDistribution: ProjectInsightLanguageEntry[];
+  parseStatusBreakdown: ProjectInsightParseStatusEntry[];
+  unresolvedImportCount: number;
+  externalImportCount: number;
+  focusedFile: ProjectInsightFocusedFile | null;
+  recommendations: ProjectInsightRecommendation[];
   totals: ProjectMapTotals;
 }
 

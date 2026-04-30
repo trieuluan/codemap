@@ -18,10 +18,13 @@ import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/a
 
 export default async function ProjectInsightsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ file?: string; symbol?: string }>;
 }) {
   const { projectId } = await params;
+  const { file: focusFile, symbol: focusSymbol } = await searchParams;
   const api = createServerProjectsApi({
     cookieHeader: (await cookies()).toString(),
   });
@@ -30,7 +33,10 @@ export default async function ProjectInsightsPage({
     const [project, imports, insights] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImports(projectId),
-      api.getProjectInsights(projectId),
+      api.getProjectInsights(projectId, {
+        file: focusFile,
+        symbol: focusSymbol,
+      }),
     ]);
 
     return (
@@ -89,6 +95,8 @@ export default async function ProjectInsightsPage({
           project={project}
           imports={imports}
           insights={insights}
+          focusFile={focusFile}
+          focusSymbol={focusSymbol}
         />
       </div>
     );

@@ -213,6 +213,62 @@ export interface ProjectInsightsCycleCandidate {
   summary: string;
 }
 
+export interface ProjectInsightsLanguageEntry {
+  language: string;
+  fileCount: number;
+}
+
+export interface ProjectInsightsParseStatusEntry {
+  status:
+    | "parsed"
+    | "skipped"
+    | "too_large"
+    | "binary"
+    | "unsupported"
+    | "error";
+  fileCount: number;
+}
+
+export interface ProjectInsightsFocusedEdgeFile
+  extends ProjectInsightsFileEntry {
+  moduleSpecifier: string;
+  importKind: string;
+  importedNames: string[];
+  isTypeOnly: boolean;
+  isResolved: boolean;
+  resolutionKind: string;
+}
+
+export interface ProjectInsightsFocusedFile extends ProjectInsightsFileEntry {
+  symbolName: string | null;
+  isOrphan: boolean;
+  isEntryLike: boolean;
+  entryLikeScore: number | null;
+  entryLikeReason: string | null;
+  cycles: ProjectInsightsCycleCandidate[];
+  directImporters: ProjectInsightsFocusedEdgeFile[];
+  directDependencies: ProjectInsightsFocusedEdgeFile[];
+}
+
+export interface ProjectInsightsRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  severity: "info" | "warning" | "critical";
+  action:
+    | "review_cycles"
+    | "inspect_high_fan_out"
+    | "inspect_orphans"
+    | "review_parse_quality"
+    | "inspect_focused_file"
+    | "review_focused_orphan"
+    | "review_focused_entry"
+    | "review_focused_cycle"
+    | "inspect_focused_fan_out"
+    | "inspect_focused_dependents";
+  href: string | null;
+}
+
 export interface ProjectInsightsSummary {
   topFilesByImportCount: ProjectInsightsFileEntry[];
   topFilesByInboundDependencyCount: ProjectInsightsFileEntry[];
@@ -220,6 +276,12 @@ export interface ProjectInsightsSummary {
   orphanFiles: ProjectInsightsFileEntry[];
   entryLikeFiles: ProjectInsightsEntryLikeFile[];
   circularDependencyCandidates: ProjectInsightsCycleCandidate[];
+  languageDistribution: ProjectInsightsLanguageEntry[];
+  parseStatusBreakdown: ProjectInsightsParseStatusEntry[];
+  unresolvedImportCount: number;
+  externalImportCount: number;
+  focusedFile: ProjectInsightsFocusedFile | null;
+  recommendations: ProjectInsightsRecommendation[];
   totals: {
     files: number;
     sourceFiles: number;

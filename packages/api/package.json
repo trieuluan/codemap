@@ -19,7 +19,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/scripts/seed.ts",
-    "api-key:create": "tsx src/scripts/create-api-key.ts"
+    "api-key:create": "tsx src/scripts/create-api-key.ts",
+    "redis:cache:clear": "tsx src/scripts/clear-redis-cache.ts"
   },
   "dependencies": {
     "@codemap/shared": "file:../shared",

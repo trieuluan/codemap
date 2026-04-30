@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { enqueueProjectImportJob } from "../../lib/project-import-queue";
+import { cacheKeys } from "../../lib/redis-cache";
 import {
   buildUnavailableFilePreview,
   createProjectRawImageReadStream,
@@ -27,6 +28,7 @@ import {
   projectFileContentQuerySchema,
   projectFileReparseBodySchema,
   projectImportCompareQuerySchema,
+  projectMapInsightsQuerySchema,
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
   projectParamsSchema,
@@ -658,15 +660,23 @@ export function createProjectController(fastify: FastifyInstance) {
       }
 
       const importId = latestMapWithSource.importRecord.id;
-      const cacheKey = `insights:${importId}`;
-      const cached = await fastify.redis.get(cacheKey);
+      const query = projectMapInsightsQuerySchema.parse(request.query ?? {});
+      const cacheKey = cacheKeys.projectInsights(importId);
+      const canUseCache = !query.file && !query.symbol;
+      const cached = canUseCache ? await fastify.redis.get(cacheKey) : null;
 
       if (cached) {
         return reply.success(JSON.parse(cached));
       }
 
-      const insights = await repoParseGraphService.getProjectInsights(importId);
-      await fastify.redis.set(cacheKey, JSON.stringify(insights), "EX", 86400);
+      const insights = await repoParseGraphService.getProjectInsights(importId, {
+        file: query.file,
+        symbol: query.symbol,
+      });
+
+      if (canUseCache) {
+        await fastify.redis.set(cacheKey, JSON.stringify(insights), "EX", 86400);
+      }
 
       return reply.success(insights);
     },

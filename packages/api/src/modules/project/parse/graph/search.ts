@@ -14,6 +14,15 @@ function isSubsequenceMatch(value: string, query: string): boolean {
   return qi === query.length;
 }
 
+function compactSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function basenameWithoutExtension(path: string): string {
+  const filename = path.split("/").pop() ?? path;
+  return filename.replace(/\.[^.]+$/, "");
+}
+
 function splitQueryTokens(query: string): string[] {
   const tokens = new Set<string>();
   tokens.add(query);
@@ -30,13 +39,21 @@ function splitQueryTokens(query: string): string[] {
 function getSearchRank(value: string, query: string, trgmScore = 0) {
   const normalizedValue = value.trim().toLowerCase();
   const normalizedQuery = query.trim().toLowerCase();
+  const valueBaseName = basenameWithoutExtension(normalizedValue);
+  const compactValue = compactSearchText(normalizedValue);
+  const compactBaseName = compactSearchText(valueBaseName);
+  const compactQuery = compactSearchText(normalizedQuery);
 
   if (!normalizedValue || !normalizedQuery) return Number.MAX_SAFE_INTEGER;
   if (normalizedValue === normalizedQuery) return 0;
-  if (normalizedValue.startsWith(normalizedQuery)) return 1;
-  if (normalizedValue.includes(normalizedQuery)) return 2;
-  if (isSubsequenceMatch(normalizedValue, normalizedQuery)) return 3;
-  if (trgmScore > 0) return 4 + (1 - trgmScore);
+  if (valueBaseName === normalizedQuery) return 1;
+  if (compactBaseName && compactBaseName === compactQuery) return 2;
+  if (normalizedValue.startsWith(normalizedQuery)) return 3;
+  if (valueBaseName.startsWith(normalizedQuery)) return 4;
+  if (normalizedValue.includes(normalizedQuery)) return 5;
+  if (compactQuery && compactValue.includes(compactQuery)) return 6;
+  if (isSubsequenceMatch(normalizedValue, normalizedQuery)) return 7;
+  if (trgmScore > 0) return 8 + (1 - trgmScore);
 
   return Number.MAX_SAFE_INTEGER;
 }
@@ -56,6 +73,7 @@ export function createSearchService(database: Database) {
 
       const queryTokens = splitQueryTokens(query.trim());
       const tokenPatterns = queryTokens.map((t) => `%${t.toLowerCase()}%`);
+      const exactPattern = `%${normalizedQuery}%`;
 
       const fileTokenFilter = or(...tokenPatterns.map((p) => ilike(repoFile.path, p)))!;
       const symbolTokenFilter = or(...tokenPatterns.map((p) => ilike(repoSymbol.displayName, p)))!;
@@ -65,6 +83,24 @@ export function createSearchService(database: Database) {
       const fileTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoFile.path}))`, trgmThreshold);
       const symbolTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoSymbol.displayName}))`, trgmThreshold);
       const exportTrgmFilter = gt(sql<number>`word_similarity(${normalizedQuery}, lower(${repoExport.exportName}))`, trgmThreshold);
+      const fileSearchOrder = sql<number>`case
+        when lower(${repoFile.path}) = ${normalizedQuery} then 0
+        when lower(${repoFile.path}) like ${exactPattern} then 1
+        when word_similarity(${normalizedQuery}, lower(${repoFile.path})) > ${trgmThreshold} then 2
+        else 3
+      end`;
+      const symbolSearchOrder = sql<number>`case
+        when lower(${repoSymbol.displayName}) = ${normalizedQuery} then 0
+        when lower(${repoSymbol.displayName}) like ${exactPattern} then 1
+        when word_similarity(${normalizedQuery}, lower(${repoSymbol.displayName})) > ${trgmThreshold} then 2
+        else 3
+      end`;
+      const exportSearchOrder = sql<number>`case
+        when lower(${repoExport.exportName}) = ${normalizedQuery} then 0
+        when lower(${repoExport.exportName}) like ${exactPattern} then 1
+        when word_similarity(${normalizedQuery}, lower(${repoExport.exportName})) > ${trgmThreshold} then 2
+        else 3
+      end`;
 
       const [fileMatches, symbolMatches, exportMatches] = await Promise.all([
         database
@@ -76,8 +112,8 @@ export function createSearchService(database: Database) {
           })
           .from(repoFile)
           .where(and(eq(repoFile.projectImportId, projectImportId), or(fileTokenFilter, fileTrgmFilter)))
-          .orderBy(asc(repoFile.path))
-          .limit(50),
+          .orderBy(fileSearchOrder, asc(repoFile.path))
+          .limit(100),
         database
           .select({
             id: repoSymbol.id,
@@ -94,8 +130,8 @@ export function createSearchService(database: Database) {
             or(symbolTokenFilter, symbolTrgmFilter),
             symbolKinds && symbolKinds.length > 0 ? inArray(repoSymbol.kind, symbolKinds) : undefined,
           ))
-          .orderBy(asc(repoSymbol.displayName))
-          .limit(50),
+          .orderBy(symbolSearchOrder, asc(repoSymbol.displayName))
+          .limit(100),
         database
           .select({
             id: repoExport.id,
@@ -110,8 +146,8 @@ export function createSearchService(database: Database) {
           })
           .from(repoExport)
           .where(and(eq(repoExport.projectImportId, projectImportId), or(exportTokenFilter, exportTrgmFilter)))
-          .orderBy(asc(repoExport.exportName))
-          .limit(50),
+          .orderBy(exportSearchOrder, asc(repoExport.exportName))
+          .limit(100),
       ]);
 
       const allSymbolIds = [...new Set([

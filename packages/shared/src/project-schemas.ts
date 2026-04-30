@@ -118,6 +118,11 @@ export const projectMapSearchQuerySchema = z.object({
   ),
 });
 
+export const projectMapInsightsQuerySchema = z.object({
+  file: z.string().trim().min(1).max(2000).optional(),
+  symbol: z.string().trim().min(1).max(255).optional(),
+});
+
 export const projectImportCompareQuerySchema = z.object({
   base: z.uuid(),
   head: z.uuid(),
@@ -161,6 +166,9 @@ export type ProjectFileContentQuery = z.infer<
   typeof projectFileContentQuerySchema
 >;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
+export type ProjectMapInsightsQuery = z.infer<
+  typeof projectMapInsightsQuerySchema
+>;
 export type ProjectImportCompareQuery = z.infer<
   typeof projectImportCompareQuerySchema
 >;

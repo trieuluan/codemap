@@ -1,7 +1,11 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import type { Project, ProjectImport, ProjectMapSnapshot } from "@/features/projects/api";
+import type {
+  Project,
+  ProjectImport,
+  ProjectMapSnapshot,
+} from "@/features/projects/api";
 import { cn } from "@/lib/utils";
 import {
   formatProjectImportAnalysisCount,
@@ -56,7 +60,7 @@ function ImportAnalysisSummary({
   const stats = getProjectImportAnalysisStats(latestImport);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {[
         {
           label: "Total files",
@@ -74,6 +78,10 @@ function ImportAnalysisSummary({
           label: "Dependencies found",
           value: formatProjectImportAnalysisCount(stats.dependenciesFound),
         },
+        {
+          label: "Symbols",
+          value: formatProjectImportAnalysisCount(stats.symbols),
+        },
       ].map((item) => (
         <div
           key={item.label}
@@ -82,7 +90,9 @@ function ImportAnalysisSummary({
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {item.label}
           </p>
-          <p className="mt-1 text-lg font-semibold text-foreground">{item.value}</p>
+          <p className="mt-1 text-lg font-semibold text-foreground">
+            {item.value}
+          </p>
         </div>
       ))}
     </div>
@@ -99,7 +109,9 @@ export function ProjectMapStatusBanner({
   mapSnapshot: ProjectMapSnapshot | null;
 }) {
   const latestImport = getLatestProjectImport(imports);
-  const hasCompletedImport = imports.some((item) => item.status === "completed");
+  const hasCompletedImport = imports.some(
+    (item) => item.status === "completed",
+  );
   const hasPreviewableSource = imports.some(
     (item) => item.status === "completed" && item.sourceAvailable,
   );
@@ -125,7 +137,9 @@ export function ProjectMapStatusBanner({
                 latestImport?.errorMessage ||
                 "The latest import did not complete successfully."}
             </p>
-            {latestImport ? <ImportAnalysisSummary latestImport={latestImport} /> : null}
+            {latestImport ? (
+              <ImportAnalysisSummary latestImport={latestImport} />
+            ) : null}
           </div>
         </AlertDescription>
       </Alert>
@@ -170,15 +184,16 @@ export function ProjectMapStatusBanner({
         Analysis ready
         <Badge
           variant="outline"
-          className={cn("capitalize", statusBadgeClassName(latestImport.status))}
+          className={cn(
+            "capitalize",
+            statusBadgeClassName(latestImport.status),
+          )}
         >
           {getProjectImportStatusLabel(latestImport.status)}
         </Badge>
         <Badge
           variant="outline"
-          className={cn(
-            parseStatusBadgeClassName(latestImport.parseStatus),
-          )}
+          className={cn(parseStatusBadgeClassName(latestImport.parseStatus))}
         >
           {getProjectImportParseStatusLabel(latestImport.parseStatus)}
         </Badge>

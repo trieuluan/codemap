@@ -122,6 +122,7 @@ export interface ProjectImportAnalysisStats {
   sourceFiles: number | null;
   parsedFiles: number | null;
   dependenciesFound: number | null;
+  symbols: number | null;
 }
 
 export function getProjectImportAnalysisStats(
@@ -138,12 +139,14 @@ export function getProjectImportAnalysisStats(
     toValidCount(stats?.dependencyCount) ??
     toValidCount(projectImport?.indexedEdgeCount) ??
     null;
+  const symbols = toValidCount(projectImport?.indexedSymbolCount) ?? null;
 
   return {
     totalFiles,
     sourceFiles,
     parsedFiles,
     dependenciesFound,
+    symbols,
   };
 }
 

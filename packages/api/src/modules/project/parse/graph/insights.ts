@@ -3,6 +3,9 @@ import { repoFile, repoImportEdge, repoSymbol } from "../../../../db/schema";
 import type {
   ProjectAnalysisSummary,
   ProjectInsightsCycleCandidate,
+  ProjectInsightsFocusedEdgeFile,
+  ProjectInsightsFocusedFile,
+  ProjectInsightsRecommendation,
   ProjectInsightsSummary,
 } from "../types/repo-parse-graph.types";
 import { buildEntryLikeReason, MONOREPO_ROOT_SEGMENTS, tarjanSCC, toPathBaseName, toTopLevelFolder } from "./utils";
@@ -86,7 +89,10 @@ export function createInsightsService(database: Database) {
       };
     },
 
-    async getProjectInsights(projectImportId: string): Promise<ProjectInsightsSummary> {
+    async getProjectInsights(
+      projectImportId: string,
+      focus?: { file?: string; symbol?: string },
+    ): Promise<ProjectInsightsSummary> {
       const [files, importEdges, symbols] = await Promise.all([
         database.query.repoFile.findMany({
           where: and(eq(repoFile.projectImportId, projectImportId), eq(repoFile.isIgnored, false)),
@@ -104,19 +110,39 @@ export function createInsightsService(database: Database) {
 
       const fileStats = new Map<string, { id: string; path: string; language: string | null; incomingCount: number; outgoingCount: number; isParseable: boolean }>();
       const folderCounts = new Map<string, number>();
+      const languageCounts = new Map<string, number>();
+      const parseStatusCounts = new Map<string, number>();
       const internalAdjacency = new Map<string, Set<string>>();
       const internalEdgeCounts = new Map<string, number>();
+      let unresolvedImportCount = 0;
+      let externalImportCount = 0;
 
       for (const file of files) {
         fileStats.set(file.id, { id: file.id, path: file.path, language: file.language, incomingCount: 0, outgoingCount: 0, isParseable: file.isParseable });
+        parseStatusCounts.set(file.parseStatus, (parseStatusCounts.get(file.parseStatus) ?? 0) + 1);
 
         if (file.isParseable) {
           const topFolder = toTopLevelFolder(file.path, true);
           folderCounts.set(topFolder, (folderCounts.get(topFolder) ?? 0) + 1);
+
+          const language = file.language ?? "Unknown";
+          languageCounts.set(language, (languageCounts.get(language) ?? 0) + 1);
         }
       }
 
       for (const edge of importEdges) {
+        if (!edge.isResolved || edge.resolutionKind === "unresolved") {
+          unresolvedImportCount += 1;
+        }
+
+        if (
+          edge.resolutionKind === "package" ||
+          edge.resolutionKind === "builtin" ||
+          Boolean(edge.targetExternalSymbolKey)
+        ) {
+          externalImportCount += 1;
+        }
+
         if (!edge.targetFileId) continue;
 
         const sourceStats = fileStats.get(edge.sourceFileId);
@@ -270,6 +296,40 @@ export function createInsightsService(database: Database) {
         })
         .slice(0, 12);
 
+      const languageDistribution = Array.from(languageCounts.entries())
+        .map(([language, fileCount]) => ({ language, fileCount }))
+        .sort((left, right) => {
+          if (left.fileCount !== right.fileCount) return right.fileCount - left.fileCount;
+          return left.language.localeCompare(right.language);
+        });
+
+      const parseStatusBreakdown = Array.from(parseStatusCounts.entries())
+        .map(([status, fileCount]) => ({
+          status: status as "parsed" | "skipped" | "too_large" | "binary" | "unsupported" | "error",
+          fileCount,
+        }))
+        .sort((left, right) => {
+          if (left.fileCount !== right.fileCount) return right.fileCount - left.fileCount;
+          return left.status.localeCompare(right.status);
+        });
+
+      const focusedFile = buildFocusedFile({
+        focusFile: focus?.file,
+        focusSymbol: focus?.symbol,
+        fileStats,
+        importEdges,
+        entryLikeFiles,
+        circularDependencyCandidates,
+      });
+
+      const recommendations = buildRecommendations({
+        circularDependencyCandidates,
+        topFilesByImportCount,
+        orphanFiles,
+        parseStatusBreakdown,
+        focusedFile,
+      });
+
       return {
         topFilesByImportCount,
         topFilesByInboundDependencyCount,
@@ -283,6 +343,12 @@ export function createInsightsService(database: Database) {
         orphanFiles,
         entryLikeFiles,
         circularDependencyCandidates,
+        languageDistribution,
+        parseStatusBreakdown,
+        unresolvedImportCount,
+        externalImportCount,
+        focusedFile,
+        recommendations,
         totals: {
           files: files.length,
           sourceFiles: sourceFiles.length,
@@ -293,4 +359,272 @@ export function createInsightsService(database: Database) {
       };
     },
   };
+}
+
+function buildFocusedFile({
+  focusFile,
+  focusSymbol,
+  fileStats,
+  importEdges,
+  entryLikeFiles,
+  circularDependencyCandidates,
+}: {
+  focusFile?: string;
+  focusSymbol?: string;
+  fileStats: Map<
+    string,
+    {
+      id: string;
+      path: string;
+      language: string | null;
+      incomingCount: number;
+      outgoingCount: number;
+      isParseable: boolean;
+    }
+  >;
+  importEdges: Array<{
+    sourceFileId: string;
+    targetFileId: string | null;
+    moduleSpecifier: string;
+    importKind: string;
+    importedNames: string[];
+    isTypeOnly: boolean;
+    isResolved: boolean;
+    resolutionKind: string;
+    sourceFile: { path: string; language: string | null } | null;
+    targetFile: { path: string; language: string | null } | null;
+  }>;
+  entryLikeFiles: Array<{
+    path: string;
+    language: string | null;
+    incomingCount: number;
+    outgoingCount: number;
+    score: number;
+    reason: string;
+  }>;
+  circularDependencyCandidates: ProjectInsightsCycleCandidate[];
+}): ProjectInsightsFocusedFile | null {
+  if (!focusFile) {
+    return null;
+  }
+
+  const stats = Array.from(fileStats.values()).find(
+    (item) => item.path === focusFile,
+  );
+
+  if (!stats) {
+    return null;
+  }
+
+  const entryLike = entryLikeFiles.find((item) => item.path === focusFile);
+  const cycles = circularDependencyCandidates.filter((item) =>
+    item.paths.includes(focusFile),
+  );
+
+  return {
+    path: stats.path,
+    language: stats.language,
+    incomingCount: stats.incomingCount,
+    outgoingCount: stats.outgoingCount,
+    symbolName: focusSymbol ?? null,
+    isOrphan: stats.incomingCount === 0 && stats.outgoingCount === 0,
+    isEntryLike: Boolean(entryLike),
+    entryLikeScore: entryLike?.score ?? null,
+    entryLikeReason: entryLike?.reason ?? null,
+    cycles,
+    directImporters: importEdges
+      .filter((edge) => edge.targetFileId === stats.id && edge.sourceFile)
+      .map((edge) =>
+        toFocusedEdgeFile(edge, edge.sourceFile!, fileStats),
+      )
+      .sort(compareFocusedEdgeFiles)
+      .slice(0, 12),
+    directDependencies: importEdges
+      .filter((edge) => edge.sourceFileId === stats.id && edge.targetFile)
+      .map((edge) =>
+        toFocusedEdgeFile(edge, edge.targetFile!, fileStats),
+      )
+      .sort(compareFocusedEdgeFiles)
+      .slice(0, 12),
+  };
+}
+
+function toFocusedEdgeFile(
+  edge: {
+    moduleSpecifier: string;
+    importKind: string;
+    importedNames: string[];
+    isTypeOnly: boolean;
+    isResolved: boolean;
+    resolutionKind: string;
+  },
+  file: { path: string; language: string | null },
+  fileStats: Map<
+    string,
+    {
+      path: string;
+      incomingCount: number;
+      outgoingCount: number;
+    }
+  >,
+): ProjectInsightsFocusedEdgeFile {
+  const stats = Array.from(fileStats.values()).find(
+    (item) => item.path === file.path,
+  );
+
+  return {
+    path: file.path,
+    language: file.language,
+    incomingCount: stats?.incomingCount ?? 0,
+    outgoingCount: stats?.outgoingCount ?? 0,
+    moduleSpecifier: edge.moduleSpecifier,
+    importKind: edge.importKind,
+    importedNames: edge.importedNames,
+    isTypeOnly: edge.isTypeOnly,
+    isResolved: edge.isResolved,
+    resolutionKind: edge.resolutionKind,
+  };
+}
+
+function compareFocusedEdgeFiles(
+  left: ProjectInsightsFocusedEdgeFile,
+  right: ProjectInsightsFocusedEdgeFile,
+) {
+  return left.path.localeCompare(right.path);
+}
+
+function buildRecommendations({
+  circularDependencyCandidates,
+  topFilesByImportCount,
+  orphanFiles,
+  parseStatusBreakdown,
+  focusedFile,
+}: {
+  circularDependencyCandidates: ProjectInsightsCycleCandidate[];
+  topFilesByImportCount: Array<{ path: string; outgoingCount: number }>;
+  orphanFiles: Array<{ path: string }>;
+  parseStatusBreakdown: Array<{ status: string; fileCount: number }>;
+  focusedFile: ProjectInsightsFocusedFile | null;
+}): ProjectInsightsRecommendation[] {
+  const recommendations: ProjectInsightsRecommendation[] = [];
+  if (focusedFile) {
+    recommendations.push({
+      id: "inspect-focused-file",
+      title: "Inspect focused file relationships",
+      description: `${focusedFile.path} has ${focusedFile.incomingCount} incoming and ${focusedFile.outgoingCount} outgoing internal dependencies.`,
+      severity: "info",
+      action: "inspect_focused_file",
+      href: null,
+    });
+
+    if (focusedFile.isOrphan) {
+      recommendations.push({
+        id: "review-focused-orphan",
+        title: "Review orphan status",
+        description: "This file has no indexed internal importers or dependencies. Confirm whether it is generated, unused, or loaded outside static imports.",
+        severity: "info",
+        action: "review_focused_orphan",
+        href: null,
+      });
+    }
+
+    if (focusedFile.isEntryLike) {
+      recommendations.push({
+        id: "review-focused-entry",
+        title: "Review entry surface",
+        description: focusedFile.entryLikeReason
+          ? `${focusedFile.entryLikeReason}. Check whether its dependencies match the intended app boundary.`
+          : "This file looks like an entry surface. Check whether its dependencies match the intended app boundary.",
+        severity: "info",
+        action: "review_focused_entry",
+        href: null,
+      });
+    }
+
+    if (focusedFile.cycles.length > 0) {
+      recommendations.push({
+        id: "review-focused-cycle",
+        title: "Review focused cycle",
+        description: `${focusedFile.cycles.length} cycle candidate${focusedFile.cycles.length === 1 ? "" : "s"} include this file. Start by inspecting direct imports around this node.`,
+        severity: "critical",
+        action: "review_focused_cycle",
+        href: null,
+      });
+    }
+
+    if (focusedFile.outgoingCount >= 8) {
+      recommendations.push({
+        id: "inspect-focused-fan-out",
+        title: "Inspect focused file fan-out",
+        description: `This file imports ${focusedFile.outgoingCount} internal files and may be coordinating too many responsibilities.`,
+        severity: "warning",
+        action: "inspect_focused_fan_out",
+        href: null,
+      });
+    }
+
+    if (focusedFile.incomingCount >= 8) {
+      recommendations.push({
+        id: "inspect-focused-dependents",
+        title: "Inspect focused file dependents",
+        description: `${focusedFile.incomingCount} internal files depend on this file. Review callers before changing its public surface.`,
+        severity: "warning",
+        action: "inspect_focused_dependents",
+        href: null,
+      });
+    }
+
+    return recommendations.slice(0, 4);
+  }
+
+  const parseProblemCount = parseStatusBreakdown
+    .filter((item) => item.status !== "parsed" && item.status !== "skipped")
+    .reduce((total, item) => total + item.fileCount, 0);
+
+  if (circularDependencyCandidates.length > 0) {
+    recommendations.push({
+      id: "review-cycles",
+      title: "Review circular dependencies",
+      description: `${circularDependencyCandidates.length} cycle candidate${circularDependencyCandidates.length === 1 ? "" : "s"} found. Start with direct cycles before larger SCCs.`,
+      severity: "critical",
+      action: "review_cycles",
+      href: null,
+    });
+  }
+
+  const highFanOut = topFilesByImportCount[0];
+  if (highFanOut && highFanOut.outgoingCount >= 8) {
+    recommendations.push({
+      id: "inspect-high-fan-out",
+      title: "Inspect high fan-out files",
+      description: `${highFanOut.path} imports ${highFanOut.outgoingCount} internal files and may be doing too much.`,
+      severity: "warning",
+      action: "inspect_high_fan_out",
+      href: null,
+    });
+  }
+
+  if (orphanFiles.length > 0) {
+    recommendations.push({
+      id: "inspect-orphans",
+      title: "Inspect orphan files",
+      description: `${orphanFiles.length} parseable file${orphanFiles.length === 1 ? "" : "s"} in the top orphan list have no internal dependency edges.`,
+      severity: "info",
+      action: "inspect_orphans",
+      href: null,
+    });
+  }
+
+  if (parseProblemCount > 0) {
+    recommendations.push({
+      id: "review-parse-quality",
+      title: "Review parse quality",
+      description: `${parseProblemCount} file${parseProblemCount === 1 ? "" : "s"} were indexed with a non-ideal parse status.`,
+      severity: "warning",
+      action: "review_parse_quality",
+      href: null,
+    });
+  }
+
+  return recommendations.slice(0, 4);
 }

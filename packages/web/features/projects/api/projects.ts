@@ -127,11 +127,18 @@ export function createServerProjectsApi(
       );
     },
 
-    getProjectInsights: async (projectId: string) => {
+    getProjectInsights: async (
+      projectId: string,
+      options?: { file?: string; symbol?: string },
+    ) => {
       return requestApi<ProjectMapInsightsResponse>(
         `/projects/${projectId}/map/insights`,
         {
           cookieHeader: defaults.cookieHeader,
+          queryParams: {
+            file: options?.file,
+            symbol: options?.symbol,
+          },
         },
       );
     },

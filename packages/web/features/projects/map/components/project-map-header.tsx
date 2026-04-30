@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart2, Network, Search, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,7 +31,6 @@ export function ProjectMapHeader({
   importId?: string | null;
   parseStatus?: ProjectImportParseStatus | null;
 }) {
-  const router = useRouter();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -46,12 +44,6 @@ export function ProjectMapHeader({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const navigateToFile = (filePath: string) => {
-    router.push(
-      `/projects/${projectId}/explorer?path=${encodeURIComponent(filePath)}`,
-    );
-  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -101,9 +93,6 @@ export function ProjectMapHeader({
         projectId={projectId}
         importId={importId}
         parseStatus={parseStatus}
-        onSelectFile={(item) => navigateToFile(item.path)}
-        onSelectSymbol={(item) => navigateToFile(item.filePath)}
-        onSelectExport={(item) => navigateToFile(item.filePath)}
       />
     </div>
   );
