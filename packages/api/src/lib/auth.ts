@@ -1,7 +1,9 @@
+import { eq } from "drizzle-orm";
 import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "../db";
+import { role, userRole } from "../db/schema";
 
 function getApiKeyFromHeaders(headers?: Headers | null) {
   const apiKeyHeader = headers?.get("x-api-key")?.trim();
@@ -42,6 +44,23 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          const userRoleRecord = await db.query.role.findFirst({
+            where: eq(role.name, "user"),
+          });
+          if (!userRoleRecord) return;
+          await db
+            .insert(userRole)
+            .values({ userId: user.id, roleId: userRoleRecord.id })
+            .onConflictDoNothing();
+        },
+      },
+    },
   },
 
   plugins: [

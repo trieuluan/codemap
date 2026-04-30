@@ -16,23 +16,18 @@ const seedEnvSchema = z.object({
 });
 
 const ADMIN_ROLE_NAME = "admin";
+const USER_ROLE_NAME = "user";
 
-async function ensureAdminRole() {
+async function ensureRole(name: string, description: string) {
   const existingRole = await db.query.role.findFirst({
-    where: eq(role.name, ADMIN_ROLE_NAME),
+    where: eq(role.name, name),
   });
 
-  if (existingRole) {
-    return existingRole;
-  }
+  if (existingRole) return existingRole;
 
   const [createdRole] = await db
     .insert(role)
-    .values({
-      id: randomUUID(),
-      name: ADMIN_ROLE_NAME,
-      description: "Bootstrap system administrator role",
-    })
+    .values({ id: randomUUID(), name, description })
     .returning();
 
   return createdRole;
@@ -71,7 +66,11 @@ async function ensureAdminRoleAssignment(userId: string, roleId: string) {
 async function main() {
   const env = seedEnvSchema.parse(process.env);
 
-  const adminRole = await ensureAdminRole();
+  const [adminRole] = await Promise.all([
+    ensureRole(ADMIN_ROLE_NAME, "System administrator"),
+    ensureRole(USER_ROLE_NAME, "Regular authenticated user"),
+  ]);
+
   const adminUser = await ensureAdminUser(
     env.ADMIN_NAME,
     env.ADMIN_EMAIL,
