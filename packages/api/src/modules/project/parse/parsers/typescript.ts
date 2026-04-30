@@ -357,16 +357,19 @@ function extractSymbolsWithAst(
   ) {
     const body = fnNode.body;
 
-    // Extract inner function declarations defined inside the factory body (private helpers)
+    // Extract inner function declarations defined inside the factory body (private helpers).
+    // Use line number as disambiguator so two factories in the same file can have
+    // identically-named helpers without a localKey collision.
     const blockBody = body && "statements" in body ? (body as ts.Block) : null;
     if (blockBody) {
       for (const stmt of blockBody.statements) {
         if (ts.isFunctionDeclaration(stmt) && stmt.name) {
           const name = stmt.name.text;
           const { line, col } = getLineCol(sourceFile, stmt.getStart(sourceFile));
+          const uniqueName = `${name}@${line}`;
           symbols.push({
-            localKey: buildLocalSymbolKey(file.path, "function", `${parentLocalKey}__${name}`),
-            stableKey: buildStableSymbolKey(file.path, "function", `${parentLocalKey}__${name}`, line),
+            localKey: buildLocalSymbolKey(file.path, "function", uniqueName),
+            stableKey: buildStableSymbolKey(file.path, "function", uniqueName, line),
             displayName: name,
             kind: "function",
             language: file.language!,
