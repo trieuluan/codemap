@@ -63,5 +63,26 @@ export function createSettingsController(fastify: FastifyInstance) {
         apiKey,
       });
     },
+
+    revokeCurrentApiKey: async (request: FastifyRequest, reply: FastifyReply) => {
+      const token =
+        (request.headers["x-api-key"] as string | undefined) ??
+        (request.headers.authorization?.startsWith("Bearer ")
+          ? request.headers.authorization.slice(7)
+          : undefined);
+
+      if (!token) {
+        throw fastify.httpErrors.unauthorized("No API key provided");
+      }
+
+      const apiKey = await service.revokeCurrentApiKey(token);
+
+      if (!apiKey) {
+        // Key not found or already revoked — treat as success so logout is idempotent
+        return reply.success({ revoked: true, apiKey: null });
+      }
+
+      return reply.success({ revoked: true, apiKey });
+    },
   };
 }

@@ -8,13 +8,17 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   BarChart2,
+  BookOpen,
   Clock,
   ExternalLink,
+  FileCode2,
+  GitBranch,
   History,
   Loader2,
   Network,
   Pencil,
   RefreshCcw,
+  Share2,
   Trash2,
   Workflow,
 } from "lucide-react";
@@ -28,16 +32,28 @@ import {
   triggerProjectImport,
   type Project,
   type ProjectImport,
+  type ProjectImportParseStatus,
 } from "@/features/projects/api";
 import { ProjectStatusBadge } from "../components/project-status-badge";
 import { ProjectVisibilityBadge } from "../components/project-visibility-badge";
-import { getProjectRepositoryLabel } from "../utils/project-helpers";
+import {
+  formatProjectImportAnalysisCount,
+  getProjectImportAnalysisStats,
+  getProjectImportParseStatusLabel,
+  getProjectRepositoryLabel,
+} from "../utils/project-helpers";
 import { LocalProjectDate } from "../components/local-project-date";
 import { ProjectImportStatusBadge } from "../components/project-import-status-badge";
 import { DeleteProjectDialog } from "../list/components/delete-project-dialog";
 import { EditProjectDialog } from "./components/edit-project-dialog";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
+
+// Fix #5: local_workspace không có repositoryUrl nhưng vẫn có thể re-import
+function canTriggerImport(project: Project) {
+  return Boolean(project.repositoryUrl) || project.provider === "local_workspace";
+}
 
 export function ProjectOverview({
   initialProject,
@@ -75,7 +91,6 @@ export function ProjectOverview({
 
   type ImportPage = { data: ProjectImport[]; nextCursor: string | null };
 
-  // SWR Infinite — cursor-based pagination
   const {
     data: pages,
     size,
@@ -104,12 +119,8 @@ export function ProjectOverview({
         },
       ],
       refreshInterval: (data: ImportPage[] | undefined): number => {
-        const latestStatus = data?.[0]?.data[0]?.status;
-        return latestStatus === "pending" ||
-          latestStatus === "queued" ||
-          latestStatus === "running"
-          ? 3000
-          : 0;
+        const s = data?.[0]?.data[0]?.status;
+        return s === "pending" || s === "queued" || s === "running" ? 3000 : 0;
       },
     },
   );
@@ -117,9 +128,20 @@ export function ProjectOverview({
   const allImports = pages?.flatMap((p) => p.data) ?? [];
   const hasMore = Boolean(pages?.[pages.length - 1]?.nextCursor);
   const latestImport = allImports[0] ?? null;
-  const canImport = Boolean(project.repositoryUrl);
+  const canImport = canTriggerImport(project);
   const hasImports = allImports.length > 0;
   const isImporting = project.status === "importing";
+
+  // Fix #2: stats từ latest completed import
+  const latestCompletedImport =
+    allImports.find((imp) => imp.status === "completed") ?? null;
+  const analysisStats = getProjectImportAnalysisStats(latestCompletedImport);
+  const hasStats =
+    latestCompletedImport !== null &&
+    (analysisStats.totalFiles !== null ||
+      analysisStats.sourceFiles !== null ||
+      analysisStats.parsedFiles !== null ||
+      analysisStats.dependenciesFound !== null);
 
   const importLabel = isImporting
     ? "Importing..."
@@ -129,7 +151,6 @@ export function ProjectOverview({
         ? "Re-import"
         : "Import";
 
-  // Intersection observer — load next page when sentinel is visible
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -254,20 +275,93 @@ export function ProjectOverview({
         </div>
       </div>
 
+      {/* Fix #1: Onboarding banner khi chưa có import */}
+      {!hasImports && !isImporting ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background">
+              <BookOpen className="size-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="font-medium">Get started with your first import</p>
+                <p className="text-sm text-muted-foreground">
+                  Import your repository to start exploring the codebase — file
+                  structure, dependency graph, symbols, and insights will be
+                  available once the import completes.
+                </p>
+              </div>
+              {canImport ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={handleImport} disabled={isImportPending}>
+                    <RefreshCcw className="size-3.5" />
+                    Start first import
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    Add a repository URL first —
+                  </p>
+                  <EditProjectDialog
+                    project={project}
+                    onUpdated={revalidateProjectDetail}
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        <Pencil className="size-3.5" />
+                        Edit project
+                      </Button>
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Fix #2: Stats cards khi có completed import */}
+      {hasStats ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard
+            icon={FileCode2}
+            label="Total files"
+            value={formatProjectImportAnalysisCount(analysisStats.totalFiles)}
+          />
+          <StatCard
+            icon={FileCode2}
+            label="Source files"
+            value={formatProjectImportAnalysisCount(analysisStats.sourceFiles)}
+          />
+          <StatCard
+            icon={BookOpen}
+            label="Parsed files"
+            value={formatProjectImportAnalysisCount(analysisStats.parsedFiles)}
+          />
+          <StatCard
+            icon={Share2}
+            label="Dependencies"
+            value={formatProjectImportAnalysisCount(analysisStats.dependenciesFound)}
+          />
+        </div>
+      ) : null}
+
       {/* Body */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Import list */}
         <div className="rounded-lg border border-border/70 bg-card">
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-3">
             <p className="text-sm font-medium">Imports</p>
-            <span className="text-xs text-muted-foreground">
-              {allImports.length} loaded
-            </span>
+            {allImports.length > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {allImports.length} loaded
+              </span>
+            ) : null}
           </div>
 
-          {allImports.length === 0 ? (
+          {allImports.length === 0 && !isImporting ? (
             <p className="px-5 py-8 text-sm text-muted-foreground">
-              No imports yet. Run the first import to start indexing this repository.
+              No imports yet.
             </p>
           ) : (
             <ul className="divide-y divide-border/70">
@@ -277,7 +371,6 @@ export function ProjectOverview({
             </ul>
           )}
 
-          {/* Infinity scroll sentinel */}
           <div ref={sentinelRef} className="h-1" />
 
           {isValidating && size > 1 ? (
@@ -294,7 +387,7 @@ export function ProjectOverview({
           ) : null}
         </div>
 
-        {/* Metadata */}
+        {/* Sidebar */}
         <div className="space-y-4">
           {/* Latest import summary */}
           {latestImport ? (
@@ -308,20 +401,37 @@ export function ProjectOverview({
                   </Badge>
                 ) : null}
               </div>
+
+              {/* Fix #4: parse status */}
+              {latestImport.status === "completed" ? (
+                <ParseStatusRow parseStatus={latestImport.parseStatus} />
+              ) : null}
+
               <div className="space-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Clock className="size-3" />
                   Started{" "}
-                  <LocalProjectDate value={latestImport.startedAt} className="text-foreground" />
+                  <LocalProjectDate
+                    value={latestImport.startedAt}
+                    className="text-foreground"
+                  />
                 </span>
                 {latestImport.completedAt ? (
                   <span className="flex items-center gap-1.5">
                     <Clock className="size-3" />
                     Finished{" "}
-                    <LocalProjectDate value={latestImport.completedAt} className="text-foreground" />
+                    <LocalProjectDate
+                      value={latestImport.completedAt}
+                      className="text-foreground"
+                    />
+                    {/* Duration */}
+                    <span className="text-muted-foreground">
+                      ({formatDuration(latestImport.startedAt, latestImport.completedAt)})
+                    </span>
                   </span>
                 ) : null}
               </div>
+
               {latestImport.errorMessage ? (
                 <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
@@ -341,18 +451,25 @@ export function ProjectOverview({
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Branch</dt>
-                <dd className="mt-0.5 font-mono text-xs">{project.defaultBranch || "—"}</dd>
+                <dd className="mt-0.5 font-mono text-xs">
+                  {project.defaultBranch || "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Last imported</dt>
                 <dd className="mt-0.5">
-                  <LocalProjectDate value={project.lastImportedAt} emptyLabel="Never" />
+                  <LocalProjectDate
+                    value={project.lastImportedAt}
+                    emptyLabel="Never"
+                  />
                 </dd>
               </div>
               {project.provider ? (
                 <div>
                   <dt className="text-xs text-muted-foreground">Provider</dt>
-                  <dd className="mt-0.5 capitalize">{project.provider.replace("_", " ")}</dd>
+                  <dd className="mt-0.5 capitalize">
+                    {project.provider.replace("_", " ")}
+                  </dd>
                 </div>
               ) : null}
             </dl>
@@ -384,21 +501,125 @@ export function ProjectOverview({
   );
 }
 
-function ImportRow({ imp }: { imp: ProjectImport & { commitMessage?: string | null } }) {
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
   return (
-    <li className="flex items-center gap-3 px-5 py-3">
-      <ProjectImportStatusBadge status={imp.status} />
-      <div className="min-w-0 flex-1">
-        {imp.branch ? (
-          <span className="font-mono text-xs text-muted-foreground">{imp.branch}</span>
+    <div className="rounded-lg border border-border/70 bg-card p-4 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </div>
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+const parseStatusStyles: Record<string, string> = {
+  completed: "text-emerald-600 dark:text-emerald-400",
+  partial: "text-amber-600 dark:text-amber-400",
+  failed: "text-destructive",
+  running: "text-blue-600 dark:text-blue-400",
+  pending: "text-muted-foreground",
+  queued: "text-muted-foreground",
+};
+
+function ParseStatusRow({ parseStatus }: { parseStatus: ProjectImportParseStatus }) {
+  const label = getProjectImportParseStatusLabel(parseStatus);
+  const colorClass = parseStatusStyles[parseStatus] ?? "text-muted-foreground";
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <BookOpen className="size-3 text-muted-foreground" />
+      <span className="text-muted-foreground">Parse:</span>
+      <span className={cn("font-medium", colorClass)}>{label}</span>
+    </div>
+  );
+}
+
+// Fix #3: ImportRow với parse status, duration, và indexed counts
+function ImportRow({
+  imp,
+}: {
+  imp: ProjectImport & { commitMessage?: string | null };
+}) {
+  const isActive =
+    imp.status === "pending" || imp.status === "queued" || imp.status === "running";
+  const duration =
+    imp.completedAt ? formatDuration(imp.startedAt, imp.completedAt) : null;
+
+  return (
+    <li className="flex items-start gap-3 px-5 py-3">
+      <div className="mt-0.5 shrink-0">
+        <ProjectImportStatusBadge status={imp.status} />
+      </div>
+
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {imp.branch ? (
+            <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+              <GitBranch className="size-3" />
+              {imp.branch}
+            </span>
+          ) : null}
+          {imp.commitMessage ? (
+            <span className="truncate text-xs text-foreground">{imp.commitMessage}</span>
+          ) : null}
+        </div>
+
+        {/* Fix #4: parse status inline */}
+        {imp.status === "completed" && imp.parseStatus ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Parse:</span>
+            <span
+              className={cn(
+                "font-medium",
+                parseStatusStyles[imp.parseStatus] ?? "text-muted-foreground",
+              )}
+            >
+              {getProjectImportParseStatusLabel(imp.parseStatus)}
+            </span>
+            {/* Fix #3: indexed counts */}
+            {imp.parseStatus === "completed" || imp.parseStatus === "partial" ? (
+              <span className="text-muted-foreground">
+                · {imp.indexedFileCount.toLocaleString()} files ·{" "}
+                {imp.indexedSymbolCount.toLocaleString()} symbols
+              </span>
+            ) : null}
+          </div>
         ) : null}
-        {imp.commitMessage ? (
-          <p className="truncate text-sm">{imp.commitMessage}</p>
+
+        {isActive ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            In progress…
+          </div>
         ) : null}
       </div>
-      <div className="shrink-0 text-right text-xs text-muted-foreground">
+
+      <div className="shrink-0 text-right text-xs text-muted-foreground space-y-0.5">
         <LocalProjectDate value={imp.startedAt} />
+        {duration ? (
+          <p className="text-[10px] text-muted-foreground/60">{duration}</p>
+        ) : null}
       </div>
     </li>
   );
+}
+
+function formatDuration(startedAt: string, completedAt: string): string {
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (ms < 0) return "";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
 }

@@ -112,5 +112,15 @@ export function createSettingsService(database: Database) {
 
       return mapApiKeySummary(updatedRecord);
     },
+
+    async revokeCurrentApiKey(token: string) {
+      const [updatedRecord] = await database
+        .update(apikey)
+        .set({ enabled: false })
+        .where(and(eq(apikey.key, token), eq(apikey.enabled, true)))
+        .returning();
+
+      return updatedRecord ? mapApiKeySummary(updatedRecord) : null;
+    },
   };
 }

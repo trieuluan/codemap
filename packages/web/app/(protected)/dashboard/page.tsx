@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { WelcomeSection } from "@/features/dashboard/welcome-section";
 import { StatsSummary } from "@/features/dashboard/stats-summary";
 import { OnboardingCards } from "@/features/dashboard/onboarding-cards";
-import { QuickActions } from "@/features/dashboard/quick-actions";
 import { RecentActivity } from "@/features/dashboard/recent-activity";
 import { GithubConnectCard } from "@/features/github/components/github-connect-card";
 import { GithubOAuthToast } from "@/features/github/components/github-oauth-toast";
@@ -45,7 +44,6 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           <GithubConnectCard />
           <GitlabConnectCard />
-          <QuickActions />
         </div>
       </div>
     </div>

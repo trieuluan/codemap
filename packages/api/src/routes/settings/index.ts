@@ -7,6 +7,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.get("/api-keys", controller.listApiKeys);
   fastify.post("/api-keys", controller.createApiKey);
   fastify.post("/api-keys/:apiKeyId/revoke", controller.revokeApiKey);
+  fastify.post("/api-keys/revoke-current", controller.revokeCurrentApiKey);
 };
 
 export default settingsRoutes;
