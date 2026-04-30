@@ -34,15 +34,9 @@ export type ToolErrorResult = Record<string, unknown> & {
   isError: true;
 };
 
-export type LegacyToolResult = Record<string, unknown> & {
-  content: TextContent[];
-  isError?: boolean;
-};
-
 export type ToolResult<TData extends ToolData = ToolData> =
   | ToolSuccessResult<TData>
-  | ToolErrorResult
-  | LegacyToolResult;
+  | ToolErrorResult;
 
 function toTextContent(content: string): TextContent[] {
   return [{ type: "text", text: content }];
@@ -70,8 +64,8 @@ function toErrorShape(error: unknown): ToolErrorShape {
 }
 
 /** Wraps a string into the MCP text content response shape. */
-export function text(content: string): ToolResult {
-  return { content: toTextContent(content) };
+export function text(content: string): ToolSuccessResult {
+  return success(content, {});
 }
 
 /** Wraps a summary + machine-readable data into the MCP response shape. */

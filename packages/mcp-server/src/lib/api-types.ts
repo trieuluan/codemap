@@ -4,7 +4,6 @@ import type {
   Project,
   ProjectAnalysisSummary,
   ProjectFileBlastRadius,
-  ProjectFileBlastRadiusEntry,
   ProjectFileContent,
   ProjectFileContentKind,
   ProjectFileContentStatus,
@@ -58,7 +57,6 @@ export type SearchSymbolResult = ProjectMapSearchSymbolResult;
 export type SearchExportResult = ProjectMapSearchExportResult;
 export type CodebaseSearchResponse = ProjectMapSearchResponse;
 
-export type BlastRadiusEntry = ProjectFileBlastRadiusEntry;
 export type BlastRadius = ProjectFileBlastRadius;
 
 export type InsightsFileEntry =

@@ -79,3 +79,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.suggest_edit_locations]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.find_usages]
+approval_mode = "approve"

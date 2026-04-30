@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import type { MouseEvent } from "react";
 import { useState, useTransition } from "react";
 import {
