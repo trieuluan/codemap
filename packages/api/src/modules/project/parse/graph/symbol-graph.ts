@@ -191,20 +191,12 @@ export function createSymbolGraphService(database: Database) {
 
       const target = symbols.find((symbol) => symbol.id === targetSummary.id)!;
       const targetOccurrences = occurrenceBySymbolId.get(target.id) ?? [];
-      const targetIncomingRelationships = await database.query.repoSymbolRelationship.findMany({
-        where: and(
-          eq(repoSymbolRelationship.projectImportId, projectImportId),
-          eq(repoSymbolRelationship.toSymbolId, target.id),
-        ),
-        with: { fromSymbol: { with: { file: true } } },
-      });
-      const targetOutgoingRelationships = await database.query.repoSymbolRelationship.findMany({
-        where: and(
-          eq(repoSymbolRelationship.projectImportId, projectImportId),
-          eq(repoSymbolRelationship.fromSymbolId, target.id),
-        ),
-        with: { toSymbol: { with: { file: true } } },
-      });
+      const targetIncomingRelationships = incomingRelationships.filter(
+        (relationship) => relationship.toSymbolId === target.id,
+      );
+      const targetOutgoingRelationships = outgoingRelationships.filter(
+        (relationship) => relationship.fromSymbolId === target.id,
+      );
 
       // Find import edges where importedNames contains this symbol's name —
       // i.e. files that explicitly import this symbol by name

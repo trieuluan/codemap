@@ -14,10 +14,11 @@ type FixtureFile = {
   id: string;
   path: string;
   language: string | null;
+  lineCount: number | null;
 };
 
 function file(id: string, path: string): FixtureFile {
-  return { id, path, language: "TypeScript" };
+  return { id, path, language: "TypeScript", lineCount: 240 };
 }
 
 function fileResult(path: string): ProjectMapSearchFileResult {
@@ -313,5 +314,38 @@ test("edit location ranking demotes generic UI symbols for broad roadmap prompts
     genericItems.every((item) =>
       item.signals.some((signal) => signal === "demoted:generic_symbol"),
     ),
+  );
+});
+
+test("edit location ranking prioritizes concrete domain service over relationship schema matches", () => {
+  const files = [
+    file("f1", "packages/api/src/modules/project/parse/graph/symbol-graph.ts"),
+    file("f2", "packages/api/src/db/relations.ts"),
+    file("f3", "packages/api/src/db/schema/repo-parse-schema.ts"),
+    file("f4", "packages/api/src/modules/project/parse/graph/symbol-usages.ts"),
+  ];
+
+  const ranked = suggestions({
+    query: "optimize symbol graph service to avoid duplicate relationship queries in backend endpoint",
+    files,
+    searchResults: {
+      files: files.map((item) => fileResult(item.path)),
+      symbols: [
+        symbol("s1", "createSymbolGraphService", files[0]!.path),
+        symbol("s2", "repoSymbolRelationshipRelations", files[1]!.path, "variable"),
+        symbol("s3", "repoSymbolRelationship", files[2]!.path, "variable"),
+        symbol("s4", "createSymbolUsagesService", files[3]!.path),
+      ],
+      exports: [
+        exportResult("e1", "createSymbolGraphService", files[0]!.path, "s1"),
+        exportResult("e2", "repoSymbolRelationshipRelations", files[1]!.path, "s2"),
+      ],
+    },
+  });
+
+  assert.equal(ranked[0]?.path, files[0]!.path);
+  assert.ok(
+    ranked.findIndex((item) => item.path === files[0]!.path) <
+      ranked.findIndex((item) => item.path === files[1]!.path),
   );
 });

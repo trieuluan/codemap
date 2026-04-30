@@ -305,6 +305,19 @@ function tokenCoverage(path: string, tokens: string[]) {
   return matchedCount / tokens.length;
 }
 
+function relevantSymbolTokenCoverage(candidate: Candidate, tokens: string[]) {
+  if (tokens.length === 0 || candidate.relevantSymbols.size === 0) return 0;
+
+  let maxMatchedCount = 0;
+  for (const symbol of Array.from(candidate.relevantSymbols.values())) {
+    const symbolTokens = new Set(tokenize(symbol.name));
+    const matchedCount = tokens.filter((token) => symbolTokens.has(token)).length;
+    maxMatchedCount = Math.max(maxMatchedCount, matchedCount);
+  }
+
+  return maxMatchedCount / tokens.length;
+}
+
 function applyBroadMatchCaps(candidate: Candidate, tokens: string[]) {
   const hasDirectSymbolEvidence =
     candidate.signals.has("symbol_match") || candidate.signals.has("export_match");
@@ -317,6 +330,7 @@ function applyBroadMatchCaps(candidate: Candidate, tokens: string[]) {
     candidate.signals.has("file_path_match") &&
     !hasDirectSymbolEvidence &&
     tokenCoverage(candidate.path, tokens) <= 0.35;
+  const symbolCoverage = relevantSymbolTokenCoverage(candidate, tokens);
 
   if (hasOnlyBroadPathEvidence && candidate.signals.has("convention:mcp_tool")) {
     candidate.score = Math.min(candidate.score, 70);
@@ -331,11 +345,17 @@ function applyBroadMatchCaps(candidate: Candidate, tokens: string[]) {
   if (
     hasDirectSymbolEvidence &&
     !hasCoreConvention &&
-    tokenCoverage(candidate.path, tokens) <= 0.2
+    Math.max(tokenCoverage(candidate.path, tokens), symbolCoverage) <= 0.2
   ) {
     candidate.score = Math.min(candidate.score, 78);
     candidate.signals.add("weak_direct_match");
     candidate.reasons.add("weak direct match");
+  }
+
+  if (hasDirectSymbolEvidence && symbolCoverage >= 0.3) {
+    candidate.score += 12;
+    candidate.signals.add("domain_symbol_match");
+    candidate.reasons.add("symbol name covers task domain terms");
   }
 }
 
