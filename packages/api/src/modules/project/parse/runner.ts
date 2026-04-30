@@ -113,6 +113,11 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
 
     const fileRowByPath = new Map(fileRows.map((file) => [file.path, file] as const));
     const filePathSet = new Set(fileRows.map((file) => file.path));
+    const fileIdByPathPrefix = new Map<string, string>();
+    for (const [path, row] of fileRowByPath) {
+      fileIdByPathPrefix.set(path, row.id);
+      fileIdByPathPrefix.set(path.replace(/\.[^/.]+$/, ""), row.id);
+    }
     const symbolDrafts: RepoSymbolInsert[] = [];
     const symbolParentLocalKeyMap = new Map<string, string>(); // localKey → parentLocalKey
     const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
@@ -177,19 +182,21 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         externalSymbols.push(...semantics.externalSymbols);
 
         for (const importEdge of semantics.imports) {
-          const targetFile = importEdge.targetPathText ? fileRowByPath.get(importEdge.targetPathText) : null;
+          const targetFileId = importEdge.targetPathText
+            ? fileIdByPathPrefix.get(importEdge.targetPathText) ?? null
+            : null;
           importEdgeDrafts.push({
             localKey: importEdge.localKey,
             projectImportId: importId,
             sourceFileId: fileRow.id,
-            targetFileId: targetFile?.id ?? null,
+            targetFileId,
             targetPathText: importEdge.targetPathText,
             targetExternalSymbolKey: importEdge.targetExternalSymbolKey,
             moduleSpecifier: importEdge.moduleSpecifier,
             importKind: importEdge.importKind,
             importedNames: importEdge.importedNames,
             isTypeOnly: importEdge.isTypeOnly,
-            isResolved: Boolean(targetFile || importEdge.targetExternalSymbolKey),
+            isResolved: Boolean(targetFileId || importEdge.targetExternalSymbolKey),
             resolutionKind: importEdge.resolutionKind,
             startLine: importEdge.line,
             startCol: importEdge.col,
@@ -291,15 +298,6 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }
 
     // importedSymbols: sourceFileId → (importedName → symbolId) — for cross-file call resolution
-    // built from import edges: if file A imports { foo } from file B, lookup foo in B's symbols
-    // targetPathText may lack extension (e.g. "service.shared" vs "service.shared.ts") — resolve with prefix match
-    const fileIdByPathPrefix = new Map<string, string>();
-    for (const [path, row] of fileRowByPath) {
-      const withoutExt = path.replace(/\.[^/.]+$/, "");
-      fileIdByPathPrefix.set(withoutExt, row.id);
-      fileIdByPathPrefix.set(path, row.id);
-    }
-
     const importedSymbols = new Map<string, Map<string, string>>();
     // namespaceMap: sourceFileId → (namespaceName → targetFileId) — for wildcard import resolution
     const namespaceMap = new Map<string, Map<string, string>>();
