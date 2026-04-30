@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { Check, Zap } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -9,10 +10,78 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { browserWorkspacesApi } from "@/features/workspaces/api";
+import type { WorkspacePlan } from "@/features/workspaces/api/workspaces.types";
 
 const api = browserWorkspacesApi();
+
+const PLAN_CONFIG: Record<
+  WorkspacePlan,
+  {
+    label: string;
+    price: string;
+    description: string;
+    features: string[];
+    highlight: boolean;
+  }
+> = {
+  beta: {
+    label: "Beta",
+    price: "Free",
+    description: "Early access — all limits unlocked during beta.",
+    features: [
+      "Unlimited projects",
+      "Unlimited imports / month",
+      "MCP access",
+      "Private repo imports",
+    ],
+    highlight: false,
+  },
+  developer: {
+    label: "Developer",
+    price: "$19 / mo",
+    description: "For solo developers and small projects.",
+    features: [
+      "20 projects",
+      "200 imports / month",
+      "50 000 files / import",
+      "MCP access",
+      "Private repo imports",
+    ],
+    highlight: false,
+  },
+  team: {
+    label: "Team",
+    price: "$49 / mo",
+    description: "For teams that need unlimited scale.",
+    features: [
+      "Unlimited projects",
+      "Unlimited imports / month",
+      "Unlimited indexed files",
+      "MCP access",
+      "Private repo imports",
+      "Team workspace",
+    ],
+    highlight: true,
+  },
+};
+
+function PlanBadge({ plan }: { plan: WorkspacePlan }) {
+  const colors: Record<WorkspacePlan, string> = {
+    team: "bg-primary text-primary-foreground",
+    developer: "bg-emerald-600 text-white",
+    beta: "bg-muted text-muted-foreground",
+  };
+  return (
+    <Badge className={cn("capitalize", colors[plan])}>
+      {PLAN_CONFIG[plan].label}
+    </Badge>
+  );
+}
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -43,15 +112,104 @@ function UsageRow({
   current: number;
   max: number | null;
 }) {
+  const pct = usagePercent(current, max);
+  const isWarning = max !== null && pct >= 80;
+  const isCritical = max !== null && pct >= 100;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-4 text-sm">
         <span className="text-muted-foreground">{label}</span>
-        <span className="font-mono">
+        <span
+          className={cn(
+            "font-mono",
+            isCritical
+              ? "text-destructive font-semibold"
+              : isWarning
+                ? "text-amber-500"
+                : "",
+          )}
+        >
           {current.toLocaleString()} / {formatLimit(max)}
         </span>
       </div>
-      <Progress value={usagePercent(current, max)} />
+      <Progress
+        value={pct}
+        className={cn(
+          isCritical
+            ? "[&>div]:bg-destructive"
+            : isWarning
+              ? "[&>div]:bg-amber-500"
+              : "",
+        )}
+      />
+    </div>
+  );
+}
+
+function PlanCard({
+  plan,
+  current,
+}: {
+  plan: WorkspacePlan;
+  current: boolean;
+}) {
+  const config = PLAN_CONFIG[plan];
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-5 space-y-4 relative",
+        config.highlight
+          ? "border-primary/50 bg-primary/5"
+          : "border-border/70 bg-card",
+        current && "ring-2 ring-primary",
+      )}
+    >
+      {config.highlight && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <Badge className="bg-primary text-primary-foreground text-xs px-3">
+            Most popular
+          </Badge>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <p className="font-semibold">{config.label}</p>
+          {current && (
+            <Badge variant="outline" className="text-xs border-primary text-primary">
+              Current
+            </Badge>
+          )}
+        </div>
+        <p className="text-2xl font-bold">{config.price}</p>
+        <p className="text-xs text-muted-foreground">{config.description}</p>
+      </div>
+
+      <Separator />
+
+      <ul className="space-y-2">
+        {config.features.map((f) => (
+          <li key={f} className="flex items-center gap-2 text-sm">
+            <Check className="size-3.5 shrink-0 text-emerald-500" />
+            {f}
+          </li>
+        ))}
+      </ul>
+
+      {!current && (
+        <Button
+          size="sm"
+          variant={config.highlight ? "default" : "outline"}
+          className="w-full"
+          asChild
+        >
+          <a href="mailto:hello@codemap.dev?subject=Upgrade%20plan" target="_blank" rel="noreferrer">
+            <Zap className="size-3.5" />
+            Contact us
+          </a>
+        </Button>
+      )}
     </div>
   );
 }
@@ -68,97 +226,122 @@ export function BillingSection() {
   );
 
   const isLoading = workspacesLoading || detailLoading;
+  const currentPlan = detail?.workspace.plan as WorkspacePlan | undefined;
 
   return (
     <>
+      {/* Current plan + usage */}
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div className="space-y-1">
-            <CardTitle>Workspace plan</CardTitle>
-            <CardDescription>
-              Billing provider integration is planned for V2. This page shows
-              the manually assigned workspace plan and current usage.
-            </CardDescription>
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <CardTitle>Current plan</CardTitle>
+              <CardDescription>
+                Your workspace plan and usage for this month.
+              </CardDescription>
+            </div>
+            {currentPlan && <PlanBadge plan={currentPlan} />}
           </div>
-          <Badge variant="secondary">Provider coming later</Badge>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">
-              Loading workspace plan...
+              Loading...
             </div>
           ) : detail ? (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Stat
-                label="Workspace"
-                value={<span className="font-medium">{detail.workspace.name}</span>}
-              />
-              <Stat label="Type" value={<Badge>{detail.workspace.type}</Badge>} />
-              <Stat label="Plan" value={<Badge>{detail.workspace.plan}</Badge>} />
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-3 text-sm">
+                <Stat
+                  label="Workspace"
+                  value={<span className="font-medium">{detail.workspace.name}</span>}
+                />
+                <Stat
+                  label="Private repos"
+                  value={detail.entitlements.privateRepoImports ? "Enabled" : "Disabled"}
+                />
+                <Stat
+                  label="MCP access"
+                  value={detail.entitlements.mcpAccess ? "Enabled" : "Disabled"}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <p className="text-sm font-medium">Usage this month</p>
+                <UsageRow
+                  label="Projects"
+                  current={detail.usage.projectCount}
+                  max={detail.entitlements.maxProjects}
+                />
+                <UsageRow
+                  label="Imports"
+                  current={detail.usage.importsThisMonth}
+                  max={detail.entitlements.maxImportsPerMonth}
+                />
+                <UsageRow
+                  label="Indexed files"
+                  current={detail.usage.indexedFilesThisMonth}
+                  max={detail.entitlements.maxIndexedFilesPerImport}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Stat
+                  label="Symbols indexed"
+                  value={
+                    <span className="font-mono">
+                      {detail.usage.indexedSymbolsThisMonth.toLocaleString()}
+                    </span>
+                  }
+                />
+                <Stat
+                  label="Edges indexed"
+                  value={
+                    <span className="font-mono">
+                      {detail.usage.indexedEdgesThisMonth.toLocaleString()}
+                    </span>
+                  }
+                />
+                <Stat
+                  label="MCP sessions"
+                  value={
+                    <span className="font-mono">
+                      {detail.usage.mcpSessionsCreatedThisMonth.toLocaleString()}
+                    </span>
+                  }
+                />
+              </div>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No workspace found yet. Create a project to initialize your
-              personal workspace.
+              No workspace found yet. Create a project to initialize your personal workspace.
             </div>
           )}
         </CardContent>
       </Card>
 
-      {detail ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Entitlements and usage</CardTitle>
-            <CardDescription>
-              Usage is tracked per workspace for project creation, imports, and
-              indexed graph size.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <UsageRow
-              label="Projects"
-              current={detail.usage.projectCount}
-              max={detail.entitlements.maxProjects}
-            />
-            <UsageRow
-              label="Imports this month"
-              current={detail.usage.importsThisMonth}
-              max={detail.entitlements.maxImportsPerMonth}
-            />
-            <UsageRow
-              label="Indexed files this month"
-              current={detail.usage.indexedFilesThisMonth}
-              max={detail.entitlements.maxIndexedFilesPerImport}
-            />
-            <div className="grid gap-4 pt-2 sm:grid-cols-3">
-              <Stat
-                label="Symbols indexed"
-                value={
-                  <span className="font-mono">
-                    {detail.usage.indexedSymbolsThisMonth.toLocaleString()}
-                  </span>
-                }
+      {/* Upgrade */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Plans</CardTitle>
+          <CardDescription>
+            Compare plans and contact us to upgrade. All plans include full
+            CodeMap features — limits apply per workspace per month.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {(["beta", "developer", "team"] as WorkspacePlan[]).map((plan) => (
+              <PlanCard
+                key={plan}
+                plan={plan}
+                current={currentPlan === plan}
               />
-              <Stat
-                label="Edges indexed"
-                value={
-                  <span className="font-mono">
-                    {detail.usage.indexedEdgesThisMonth.toLocaleString()}
-                  </span>
-                }
-              />
-              <Stat
-                label="MCP sessions"
-                value={
-                  <span className="font-mono">
-                    {detail.usage.mcpSessionsCreatedThisMonth.toLocaleString()}
-                  </span>
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }
