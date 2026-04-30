@@ -1,4 +1,4 @@
-import { requestApi } from "@/lib/api/client";
+import { requestApi, type ApiClientOptions } from "@/lib/api/client";
 import type {
   CreateUserApiKeyInput,
   CreateUserApiKeyResponse,
@@ -7,6 +7,15 @@ import type {
 } from "./settings.types";
 
 export type * from "./settings.types";
+
+export function createServerSettingsApi(defaults: ApiClientOptions = {}) {
+  return {
+    listApiKeys: () =>
+      requestApi<ListUserApiKeysResponse>("/settings/api-keys", {
+        cookieHeader: defaults.cookieHeader,
+      }),
+  };
+}
 
 export function browserSettingsApi() {
   return {

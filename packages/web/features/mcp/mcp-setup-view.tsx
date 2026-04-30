@@ -8,8 +8,11 @@ import {
   CheckCircle2,
   ChevronRight,
   Copy,
+  GitBranch,
   KeyRound,
   MonitorCheck,
+  Network,
+  RefreshCcw,
   Sparkles,
   Terminal,
 } from "lucide-react";
@@ -19,8 +22,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CreateApiKeyDialog } from "@/features/settings/components/create-api-key-dialog";
 import { browserSettingsApi } from "@/features/settings/api";
+import { browserProjectsApi } from "@/features/projects/api";
 
 const api = browserSettingsApi();
+const projectsApi = browserProjectsApi;
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -88,6 +93,9 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { data: apiKeys, mutate } = useSWR("settings-api-keys", () =>
     api.listApiKeys(),
   );
+  const { data: projects } = useSWR("mcp-setup-projects", () =>
+    projectsApi.getProjects({ include: ["latestImport"] }),
+  );
 
   const activeKeys =
     apiKeys?.filter(
@@ -98,6 +106,23 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   const mcpKeys = activeKeys.filter((k) => k.metadata?.client === "mcp");
   const isConnected = mcpKeys.length > 0;
+  const hasProjects = (projects?.length ?? 0) > 0;
+  const readyProject = projects?.find(
+    (project) =>
+      project.status === "ready" &&
+      project.latestImport?.status === "completed" &&
+      project.latestImport.parseStatus === "completed",
+  );
+  const activeImportProject = projects?.find(
+    (project) =>
+      project.status === "importing" ||
+      project.latestImport?.status === "pending" ||
+      project.latestImport?.status === "queued" ||
+      project.latestImport?.status === "running" ||
+      project.latestImport?.parseStatus === "queued" ||
+      project.latestImport?.parseStatus === "running",
+  );
+  const hasReadyProject = Boolean(readyProject);
 
   const claudeDesktopConfig = JSON.stringify(
     {
@@ -130,8 +155,11 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">API & MCP</h1>
         <p className="text-sm text-muted-foreground">
-          Connect CodeMap to your AI tool in two steps. Authentication is fully
-          automatic — no API key copy-paste needed.
+          Connect CodeMap to your AI tool, link a project, and wait for the
+          index before asking for codebase context.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          API endpoint: <span className="font-mono text-foreground">{apiBaseUrl}</span>
         </p>
       </div>
 
@@ -172,8 +200,8 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
         {/* Step 1: Add to AI tool */}
         <Step number={1} title="Add CodeMap to your AI tool" done={isConnected}>
           <p className="text-sm text-muted-foreground">
-            Add the config below to your AI tool. No API key needed here —
-            authentication happens automatically in step 2.
+            Add the config below to your AI tool. No API key is needed here —
+            authentication happens from the AI tool in the next step.
           </p>
 
           <Tabs defaultValue="claude">
@@ -278,29 +306,121 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
           )}
         </Step>
 
-        {/* Step 3: Use */}
-        <Step number={3} title="Start exploring" done={isConnected}>
+        {/* Step 3: Link project */}
+        <Step number={3} title="Create or link the current project" done={hasProjects}>
           <p className="text-sm text-muted-foreground">
-            Once connected, CodeMap gives your AI tool full visibility into your
-            codebase. Try:
+            Project setup happens in your AI tool. From your repository
+            workspace, ask it to create or link the CodeMap project:
+          </p>
+
+          <div className="space-y-2">
+            {[
+              "Set up CodeMap for this project",
+              "Create a CodeMap project for this workspace",
+              "Get current CodeMap project",
+            ].map((prompt) => (
+              <div
+                key={prompt}
+                className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2"
+              >
+                <span className="flex-1 font-mono text-xs">"{prompt}"</span>
+                <CopyButton text={prompt} />
+              </div>
+            ))}
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            The AI should call{" "}
+            <code className="rounded bg-muted px-1 font-mono text-xs">get_project</code>{" "}
+            first. If no project is linked, it should call{" "}
+            <code className="rounded bg-muted px-1 font-mono text-xs">create_project</code>.
+          </p>
+
+          {hasProjects ? (
+            <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/5 px-3 py-2 text-xs text-success">
+              <GitBranch className="size-3.5 shrink-0" />
+              {projects?.length} project{projects?.length === 1 ? "" : "s"} available.
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/projects">
+                Create from web instead
+                <ChevronRight className="size-3.5" />
+              </Link>
+            </Button>
+          )}
+        </Step>
+
+        {/* Step 4: Import */}
+        <Step number={4} title="Wait for import and parse" done={hasReadyProject}>
+          <p className="text-sm text-muted-foreground">
+            Once the project is linked, the AI should wait until the index is
+            ready before relying on search, symbols, callers, or edit-location
+            suggestions.
+          </p>
+
+          <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+            <RefreshCcw className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              Expected MCP flow:{" "}
+              <code className="font-mono">trigger_reimport</code> when needed,
+              then <code className="font-mono">wait_for_import</code> until
+              completed.
+            </span>
+          </div>
+
+          {hasReadyProject ? (
+            <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/5 px-3 py-2 text-xs text-success">
+              <CheckCircle2 className="size-3.5 shrink-0" />
+              At least one project has a completed semantic index.
+            </div>
+          ) : activeImportProject ? (
+            <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <RefreshCcw className="size-3.5 shrink-0 animate-spin" />
+              Import or parse is currently in progress.
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No ready indexed project detected yet.
+            </p>
+          )}
+        </Step>
+
+        {/* Step 5: Use */}
+        <Step number={5} title="Try the first MCP command" done={isConnected && hasReadyProject}>
+          <p className="text-sm text-muted-foreground">
+            When auth and indexing are ready, ask your AI tool to use CodeMap
+            before opening large files manually.
           </p>
 
           <div className="grid gap-2 sm:grid-cols-2">
             {[
-              { q: "What files handle authentication?", desc: "Codebase search" },
-              { q: "Show me the dependency graph", desc: "Graph & insights" },
-              { q: "Where is UserService defined?", desc: "Symbol lookup" },
-              { q: "Suggest where to add this feature", desc: "Edit locations" },
+              { q: "Get the current CodeMap project", desc: "Project health" },
+              { q: "Search CodeMap for authentication", desc: "Codebase search" },
+              { q: "Suggest edit locations for this task", desc: "Edit locations" },
+              { q: "Find callers for this function", desc: "Symbol callers" },
             ].map(({ q, desc }) => (
               <div
                 key={q}
-                className="rounded-md border border-border/70 bg-muted/20 px-3 py-2.5 space-y-0.5"
+                className="space-y-0.5 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5"
               >
-                <p className="font-mono text-xs">"{q}"</p>
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 font-mono text-xs">"{q}"</p>
+                  <CopyButton text={q} />
+                </div>
                 <p className="text-[10px] text-muted-foreground">{desc}</p>
               </div>
             ))}
           </div>
+
+          {readyProject ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/projects/${readyProject.id}/explorer`}>
+                Open ready project in Explorer
+                <Network className="size-3.5" />
+              </Link>
+            </Button>
+          ) : null}
         </Step>
       </div>
 

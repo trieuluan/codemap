@@ -131,10 +131,18 @@ export function ProjectOverview({
   const canImport = canTriggerImport(project);
   const hasImports = allImports.length > 0;
   const isImporting = project.status === "importing";
+  const latestImportFailed = latestImport?.status === "failed";
+  const latestImportActive =
+    latestImport?.status === "pending" ||
+    latestImport?.status === "queued" ||
+    latestImport?.status === "running" ||
+    latestImport?.parseStatus === "queued" ||
+    latestImport?.parseStatus === "running";
 
   // Fix #2: stats từ latest completed import
   const latestCompletedImport =
     allImports.find((imp) => imp.status === "completed") ?? null;
+  const isReadyToExplore = latestCompletedImport?.parseStatus === "completed";
   const analysisStats = getProjectImportAnalysisStats(latestCompletedImport);
   const hasStats =
     latestCompletedImport !== null &&
@@ -147,9 +155,11 @@ export function ProjectOverview({
     ? "Importing..."
     : isImportPending
       ? "Starting..."
-      : hasImports
-        ? "Re-import"
-        : "Import";
+      : latestImportFailed
+        ? "Retry import"
+        : hasImports
+          ? "Re-import"
+          : "Import project";
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -315,6 +325,89 @@ export function ProjectOverview({
                   />
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {latestImportActive ? (
+        <div className="rounded-lg border border-blue-500/25 bg-blue-500/5 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium">Import in progress</p>
+              <p className="text-sm text-muted-foreground">
+                CodeMap is still importing or parsing this project. Explorer is
+                safest after the latest import completes.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/projects/${project.id}/history`}>
+                <History className="size-3.5" />
+                View history
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {latestImportFailed ? (
+        <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium text-destructive">Latest import failed</p>
+              <p className="text-sm text-muted-foreground">
+                Retry the import after checking repository access, branch, or
+                the latest error in history.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={handleImport}
+                disabled={isImportPending || isImporting || !canImport}
+              >
+                <RefreshCcw className="size-3.5" />
+                Retry import
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/projects/${project.id}/history`}>
+                  <History className="size-3.5" />
+                  View history
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isReadyToExplore ? (
+        <div className="rounded-lg border border-border/70 bg-card p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="font-medium">Index ready</p>
+              <p className="text-sm text-muted-foreground">
+                Open the indexed project in Explorer, Graph, or Insights.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <Link href={`/projects/${project.id}/explorer`}>
+                  <Workflow className="size-3.5" />
+                  Open Explorer
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/projects/${project.id}/graph`}>
+                  <Network className="size-3.5" />
+                  Open Graph
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/projects/${project.id}/insights`}>
+                  <BarChart2 className="size-3.5" />
+                  View Insights
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
