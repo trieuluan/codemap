@@ -63,11 +63,12 @@ export function getWorkspaceEntitlements(
     };
   }
 
+  // beta = unlimited during early access
   return {
     plan,
-    maxProjects: 5,
-    maxImportsPerMonth: 50,
-    maxIndexedFilesPerImport: 20_000,
+    maxProjects: null,
+    maxImportsPerMonth: null,
+    maxIndexedFilesPerImport: null,
     privateRepoImports: true,
     mcpAccess: true,
   };
@@ -288,22 +289,6 @@ export function createWorkspaceService(database: Database) {
         orderBy: [asc(workspaceMember.createdAt)],
       });
 
-      if (memberships.length === 0) {
-        const personal = await ensurePersonalWorkspace(userId);
-        return [
-          {
-            workspace: personal,
-            membership: {
-              workspaceId: personal.id,
-              userId,
-              role: "owner" as const,
-              createdAt: personal.createdAt,
-              updatedAt: personal.updatedAt,
-            },
-          },
-        ];
-      }
-
       return memberships.map((membership) => ({
         workspace: membership.workspace,
         membership,
@@ -368,6 +353,16 @@ export function createWorkspaceService(database: Database) {
         .returning();
 
       return updatedWorkspace ?? null;
+    },
+
+    async setWorkspacePlan(workspaceId: string, plan: WorkspacePlan) {
+      const [updated] = await database
+        .update(workspace)
+        .set({ plan })
+        .where(eq(workspace.id, workspaceId))
+        .returning();
+
+      return updated ?? null;
     },
 
     async listMembers(userId: string, workspaceId: string) {

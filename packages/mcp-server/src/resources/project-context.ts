@@ -117,11 +117,12 @@ function buildContextText(
   lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub OAuth access for GitHub repository imports");
   lines.push("- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage optional GitLab OAuth access (gitlab.com) for GitLab repository imports");
   lines.push("- list_projects — list all accessible projects");
-  lines.push("- get_project — get the current linked project from .codemap/mcp.json; call with no arguments. If no project is linked, call create_project.");
+  lines.push("- get_project — get the current linked project from .codemap/mcp.json; call with no arguments. If no project is linked, call create_project or link_project.");
   lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
   lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
   lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository; call check_github_connection first for private repos");
   lines.push("- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository; call check_gitlab_connection first for private repos");
+  lines.push("- link_project — link the current workspace to an existing CodeMap project; auto-detects by git remote URL, or lists all projects for manual selection; can also update the project's repositoryUrl and defaultBranch from the workspace");
   lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
   lines.push("- get_project_map — browse the full file tree");
   lines.push("- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint (→ get_file ...) showing the optimal include mode to use next");
@@ -220,8 +221,9 @@ function buildContextText(
   lines.push("- Use get_project to confirm the current linked project saved in .codemap/mcp.json; do not pass project_id to get_project.");
   lines.push("- If get_project reports health.nextAction as trigger_reimport, call trigger_reimport and then wait_for_import.");
   lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
-  lines.push("- If get_project reports no linked project, call create_project first; it will create/reuse a project, save the link into .codemap/mcp.json, start import when needed, and then you should call wait_for_import.");
-  lines.push("- Use get_current_workspace_info before create_project when linking the current workspace.");
+  lines.push("- If get_project reports no linked project: call link_project first (no arguments) — it auto-detects by git remote and suggests a match if found, or lists all projects for manual selection. Only call create_project if no suitable project exists yet.");
+  lines.push("- After link_project confirms the link, if the project has no repositoryUrl and the workspace has a git remote, call link_project with update_repo: true to update the project's repositoryUrl and defaultBranch.");
+  lines.push("- Use get_current_workspace_info before create_project or link_project when you need to inspect the local git remote and branch first.");
   lines.push("- Use search_codebase first when you know a specific keyword (function name, class name, file name). Each result includes a read hint (→ get_file ...) — follow it directly instead of calling get_file with content.");
   lines.push("- Use suggest_edit_locations for broad tasks where you do not know which files are relevant. Each suggestion includes a readPlan — always use it to call get_file with the right include mode instead of defaulting to content. Treat results as candidates, not final truth; prefer high-confidence entries.");
   lines.push("- After suggest_edit_locations returns multiple candidates, use get_files to survey all of them in one batch call (outline only), then use get_file with include: [\"symbols\"] to deep-dive the specific file you need to edit.");
@@ -284,10 +286,13 @@ export function registerProjectContextResource(
                 "No CodeMap project is linked to this workspace.",
                 "",
                 "get_project only reads the current project saved in .codemap/mcp.json.",
-                "Next action: call create_project to create or reuse a project for this workspace and save the link.",
+                "Next action: call link_project (no arguments) first — it checks if an existing project matches this workspace by git remote URL and suggests it automatically.",
+                "If no match is found, link_project lists all your projects for manual selection.",
+                "Only call create_project if no suitable project exists yet.",
                 "",
-                "Run one of the following tools to link a project:",
-                "- create_project — recommended for the current local workspace",
+                "Run one of the following tools to link or create a project:",
+                "- link_project — recommended if you already have a project in CodeMap; auto-detects by git remote",
+                "- create_project — recommended for the current local workspace if no project exists yet",
                 "- create_project_from_github — import a GitHub repository when you are not working from the local repo",
                 "",
                 "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions and treat summary text as a human-readable fallback.",

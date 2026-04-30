@@ -1,6 +1,4 @@
 import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
-import { simpleGit } from "simple-git";
-import type { db } from "../../db";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 import { createWorkspaceService } from "../workspace/service";
 import type {
@@ -11,54 +9,21 @@ import type {
   ProjectListInclude,
   UpdateProjectBody,
 } from "./schema";
-
-type Database = typeof db;
-type ProjectImportRecord = typeof projectImport.$inferSelect;
-
-function slugifyProjectName(value: string) {
-  const slug = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return slug || "project";
-}
+import {
+  type Database,
+  type ProjectImportRecord,
+  ensureUniqueSlug as ensureUniqueSlugShared,
+  normalizeLocalWorkspacePath,
+  normalizeRepositoryUrl,
+  slugifyProjectName,
+  withCommitMessages,
+} from "./service.shared";
 
 export function createProjectService(database: Database) {
   const workspaceService = createWorkspaceService(database);
 
-  function normalizeRepositoryUrl(value: string) {
-    return value.trim().replace(/\/+$/, "");
-  }
-
-  function normalizeLocalWorkspacePath(value: string) {
-    return value.trim();
-  }
-
   async function ensureUniqueSlug(slug: string, excludeProjectId?: string) {
-    let candidate = slug;
-    let suffix = 1;
-
-    while (true) {
-      const existing = await database.query.project.findFirst({
-        where: excludeProjectId
-          ? and(eq(project.slug, candidate), ne(project.id, excludeProjectId))
-          : eq(project.slug, candidate),
-        columns: {
-          id: true,
-        },
-      });
-
-      if (!existing) {
-        return candidate;
-      }
-
-      candidate = `${slug}-${suffix}`;
-      suffix += 1;
-    }
+    return ensureUniqueSlugShared(database, slug, excludeProjectId);
   }
 
   async function getAccessibleProject(projectId: string, userId: string) {
@@ -128,48 +93,6 @@ export function createProjectService(database: Database) {
         indexedEdgeCount: importRecord.indexedEdgeCount,
       },
     });
-  }
-
-  async function getCommitMessage(
-    importRecord: ProjectImportRecord,
-    fallbackWorkspacePath?: string | null,
-  ) {
-    if (!importRecord.commitSha) {
-      return null;
-    }
-
-    const workspacePath =
-      importRecord.sourceAvailable && importRecord.sourceWorkspacePath
-        ? importRecord.sourceWorkspacePath
-        : fallbackWorkspacePath;
-
-    if (!workspacePath) return null;
-
-    try {
-      const message = await simpleGit(workspacePath).show([
-        "-s",
-        "--format=%s",
-        importRecord.commitSha,
-      ]);
-      return message.trim() || null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function withCommitMessages(imports: ProjectImportRecord[]) {
-    const fallbackWorkspacePath =
-      imports.find(
-        (importRecord) =>
-          importRecord.sourceAvailable && importRecord.sourceWorkspacePath,
-      )?.sourceWorkspacePath ?? null;
-
-    return Promise.all(
-      imports.map(async (importRecord) => ({
-        ...importRecord,
-        commitMessage: await getCommitMessage(importRecord, fallbackWorkspacePath),
-      })),
-    );
   }
 
   async function getOwnedProjectByGithubSource(

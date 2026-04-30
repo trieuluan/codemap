@@ -11,7 +11,9 @@ import {
   Users,
   Settings,
   HelpCircle,
+  ShieldCheck,
 } from "lucide-react";
+import { useAdminCheck } from "@/features/auth/use-admin-check";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -27,6 +29,7 @@ const secondaryNavigation = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { isAdmin } = useAdminCheck();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
@@ -64,6 +67,20 @@ export function DashboardSidebar() {
         </div>
 
         <div className="mt-auto space-y-1">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                pathname === "/admin" || pathname.startsWith("/admin/")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <ShieldCheck className="size-4" />
+              Admin
+            </Link>
+          )}
           {secondaryNavigation.map((item) => {
             const isActive = pathname === item.href;
             return (

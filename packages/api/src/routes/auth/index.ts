@@ -1,37 +1,8 @@
 import type { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
+import { userRole } from "../../db/schema";
 
 export default async function authRoutes(fastify: FastifyInstance) {
-  //   const authController = buildAuthController(fastify);
-
-  //   fastify.register(async function authRoutes(fastify) {
-
-  //   fastify.post('/register', {
-  //     schema: {
-  //       body: {
-  //         type: 'object',
-  //         properties: {
-  //           email: { type: 'string', format: 'email' },
-  //           password: { type: 'string', minLength: 6 },
-  //           name: { type: 'string', minLength: 1 },
-  //         },
-  //         required: ['email', 'password', 'name'],
-  //       },
-  //     },
-  //   }, authController.register);
-
-  //   fastify.post('/login', {
-  //     schema: {
-  //       body: {
-  //         type: 'object',
-  //         properties: {
-  //           email: { type: 'string', format: 'email' },
-  //           password: { type: 'string', minLength: 6 },
-  //         },
-  //         required: ['email', 'password'],
-  //       },
-  //     },
-  //   }, authController.login);
-
   fastify.get("/me", async (request, reply) => {
     if (!request.session) {
       return reply.code(401).send({
@@ -43,14 +14,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
     }
 
+    const userId = request.session.user.id;
+
+    const assignments = await fastify.db.query.userRole.findMany({
+      where: eq(userRole.userId, userId),
+      with: { role: { columns: { name: true } } },
+    });
+
+    const roles = assignments.map((a) => a.role.name);
+
     return reply.success({
       user: request.session.user,
       session: request.session.session,
+      roles,
     });
   });
-
-  //   fastify.post('/logout', {
-  //     preHandler: fastify.authGuard(),
-  //   }, authController.logout);
-  //   }, { prefix: '/auth' });
 }

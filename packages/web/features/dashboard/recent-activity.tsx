@@ -6,7 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, GitBranch } from "lucide-react";
-import { browserProjectsApi, type ProjectListItem } from "@/features/projects/api";
+import {
+  browserProjectsApi,
+  type ProjectListItem,
+} from "@/features/projects/api";
 
 function useRecentActivity() {
   return useSWR("dashboard-activity", () =>
@@ -16,8 +19,12 @@ function useRecentActivity() {
 
 function buildActivities(projects: ProjectListItem[]) {
   return projects
-    .filter((p): p is ProjectListItem & { latestImport: NonNullable<ProjectListItem["latestImport"]> } =>
-      p.latestImport != null,
+    .filter(
+      (
+        p,
+      ): p is ProjectListItem & {
+        latestImport: NonNullable<ProjectListItem["latestImport"]>;
+      } => p.latestImport != null,
     )
     .map((p) => {
       const imp = p.latestImport;
@@ -26,9 +33,11 @@ function buildActivities(projects: ProjectListItem[]) {
         ? formatDistanceToNow(completedAt, { addSuffix: true })
         : "recently";
       const statusLabel =
-        imp.status === "completed" ? "completed"
-        : imp.status === "failed" ? "failed"
-        : "in progress";
+        imp.status === "completed"
+          ? "completed"
+          : imp.status === "failed"
+            ? "failed"
+            : "in progress";
       return {
         id: imp.id,
         message: `Import ${statusLabel} for ${p.name}`,
@@ -68,7 +77,12 @@ export function RecentActivity() {
             icon={Activity}
             title="No activity yet"
             description="Your recent activity will appear here once you start using CodeMap."
-          />
+          >
+            <p className="text-center text-sm text-muted-foreground">
+              To get started, create a new project and import your code. Happy
+              coding!
+            </p>
+          </Empty>
         ) : (
           <div className="space-y-4">
             {activities.map((activity) => (
