@@ -18,13 +18,13 @@ import { useAdminCheck } from "@/features/auth/use-admin-check";
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "API", href: "/dashboard/api", icon: Code },
-  { name: "Team", href: "/dashboard/team", icon: Users },
+  { name: "API", href: "/api", icon: Code },
+  { name: "Team", href: "/settings/team", icon: Users },
 ];
 
 const secondaryNavigation = [
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Help", href: "/dashboard/help", icon: HelpCircle },
+  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Help", href: "/help", icon: HelpCircle },
 ];
 
 export function DashboardSidebar() {
@@ -82,7 +82,7 @@ export function DashboardSidebar() {
             </Link>
           )}
           {secondaryNavigation.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.name}

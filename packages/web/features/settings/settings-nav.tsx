@@ -6,10 +6,10 @@ import { CreditCard, KeyRound, Users, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
-  { id: "account", label: "Account", icon: UserRound, href: "/dashboard/settings/account" },
-  { id: "api-keys", label: "API Keys", icon: KeyRound, href: "/dashboard/settings/api-keys" },
-  { id: "team", label: "Team", icon: Users, href: "/dashboard/settings/team" },
-  { id: "billing", label: "Billing", icon: CreditCard, href: "/dashboard/settings/billing" },
+  { id: "account", label: "Account", icon: UserRound, href: "/settings/account" },
+  { id: "api-keys", label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
+  { id: "team", label: "Team", icon: Users, href: "/settings/team" },
+  { id: "billing", label: "Billing", icon: CreditCard, href: "/settings/billing" },
 ];
 
 export function SettingsNav() {
