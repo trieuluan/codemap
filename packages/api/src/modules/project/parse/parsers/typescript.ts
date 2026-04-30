@@ -573,6 +573,17 @@ function extractCallsWithAst(
             : undefined;
         calls.push({ calleeName, namespaceName, line, col, endCol: col + calleeName.length });
       }
+      // don't skip children — call args may contain more references
+    } else if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ts.isIdentifier(node.name) &&
+      !ts.isCallExpression(node.parent)
+    ) {
+      // standalone property access: CACHE_NAMESPACES.projectInsights (not part of a call)
+      const objectName = node.expression.text;
+      const { line, col } = getLineCol(sourceFile, node.expression.getStart(sourceFile));
+      calls.push({ calleeName: objectName, namespaceName: undefined, line, col, endCol: col + objectName.length });
     }
     ts.forEachChild(node, walk);
   }
