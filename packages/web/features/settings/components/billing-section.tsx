@@ -1,7 +1,8 @@
 "use client";
 
 import useSWR from "swr";
-import { useTransition, useRef, useEffect, useState } from "react";
+import { useTransition } from "react";
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Check } from "lucide-react";
 import {
   Card,
@@ -19,19 +20,6 @@ import { browserWorkspacesApi } from "@/features/workspaces/api";
 import { createSubscription, cancelSubscription, listPayments } from "@/features/billing/api";
 import type { WorkspacePlan } from "@/features/workspaces/api/workspaces.types";
 
-declare global {
-  interface Window {
-    paypal?: {
-      Buttons: (options: {
-        style?: Record<string, unknown>;
-        createSubscription: (_data: unknown, actions: { subscription: { create: (opts: { plan_id: string }) => Promise<string> } }) => Promise<string>;
-        onApprove: (data: { subscriptionID: string }) => void;
-        onError: (err: unknown) => void;
-        onCancel: () => void;
-      }) => { render: (el: HTMLElement) => void };
-    };
-  }
-}
 
 const api = browserWorkspacesApi();
 
@@ -153,51 +141,39 @@ function PayPalButton({
   workspaceId: string;
   onSuccess: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
-  const rendered = useRef(false);
 
-  useEffect(() => {
-    if (!window.paypal || !containerRef.current || rendered.current) return;
-    rendered.current = true;
-
-    window.paypal.Buttons({
-      style: { layout: "horizontal", color: "blue", shape: "rect", label: "subscribe", height: 36 },
-      createSubscription: async (_data, actions) => {
+  return (
+    <PayPalButtons
+      style={{ layout: "horizontal", color: "blue", shape: "rect", label: "subscribe", height: 36 }}
+      createSubscription={async () => {
         const { subscriptionId } = await createSubscription({ plan, workspaceId });
-        return actions.subscription.create({ plan_id: subscriptionId });
-      },
-      onApprove: (data) => {
-        startTransition(async () => {
-          toast({ title: "Subscription activated!", description: `Subscription ID: ${data.subscriptionID}` });
-          onSuccess();
-        });
-      },
-      onError: (err) => {
+        return subscriptionId;
+      }}
+      onApprove={async (data: { subscriptionID?: string }) => {
+        toast({ title: "Subscription activated!", description: `ID: ${data.subscriptionID}` });
+        onSuccess();
+      }}
+      onError={(err: unknown) => {
         console.error("PayPal error", err);
         toast({ title: "Payment failed", description: "Please try again.", variant: "destructive" });
-      },
-      onCancel: () => {
+      }}
+      onCancel={() => {
         toast({ title: "Payment cancelled" });
-      },
-    }).render(containerRef.current);
-  }, [plan, workspaceId, onSuccess, toast]);
-
-  return <div ref={containerRef} className={cn("min-h-[40px]", isPending && "opacity-50")} />;
+      }}
+    />
+  );
 }
 
 function PlanCard({
   plan,
   current,
   workspaceId,
-  paypalReady,
   onSubscribed,
 }: {
   plan: WorkspacePlan;
   current: boolean;
   workspaceId?: string;
-  paypalReady: boolean;
   onSubscribed: () => void;
 }) {
   const config = PLAN_CONFIG[plan];
@@ -254,11 +230,7 @@ function PlanCard({
       </ul>
 
       {!current && config.paypalPlanKey && workspaceId ? (
-        paypalReady ? (
-          <PayPalButton plan={config.paypalPlanKey} workspaceId={workspaceId} onSuccess={onSubscribed} />
-        ) : (
-          <div className="h-10 rounded bg-muted animate-pulse" />
-        )
+        <PayPalButton plan={config.paypalPlanKey} workspaceId={workspaceId} onSuccess={onSubscribed} />
       ) : current && plan !== "beta" ? (
         <button
           onClick={handleCancel}
@@ -288,21 +260,6 @@ export function BillingSection() {
   );
 
   const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-  const [paypalReady, setPaypalReady] = useState(false);
-
-  useEffect(() => {
-    if (!paypalClientId || window.paypal) {
-      if (window.paypal) setPaypalReady(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&vault=true&intent=subscription`;
-    script.setAttribute("data-sdk-integration-source", "button-factory");
-    script.onload = () => setPaypalReady(true);
-    document.body.appendChild(script);
-    return () => { document.body.removeChild(script); };
-  }, [paypalClientId]);
-
   const isLoading = workspacesLoading || detailLoading;
   const currentPlan = detail?.workspace.plan as WorkspacePlan | undefined;
 
@@ -310,7 +267,7 @@ export function BillingSection() {
     void mutate();
   }
 
-  return (
+  const content = (
     <>
       {/* Current plan + usage */}
       <Card>
@@ -370,7 +327,6 @@ export function BillingSection() {
                 plan={plan}
                 current={currentPlan === plan}
                 workspaceId={activeWorkspace?.id}
-                paypalReady={paypalReady}
                 onSubscribed={handleSubscribed}
               />
             ))}
@@ -425,5 +381,19 @@ export function BillingSection() {
         </Card>
       )}
     </>
+  );
+
+  if (!paypalClientId) return content;
+
+  return (
+    <PayPalScriptProvider
+      options={{
+        clientId: paypalClientId,
+        vault: true,
+        intent: "subscription",
+      }}
+    >
+      {content}
+    </PayPalScriptProvider>
   );
 }
