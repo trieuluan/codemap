@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { requestApi } from "@/lib/api/client";
+import { DashboardHeader } from "@/features/dashboard/header";
+import { DashboardSidebar } from "@/features/dashboard/sidebar";
 
 interface MeResponse {
   roles: string[];
@@ -22,5 +24,13 @@ export default async function AdminLayout({
     redirect("/dashboard");
   }
 
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-background">
+      <DashboardSidebar />
+      <div className="lg:pl-64">
+        <DashboardHeader />
+        <main className="p-4 lg:p-6">{children}</main>
+      </div>
+    </div>
+  );
 }

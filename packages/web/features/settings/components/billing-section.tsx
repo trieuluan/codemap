@@ -1,7 +1,8 @@
 "use client";
 
 import useSWR from "swr";
-import { Check, Zap } from "lucide-react";
+import { useTransition, useRef, useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -10,12 +11,27 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { browserWorkspacesApi } from "@/features/workspaces/api";
+import { createSubscription, cancelSubscription, listPayments } from "@/features/billing/api";
 import type { WorkspacePlan } from "@/features/workspaces/api/workspaces.types";
+
+declare global {
+  interface Window {
+    paypal?: {
+      Buttons: (options: {
+        style?: Record<string, unknown>;
+        createSubscription: (_data: unknown, actions: { subscription: { create: (opts: { plan_id: string }) => Promise<string> } }) => Promise<string>;
+        onApprove: (data: { subscriptionID: string }) => void;
+        onError: (err: unknown) => void;
+        onCancel: () => void;
+      }) => { render: (el: HTMLElement) => void };
+    };
+  }
+}
 
 const api = browserWorkspacesApi();
 
@@ -27,6 +43,7 @@ const PLAN_CONFIG: Record<
     description: string;
     features: string[];
     highlight: boolean;
+    paypalPlanKey: "developer" | "team" | null;
   }
 > = {
   beta: {
@@ -40,6 +57,7 @@ const PLAN_CONFIG: Record<
       "Private repo imports",
     ],
     highlight: false,
+    paypalPlanKey: null,
   },
   developer: {
     label: "Developer",
@@ -53,6 +71,7 @@ const PLAN_CONFIG: Record<
       "Private repo imports",
     ],
     highlight: false,
+    paypalPlanKey: "developer",
   },
   team: {
     label: "Team",
@@ -67,6 +86,7 @@ const PLAN_CONFIG: Record<
       "Team workspace",
     ],
     highlight: true,
+    paypalPlanKey: "team",
   },
 };
 
@@ -103,15 +123,7 @@ function usagePercent(current: number, max: number | null) {
   return Math.min(100, Math.round((current / max) * 100));
 }
 
-function UsageRow({
-  label,
-  current,
-  max,
-}: {
-  label: string;
-  current: number;
-  max: number | null;
-}) {
+function UsageRow({ label, current, max }: { label: string; current: number; max: number | null }) {
   const pct = usagePercent(current, max);
   const isWarning = max !== null && pct >= 80;
   const isCritical = max !== null && pct >= 100;
@@ -120,56 +132,102 @@ function UsageRow({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-4 text-sm">
         <span className="text-muted-foreground">{label}</span>
-        <span
-          className={cn(
-            "font-mono",
-            isCritical
-              ? "text-destructive font-semibold"
-              : isWarning
-                ? "text-amber-500"
-                : "",
-          )}
-        >
+        <span className={cn("font-mono", isCritical ? "text-destructive font-semibold" : isWarning ? "text-amber-500" : "")}>
           {current.toLocaleString()} / {formatLimit(max)}
         </span>
       </div>
       <Progress
         value={pct}
-        className={cn(
-          isCritical
-            ? "[&>div]:bg-destructive"
-            : isWarning
-              ? "[&>div]:bg-amber-500"
-              : "",
-        )}
+        className={cn(isCritical ? "[&>div]:bg-destructive" : isWarning ? "[&>div]:bg-amber-500" : "")}
       />
     </div>
   );
 }
 
+function PayPalButton({
+  plan,
+  workspaceId,
+  onSuccess,
+}: {
+  plan: "developer" | "team";
+  workspaceId: string;
+  onSuccess: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+  const rendered = useRef(false);
+
+  useEffect(() => {
+    if (!window.paypal || !containerRef.current || rendered.current) return;
+    rendered.current = true;
+
+    window.paypal.Buttons({
+      style: { layout: "horizontal", color: "blue", shape: "rect", label: "subscribe", height: 36 },
+      createSubscription: async (_data, actions) => {
+        const { subscriptionId } = await createSubscription({ plan, workspaceId });
+        return actions.subscription.create({ plan_id: subscriptionId });
+      },
+      onApprove: (data) => {
+        startTransition(async () => {
+          toast({ title: "Subscription activated!", description: `Subscription ID: ${data.subscriptionID}` });
+          onSuccess();
+        });
+      },
+      onError: (err) => {
+        console.error("PayPal error", err);
+        toast({ title: "Payment failed", description: "Please try again.", variant: "destructive" });
+      },
+      onCancel: () => {
+        toast({ title: "Payment cancelled" });
+      },
+    }).render(containerRef.current);
+  }, [plan, workspaceId, onSuccess, toast]);
+
+  return <div ref={containerRef} className={cn("min-h-[40px]", isPending && "opacity-50")} />;
+}
+
 function PlanCard({
   plan,
   current,
+  workspaceId,
+  paypalReady,
+  onSubscribed,
 }: {
   plan: WorkspacePlan;
   current: boolean;
+  workspaceId?: string;
+  paypalReady: boolean;
+  onSubscribed: () => void;
 }) {
   const config = PLAN_CONFIG[plan];
+  const { toast } = useToast();
+  const [isCancelling, startCancel] = useTransition();
+
+  function handleCancel() {
+    if (!workspaceId) return;
+    startCancel(async () => {
+      try {
+        await cancelSubscription(workspaceId);
+        toast({ title: "Subscription cancelled. Plan reset to Beta." });
+        onSubscribed();
+      } catch {
+        toast({ title: "Failed to cancel", variant: "destructive" });
+      }
+    });
+  }
+
   return (
     <div
       className={cn(
         "rounded-lg border p-5 space-y-4 relative",
-        config.highlight
-          ? "border-primary/50 bg-primary/5"
-          : "border-border/70 bg-card",
+        config.highlight ? "border-primary/50 bg-primary/5" : "border-border/70 bg-card",
         current && "ring-2 ring-primary",
       )}
     >
       {config.highlight && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge className="bg-primary text-primary-foreground text-xs px-3">
-            Most popular
-          </Badge>
+          <Badge className="bg-primary text-primary-foreground text-xs px-3">Most popular</Badge>
         </div>
       )}
 
@@ -177,9 +235,7 @@ function PlanCard({
         <div className="flex items-center justify-between">
           <p className="font-semibold">{config.label}</p>
           {current && (
-            <Badge variant="outline" className="text-xs border-primary text-primary">
-              Current
-            </Badge>
+            <Badge variant="outline" className="text-xs border-primary text-primary">Current</Badge>
           )}
         </div>
         <p className="text-2xl font-bold">{config.price}</p>
@@ -197,19 +253,21 @@ function PlanCard({
         ))}
       </ul>
 
-      {!current && (
-        <Button
-          size="sm"
-          variant={config.highlight ? "default" : "outline"}
-          className="w-full"
-          asChild
+      {!current && config.paypalPlanKey && workspaceId ? (
+        paypalReady ? (
+          <PayPalButton plan={config.paypalPlanKey} workspaceId={workspaceId} onSuccess={onSubscribed} />
+        ) : (
+          <div className="h-10 rounded bg-muted animate-pulse" />
+        )
+      ) : current && plan !== "beta" ? (
+        <button
+          onClick={handleCancel}
+          disabled={isCancelling}
+          className="w-full text-xs text-muted-foreground underline underline-offset-2 hover:text-destructive transition-colors disabled:opacity-50"
         >
-          <a href="mailto:hello@codemap.dev?subject=Upgrade%20plan" target="_blank" rel="noreferrer">
-            <Zap className="size-3.5" />
-            Contact us
-          </a>
-        </Button>
-      )}
+          {isCancelling ? "Cancelling…" : "Cancel subscription"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -220,13 +278,37 @@ export function BillingSection() {
     () => api.listWorkspaces(),
   );
   const activeWorkspace = workspaceRows?.[0]?.workspace ?? null;
-  const { data: detail, isLoading: detailLoading } = useSWR(
+  const { data: detail, isLoading: detailLoading, mutate } = useSWR(
     activeWorkspace ? ["settings-billing-workspace", activeWorkspace.id] : null,
     ([, workspaceId]) => api.getWorkspace(workspaceId),
   );
+  const { data: payments } = useSWR(
+    activeWorkspace ? ["billing-payments", activeWorkspace.id] : null,
+    ([, workspaceId]) => listPayments(workspaceId),
+  );
+
+  const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+  const [paypalReady, setPaypalReady] = useState(false);
+
+  useEffect(() => {
+    if (!paypalClientId || window.paypal) {
+      if (window.paypal) setPaypalReady(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&vault=true&intent=subscription`;
+    script.setAttribute("data-sdk-integration-source", "button-factory");
+    script.onload = () => setPaypalReady(true);
+    document.body.appendChild(script);
+    return () => { document.body.removeChild(script); };
+  }, [paypalClientId]);
 
   const isLoading = workspacesLoading || detailLoading;
   const currentPlan = detail?.workspace.plan as WorkspacePlan | undefined;
+
+  function handleSubscribed() {
+    void mutate();
+  }
 
   return (
     <>
@@ -236,81 +318,32 @@ export function BillingSection() {
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <CardTitle>Current plan</CardTitle>
-              <CardDescription>
-                Your workspace plan and usage for this month.
-              </CardDescription>
+              <CardDescription>Your workspace plan and usage for this month.</CardDescription>
             </div>
             {currentPlan && <PlanBadge plan={currentPlan} />}
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">
-              Loading...
-            </div>
+            <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">Loading...</div>
           ) : detail ? (
             <div className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-3 text-sm">
-                <Stat
-                  label="Workspace"
-                  value={<span className="font-medium">{detail.workspace.name}</span>}
-                />
-                <Stat
-                  label="Private repos"
-                  value={detail.entitlements.privateRepoImports ? "Enabled" : "Disabled"}
-                />
-                <Stat
-                  label="MCP access"
-                  value={detail.entitlements.mcpAccess ? "Enabled" : "Disabled"}
-                />
+                <Stat label="Workspace" value={<span className="font-medium">{detail.workspace.name}</span>} />
+                <Stat label="Private repos" value={detail.entitlements.privateRepoImports ? "Enabled" : "Disabled"} />
+                <Stat label="MCP access" value={detail.entitlements.mcpAccess ? "Enabled" : "Disabled"} />
               </div>
-
               <Separator />
-
               <div className="space-y-4">
                 <p className="text-sm font-medium">Usage this month</p>
-                <UsageRow
-                  label="Projects"
-                  current={detail.usage.projectCount}
-                  max={detail.entitlements.maxProjects}
-                />
-                <UsageRow
-                  label="Imports"
-                  current={detail.usage.importsThisMonth}
-                  max={detail.entitlements.maxImportsPerMonth}
-                />
-                <UsageRow
-                  label="Indexed files"
-                  current={detail.usage.indexedFilesThisMonth}
-                  max={detail.entitlements.maxIndexedFilesPerImport}
-                />
+                <UsageRow label="Projects" current={detail.usage.projectCount} max={detail.entitlements.maxProjects} />
+                <UsageRow label="Imports" current={detail.usage.importsThisMonth} max={detail.entitlements.maxImportsPerMonth} />
+                <UsageRow label="Indexed files" current={detail.usage.indexedFilesThisMonth} max={detail.entitlements.maxIndexedFilesPerImport} />
               </div>
-
               <div className="grid gap-4 sm:grid-cols-3">
-                <Stat
-                  label="Symbols indexed"
-                  value={
-                    <span className="font-mono">
-                      {detail.usage.indexedSymbolsThisMonth.toLocaleString()}
-                    </span>
-                  }
-                />
-                <Stat
-                  label="Edges indexed"
-                  value={
-                    <span className="font-mono">
-                      {detail.usage.indexedEdgesThisMonth.toLocaleString()}
-                    </span>
-                  }
-                />
-                <Stat
-                  label="MCP sessions"
-                  value={
-                    <span className="font-mono">
-                      {detail.usage.mcpSessionsCreatedThisMonth.toLocaleString()}
-                    </span>
-                  }
-                />
+                <Stat label="Symbols indexed" value={<span className="font-mono">{detail.usage.indexedSymbolsThisMonth.toLocaleString()}</span>} />
+                <Stat label="Edges indexed" value={<span className="font-mono">{detail.usage.indexedEdgesThisMonth.toLocaleString()}</span>} />
+                <Stat label="MCP sessions" value={<span className="font-mono">{detail.usage.mcpSessionsCreatedThisMonth.toLocaleString()}</span>} />
               </div>
             </div>
           ) : (
@@ -321,27 +354,76 @@ export function BillingSection() {
         </CardContent>
       </Card>
 
-      {/* Upgrade */}
+      {/* Plans */}
       <Card>
         <CardHeader>
           <CardTitle>Plans</CardTitle>
           <CardDescription>
-            Compare plans and contact us to upgrade. All plans include full
-            CodeMap features — limits apply per workspace per month.
+            Upgrade or downgrade your workspace plan. Payments processed via PayPal.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-3">
             {(["beta", "developer", "team"] as WorkspacePlan[]).map((plan) => (
               <PlanCard
                 key={plan}
                 plan={plan}
                 current={currentPlan === plan}
+                workspaceId={activeWorkspace?.id}
+                paypalReady={paypalReady}
+                onSubscribed={handleSubscribed}
               />
             ))}
           </div>
         </CardContent>
       </Card>
+
+      {/* Payment history */}
+      {payments && payments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment history</CardTitle>
+            <CardDescription>Recent payments for this workspace.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/70">
+                    <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Plan</th>
+                    <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Amount</th>
+                    <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Status</th>
+                    <th className="pb-2 text-left text-xs font-medium text-muted-foreground">Provider</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr key={p.id} className="border-b border-border/70 last:border-0">
+                      <td className="py-2 text-muted-foreground">
+                        {new Date(p.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-2 capitalize">{p.plan}</td>
+                      <td className="py-2 font-mono">
+                        {p.amount ? `${p.amount} ${p.currency}` : "—"}
+                      </td>
+                      <td className="py-2">
+                        <Badge
+                          variant={p.status === "completed" ? "default" : "destructive"}
+                          className="text-xs capitalize"
+                        >
+                          {p.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2 capitalize text-muted-foreground">{p.provider}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }
