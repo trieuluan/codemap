@@ -4,6 +4,8 @@ import {
   usageEvent,
   workspace,
   workspaceMember,
+  workspaceSubscription,
+  workspacePayment,
 } from "./schema/workspace-schema";
 import {
   project,
@@ -44,6 +46,27 @@ export const workspaceRelations = relations(workspace, ({ one, many }) => ({
   members: many(workspaceMember),
   projects: many(project),
   usageEvents: many(usageEvent),
+  subscriptions: many(workspaceSubscription),
+  payments: many(workspacePayment),
+}));
+
+export const workspaceSubscriptionRelations = relations(workspaceSubscription, ({ one, many }) => ({
+  workspace: one(workspace, {
+    fields: [workspaceSubscription.workspaceId],
+    references: [workspace.id],
+  }),
+  payments: many(workspacePayment),
+}));
+
+export const workspacePaymentRelations = relations(workspacePayment, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [workspacePayment.workspaceId],
+    references: [workspace.id],
+  }),
+  subscription: one(workspaceSubscription, {
+    fields: [workspacePayment.subscriptionId],
+    references: [workspaceSubscription.id],
+  }),
 }));
 
 export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => ({

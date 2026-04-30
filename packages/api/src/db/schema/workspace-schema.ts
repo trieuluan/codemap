@@ -3,6 +3,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -23,6 +24,27 @@ export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "admin",
   "member",
 ]);
+export const billingProviderEnum = pgEnum("billing_provider", [
+  "paypal",
+  "stripe",
+  "manual",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "cancelled",
+  "past_due",
+  "paused",
+  "trialing",
+]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "completed",
+  "failed",
+  "refunded",
+  "pending",
+]);
+
 export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "project_created",
   "import_triggered",
@@ -78,6 +100,71 @@ export const workspaceMember = pgTable(
     }),
     index("workspace_member_workspace_id_idx").on(table.workspaceId),
     index("workspace_member_user_id_idx").on(table.userId),
+  ],
+);
+
+export const workspaceSubscription = pgTable(
+  "workspace_subscription",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    plan: workspacePlanEnum("plan").notNull(),
+    provider: billingProviderEnum("provider").notNull(),
+    providerSubscriptionId: text("provider_subscription_id"),
+    providerPlanId: text("provider_plan_id"),
+    status: subscriptionStatusEnum("status").notNull(),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelledAt: timestamp("cancelled_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("workspace_subscription_workspace_id_idx").on(table.workspaceId),
+    index("workspace_subscription_provider_subscription_id_idx").on(
+      table.provider,
+      table.providerSubscriptionId,
+    ),
+  ],
+);
+
+export const workspacePayment = pgTable(
+  "workspace_payment",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id").references(
+      () => workspaceSubscription.id,
+      { onDelete: "set null" },
+    ),
+    provider: billingProviderEnum("provider").notNull(),
+    providerOrderId: text("provider_order_id"),
+    providerCaptureId: text("provider_capture_id"),
+    amount: numeric("amount", { precision: 10, scale: 2 }),
+    currency: text("currency").default("USD").notNull(),
+    status: paymentStatusEnum("status").notNull(),
+    plan: workspacePlanEnum("plan").notNull(),
+    metadataJson: jsonb("metadata_json"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("workspace_payment_workspace_id_idx").on(table.workspaceId),
+    index("workspace_payment_subscription_id_idx").on(table.subscriptionId),
+    index("workspace_payment_provider_order_id_idx").on(
+      table.provider,
+      table.providerOrderId,
+    ),
   ],
 );
 

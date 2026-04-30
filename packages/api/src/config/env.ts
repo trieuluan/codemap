@@ -17,6 +17,12 @@ export const envSchema = z.object({
   GITHUB_CLIENT_ID: z.string().trim().min(1).optional(),
   GITHUB_CLIENT_SECRET: z.string().trim().min(1).optional(),
   GITHUB_OAUTH_CALLBACK_URL: z.url().optional(),
+  PAYPAL_CLIENT_ID: z.string().trim().min(1).optional(),
+  PAYPAL_CLIENT_SECRET: z.string().trim().min(1).optional(),
+  PAYPAL_PLAN_ID_DEVELOPER: z.string().trim().min(1).optional(),
+  PAYPAL_PLAN_ID_TEAM: z.string().trim().min(1).optional(),
+  PAYPAL_WEBHOOK_ID: z.string().trim().min(1).optional(),
+  PAYPAL_ENV: z.enum(["sandbox", "live"]).default("sandbox"),
 });
 
 export type Env = z.infer<typeof envSchema>;
