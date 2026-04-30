@@ -574,16 +574,27 @@ function extractCallsWithAst(
         calls.push({ calleeName, namespaceName, line, col, endCol: col + calleeName.length });
       }
       // don't skip children — call args may contain more references
-    } else if (
-      ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      ts.isIdentifier(node.name) &&
-      !ts.isCallExpression(node.parent)
-    ) {
-      // standalone property access: CACHE_NAMESPACES.projectInsights (not part of a call)
+    } else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+      // standalone property access: CACHE_NAMESPACES.foo (not the expression of a call — already handled above)
       const objectName = node.expression.text;
       const { line, col } = getLineCol(sourceFile, node.expression.getStart(sourceFile));
       calls.push({ calleeName: objectName, namespaceName: undefined, line, col, endCol: col + objectName.length });
+    } else if (
+      ts.isIdentifier(node) &&
+      !ts.isPropertyAccessExpression(node.parent) &&
+      !ts.isCallExpression(node.parent) &&
+      !ts.isImportDeclaration(node.parent) &&
+      !ts.isImportSpecifier(node.parent) &&
+      !ts.isVariableDeclaration(node.parent) &&
+      !ts.isParameter(node.parent) &&
+      !ts.isPropertyAssignment(node.parent) &&
+      !ts.isShorthandPropertyAssignment(node.parent) &&
+      !ts.isTypeReferenceNode(node.parent) &&
+      !ts.isExportSpecifier(node.parent)
+    ) {
+      // bare identifier reference: CACHE_PREFIX used standalone (array element, argument, etc.)
+      const { line, col } = getLineCol(sourceFile, node.getStart(sourceFile));
+      calls.push({ calleeName: node.text, namespaceName: undefined, line, col, endCol: col + node.text.length });
     }
     ts.forEachChild(node, walk);
   }
