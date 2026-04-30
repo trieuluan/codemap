@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import {
   Card,
@@ -74,6 +75,7 @@ function getInitials(name: string | null | undefined) {
 }
 
 export function AccountSection() {
+  const router = useRouter();
   const { data: session } = authClient.useSession();
   const user = session?.user;
 
@@ -84,7 +86,14 @@ export function AccountSection() {
   const [productEmails, setProductEmails] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const confirmPhrase = "delete my account";
+
+  async function handleDeleteAccount() {
+    setIsDeleting(true);
+    await authClient.deleteUser();
+    router.push("/auth");
+  }
 
   const displayName = name ?? user?.name ?? "";
   const displayEmail = user?.email ?? "";
@@ -283,14 +292,14 @@ export function AccountSection() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={confirmText !== confirmPhrase}
+              disabled={confirmText !== confirmPhrase || isDeleting}
               className={cn(
                 "bg-destructive text-white hover:bg-destructive/90",
-                confirmText !== confirmPhrase && "pointer-events-none opacity-50",
+                (confirmText !== confirmPhrase || isDeleting) && "pointer-events-none opacity-50",
               )}
-              onClick={() => setConfirmOpen(false)}
+              onClick={handleDeleteAccount}
             >
-              Delete account
+              {isDeleting ? "Deleting…" : "Delete account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
