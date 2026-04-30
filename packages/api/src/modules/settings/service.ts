@@ -84,7 +84,7 @@ export function createSettingsService(database: Database) {
       });
 
       const createdRecord = await database.query.apikey.findFirst({
-        where: eq(apikey.key, createdApiKey.key),
+        where: eq(apikey.id, createdApiKey.id),
       });
 
       if (!createdRecord) {
@@ -114,10 +114,17 @@ export function createSettingsService(database: Database) {
     },
 
     async revokeCurrentApiKey(token: string) {
+      // verifyApiKey hashes the token internally and returns the matched record id
+      const verified = await auth.api.verifyApiKey({
+        body: { key: token },
+      }).catch(() => null);
+
+      if (!verified?.key?.id) return null;
+
       const [updatedRecord] = await database
         .update(apikey)
         .set({ enabled: false })
-        .where(and(eq(apikey.key, token), eq(apikey.enabled, true)))
+        .where(and(eq(apikey.id, verified.key.id), eq(apikey.enabled, true)))
         .returning();
 
       return updatedRecord ? mapApiKeySummary(updatedRecord) : null;

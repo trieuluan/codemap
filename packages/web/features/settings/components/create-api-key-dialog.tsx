@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Copy, KeyRound } from "lucide-react";
+import { Check, Copy, KeyRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +45,8 @@ export function CreateApiKeyDialog({
     null,
   );
   const [nameError, setNameError] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedEnv, setCopiedEnv] = useState(false);
 
   useEffect(() => {
     if (!open && !isPending) {
@@ -93,21 +95,20 @@ export function CreateApiKeyDialog({
     });
   }
 
-  async function handleCopy() {
-    if (!createdKey?.plainTextKey) {
-      return;
-    }
-
+  async function handleCopy(text: string, type: "key" | "env") {
     try {
-      await navigator.clipboard.writeText(createdKey.plainTextKey);
-      toast({
-        title: "API key copied",
-        description: "The new API key has been copied to your clipboard.",
-      });
+      await navigator.clipboard.writeText(text);
+      if (type === "key") {
+        setCopiedKey(true);
+        setTimeout(() => setCopiedKey(false), 2000);
+      } else {
+        setCopiedEnv(true);
+        setTimeout(() => setCopiedEnv(false), 2000);
+      }
     } catch {
       toast({
         title: "Copy failed",
-        description: "Copy the API key manually from the field below.",
+        description: "Copy the value manually from the field below.",
         variant: "destructive",
       });
     }
@@ -127,17 +128,49 @@ export function CreateApiKeyDialog({
             </DialogHeader>
 
             <div className="space-y-4">
-              <div className="rounded-lg border border-border bg-secondary/40 p-4">
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <div className="rounded-lg border border-border bg-secondary/40 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
                   <KeyRound className="size-4" />
-                  New key
+                  New key — copy now, shown once
                 </div>
+
+                {/* Plain key */}
                 <div className="flex gap-2">
-                  <Input value={createdKey.plainTextKey} readOnly />
-                  <Button type="button" variant="outline" onClick={handleCopy}>
-                    <Copy className="mr-2 size-4" />
-                    Copy
+                  <Input value={createdKey.plainTextKey} readOnly className="font-mono text-xs" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleCopy(createdKey.plainTextKey, "key")}
+                    title="Copy key"
+                  >
+                    {copiedKey ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
                   </Button>
+                </div>
+
+                {/* Env snippet */}
+                <div>
+                  <p className="mb-1.5 text-xs text-muted-foreground">
+                    Environment variable snippet:
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={`CODEMAP_API_KEY=${createdKey.plainTextKey}`}
+                      readOnly
+                      className="font-mono text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() =>
+                        handleCopy(`CODEMAP_API_KEY=${createdKey.plainTextKey}`, "env")
+                      }
+                      title="Copy env snippet"
+                    >
+                      {copiedEnv ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+                    </Button>
+                  </div>
                 </div>
               </div>
 

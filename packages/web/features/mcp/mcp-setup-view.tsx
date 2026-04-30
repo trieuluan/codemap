@@ -263,15 +263,20 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
                   className="flex items-center gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2"
                 >
                   <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
-                  <span className="flex-1 text-sm font-medium">
-                    {key.metadata?.clientName ?? key.name ?? "MCP session"}
-                  </span>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium">
+                      {key.metadata?.clientName ?? key.name ?? "MCP session"}
+                    </p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {key.start ? `${key.start}••••••••` : "••••••••••••"}
+                    </p>
+                  </div>
                   {key.metadata?.deviceName ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground shrink-0">
                       {key.metadata.deviceName}
                     </span>
                   ) : null}
-                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs">
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs shrink-0">
                     Active
                   </Badge>
                 </div>

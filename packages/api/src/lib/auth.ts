@@ -50,6 +50,10 @@ export const auth = betterAuth({
       defaultPrefix: "codemap_",
       enableMetadata: true,
       enableSessionForAPIKeys: true,
+      startingCharactersConfig: {
+        shouldStore: true,
+        charactersLength: 16,
+      },
       rateLimit: {
         enabled: true,
         maxRequests: 10_000,

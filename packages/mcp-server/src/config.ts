@@ -167,8 +167,8 @@ export async function loadConfig(cwd = process.cwd()): Promise<McpServerConfig> 
   ]);
 
   const envConfig: McpConfigFile = {
-    apiUrl: readOptionalEnv("API_URL"),
-    apiToken: readOptionalEnv("API_TOKEN"),
+    apiUrl: readOptionalEnv("CODEMAP_API_URL"),
+    apiToken: readOptionalEnv("CODEMAP_API_KEY"),
   };
 
   let resolved: McpServerConfig = {
