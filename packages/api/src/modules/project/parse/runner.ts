@@ -276,12 +276,34 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
 
     await repoParseGraphService.saveRelationships(relationshipDrafts);
 
-    // symbolId lookup by display name — used for resolving intra-file call occurrences
-    const symbolIdByDisplayName = new Map<string, string>();
+    // fileLocalSymbols: fileId → (displayName → symbolId) — for intra-file call resolution
+    const fileLocalSymbols = new Map<string, Map<string, string>>();
     for (const symbol of symbolDrafts) {
+      const filePath = symbol.localSymbolKey?.split("#")[0] ?? "";
+      const fileRow = fileRowByPath.get(filePath);
       const symbolId = symbol.localSymbolKey ? symbolIdByLocalKey.get(symbol.localSymbolKey) : null;
-      if (symbolId && symbol.displayName) {
-        symbolIdByDisplayName.set(symbol.displayName, symbolId);
+      if (!fileRow || !symbolId || !symbol.displayName) continue;
+
+      let byName = fileLocalSymbols.get(fileRow.id);
+      if (!byName) { byName = new Map(); fileLocalSymbols.set(fileRow.id, byName); }
+      byName.set(symbol.displayName, symbolId);
+    }
+
+    // importedSymbols: sourceFileId → (importedName → symbolId) — for cross-file call resolution
+    // built from import edges: if file A imports { foo } from file B, lookup foo in B's symbols
+    const importedSymbols = new Map<string, Map<string, string>>();
+    for (const edge of importEdgeDrafts) {
+      if (!edge.importedNames?.length || !edge.targetPathText) continue;
+      const targetFileId = fileRowByPath.get(edge.targetPathText)?.id;
+      const targetLocalSymbols = targetFileId ? fileLocalSymbols.get(targetFileId) : null;
+      if (!targetLocalSymbols) continue;
+
+      let byName = importedSymbols.get(edge.sourceFileId);
+      if (!byName) { byName = new Map(); importedSymbols.set(edge.sourceFileId, byName); }
+
+      for (const name of edge.importedNames) {
+        const symbolId = targetLocalSymbols.get(name);
+        if (symbolId) byName.set(name, symbolId);
       }
     }
 
@@ -308,7 +330,10 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }
 
     for (const call of pendingCalls) {
-      const symbolId = symbolIdByDisplayName.get(call.calleeName);
+      // intra-file first, then cross-file via import edges
+      const symbolId =
+        fileLocalSymbols.get(call.fileId)?.get(call.calleeName) ??
+        importedSymbols.get(call.fileId)?.get(call.calleeName);
       if (!symbolId) continue;
       occurrenceDrafts.push({
         projectImportId: importId,
