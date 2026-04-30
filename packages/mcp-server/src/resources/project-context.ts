@@ -80,7 +80,7 @@ function buildContextText(
   lines.push("");
   lines.push("## Supported Languages");
   lines.push("CodeMap parses and indexes symbols from the following languages:");
-  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports");
+  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports; methods inside factory return-objects (e.g. createXxxService, createXxxController patterns) are also indexed as kind=method with parentSymbolName pointing to the factory — find_usages works for these without needing grep");
   lines.push("- Dart (.dart) — classes, mixins, enums, imports");
   lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
   lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
@@ -205,7 +205,7 @@ function buildContextText(
   lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
   lines.push("- Add blast_radius to get_file before risky edits to shared files, services, schemas, or MCP tools; do not request blast_radius for routine file reading.");
   lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
-  lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol.");
+  lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names — no grep needed. Results include parentSymbolName so you can see which factory owns the method.");
   lines.push("- To find dead code: use get_file with include: [\"outline\"] and check importedBy — if empty, the file has no known importers. Then confirm with find_usages on the exported symbol. Cross-check with Bash grep for dynamic usage before deleting.");
   lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
   lines.push("- Use rename_symbol to rename a symbol codebase-wide — provide the definition file and current name; it uses the parse index to find all occurrences and rewrites imports automatically. Call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true to avoid false positives in unrelated files.");
