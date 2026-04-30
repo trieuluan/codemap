@@ -109,6 +109,18 @@ function buildContextText(
   lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
   lines.push("- Gettext (.po) — indexed by path only (no symbol extraction); use get_file with start_line/end_line to read specific ranges of large translation files without loading the full content");
   lines.push("All other file types are indexed by path only (no symbol extraction).");
+  lines.push("");
+  lines.push("## Symbol Occurrence Tracking (TypeScript/JS)");
+  lines.push("find_usages returns occurrences with occurrenceRole that indicates how a symbol appears:");
+  lines.push("- definition — where the symbol is declared");
+  lines.push("- call — direct function/method call: foo(), obj.method()");
+  lines.push("- reference — property access (OBJ.prop) or bare identifier usage (CONST in array/arg)");
+  lines.push("Cross-file calls are resolved via named imports ({ foo } from '...'). Wildcard imports (import * as ns) are also resolved: ns.foo() maps to foo in the target module.");
+  lines.push("Known false negatives — find_usages may show 0 callers for symbols used via:");
+  lines.push("- Dynamic import: import('../lib/foo.js') with no importedNames — workers often use this pattern");
+  lines.push("- Framework registration: Fastify route handlers registered via object destructuring, not direct calls");
+  lines.push("- Runtime/dynamic access: obj[methodName], eval, require with variable path");
+  lines.push("Always cross-check with Bash grep before concluding a symbol is dead.");
 
   lines.push("");
   lines.push("## Available Tools");
@@ -244,8 +256,9 @@ function buildContextText(
   lines.push("- Use get_project_insights first for global signals: orphan files, cycles, top fan-out/fan-in files, parse quality, and entry-like files.");
   lines.push("- Use get_project_map for folder-level scope, then get_files for outlines of candidate files. Avoid reading full content until a candidate is confirmed.");
   lines.push("- Large files: use line-count shell checks such as rg --files plus wc -l, excluding generated folders (.next, dist, coverage, node_modules). Then inspect the largest files with get_file include: [\"outline\"] and split only when there is a clear concern boundary.");
-  lines.push("- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins/routes, CLI scripts, worker entrypoints, tests, generated config files, or MCP tool registration files solely because the static import graph has no importer.");
-  lines.push("- Dead functions/exports: use find_usages or find_callers on the symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage, framework conventions, test-only usage, or external public API contracts before deleting.");
+  lines.push("- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins/routes, CLI scripts, worker entrypoints, tests, generated config files, or MCP tool registration files solely because the static import graph has no importer. Framework-convention files loaded by name (Next.js proxy.ts/middleware.ts, page.tsx, layout.tsx; Fastify autoload plugins) will always appear as orphans in the static graph.");
+  lines.push("- Dead functions/exports: use find_usages or find_callers on the symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage, framework conventions, test-only usage, or external public API contracts before deleting. Common false negatives: BullMQ worker files use dynamic import() with no importedNames — all exports appear unreferenced but are used at runtime; Fastify controller methods are registered via object destructuring, not direct calls.");
+  lines.push("- find_usages occurrenceRole guidance: 'definition' = declaration site; 'call' = direct call or method call; 'reference' = property access (OBJ.prop) or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.");
   lines.push("- Duplicate functions: exact body duplicates are strong candidates when they are in regular app code. Prefer a shared helper only when the duplicate behavior is stable and the abstraction names a real domain concept. Keep tiny duplicates or provider-specific code separate when shared code would hide meaningful differences.");
   lines.push("- UI library components can be intentionally unused inventory. Do not delete generic components like shadcn/Radix UI wrappers just because they have no current import unless the user explicitly asks to prune UI inventory.");
   lines.push("- After cleanup edits, run package builds and get_working_diff. If code was pushed or the user wants fresh MCP data, call trigger_reimport and wait_for_import.");
