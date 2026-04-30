@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
 import { simpleGit } from "simple-git";
 import type { db } from "../../db";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
+import { createWorkspaceService } from "../workspace/service";
 import type {
   CreateProjectBody,
   CreateProjectFromGithubBody,
@@ -27,6 +28,8 @@ function slugifyProjectName(value: string) {
 }
 
 export function createProjectService(database: Database) {
+  const workspaceService = createWorkspaceService(database);
+
   function normalizeRepositoryUrl(value: string) {
     return value.trim().replace(/\/+$/, "");
   }
@@ -58,12 +61,72 @@ export function createProjectService(database: Database) {
     }
   }
 
-  async function getOwnedProject(projectId: string, ownerUserId: string) {
-    return database.query.project.findFirst({
-      where: and(
-        eq(project.id, projectId),
-        eq(project.ownerUserId, ownerUserId),
-      ),
+  async function getAccessibleProject(projectId: string, userId: string) {
+    const projectRecord = await database.query.project.findFirst({
+      where: eq(project.id, projectId),
+    });
+
+    if (!projectRecord) return null;
+
+    if (!projectRecord.workspaceId) {
+      return projectRecord.ownerUserId === userId ? projectRecord : null;
+    }
+
+    const access = await workspaceService.getWorkspaceAccess(
+      userId,
+      projectRecord.workspaceId,
+    );
+
+    return access ? projectRecord : null;
+  }
+
+  async function getWorkspaceForProjectAccess(
+    userId: string,
+    projectRecord: typeof project.$inferSelect,
+  ) {
+    if (!projectRecord.workspaceId) {
+      if (projectRecord.ownerUserId !== userId) return null;
+      const personal = await workspaceService.ensurePersonalWorkspace(userId);
+      return {
+        workspace: personal,
+        membership: {
+          workspaceId: personal.id,
+          userId,
+          role: "owner" as const,
+          createdAt: personal.createdAt,
+          updatedAt: personal.updatedAt,
+        },
+      };
+    }
+
+    return workspaceService.getWorkspaceAccess(userId, projectRecord.workspaceId);
+  }
+
+  async function recordParseCompletedUsage(
+    importRecord: ProjectImportRecord,
+    parseStatus: "completed" | "partial",
+  ) {
+    const projectRecord = await database.query.project.findFirst({
+      where: eq(project.id, importRecord.projectId),
+      columns: {
+        id: true,
+        workspaceId: true,
+      },
+    });
+
+    if (!projectRecord?.workspaceId) return;
+
+    await workspaceService.recordUsageEvent({
+      workspaceId: projectRecord.workspaceId,
+      projectId: projectRecord.id,
+      userId: importRecord.triggeredByUserId,
+      type: "parse_completed",
+      metadataJson: {
+        parseStatus,
+        indexedFileCount: importRecord.indexedFileCount,
+        indexedSymbolCount: importRecord.indexedSymbolCount,
+        indexedEdgeCount: importRecord.indexedEdgeCount,
+      },
     });
   }
 
@@ -114,6 +177,7 @@ export function createProjectService(database: Database) {
     input: {
       repositoryUrl: string;
       externalRepoId?: string | null;
+      workspaceId?: string | null;
     },
   ) {
     const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
@@ -121,7 +185,9 @@ export function createProjectService(database: Database) {
     if (input.externalRepoId) {
       const projectByExternalRepoId = await database.query.project.findFirst({
         where: and(
-          eq(project.ownerUserId, ownerUserId),
+          input.workspaceId
+            ? eq(project.workspaceId, input.workspaceId)
+            : eq(project.ownerUserId, ownerUserId),
           eq(project.provider, "github"),
           eq(project.externalRepoId, input.externalRepoId),
         ),
@@ -134,7 +200,9 @@ export function createProjectService(database: Database) {
 
     return database.query.project.findFirst({
       where: and(
-        eq(project.ownerUserId, ownerUserId),
+        input.workspaceId
+          ? eq(project.workspaceId, input.workspaceId)
+          : eq(project.ownerUserId, ownerUserId),
         eq(project.provider, "github"),
         eq(project.repositoryUrl, normalizedRepositoryUrl),
       ),
@@ -143,6 +211,21 @@ export function createProjectService(database: Database) {
 
   return {
     async createProject(ownerUserId: string, input: CreateProjectBody) {
+      const targetWorkspace = input.workspaceId
+        ? (await workspaceService.assertWorkspaceRole(ownerUserId, input.workspaceId, [
+            "owner",
+            "admin",
+          ]))?.workspace
+        : await workspaceService.ensurePersonalWorkspace(ownerUserId);
+
+      if (!targetWorkspace) {
+        throw new Error("WORKSPACE_ACCESS_DENIED");
+      }
+
+      const entitlements = workspaceService.getWorkspaceEntitlements(targetWorkspace);
+      const usage = await workspaceService.getUsageSummary(targetWorkspace.id);
+      workspaceService.assertCanCreateProject(entitlements, usage);
+
       const baseSlug = slugifyProjectName(input.slug ?? input.name);
       const slug = await ensureUniqueSlug(baseSlug);
       const hasRepositoryUrl = Boolean(input.repositoryUrl);
@@ -160,6 +243,7 @@ export function createProjectService(database: Database) {
           slug,
           description: input.description ?? null,
           ownerUserId,
+          workspaceId: targetWorkspace.id,
           visibility: input.visibility ?? "private",
           defaultBranch: input.defaultBranch ?? null,
           repositoryUrl: input.repositoryUrl
@@ -173,15 +257,38 @@ export function createProjectService(database: Database) {
         })
         .returning();
 
+      await workspaceService.recordUsageEvent({
+        workspaceId: targetWorkspace.id,
+        projectId: createdProject.id,
+        userId: ownerUserId,
+        type: "project_created",
+      });
+
       return createdProject;
     },
 
     async listProjects(
       ownerUserId: string,
-      options?: { include?: ProjectListInclude[] },
+      options?: { include?: ProjectListInclude[]; workspaceId?: string },
     ) {
+      let workspaceIds: string[];
+      if (options?.workspaceId) {
+        const access = await workspaceService.getWorkspaceAccess(
+          ownerUserId,
+          options.workspaceId,
+        );
+        if (!access) return [];
+        workspaceIds = [options.workspaceId];
+      } else {
+        const workspaces = await workspaceService.listWorkspaces(ownerUserId);
+        workspaceIds = workspaces.map((item) => item.workspace.id);
+      }
+
       const projects = await database.query.project.findMany({
-        where: eq(project.ownerUserId, ownerUserId),
+        where:
+          workspaceIds.length > 0
+            ? inArray(project.workspaceId, workspaceIds)
+            : eq(project.ownerUserId, ownerUserId),
         orderBy: [desc(project.updatedAt), desc(project.createdAt)],
       });
 
@@ -212,7 +319,7 @@ export function createProjectService(database: Database) {
     },
 
     async getProjectById(projectId: string, ownerUserId: string) {
-      return getOwnedProject(projectId, ownerUserId);
+      return getAccessibleProject(projectId, ownerUserId);
     },
 
     async updateProject(
@@ -220,7 +327,7 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: UpdateProjectBody,
     ) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -264,9 +371,7 @@ export function createProjectService(database: Database) {
       const [updatedProject] = await database
         .update(project)
         .set(values)
-        .where(
-          and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)),
-        )
+        .where(eq(project.id, projectId))
         .returning();
 
       return updatedProject;
@@ -276,9 +381,21 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: CreateProjectFromGithubBody,
     ) {
+      if (input.workspaceId) {
+        const access = await workspaceService.assertWorkspaceRole(
+          ownerUserId,
+          input.workspaceId,
+          ["owner", "admin"],
+        );
+        if (!access) {
+          throw new Error("WORKSPACE_ACCESS_DENIED");
+        }
+      }
+
       const existingProject = await getOwnedProjectByGithubSource(ownerUserId, {
         repositoryUrl: input.repositoryUrl,
         externalRepoId: input.externalRepoId,
+        workspaceId: input.workspaceId,
       });
       const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
 
@@ -309,6 +426,7 @@ export function createProjectService(database: Database) {
       }
 
       return this.createProject(ownerUserId, {
+        workspaceId: input.workspaceId,
         name:
           input.name ??
           normalizeRepositoryUrl(input.repositoryUrl)
@@ -330,9 +448,22 @@ export function createProjectService(database: Database) {
     ) {
       const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
 
+      if (input.workspaceId) {
+        const access = await workspaceService.assertWorkspaceRole(
+          ownerUserId,
+          input.workspaceId,
+          ["owner", "admin"],
+        );
+        if (!access) {
+          throw new Error("WORKSPACE_ACCESS_DENIED");
+        }
+      }
+
       const existingProject = await database.query.project.findFirst({
         where: and(
-          eq(project.ownerUserId, ownerUserId),
+          input.workspaceId
+            ? eq(project.workspaceId, input.workspaceId)
+            : eq(project.ownerUserId, ownerUserId),
           eq(project.provider, "gitlab"),
           eq(project.repositoryUrl, normalizedRepositoryUrl),
         ),
@@ -361,6 +492,7 @@ export function createProjectService(database: Database) {
       }
 
       return this.createProject(ownerUserId, {
+        workspaceId: input.workspaceId,
         name:
           input.name ??
           normalizedRepositoryUrl.split("/").filter(Boolean).at(-1) ??
@@ -378,6 +510,7 @@ export function createProjectService(database: Database) {
         name?: string;
         description?: string | null;
         branch?: string | null;
+        workspaceId?: string | null;
       },
     ) {
       // Uploaded sources always get a fresh project.
@@ -385,6 +518,7 @@ export function createProjectService(database: Database) {
       // promote the extracted zip directly into .codemap-storage and save
       // sourceWorkspacePath on the import record before the worker runs.
       return this.createProject(ownerUserId, {
+        workspaceId: input.workspaceId ?? undefined,
         name: input.name ?? "uploaded-project",
         description: input.description ?? null,
         defaultBranch: input.branch ?? null,
@@ -416,10 +550,13 @@ export function createProjectService(database: Database) {
     },
 
     async deleteProject(projectId: string, ownerUserId: string) {
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
+      if (!existingProject) return null;
+
       const [deletedProject] = await database
         .delete(project)
         .where(
-          and(eq(project.id, projectId), eq(project.ownerUserId, ownerUserId)),
+          eq(project.id, projectId),
         )
         .returning({
           id: project.id,
@@ -432,7 +569,7 @@ export function createProjectService(database: Database) {
       projectId: string,
       ownerUserId: string,
     ) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -452,11 +589,24 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: CreateProjectImportBody,
     ) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
       }
+
+      const workspaceId =
+        existingProject.workspaceId ??
+        (await workspaceService.ensurePersonalWorkspace(ownerUserId)).id;
+      const workspaceAccess = await getWorkspaceForProjectAccess(
+        ownerUserId,
+        existingProject,
+      );
+      const entitlements = workspaceService.getWorkspaceEntitlements(
+        workspaceAccess?.workspace ?? { plan: "beta" },
+      );
+      const usage = await workspaceService.getUsageSummary(workspaceId);
+      workspaceService.assertCanTriggerImport(entitlements, usage);
 
       const importBranch =
         input.branch ?? existingProject.defaultBranch ?? null;
@@ -496,6 +646,13 @@ export function createProjectService(database: Database) {
           .where(eq(project.id, projectId));
 
         return [newImport];
+      });
+
+      await workspaceService.recordUsageEvent({
+        workspaceId,
+        projectId,
+        userId: ownerUserId,
+        type: "import_triggered",
       });
 
       return createdImport;
@@ -723,6 +880,10 @@ export function createProjectService(database: Database) {
         return [completedImport];
       });
 
+      if (updatedImport) {
+        await recordParseCompletedUsage(updatedImport, "completed");
+      }
+
       return updatedImport ?? null;
     },
 
@@ -765,6 +926,10 @@ export function createProjectService(database: Database) {
 
         return [partialImport];
       });
+
+      if (updatedImport) {
+        await recordParseCompletedUsage(updatedImport, "partial");
+      }
 
       return updatedImport ?? null;
     },
@@ -824,7 +989,7 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       options?: { limit?: number; cursor?: string },
     ) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -855,7 +1020,7 @@ export function createProjectService(database: Database) {
       projectImportIds: string[],
       ownerUserId: string,
     ) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -874,7 +1039,7 @@ export function createProjectService(database: Database) {
     },
 
     async getLatestProjectMap(projectId: string, ownerUserId: string) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -893,7 +1058,7 @@ export function createProjectService(database: Database) {
     },
 
     async getLatestProjectMapWithSource(projectId: string, ownerUserId: string) {
-      const existingProject = await getOwnedProject(projectId, ownerUserId);
+      const existingProject = await getAccessibleProject(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;

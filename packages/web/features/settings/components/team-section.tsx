@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import useSWR from "swr";
+import { Users } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -13,75 +13,104 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { browserWorkspacesApi } from "@/features/workspaces/api";
 
-// Placeholder data — replace with real `useSWR("settings-team", …)` once the API exists.
-const MEMBERS = [
-  { initials: "JL", name: "John Le", email: "john@codemap.dev", role: "Owner" },
-  { initials: "HP", name: "Huy Pham", email: "huy@codemap.dev", role: "Admin" },
-  {
-    initials: "TN",
-    name: "Trinh Ngo",
-    email: "trinh@codemap.dev",
-    role: "Member",
-  },
-  {
-    initials: "MD",
-    name: "Minh Do",
-    email: "minh@codemap.dev",
-    role: "Member",
-  },
-];
+const api = browserWorkspacesApi();
+
+function getInitials(name: string | null | undefined, email: string) {
+  const source = name?.trim() || email;
+  return source
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function roleLabel(role: string) {
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
 
 export function TeamSection() {
-  const [invite, setInvite] = useState("");
+  const { data: workspaceRows, isLoading: workspacesLoading } = useSWR(
+    "settings-workspaces",
+    () => api.listWorkspaces(),
+  );
+  const activeWorkspace = workspaceRows?.[0]?.workspace ?? null;
+  const { data: members, isLoading: membersLoading } = useSWR(
+    activeWorkspace ? ["settings-workspace-members", activeWorkspace.id] : null,
+    ([, workspaceId]) => api.listMembers(workspaceId),
+  );
+
+  const isLoading = workspacesLoading || membersLoading;
 
   return (
     <Card>
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <CardTitle>Members</CardTitle>
+          <CardTitle>Workspace members</CardTitle>
           <CardDescription>
-            People in your CodeMap workspace. Invite by email — they&apos;ll get
-            a sign-in link.
+            {activeWorkspace
+              ? `${activeWorkspace.name} is your current ${activeWorkspace.type} workspace.`
+              : "Members are scoped to your CodeMap workspace."}
           </CardDescription>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
           <Input
-            value={invite}
-            onChange={(e) => setInvite(e.target.value)}
+            disabled
             type="email"
             placeholder="teammate@example.com"
             className="w-full sm:w-64"
           />
-          <Button disabled={!invite}>Invite</Button>
+          <Button disabled>Invite soon</Button>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ul className="divide-y divide-border">
-          {MEMBERS.map((m) => (
-            <li
-              key={m.email}
-              className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-            >
-              <Avatar className="size-9">
-                <AvatarFallback>{m.initials}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{m.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {m.email}
-                </p>
-              </div>
-              <Badge variant={m.role === "Owner" ? "default" : "secondary"}>
-                {m.role}
-              </Badge>
-              <Button variant="ghost" size="icon" className="size-8">
-                <MoreHorizontal className="size-4" />
-                <span className="sr-only">Member options</span>
-              </Button>
-            </li>
-          ))}
-        </ul>
+        {!activeWorkspace && !isLoading ? (
+          <div className="flex items-center gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <Users className="size-4" />
+            No workspace found yet. Create a project to initialize your personal
+            workspace.
+          </div>
+        ) : null}
+
+        {isLoading ? (
+          <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">
+            Loading workspace members...
+          </div>
+        ) : null}
+
+        {members?.length ? (
+          <ul className="divide-y divide-border">
+            {members.map((member) => {
+              const email = member.user?.email ?? member.userId;
+              const name = member.user?.name ?? email;
+              return (
+                <li
+                  key={member.userId}
+                  className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <Avatar className="size-9">
+                    <AvatarFallback>
+                      {getInitials(member.user?.name, email) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {email}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={member.role === "owner" ? "default" : "secondary"}
+                  >
+                    {roleLabel(member.role)}
+                  </Badge>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </CardContent>
     </Card>
   );

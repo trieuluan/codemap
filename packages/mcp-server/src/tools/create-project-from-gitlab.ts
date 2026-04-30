@@ -33,6 +33,13 @@ export function registerCreateProjectFromGitlabTool(
         description: z.string().trim().min(1).max(500).optional(),
         default_branch: z.string().trim().min(1).max(255).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
+        workspace_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",
+          ),
       },
     },
     withToolError(async ({
@@ -42,6 +49,7 @@ export function registerCreateProjectFromGitlabTool(
       description,
       default_branch,
       branch,
+      workspace_id,
     }) => {
       const result = await client.request<ProjectSourceImportResult>(
         "/projects/from-gitlab",
@@ -54,6 +62,7 @@ export function registerCreateProjectFromGitlabTool(
             description,
             defaultBranch: default_branch,
             branch,
+            workspaceId: workspace_id,
           },
           authRequired: true,
         },
@@ -89,6 +98,7 @@ export function registerCreateProjectFromGitlabTool(
           repositoryUrl: repository_url,
           defaultBranch: default_branch ?? null,
           branch: branch ?? null,
+          workspaceId: workspace_id ?? null,
         },
         workspaceProjectIdSaved: true,
         nextAction: "wait_for_import",

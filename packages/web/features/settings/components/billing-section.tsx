@@ -1,5 +1,6 @@
 "use client";
 
+import useSWR from "swr";
 import {
   Card,
   CardContent,
@@ -7,10 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { browserWorkspacesApi } from "@/features/workspaces/api";
 
-// Placeholder data — replace with real billing API once it exists.
+const api = browserWorkspacesApi();
+
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -22,94 +25,140 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function formatLimit(value: number | null) {
+  return value === null ? "Unlimited" : value.toLocaleString();
+}
+
+function usagePercent(current: number, max: number | null) {
+  if (max === null || max <= 0) return 0;
+  return Math.min(100, Math.round((current / max) * 100));
+}
+
+function UsageRow({
+  label,
+  current,
+  max,
+}: {
+  label: string;
+  current: number;
+  max: number | null;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono">
+          {current.toLocaleString()} / {formatLimit(max)}
+        </span>
+      </div>
+      <Progress value={usagePercent(current, max)} />
+    </div>
+  );
+}
+
 export function BillingSection() {
+  const { data: workspaceRows, isLoading: workspacesLoading } = useSWR(
+    "settings-billing-workspaces",
+    () => api.listWorkspaces(),
+  );
+  const activeWorkspace = workspaceRows?.[0]?.workspace ?? null;
+  const { data: detail, isLoading: detailLoading } = useSWR(
+    activeWorkspace ? ["settings-billing-workspace", activeWorkspace.id] : null,
+    ([, workspaceId]) => api.getWorkspace(workspaceId),
+  );
+
+  const isLoading = workspacesLoading || detailLoading;
+
   return (
     <>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1">
-            <CardTitle>Plan</CardTitle>
+            <CardTitle>Workspace plan</CardTitle>
             <CardDescription>
-              You&apos;re on the Pro plan, billed monthly.
+              Billing provider integration is planned for V2. This page shows
+              the manually assigned workspace plan and current usage.
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm">
-            Change plan
-          </Button>
+          <Badge variant="secondary">Provider coming later</Badge>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Plan" value={<Badge>Pro</Badge>} />
-            <Stat
-              label="Seats"
-              value={<span className="font-mono">4 / 10</span>}
-            />
-            <Stat
-              label="Renews"
-              value={<span className="font-mono">May 25, 2026</span>}
-            />
-          </div>
+          {isLoading ? (
+            <div className="rounded-lg border border-border/70 p-4 text-sm text-muted-foreground">
+              Loading workspace plan...
+            </div>
+          ) : detail ? (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Stat
+                label="Workspace"
+                value={<span className="font-medium">{detail.workspace.name}</span>}
+              />
+              <Stat label="Type" value={<Badge>{detail.workspace.type}</Badge>} />
+              <Stat label="Plan" value={<Badge>{detail.workspace.plan}</Badge>} />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No workspace found yet. Create a project to initialize your
+              personal workspace.
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div className="space-y-1">
-            <CardTitle>Payment method</CardTitle>
-            <CardDescription>Charged on the 25th of each month.</CardDescription>
-          </div>
-          <Button variant="outline" size="sm">
-            Update
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-10 items-center justify-center rounded-md bg-secondary text-[10px] font-semibold tracking-wide">
-              VISA
-            </div>
-            <div>
-              <p className="font-mono text-sm">•••• 4242</p>
-              <p className="text-xs text-muted-foreground">Expires 09/27</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-          <CardDescription>
-            Past invoices. Receipts are emailed to the workspace owner.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="divide-y divide-border">
-            {[
-              { id: "INV-2026-04", date: "Apr 25, 2026", amount: "$49.00" },
-              { id: "INV-2026-03", date: "Mar 25, 2026", amount: "$49.00" },
-              { id: "INV-2026-02", date: "Feb 25, 2026", amount: "$49.00" },
-            ].map((inv) => (
-              <li
-                key={inv.id}
-                className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0"
-              >
-                <div className="flex items-center gap-4">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {inv.id}
+      {detail ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Entitlements and usage</CardTitle>
+            <CardDescription>
+              Usage is tracked per workspace for project creation, imports, and
+              indexed graph size.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <UsageRow
+              label="Projects"
+              current={detail.usage.projectCount}
+              max={detail.entitlements.maxProjects}
+            />
+            <UsageRow
+              label="Imports this month"
+              current={detail.usage.importsThisMonth}
+              max={detail.entitlements.maxImportsPerMonth}
+            />
+            <UsageRow
+              label="Indexed files this month"
+              current={detail.usage.indexedFilesThisMonth}
+              max={detail.entitlements.maxIndexedFilesPerImport}
+            />
+            <div className="grid gap-4 pt-2 sm:grid-cols-3">
+              <Stat
+                label="Symbols indexed"
+                value={
+                  <span className="font-mono">
+                    {detail.usage.indexedSymbolsThisMonth.toLocaleString()}
                   </span>
-                  <span className="text-muted-foreground">{inv.date}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono">{inv.amount}</span>
-                  <Button variant="ghost" size="sm">
-                    Download
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+                }
+              />
+              <Stat
+                label="Edges indexed"
+                value={
+                  <span className="font-mono">
+                    {detail.usage.indexedEdgesThisMonth.toLocaleString()}
+                  </span>
+                }
+              />
+              <Stat
+                label="MCP sessions"
+                value={
+                  <span className="font-mono">
+                    {detail.usage.mcpSessionsCreatedThisMonth.toLocaleString()}
+                  </span>
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </>
   );
 }

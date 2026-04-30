@@ -56,6 +56,22 @@ export function createProjectController(fastify: FastifyInstance) {
   const repoParseGraphService = createRepoParseGraphService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
+  function throwWorkspaceHttpError(error: unknown): never {
+    if (error instanceof Error) {
+      if (error.message === "WORKSPACE_ACCESS_DENIED") {
+        throw fastify.httpErrors.forbidden("Workspace access denied");
+      }
+      if (error.message === "WORKSPACE_PROJECT_LIMIT_EXCEEDED") {
+        throw fastify.httpErrors.forbidden("Workspace project limit exceeded");
+      }
+      if (error.message === "WORKSPACE_IMPORT_LIMIT_EXCEEDED") {
+        throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
+      }
+    }
+
+    throw error;
+  }
+
   async function enqueueImportOrFail(
     request: FastifyRequest,
     projectImportId: string,
@@ -85,7 +101,12 @@ export function createProjectController(fastify: FastifyInstance) {
       const userId = getAuthenticatedUserId(fastify, request);
       const body = createProjectBodySchema.parse(request.body);
 
-      const createdProject = await service.createProject(userId, body);
+      let createdProject;
+      try {
+        createdProject = await service.createProject(userId, body);
+      } catch (error) {
+        throwWorkspaceHttpError(error);
+      }
 
       return reply.success(createdProject, 201);
     },
@@ -95,6 +116,7 @@ export function createProjectController(fastify: FastifyInstance) {
       const query = listProjectsQuerySchema.parse(request.query ?? {});
       const projects = await service.listProjects(userId, {
         include: query.include,
+        workspaceId: query.workspaceId,
       });
 
       return reply.success(projects, 200, {
@@ -181,7 +203,7 @@ export function createProjectController(fastify: FastifyInstance) {
           );
         }
 
-        throw error;
+        throwWorkspaceHttpError(error);
       }
 
       if (!createdImport) {
@@ -199,10 +221,12 @@ export function createProjectController(fastify: FastifyInstance) {
     ) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const body = createProjectFromGithubBodySchema.parse(request.body ?? {});
-      const project = await service.createOrReuseProjectFromGithub(
-        userId,
-        body,
-      );
+      let project;
+      try {
+        project = await service.createOrReuseProjectFromGithub(userId, body);
+      } catch (error) {
+        throwWorkspaceHttpError(error);
+      }
 
       let createdImport;
 
@@ -220,7 +244,7 @@ export function createProjectController(fastify: FastifyInstance) {
           );
         }
 
-        throw error;
+        throwWorkspaceHttpError(error);
       }
 
       if (!createdImport) {
@@ -246,7 +270,12 @@ export function createProjectController(fastify: FastifyInstance) {
     ) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const body = createProjectFromGitlabBodySchema.parse(request.body ?? {});
-      const project = await service.createOrReuseProjectFromGitlab(userId, body);
+      let project;
+      try {
+        project = await service.createOrReuseProjectFromGitlab(userId, body);
+      } catch (error) {
+        throwWorkspaceHttpError(error);
+      }
 
       let createdImport;
 
@@ -263,7 +292,7 @@ export function createProjectController(fastify: FastifyInstance) {
             "An import is already queued or running for this project",
           );
         }
-        throw error;
+        throwWorkspaceHttpError(error);
       }
 
       if (!createdImport) {

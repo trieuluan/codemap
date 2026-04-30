@@ -9,6 +9,7 @@ import type {
 import { db } from "../../db";
 import { apikey } from "../../db/schema";
 import { auth } from "../../lib/auth";
+import { createWorkspaceService } from "../workspace/service";
 
 const MCP_AUTH_SESSION_KEY_PREFIX = "mcp:auth:session:";
 const MCP_AUTH_SESSION_TTL_SECONDS = 60 * 5;
@@ -114,6 +115,8 @@ export function createMcpService(
   webAppUrl: string,
   apiUrl: string,
 ) {
+  const workspaceService = createWorkspaceService(db);
+
   async function saveSession(record: McpAuthSessionRecord) {
     await redis.setex(
       getSessionKey(record.sessionId),
@@ -387,6 +390,20 @@ export function createMcpService(
       };
 
       await saveSession(session);
+
+      const personalWorkspace = await workspaceService.ensurePersonalWorkspace(
+        user.id,
+      );
+      await workspaceService.recordUsageEvent({
+        workspaceId: personalWorkspace.id,
+        userId: user.id,
+        type: "mcp_session_created",
+        metadataJson: {
+          clientName: session.clientName,
+          deviceName: session.deviceName,
+          sessionId: session.sessionId,
+        },
+      });
 
       return session;
     },

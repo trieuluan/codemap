@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+import { workspace } from "./workspace-schema";
 
 // PostgreSQL enum types for domain-specific constrained values.
 export const projectVisibilityEnum = pgEnum("project_visibility", [
@@ -66,6 +67,11 @@ export const project = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, {
+        onDelete: "cascade",
+      }),
     // Enum columns become native Postgres enums via `pgEnum`.
     visibility: projectVisibilityEnum("visibility").default("private").notNull(),
     status: projectStatusEnum("status").default("draft").notNull(),
@@ -88,6 +94,7 @@ export const project = pgTable(
     uniqueIndex("project_slug_unique").on(table.slug),
     // Standard indexes for common filters and future sync lookups.
     index("project_owner_user_id_idx").on(table.ownerUserId),
+    index("project_workspace_id_idx").on(table.workspaceId),
     index("project_status_idx").on(table.status),
     index("project_provider_external_repo_id_idx").on(
       table.provider,

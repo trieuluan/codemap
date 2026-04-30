@@ -14,6 +14,8 @@ import { GitlabConnectCard } from "@/features/gitlab/components/gitlab-connect-c
 import { GitlabOAuthToast } from "@/features/gitlab/components/gitlab-oauth-toast";
 import { createServerProjectsApi } from "@/features/projects/api";
 import { createServerSettingsApi } from "@/features/settings/api";
+import { createServerWorkspacesApi } from "@/features/workspaces/api";
+import type { WorkspaceDetail } from "@/features/workspaces/api";
 
 function FirstProjectCallout() {
   return (
@@ -42,7 +44,7 @@ function FirstProjectCallout() {
   );
 }
 
-function BillingV2Card() {
+function BillingV2Card({ workspace }: { workspace: WorkspaceDetail | null }) {
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
@@ -51,14 +53,22 @@ function BillingV2Card() {
             <CreditCard className="size-4 text-muted-foreground" />
           </div>
           <div>
-            <p className="text-sm font-medium">Billing in V2</p>
-            <p className="text-xs text-muted-foreground">No billing setup needed today.</p>
+            <p className="text-sm font-medium">Workspace plan</p>
+            <p className="text-xs text-muted-foreground">
+              {workspace
+                ? `${workspace.workspace.plan} plan · ${workspace.usage.projectCount} project(s)`
+                : "Billing provider coming later"}
+            </p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          Team seats, usage limits, and billing controls are planned for V2.
-          Current onboarding focuses on projects, MCP, and repository access.
+          {workspace
+            ? `Usage limits are tracked for ${workspace.workspace.name}. Billing collection is not enabled yet.`
+            : "Team seats, usage limits, and billing controls are planned for V2."}
         </p>
+        <Button asChild variant="secondary" size="sm" className="w-full">
+          <Link href="/dashboard/settings/billing">View usage</Link>
+        </Button>
       </CardContent>
     </Card>
   );
@@ -68,9 +78,11 @@ export default async function DashboardPage() {
   const cookieHeader = (await cookies()).toString();
   const api = createServerProjectsApi({ cookieHeader });
   const settingsApi = createServerSettingsApi({ cookieHeader });
+  const workspacesApi = createServerWorkspacesApi({ cookieHeader });
 
   let projects: Awaited<ReturnType<typeof api.getProjects>> = [];
   let apiKeys: Awaited<ReturnType<typeof settingsApi.listApiKeys>> = [];
+  let workspaceDetail: WorkspaceDetail | null = null;
   try {
     projects = await api.getProjects();
   } catch {
@@ -80,6 +92,15 @@ export default async function DashboardPage() {
     apiKeys = await settingsApi.listApiKeys();
   } catch {
     // keep MCP onboarding pending if keys cannot be loaded
+  }
+  try {
+    const workspaces = await workspacesApi.listWorkspaces();
+    const firstWorkspaceId = workspaces[0]?.workspace.id;
+    workspaceDetail = firstWorkspaceId
+      ? await workspacesApi.getWorkspace(firstWorkspaceId)
+      : null;
+  } catch {
+    // keep billing card informational if workspace summary cannot be loaded
   }
 
   const projectCount = projects.length;
@@ -123,7 +144,7 @@ export default async function DashboardPage() {
           </div>
           <GithubConnectCard />
           <GitlabConnectCard />
-          <BillingV2Card />
+          <BillingV2Card workspace={workspaceDetail} />
         </div>
       </div>
     </div>

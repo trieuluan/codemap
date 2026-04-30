@@ -30,6 +30,13 @@ export function registerCreateProjectTool(
         name: z.string().trim().min(1).max(120).optional(),
         description: z.string().trim().min(1).max(500).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
+        workspace_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",
+          ),
         upload_confirmed: z
           .boolean()
           .optional()
@@ -38,7 +45,13 @@ export function registerCreateProjectTool(
           ),
       },
     },
-    withToolError(async ({ name, description, branch, upload_confirmed }) => {
+    withToolError(async ({
+      name,
+      description,
+      branch,
+      workspace_id,
+      upload_confirmed,
+    }) => {
       const resolvedWorkspace = await resolveWorkspace();
       const workspace = resolvedWorkspace.workspace;
 
@@ -83,6 +96,7 @@ export function registerCreateProjectTool(
               repositoryUrl: workspace.remoteUrl,
               name,
               description,
+              workspaceId: workspace_id,
               defaultBranch: workspace.branch,
               branch: branch ?? workspace.branch,
             },
@@ -183,6 +197,7 @@ export function registerCreateProjectTool(
         name: folderName,
         description,
         branch,
+        workspaceId: workspace_id,
       };
 
       const result = await client.upload<ProjectSourceImportResult>(

@@ -60,10 +60,12 @@ export const listProjectsQuerySchema = z.object({
     parseIncludeQueryValue,
     z.array(projectListIncludeSchema).default([]),
   ),
+  workspaceId: z.uuid().optional(),
 });
 
 export const createProjectInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
+  workspaceId: z.uuid().optional(),
   slug: z
     .string()
     .trim()
@@ -81,6 +83,7 @@ export const createProjectInputSchema = z.object({
 });
 
 export const updateProjectInputSchema = createProjectInputSchema
+  .omit({ workspaceId: true })
   .partial()
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field must be provided",
@@ -88,6 +91,7 @@ export const updateProjectInputSchema = createProjectInputSchema
 
 export const createProjectFromGithubInputSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
+  workspaceId: z.uuid().optional(),
   description: nullableTrimmedString.optional(),
   repositoryUrl: z.string().trim().url().max(500),
   externalRepoId: nullableShortString.optional(),
@@ -152,6 +156,7 @@ export const createProjectFromUploadQuerySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().min(1).max(500).optional(),
   branch: z.string().trim().min(1).max(255).optional(),
+  workspaceId: z.uuid().optional(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;

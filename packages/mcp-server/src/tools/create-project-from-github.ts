@@ -27,6 +27,13 @@ export function registerCreateProjectFromGithubTool(
         external_repo_id: z.string().trim().min(1).max(255).optional(),
         default_branch: z.string().trim().min(1).max(255).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
+        workspace_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe(
+            "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",
+          ),
       },
     },
     withToolError(async ({
@@ -36,6 +43,7 @@ export function registerCreateProjectFromGithubTool(
       external_repo_id,
       default_branch,
       branch,
+      workspace_id,
     }) => {
       const result = await client.request<ProjectSourceImportResult>(
         "/projects/from-github",
@@ -48,6 +56,7 @@ export function registerCreateProjectFromGithubTool(
             externalRepoId: external_repo_id,
             defaultBranch: default_branch,
             branch,
+            workspaceId: workspace_id,
           },
           authRequired: true,
         },
@@ -84,6 +93,7 @@ export function registerCreateProjectFromGithubTool(
           externalRepoId: external_repo_id ?? null,
           defaultBranch: default_branch ?? null,
           branch: branch ?? null,
+          workspaceId: workspace_id ?? null,
         },
         workspaceProjectIdSaved: true,
         nextAction: "wait_for_import",

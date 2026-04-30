@@ -3,7 +3,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectConfig } from "../lib/workspace-project.js";
-import type { ProjectDetail } from "../lib/api-types.js";
+import type { ProjectDetail, WorkspaceDetail } from "../lib/api-types.js";
 import {
   describeImportHealth,
   getProjectImportHealth,
@@ -12,6 +12,7 @@ import {
 function formatProject(
   p: ProjectDetail,
   health: Awaited<ReturnType<typeof getProjectImportHealth>>,
+  accountWorkspace: WorkspaceDetail | null,
 ): string {
   const lines: string[] = [
     `Name: ${p.name}`,
@@ -27,6 +28,11 @@ function formatProject(
   if (p.repositoryUrl) lines.push(`Repository: ${p.repositoryUrl}`);
   if (p.localWorkspacePath)
     lines.push(`Workspace path: ${p.localWorkspacePath}`);
+  if (accountWorkspace) {
+    lines.push(
+      `Workspace: ${accountWorkspace.workspace.name} (${accountWorkspace.workspace.type}, ${accountWorkspace.workspace.plan})`,
+    );
+  }
   if (p.lastImportedAt) {
     lines.push(`Last imported: ${new Date(p.lastImportedAt).toLocaleString()}`);
   }
@@ -140,19 +146,33 @@ export function registerGetProjectTool(
         resolvedProjectId,
         project,
       );
+      const accountWorkspace = project.workspaceId
+        ? await client
+            .request<WorkspaceDetail>(
+              `/workspaces/${encodeURIComponent(project.workspaceId)}`,
+              { authRequired: true },
+            )
+            .catch(() => null)
+        : null;
 
-      return success(formatProject(project, health), {
+      return success(formatProject(project, health, accountWorkspace), {
         linkedWorkspace: true,
         workspaceRootPath: workspaceConfig.workspaceRootPath,
         projectId: resolvedProjectId,
         found: true,
         project,
         health,
+        workspace: accountWorkspace?.workspace ?? null,
+        entitlements: accountWorkspace?.entitlements ?? null,
+        usage: accountWorkspace?.usage ?? null,
         projectContext: {
           project,
           latestImport: health.latestImport,
           health,
-          workspace: health.workspace,
+          workspace: accountWorkspace?.workspace ?? null,
+          localWorkspace: health.workspace,
+          entitlements: accountWorkspace?.entitlements ?? null,
+          usage: accountWorkspace?.usage ?? null,
           recommendedNextAction: health.nextAction,
           recommendedWorkflow: buildRecommendedWorkflow(health),
         },

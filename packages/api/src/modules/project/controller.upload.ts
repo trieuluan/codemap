@@ -14,6 +14,25 @@ function getAuthenticatedUserId(
   return userId;
 }
 
+function throwWorkspaceHttpError(
+  fastify: FastifyInstance,
+  error: unknown,
+): never {
+  if (error instanceof Error) {
+    if (error.message === "WORKSPACE_ACCESS_DENIED") {
+      throw fastify.httpErrors.forbidden("Workspace access denied");
+    }
+    if (error.message === "WORKSPACE_PROJECT_LIMIT_EXCEEDED") {
+      throw fastify.httpErrors.forbidden("Workspace project limit exceeded");
+    }
+    if (error.message === "WORKSPACE_IMPORT_LIMIT_EXCEEDED") {
+      throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
+    }
+  }
+
+  throw error;
+}
+
 export function createProjectUploadController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
@@ -59,10 +78,11 @@ export function createProjectUploadController(fastify: FastifyInstance) {
           name: query.name,
           description: query.description,
           branch: query.branch ?? null,
+          workspaceId: query.workspaceId,
         });
       } catch (error) {
         await prepared.cleanup();
-        throw error;
+        throwWorkspaceHttpError(fastify, error);
       }
 
       let createdImport;
@@ -83,7 +103,7 @@ export function createProjectUploadController(fastify: FastifyInstance) {
         }
 
         await prepared.cleanup();
-        throw error;
+        throwWorkspaceHttpError(fastify, error);
       }
 
       if (!createdImport) {

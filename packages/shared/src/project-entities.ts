@@ -5,7 +5,7 @@ export type ProjectStatus =
   | "ready"
   | "failed"
   | "archived";
-export type ProjectProvider = "github" | "local_workspace";
+export type ProjectProvider = "github" | "gitlab" | "local_workspace";
 export type ProjectImportStatus =
   | "pending"
   | "queued"
@@ -41,6 +41,7 @@ export interface Project {
   slug: string;
   description: string | null;
   ownerUserId: string;
+  workspaceId: string;
   visibility: ProjectVisibility;
   status: ProjectStatus;
   defaultBranch: string | null;

@@ -40,6 +40,7 @@ export type {
   SymbolUsageRange,
   SymbolUsageTarget,
   SymbolUsagesResponse,
+  WorkspaceDetail,
 } from "@codemap/shared";
 
 export type ImportStatus = ProjectImportStatus;

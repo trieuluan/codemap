@@ -2,7 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { readWorkspaceProjectConfig } from "../lib/workspace-project.js";
-import type { ProjectDetail, ProjectImportDetail } from "../lib/api-types.js";
+import type {
+  ProjectDetail,
+  ProjectImportDetail,
+  WorkspaceDetail,
+} from "../lib/api-types.js";
 import {
   buildImportHealth,
   describeImportHealth,
@@ -27,6 +31,7 @@ function buildContextText(
   project: ProjectDetail,
   latestImport: ProjectImportDetail | null,
   health: ImportHealth,
+  accountWorkspace: WorkspaceDetail | null,
 ): string {
   const lines: string[] = [
     "# CodeMap Project Context",
@@ -48,6 +53,24 @@ function buildContextText(
   }
 
   lines.push("");
+
+  if (accountWorkspace) {
+    lines.push("## Workspace");
+    lines.push(`Name: ${accountWorkspace.workspace.name}`);
+    lines.push(`Type: ${formatStatus(accountWorkspace.workspace.type)}`);
+    lines.push(`Plan: ${formatStatus(accountWorkspace.workspace.plan)}`);
+    lines.push(`Role: ${formatStatus(accountWorkspace.membership.role)}`);
+    lines.push(
+      `Usage: ${accountWorkspace.usage.projectCount} project(s), ` +
+        `${accountWorkspace.usage.importsThisMonth} import(s) this month`,
+    );
+    lines.push(
+      `Entitlements: projects ${accountWorkspace.entitlements.maxProjects ?? "unlimited"}, ` +
+        `imports/month ${accountWorkspace.entitlements.maxImportsPerMonth ?? "unlimited"}, ` +
+        `MCP ${accountWorkspace.entitlements.mcpAccess ? "enabled" : "disabled"}`,
+    );
+    lines.push("");
+  }
 
   if (latestImport) {
     lines.push("## Latest Import");
@@ -303,6 +326,14 @@ export function registerProjectContextResource(
 
       const latestImport = imports[0] ?? null;
       const resolvedWorkspace = await resolveWorkspace({ project });
+      const accountWorkspace = project.workspaceId
+        ? await client
+            .request<WorkspaceDetail>(
+              `/workspaces/${encodeURIComponent(project.workspaceId)}`,
+              { authRequired: true },
+            )
+            .catch(() => null)
+        : null;
       const health = buildImportHealth({
         latestImport,
         workspace: resolvedWorkspace.workspace,
@@ -315,7 +346,7 @@ export function registerProjectContextResource(
           {
             uri: uri.href,
             mimeType: "text/plain",
-            text: buildContextText(project, latestImport, health),
+            text: buildContextText(project, latestImport, health, accountWorkspace),
           },
         ],
       };

@@ -35,13 +35,18 @@ export function createServerProjectsApi(
   defaults: ServerProjectsApiOptions = {},
 ) {
   return {
-    getProjects: async (options?: { include?: ProjectListInclude[] }) => {
-      const includeQuery = options?.include?.length
-        ? `?include=${options.include.join(",")}`
-        : "";
-
-      return requestApi<ProjectListItem[]>(`/projects${includeQuery}`, {
+    getProjects: async (options?: {
+      include?: ProjectListInclude[];
+      workspaceId?: string;
+    }) => {
+      return requestApi<ProjectListItem[]>("/projects", {
         cookieHeader: defaults.cookieHeader,
+        queryParams: {
+          include: options?.include?.length
+            ? options.include.join(",")
+            : undefined,
+          workspaceId: options?.workspaceId,
+        },
       });
     },
 

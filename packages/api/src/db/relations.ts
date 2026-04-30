@@ -1,6 +1,11 @@
 import { relations } from "drizzle-orm";
 import { user } from "./schema/auth-schema";
 import {
+  usageEvent,
+  workspace,
+  workspaceMember,
+} from "./schema/workspace-schema";
+import {
   project,
   projectImport,
   projectMapSnapshot,
@@ -23,8 +28,44 @@ export const projectRelations = relations(project, ({ one, many }) => ({
     fields: [project.ownerUserId],
     references: [user.id],
   }),
+  workspace: one(workspace, {
+    fields: [project.workspaceId],
+    references: [workspace.id],
+  }),
   imports: many(projectImport),
   mapSnapshots: many(projectMapSnapshot),
+}));
+
+export const workspaceRelations = relations(workspace, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [workspace.ownerUserId],
+    references: [user.id],
+  }),
+  members: many(workspaceMember),
+  projects: many(project),
+  usageEvents: many(usageEvent),
+}));
+
+export const workspaceMemberRelations = relations(workspaceMember, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [workspaceMember.workspaceId],
+    references: [workspace.id],
+  }),
+  user: one(user, {
+    fields: [workspaceMember.userId],
+    references: [user.id],
+  }),
+}));
+
+export const usageEventRelations = relations(usageEvent, ({ one }) => ({
+  workspace: one(workspace, {
+    fields: [usageEvent.workspaceId],
+    references: [workspace.id],
+  }),
+  user: one(user, {
+    fields: [usageEvent.userId],
+    references: [user.id],
+  }),
 }));
 
 export const projectImportRelations = relations(
