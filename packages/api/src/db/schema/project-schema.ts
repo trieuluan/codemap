@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { relations } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -12,16 +11,6 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
-import {
-  repoExternalSymbol,
-  repoExport,
-  repoFile,
-  repoImportEdge,
-  repoParseIssue,
-  repoSymbol,
-  repoSymbolOccurrence,
-  repoSymbolRelationship,
-} from "./repo-parse-schema";
 
 // PostgreSQL enum types for domain-specific constrained values.
 export const projectVisibilityEnum = pgEnum("project_visibility", [
@@ -191,52 +180,4 @@ export const projectMapSnapshot = pgTable(
       table.createdAt,
     ),
   ],
-);
-
-// `relations(...)` does not create DB columns.
-// It teaches Drizzle how tables connect so relation-aware queries work cleanly.
-export const projectRelations = relations(project, ({ one, many }) => ({
-  owner: one(user, {
-    fields: [project.ownerUserId],
-    references: [user.id],
-  }),
-  imports: many(projectImport),
-  mapSnapshots: many(projectMapSnapshot),
-}));
-
-export const projectImportRelations = relations(projectImport, ({ one, many }) => ({
-  project: one(project, {
-    fields: [projectImport.projectId],
-    references: [project.id],
-  }),
-  triggeredByUser: one(user, {
-    fields: [projectImport.triggeredByUserId],
-    references: [user.id],
-  }),
-  mapSnapshot: one(projectMapSnapshot, {
-    fields: [projectImport.id],
-    references: [projectMapSnapshot.importId],
-  }),
-  files: many(repoFile),
-  symbols: many(repoSymbol),
-  symbolOccurrences: many(repoSymbolOccurrence),
-  symbolRelationships: many(repoSymbolRelationship),
-  importEdges: many(repoImportEdge),
-  exports: many(repoExport),
-  parseIssues: many(repoParseIssue),
-  externalSymbols: many(repoExternalSymbol),
-}));
-
-export const projectMapSnapshotRelations = relations(
-  projectMapSnapshot,
-  ({ one }) => ({
-    project: one(project, {
-      fields: [projectMapSnapshot.projectId],
-      references: [project.id],
-    }),
-    importRecord: one(projectImport, {
-      fields: [projectMapSnapshot.importId],
-      references: [projectImport.id],
-    }),
-  }),
 );
