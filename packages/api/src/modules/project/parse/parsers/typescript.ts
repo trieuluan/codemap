@@ -356,6 +356,34 @@ function extractSymbolsWithAst(
     isParentExported: boolean,
   ) {
     const body = fnNode.body;
+
+    // Extract inner function declarations defined inside the factory body (private helpers)
+    const blockBody = body && "statements" in body ? (body as ts.Block) : null;
+    if (blockBody) {
+      for (const stmt of blockBody.statements) {
+        if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+          const name = stmt.name.text;
+          const { line, col } = getLineCol(sourceFile, stmt.getStart(sourceFile));
+          symbols.push({
+            localKey: buildLocalSymbolKey(file.path, "function", `${parentLocalKey}__${name}`),
+            stableKey: buildStableSymbolKey(file.path, "function", `${parentLocalKey}__${name}`, line),
+            displayName: name,
+            kind: "function",
+            language: file.language!,
+            signature: getSignature(stmt),
+            returnType: getReturnType(stmt),
+            doc: getJSDoc(stmt),
+            isExported: false,
+            isDefaultExport: false,
+            line,
+            col,
+            endCol: col + name.length,
+            parentSymbolLocalKey: parentLocalKey,
+          });
+        }
+      }
+    }
+
     const obj = getReturnedObjectLiteral(body);
     if (!obj) return;
 
