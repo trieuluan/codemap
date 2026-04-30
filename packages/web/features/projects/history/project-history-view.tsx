@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import useSWRInfinite from "swr/infinite";
 import { useMemo, useState } from "react";
 import { ArrowLeftRight, GitCommit, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import { FileDiffList } from "./components/file-diff-list";
 import {
   EdgeDiffList,
   SymbolDiffList,
+  countDeduplicatedSymbols,
 } from "./components/symbol-edge-diff-list";
 import type { MetricDelta } from "./types";
 
@@ -49,21 +51,33 @@ function formatImportOption(importRecord: ProjectImport) {
   const sha = shortSha(importRecord.commitSha);
   const date = new Date(
     importRecord.completedAt ?? importRecord.startedAt,
-  ).toLocaleDateString(undefined, {
+  ).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
   return `${sha} · ${date}`;
 }
 
 export function ProjectHistoryView({ projectId, initialImports }: Props) {
-  const { data: imports = initialImports } = useSWR(
-    ["project-imports", projectId],
-    () => browserProjectsApi.getProjectImports(projectId),
-    {
-      fallbackData: initialImports,
-      revalidateOnFocus: false,
+  const { data: pages } = useSWRInfinite(
+    (pageIndex, previousPage: { data: ProjectImport[]; meta: { nextCursor: string | null } } | null) => {
+      if (pageIndex > 0 && !previousPage?.meta.nextCursor) return null;
+      return ["project-imports-page", projectId, previousPage?.meta.nextCursor ?? null];
     },
+    ([, pid, cursor]: [string, string, string | null]) =>
+      browserProjectsApi.getProjectImportPage(pid, { limit: 50, cursor: cursor ?? undefined }),
+    {
+      fallbackData: [{ data: initialImports, meta: { nextCursor: null } }],
+      revalidateOnFocus: false,
+      revalidateFirstPage: false,
+    },
+  );
+
+  const imports = useMemo(
+    () => pages?.flatMap((page) => page.data) ?? initialImports,
+    [pages, initialImports],
   );
 
   // Default: select latest, set up compare with previous
@@ -453,7 +467,7 @@ function CompareDetail({
                 <TabsTrigger value="symbols">
                   Symbols
                   <span className="ml-1.5 tabular-nums text-muted-foreground">
-                    {comparison.symbols.length}
+                    {countDeduplicatedSymbols(comparison.symbols)}
                   </span>
                 </TabsTrigger>
                 <TabsTrigger value="edges">

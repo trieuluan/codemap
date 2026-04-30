@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import type {
@@ -149,7 +149,7 @@ export function ProjectMapStatusBanner({
   if (!hasCompletedImport) {
     return (
       <Alert>
-        <Loader2 />
+        <Info />
         <AlertTitle>No code map available yet</AlertTitle>
         <AlertDescription>
           Run an import to generate the first project map. Until then, this
@@ -162,7 +162,7 @@ export function ProjectMapStatusBanner({
   if (!hasPreviewableSource) {
     return (
       <Alert>
-        <Loader2 />
+        <Info />
         <AlertTitle>Repository preview needs a fresh import</AlertTitle>
         <AlertDescription>
           This project has a completed map snapshot, but retained source is not
@@ -179,7 +179,7 @@ export function ProjectMapStatusBanner({
 
   return (
     <Alert>
-      <Loader2 />
+      <CheckCircle2 />
       <AlertTitle className="flex flex-wrap items-center gap-2">
         Analysis ready
         <Badge

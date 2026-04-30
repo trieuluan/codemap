@@ -296,6 +296,12 @@ export function ProjectMapInsightsView({
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               <Link
+                href={`/projects/${project.id}/insights`}
+                className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Clear focus
+              </Link>
+              <Link
                 href={`/projects/${project.id}/explorer?path=${encodeURIComponent(focusFile)}`}
                 className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
               >

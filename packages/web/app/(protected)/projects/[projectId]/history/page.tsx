@@ -28,10 +28,11 @@ export default async function ProjectHistoryPage({
   });
 
   try {
-    const [project, imports] = await Promise.all([
+    const [project, firstPage] = await Promise.all([
       api.getProject(projectId),
-      api.getProjectImports(projectId),
+      api.getProjectImportPage(projectId, { limit: 50 }),
     ]);
+    const imports = firstPage.data;
 
     return (
       <div className="space-y-6">

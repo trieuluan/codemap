@@ -55,6 +55,13 @@ function groupSymbolsByFile(symbols: SymbolDiffEntry[]): SymbolGroup[] {
     );
 }
 
+export function countDeduplicatedSymbols(symbols: SymbolDiffEntry[]): number {
+  return groupSymbolsByFile(symbols).reduce(
+    (sum, g) => sum + g.added.length + g.removed.length,
+    0,
+  );
+}
+
 export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
