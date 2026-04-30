@@ -23,13 +23,6 @@ export function formatProjectDate(
   }).format(new Date(value));
 }
 
-export function formatLastImportedAt(value?: string | null) {
-  if (!value) {
-    return "Never imported";
-  }
-
-  return formatProjectDate(value);
-}
 
 export function getProjectStatusLabel(status: ProjectStatus) {
   switch (status) {
