@@ -20,7 +20,10 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@paypal/react-paypal-js": [
+        "../../node_modules/@paypal/react-paypal-js/dist/types/index.d.ts"
+      ]
     }
   },
   "include": [
