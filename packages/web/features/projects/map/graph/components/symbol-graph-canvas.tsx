@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import ReactFlow, {
   Background,
   Controls,
@@ -10,19 +9,23 @@ import ReactFlow, {
   type Node,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Button } from "@/components/ui/button";
 import type { ProjectSymbolGraphResponse } from "@/features/projects/api";
 
 function symbolNodeLabel(
   node: ProjectSymbolGraphResponse["nodes"][number],
 ) {
+  const isFileNode = node.kind === "file";
   return (
     <div className="min-w-0 text-left">
       <p className="truncate font-mono text-xs font-semibold">{node.name}</p>
       <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-        {node.kind}
-        {node.filePath ? ` · ${node.filePath}` : ""}
+        {isFileNode ? "file importer" : node.kind}
       </p>
+      {node.signature ? (
+        <p className="mt-0.5 truncate font-mono text-[9px] text-muted-foreground/70">
+          {node.signature}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -40,6 +43,7 @@ function buildSymbolFlow(graph: ProjectSymbolGraphResponse): {
   const nodes: Node[] = [];
 
   incoming.forEach((node, index) => {
+    const isFileImporter = node.kind === "file";
     nodes.push({
       id: node.id,
       type: "default",
@@ -47,8 +51,12 @@ function buildSymbolFlow(graph: ProjectSymbolGraphResponse): {
       data: { label: symbolNodeLabel(node) },
       style: {
         width: nodeWidth,
-        borderColor: "rgb(251 146 60 / 0.55)",
-        background: "rgb(251 146 60 / 0.06)",
+        borderColor: isFileImporter
+          ? "rgb(168 85 247 / 0.55)"   // purple for file importers
+          : "rgb(251 146 60 / 0.55)",  // orange for symbol callers
+        background: isFileImporter
+          ? "rgb(168 85 247 / 0.06)"
+          : "rgb(251 146 60 / 0.06)",
       },
     });
   });
@@ -113,8 +121,6 @@ function buildSymbolFlow(graph: ProjectSymbolGraphResponse): {
 }
 
 export function SymbolGraphCanvas({
-  projectId,
-  filePath,
   graph,
 }: {
   projectId: string;
@@ -130,13 +136,6 @@ export function SymbolGraphCanvas({
         <p className="max-w-md text-xs text-muted-foreground">
           The selected symbol was not found in the latest semantic index.
         </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link
-            href={`/projects/${projectId}/graph?file=${encodeURIComponent(filePath)}`}
-          >
-            Back to file graph
-          </Link>
-        </Button>
       </div>
     );
   }
@@ -145,29 +144,6 @@ export function SymbolGraphCanvas({
 
   return (
     <div className="relative flex-1 overflow-hidden rounded-lg border border-border/70 bg-card">
-      <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-full border border-border/70 bg-card/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
-        <span>
-          <span className="font-medium text-foreground">Left:</span> callers /
-          references
-        </span>
-        <span className="text-muted-foreground/50">|</span>
-        <span>
-          <span className="font-medium text-foreground">Center:</span>{" "}
-          selected symbol
-        </span>
-        <span className="text-muted-foreground/50">|</span>
-        <span>
-          <span className="font-medium text-foreground">Right:</span>{" "}
-          outgoing relationships
-        </span>
-        <Button variant="outline" size="sm" className="h-6 px-2" asChild>
-          <Link
-            href={`/projects/${projectId}/graph?file=${encodeURIComponent(filePath)}`}
-          >
-            File graph
-          </Link>
-        </Button>
-      </div>
       <ReactFlow
         nodes={flow.nodes}
         edges={flow.edges}

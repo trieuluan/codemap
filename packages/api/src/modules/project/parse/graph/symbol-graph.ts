@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   repoFile,
+  repoImportEdge,
   repoSymbol,
   repoSymbolOccurrence,
   repoSymbolRelationship,
@@ -170,7 +171,7 @@ export function createSymbolGraphService(database: Database) {
           isDefaultExport: symbol.isDefaultExport,
           range: definition ? toRange(definition) : null,
           usageCount,
-          callerCount: incomingCount + usageCount,
+          callerCount: incomingCount, // relationship-based callers only
           outgoingCount: outgoingCountBySymbolId.get(symbol.id) ?? 0,
           incomingCount,
         };
@@ -204,6 +205,26 @@ export function createSymbolGraphService(database: Database) {
         ),
         with: { toSymbol: { with: { file: true } } },
       });
+
+      // Find import edges where importedNames contains this symbol's name —
+      // i.e. files that explicitly import this symbol by name
+      const importCallerEdges = target.isExported
+        ? await database.query.repoImportEdge.findMany({
+            where: and(
+              eq(repoImportEdge.projectImportId, projectImportId),
+              eq(repoImportEdge.targetFileId, file.id),
+              eq(repoImportEdge.isResolved, true),
+            ),
+            with: { sourceFile: true },
+          })
+        : [];
+      // Filter to edges that actually import this symbol by name
+      const namedImportCallers = importCallerEdges.filter(
+        (edge) =>
+          edge.sourceFile !== null &&
+          (edge.importedNames.includes(target.displayName) ||
+            edge.importedNames.length === 0), // namespace/wildcard imports
+      );
 
       const relatedSymbols = new Map<string, ProjectSymbolGraphResponse["nodes"][number]>();
       const targetNode = {
@@ -240,6 +261,46 @@ export function createSymbolGraphService(database: Database) {
           evidence: "symbol_relationship",
           confidence: confidenceForKind(relationship.relationshipKind),
           range: null,
+        });
+      }
+
+      // Add import callers — files that import this symbol by name
+      for (const edge of namedImportCallers) {
+        if (!edge.sourceFile) continue;
+        const nodeId = `import-caller:${edge.id}`;
+        // Don't duplicate if already added via symbol_relationship
+        if (relatedSymbols.has(nodeId)) continue;
+        const isWildcard = edge.importedNames.length === 0;
+        relatedSymbols.set(nodeId, {
+          id: nodeId,
+          name: edge.sourceFile.path.split("/").pop() ?? edge.sourceFile.path,
+          kind: "file",
+          signature: isWildcard
+            ? `import * from "${edge.moduleSpecifier}"`
+            : `import { ${edge.importedNames.join(", ")} } from "${edge.moduleSpecifier}"`,
+          filePath: edge.sourceFile.path,
+          range: {
+            startLine: edge.startLine,
+            startCol: edge.startCol + 1,
+            endLine: edge.endLine,
+            endCol: edge.endCol + 1,
+          },
+          role: "incoming",
+          confidence: isWildcard ? "probable" : "definite",
+        });
+        edges.push({
+          id: `import-edge:${edge.id}`,
+          source: nodeId,
+          target: target.id,
+          kind: isWildcard ? "namespace_import" : "named_import",
+          evidence: "import",
+          confidence: isWildcard ? "probable" : "definite",
+          range: {
+            startLine: edge.startLine,
+            startCol: edge.startCol + 1,
+            endLine: edge.endLine,
+            endCol: edge.endCol + 1,
+          },
         });
       }
 
