@@ -67,7 +67,6 @@ export function ImportTimeline({
         const isSelected = selectedId === imp.id;
         const isBase = baseId === imp.id;
         const isHead = headId === imp.id;
-        const inComparison = compareMode && (isBase || isHead);
 
         return (
           <li key={imp.id}>

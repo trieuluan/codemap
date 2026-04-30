@@ -5,7 +5,6 @@ import * as RechartsPrimitive from 'recharts'
 import type { TooltipProps as RechartsTooltipProps } from 'recharts/types/component/Tooltip'
 import type {
   NameType,
-  Payload,
   ValueType,
 } from 'recharts/types/component/DefaultTooltipContent'
 

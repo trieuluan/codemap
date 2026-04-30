@@ -5,7 +5,6 @@ import {
   Copy,
   ExternalLink,
   FileCode2,
-  FolderTree,
   Home,
   Search,
 } from "lucide-react";

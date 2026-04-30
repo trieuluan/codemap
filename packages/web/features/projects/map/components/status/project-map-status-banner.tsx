@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Info, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import type {

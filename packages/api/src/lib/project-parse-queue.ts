@@ -43,13 +43,6 @@ export async function enqueueProjectParseJob(
   });
 }
 
-export async function getProjectParseJob(
-  connection: IORedis,
-  importId: string,
-) {
-  return getProjectParseQueue(connection).getJob(importId);
-}
-
 export async function closeProjectParseQueue() {
   await queueInstance?.close();
   queueInstance = null;
