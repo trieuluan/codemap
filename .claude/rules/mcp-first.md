@@ -25,18 +25,33 @@ Khi cần tìm hiểu code trong project `codemap`, ưu tiên dùng MCP tools tr
 
 Agent tiêu quota riêng của user và chạy song song không kiểm soát được. Chỉ spawn agent khi task thực sự cần chạy nền dài (>5 phút) hoặc user yêu cầu rõ ràng.
 
+## Factory method pattern (TypeScript)
+
+Parser giờ index methods bên trong factory return-objects (`createXxxService`, `createXxxController`...) thành symbol `kind=method` với `parentSymbolName` trỏ về factory. `find_usages` hoạt động trực tiếp — **không cần grep** cho pattern này.
+
+```
+// Đúng
+find_usages("listProjects")   // trả về định nghĩa trong service.ts + controller.ts
+
+// Sai — không cần thiết nữa
+Bash grep -rn "listProjects" packages/api/src
+```
+
+Chỉ dùng grep khi cần tìm dynamic access (`obj["methodName"]`), string literal, hoặc pattern không phải symbol declaration.
+
 ## Ví dụ
 
 **Không nên:**
 ```
 Read(repo-parse-graph.ts)  // 1900 dòng, chỉ cần sửa 3 dòng
 Agent("audit dead code")   // tốn quota, có thể làm trực tiếp bằng MCP
+Bash grep -rn "createProject" packages/api  // factory method đã được index
 ```
 
 **Nên:**
 ```
 search_codebase("toTopLevelFolder")  // tìm location
 get_file(path, startLine, endLine)   // đọc đúng đoạn cần
+find_usages("createProject")         // factory method → trả về đúng định nghĩa + callers
 find_usages("FunctionName")          // check dead code
-Bash grep -rn "FunctionName" ...     // cross-check import
 ```
