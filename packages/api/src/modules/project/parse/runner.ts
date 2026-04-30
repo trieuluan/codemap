@@ -121,9 +121,9 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
       toSymbolName: string;
       relationshipKind: RepoSymbolRelationshipInsert["relationshipKind"];
     }> = [];
-    const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string }> = [];
+    const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string; namespaceName?: string }> = [];
     const exportDrafts: Array<RepoExportInsert & { symbolLocalKey?: string; sourceImportLocalKey?: string }> = [];
-    const pendingCalls: Array<{ fileId: string; calleeName: string; line: number; col: number; endCol: number }> = [];
+    const pendingCalls: Array<{ fileId: string; calleeName: string; namespaceName?: string; line: number; col: number; endCol: number }> = [];
     const parseIssues = [];
     const externalSymbols = [];
 
@@ -196,6 +196,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
             endLine: importEdge.line,
             endCol: importEdge.endCol,
             extraJson: null,
+            namespaceName: importEdge.namespaceName,
           });
         }
 
@@ -221,7 +222,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         pendingRelationships.push(...semantics.relationships);
 
         for (const call of semantics.calls) {
-          pendingCalls.push({ fileId: fileRow.id, ...call });
+          pendingCalls.push({ fileId: fileRow.id, calleeName: call.calleeName, namespaceName: call.namespaceName, line: call.line, col: call.col, endCol: call.endCol });
         }
       } catch (error) {
         parseIssues.push({
@@ -300,10 +301,24 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }
 
     const importedSymbols = new Map<string, Map<string, string>>();
+    // namespaceMap: sourceFileId → (namespaceName → targetFileId) — for wildcard import resolution
+    const namespaceMap = new Map<string, Map<string, string>>();
+
     for (const edge of importEdgeDrafts) {
-      if (!edge.importedNames?.length || !edge.targetPathText) continue;
+      if (!edge.targetPathText) continue;
       const targetFileId = fileIdByPathPrefix.get(edge.targetPathText);
-      const targetLocalSymbols = targetFileId ? fileLocalSymbols.get(targetFileId) : null;
+      if (!targetFileId) continue;
+
+      // wildcard import: import * as ns from '...'
+      if (edge.namespaceName) {
+        let nsMap = namespaceMap.get(edge.sourceFileId);
+        if (!nsMap) { nsMap = new Map(); namespaceMap.set(edge.sourceFileId, nsMap); }
+        nsMap.set(edge.namespaceName, targetFileId);
+      }
+
+      // named import: import { foo, bar } from '...'
+      if (!edge.importedNames?.length) continue;
+      const targetLocalSymbols = fileLocalSymbols.get(targetFileId);
       if (!targetLocalSymbols) continue;
 
       let byName = importedSymbols.get(edge.sourceFileId);
@@ -338,10 +353,19 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }
 
     for (const call of pendingCalls) {
-      // intra-file first, then cross-file via import edges
-      const symbolId =
-        fileLocalSymbols.get(call.fileId)?.get(call.calleeName) ??
-        importedSymbols.get(call.fileId)?.get(call.calleeName);
+      let symbolId: string | undefined;
+
+      if (call.namespaceName) {
+        // ns.foo() — lookup via wildcard import namespace
+        const targetFileId = namespaceMap.get(call.fileId)?.get(call.namespaceName);
+        symbolId = targetFileId ? fileLocalSymbols.get(targetFileId)?.get(call.calleeName) : undefined;
+      } else {
+        // intra-file first, then named cross-file imports
+        symbolId =
+          fileLocalSymbols.get(call.fileId)?.get(call.calleeName) ??
+          importedSymbols.get(call.fileId)?.get(call.calleeName);
+      }
+
       if (!symbolId) continue;
       occurrenceDrafts.push({
         projectImportId: importId,

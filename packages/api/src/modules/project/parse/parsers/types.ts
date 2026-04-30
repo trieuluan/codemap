@@ -30,6 +30,7 @@ export interface ParsedImportDraft {
   importKind: RepoImportEdgeInsert["importKind"];
   isTypeOnly: boolean;
   importedNames: string[];
+  namespaceName?: string;
   line: number;
   col: number;
   endCol: number;
@@ -57,6 +58,7 @@ export interface ParsedRelationshipDraft {
 
 export interface ParsedCallDraft {
   calleeName: string;
+  namespaceName?: string;
   line: number;
   col: number;
   endCol: number;

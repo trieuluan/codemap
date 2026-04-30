@@ -136,7 +136,15 @@ function extractImportsWithAst(
           if (ts.isNamedImports(clause.namedBindings)) {
             importedNames.push(...extractNamedBindings(clause.namedBindings));
           }
-          // import * as ns — namespace import, importedNames stays []
+          // import * as ns — namespace import
+          if (ts.isNamespaceImport(clause.namedBindings)) {
+            const nsName = clause.namedBindings.name.text;
+            const localKey = pushImport(specifier, "import", isTypeOnly, node.getStart(sourceFile), importedNames);
+            // patch namespaceName onto the last pushed import
+            const last = imports[imports.length - 1];
+            if (last && last.localKey === localKey) last.namespaceName = nsName;
+            return;
+          }
         }
       }
 
@@ -559,7 +567,11 @@ function extractCallsWithAst(
 
       if (calleeName && calleeName !== "require") {
         const { line, col } = getLineCol(sourceFile, expr.getStart(sourceFile));
-        calls.push({ calleeName, line, col, endCol: col + calleeName.length });
+        const namespaceName =
+          ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression)
+            ? expr.expression.text
+            : undefined;
+        calls.push({ calleeName, namespaceName, line, col, endCol: col + calleeName.length });
       }
     }
     ts.forEachChild(node, walk);
