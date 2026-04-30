@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { authClient } from "@/lib/auth-client";
 
 export function SignupForm() {
   const router = useRouter();
@@ -44,7 +45,25 @@ export function SignupForm() {
 
     // Placeholder for auth implementation
     // In production, this would call your signup API
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await authClient.signUp.email({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+      });
+
+      if (response.error) {
+        setError(response.error.message || "An error occurred during signup.");
+        setIsLoading(false);
+        return;
+      }
+      router.push("/dashboard");
+    } catch (error) {
+      console.log(error);
+      setError("An unexpected error occurred. Please try again.");
+      setIsLoading(false);
+      return;
+    }
 
     // Redirect to dashboard on successful signup
     router.push("/dashboard");

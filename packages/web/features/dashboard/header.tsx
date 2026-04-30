@@ -187,11 +187,17 @@ function importStatusIcon(status: string) {
 
 function NotificationBell() {
   const { data: projects } = useSWR(
-    "global-projects-search",
+    "global-projects-notifications",
     () => browserProjectsApi.getProjects({ include: ["latestImport"] }),
     {
       revalidateOnFocus: true,
-      refreshInterval: 10000,
+      refreshInterval: (data) => {
+        const hasActive = (data ?? []).some((p) => {
+          const imp = (p as ProjectListItem & { latestImport?: { status: string } | null }).latestImport;
+          return imp?.status === "queued" || imp?.status === "pending" || imp?.status === "running";
+        });
+        return hasActive ? 3000 : 0;
+      },
     },
   );
 
