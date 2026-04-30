@@ -10,6 +10,7 @@ import {
 } from "./shared";
 import type { TypeScriptResolverConfig } from "../ts-resolver";
 import type {
+  ParsedCallDraft,
   ParsedImportDraft,
   ParsedRelationshipDraft,
   ParsedSymbolDraft,
@@ -537,6 +538,37 @@ function extractSymbolsWithAst(
   return { symbols, relationships };
 }
 
+// ─── Call extraction ─────────────────────────────────────────────────────────
+
+function extractCallsWithAst(
+  file: WorkspaceFileCandidate,
+  sourceFile: ts.SourceFile,
+): ParsedCallDraft[] {
+  const calls: ParsedCallDraft[] = [];
+
+  function walk(node: ts.Node) {
+    if (ts.isCallExpression(node)) {
+      const expr = node.expression;
+      let calleeName: string | null = null;
+
+      if (ts.isIdentifier(expr)) {
+        calleeName = expr.text;
+      } else if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name)) {
+        calleeName = expr.name.text;
+      }
+
+      if (calleeName && calleeName !== "require") {
+        const { line, col } = getLineCol(sourceFile, expr.getStart(sourceFile));
+        calls.push({ calleeName, line, col, endCol: col + calleeName.length });
+      }
+    }
+    ts.forEachChild(node, walk);
+  }
+
+  ts.forEachChild(sourceFile, walk);
+  return calls;
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export function parseTypeScriptOrJavaScriptFile(
@@ -553,6 +585,7 @@ export function parseTypeScriptOrJavaScriptFile(
   );
 
   const { symbols: astSymbols, relationships } = extractSymbolsWithAst(file, sourceFile);
+  const calls = extractCallsWithAst(file, sourceFile);
 
   const symbolExports: ParsedWorkspaceSemantics["exports"] = astSymbols
     .filter((s) => s.isExported)
@@ -570,6 +603,7 @@ export function parseTypeScriptOrJavaScriptFile(
     imports,
     exports: [...exports, ...symbolExports],
     relationships,
+    calls,
     issues,
     externalSymbols,
   };

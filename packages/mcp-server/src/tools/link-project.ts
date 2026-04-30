@@ -10,6 +10,13 @@ import {
 } from "../lib/workspace-project.js";
 import type { Project } from "../lib/api-types.js";
 
+function sshToHttpsUrl(url: string): string {
+  // git@github.com:user/repo.git → https://github.com/user/repo
+  const match = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
+  if (match) return `https://${match[1]}/${match[2]}`;
+  return url;
+}
+
 function normalizeRemoteUrl(url: string) {
   return url
     .trim()
@@ -42,7 +49,7 @@ async function maybePatchProjectRepo(
     return { patched: false, updatedProject: project };
   }
 
-  const body: Record<string, string> = { repositoryUrl: remoteUrl };
+  const body: Record<string, string> = { repositoryUrl: sshToHttpsUrl(remoteUrl) };
   if (branch) body.defaultBranch = branch;
 
   const updatedProject = await client.request<Project>(`/projects/${project.id}`, {

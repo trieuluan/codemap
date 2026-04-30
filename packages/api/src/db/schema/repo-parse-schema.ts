@@ -55,7 +55,7 @@ export const repoSymbolVisibilityEnum = pgEnum("repo_symbol_visibility", [
 
 export const repoSymbolOccurrenceRoleEnum = pgEnum(
   "repo_symbol_occurrence_role",
-  ["definition", "declaration", "reference", "import", "export", "type_reference"],
+  ["definition", "declaration", "reference", "call", "import", "export", "type_reference"],
 );
 
 export const repoSymbolRelationshipKindEnum = pgEnum(

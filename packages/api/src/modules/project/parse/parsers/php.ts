@@ -47,6 +47,7 @@ export async function parsePhpFile(
     imports: [],
     exports: [],
     relationships: [],
+    calls: [],
     issues: [],
     externalSymbols: [],
   };

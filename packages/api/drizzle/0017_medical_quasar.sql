@@ -1,0 +1,1 @@
+ALTER TYPE "public"."repo_symbol_occurrence_role" ADD VALUE 'call' BEFORE 'import';

@@ -123,6 +123,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }> = [];
     const importEdgeDrafts: Array<RepoImportEdgeInsert & { localKey: string }> = [];
     const exportDrafts: Array<RepoExportInsert & { symbolLocalKey?: string; sourceImportLocalKey?: string }> = [];
+    const pendingCalls: Array<{ fileId: string; calleeName: string; line: number; col: number; endCol: number }> = [];
     const parseIssues = [];
     const externalSymbols = [];
 
@@ -218,6 +219,10 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         }
 
         pendingRelationships.push(...semantics.relationships);
+
+        for (const call of semantics.calls) {
+          pendingCalls.push({ fileId: fileRow.id, ...call });
+        }
       } catch (error) {
         parseIssues.push({
           projectImportId: importId,
@@ -271,6 +276,15 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
 
     await repoParseGraphService.saveRelationships(relationshipDrafts);
 
+    // symbolId lookup by display name — used for resolving intra-file call occurrences
+    const symbolIdByDisplayName = new Map<string, string>();
+    for (const symbol of symbolDrafts) {
+      const symbolId = symbol.localSymbolKey ? symbolIdByLocalKey.get(symbol.localSymbolKey) : null;
+      if (symbolId && symbol.displayName) {
+        symbolIdByDisplayName.set(symbol.displayName, symbolId);
+      }
+    }
+
     for (const symbol of symbolDrafts) {
       const fileRow = fileRowByPath.get(symbol.localSymbolKey?.split("#")[0] ?? "");
       const symbolId = symbol.localSymbolKey ? symbolIdByLocalKey.get(symbol.localSymbolKey) : null;
@@ -289,6 +303,24 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         endCol: location.col + symbol.displayName.length,
         syntaxKind: symbol.kind,
         snippetPreview: symbol.signature,
+        extraJson: null,
+      });
+    }
+
+    for (const call of pendingCalls) {
+      const symbolId = symbolIdByDisplayName.get(call.calleeName);
+      if (!symbolId) continue;
+      occurrenceDrafts.push({
+        projectImportId: importId,
+        fileId: call.fileId,
+        symbolId,
+        occurrenceRole: "call",
+        startLine: call.line,
+        startCol: call.col,
+        endLine: call.line,
+        endCol: call.endCol,
+        syntaxKind: null,
+        snippetPreview: null,
         extraJson: null,
       });
     }

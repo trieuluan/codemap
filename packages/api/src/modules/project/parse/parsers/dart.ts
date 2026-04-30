@@ -12,6 +12,7 @@ export function parseDartFile(
     imports: [],
     exports: [],
     relationships: [],
+    calls: [],
     issues: [],
     externalSymbols: [],
   };

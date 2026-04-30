@@ -47,6 +47,7 @@ export async function parsePythonFile(
     imports: [],
     exports: [],
     relationships: [],
+    calls: [],
     issues: [],
     externalSymbols: [],
   };

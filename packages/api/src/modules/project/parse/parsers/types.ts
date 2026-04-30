@@ -55,11 +55,19 @@ export interface ParsedRelationshipDraft {
   relationshipKind: RepoSymbolRelationshipInsert["relationshipKind"];
 }
 
+export interface ParsedCallDraft {
+  calleeName: string;
+  line: number;
+  col: number;
+  endCol: number;
+}
+
 export interface ParsedWorkspaceSemantics {
   symbols: ParsedSymbolDraft[];
   imports: ParsedImportDraft[];
   exports: ParsedExportDraft[];
   relationships: ParsedRelationshipDraft[];
+  calls: ParsedCallDraft[];
   issues: RepoParseIssueInsert[];
   externalSymbols: RepoExternalSymbolInsert[];
 }
@@ -69,6 +77,7 @@ export const EMPTY_SEMANTICS: ParsedWorkspaceSemantics = {
   imports: [],
   exports: [],
   relationships: [],
+  calls: [],
   issues: [],
   externalSymbols: [],
 };
