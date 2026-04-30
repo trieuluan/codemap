@@ -12,7 +12,6 @@ import {
   Clock,
   ExternalLink,
   FileCode2,
-  GitBranch,
   History,
   Loader2,
   Network,
@@ -32,21 +31,20 @@ import {
   triggerProjectImport,
   type Project,
   type ProjectImport,
-  type ProjectImportParseStatus,
 } from "@/features/projects/api";
 import { ProjectStatusBadge } from "../components/project-status-badge";
 import { ProjectVisibilityBadge } from "../components/project-visibility-badge";
 import {
   formatProjectImportAnalysisCount,
   getProjectImportAnalysisStats,
-  getProjectImportParseStatusLabel,
   getProjectRepositoryLabel,
 } from "../utils/project-helpers";
 import { LocalProjectDate } from "../components/local-project-date";
 import { ProjectImportStatusBadge } from "../components/project-import-status-badge";
 import { DeleteProjectDialog } from "../list/components/delete-project-dialog";
 import { EditProjectDialog } from "./components/edit-project-dialog";
-import { cn } from "@/lib/utils";
+import { ImportRow, ParseStatusRow, formatDuration } from "./components/import-row";
+import { StatCard } from "./components/stat-card";
 
 const PAGE_SIZE = 20;
 
@@ -594,125 +592,3 @@ export function ProjectOverview({
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border/70 bg-card p-4 space-y-2">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Icon className="size-3.5" />
-        {label}
-      </div>
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
-const parseStatusStyles: Record<string, string> = {
-  completed: "text-emerald-600 dark:text-emerald-400",
-  partial: "text-amber-600 dark:text-amber-400",
-  failed: "text-destructive",
-  running: "text-blue-600 dark:text-blue-400",
-  pending: "text-muted-foreground",
-  queued: "text-muted-foreground",
-};
-
-function ParseStatusRow({ parseStatus }: { parseStatus: ProjectImportParseStatus }) {
-  const label = getProjectImportParseStatusLabel(parseStatus);
-  const colorClass = parseStatusStyles[parseStatus] ?? "text-muted-foreground";
-  return (
-    <div className="flex items-center gap-1.5 text-xs">
-      <BookOpen className="size-3 text-muted-foreground" />
-      <span className="text-muted-foreground">Parse:</span>
-      <span className={cn("font-medium", colorClass)}>{label}</span>
-    </div>
-  );
-}
-
-// Fix #3: ImportRow với parse status, duration, và indexed counts
-function ImportRow({
-  imp,
-}: {
-  imp: ProjectImport & { commitMessage?: string | null };
-}) {
-  const isActive =
-    imp.status === "pending" || imp.status === "queued" || imp.status === "running";
-  const duration =
-    imp.completedAt ? formatDuration(imp.startedAt, imp.completedAt) : null;
-
-  return (
-    <li className="flex items-start gap-3 px-5 py-3">
-      <div className="mt-0.5 shrink-0">
-        <ProjectImportStatusBadge status={imp.status} />
-      </div>
-
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {imp.branch ? (
-            <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-              <GitBranch className="size-3" />
-              {imp.branch}
-            </span>
-          ) : null}
-          {imp.commitMessage ? (
-            <span className="truncate text-xs text-foreground">{imp.commitMessage}</span>
-          ) : null}
-        </div>
-
-        {/* Fix #4: parse status inline */}
-        {imp.status === "completed" && imp.parseStatus ? (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Parse:</span>
-            <span
-              className={cn(
-                "font-medium",
-                parseStatusStyles[imp.parseStatus] ?? "text-muted-foreground",
-              )}
-            >
-              {getProjectImportParseStatusLabel(imp.parseStatus)}
-            </span>
-            {/* Fix #3: indexed counts */}
-            {imp.parseStatus === "completed" || imp.parseStatus === "partial" ? (
-              <span className="text-muted-foreground">
-                · {imp.indexedFileCount.toLocaleString()} files ·{" "}
-                {imp.indexedSymbolCount.toLocaleString()} symbols
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {isActive ? (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" />
-            In progress…
-          </div>
-        ) : null}
-      </div>
-
-      <div className="shrink-0 text-right text-xs text-muted-foreground space-y-0.5">
-        <LocalProjectDate value={imp.startedAt} />
-        {duration ? (
-          <p className="text-[10px] text-muted-foreground/60">{duration}</p>
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-function formatDuration(startedAt: string, completedAt: string): string {
-  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-  if (ms < 0) return "";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
-}
