@@ -114,6 +114,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     const fileRowByPath = new Map(fileRows.map((file) => [file.path, file] as const));
     const filePathSet = new Set(fileRows.map((file) => file.path));
     const symbolDrafts: RepoSymbolInsert[] = [];
+    const symbolParentLocalKeyMap = new Map<string, string>(); // localKey → parentLocalKey
     const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
     const pendingRelationships: Array<{
       fromSymbolLocalKey: string;
@@ -143,6 +144,9 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         });
 
         for (const symbol of semantics.symbols) {
+          if (symbol.parentSymbolLocalKey) {
+            symbolParentLocalKeyMap.set(symbol.localKey, symbol.parentSymbolLocalKey);
+          }
           symbolDrafts.push({
             projectImportId: importId,
             fileId: fileRow.id,
@@ -232,6 +236,19 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         .map((symbol) => [symbol.localSymbolKey, symbol.id] as const)
         .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1])),
     );
+
+    // Resolve parentSymbolLocalKey → parentSymbolId for factory return-object methods
+    if (symbolParentLocalKeyMap.size > 0) {
+      const parentPairs: Array<{ childId: string; parentId: string }> = [];
+      for (const [childLocalKey, parentLocalKey] of symbolParentLocalKeyMap) {
+        const childId = symbolIdByLocalKey.get(childLocalKey);
+        const parentId = symbolIdByLocalKey.get(parentLocalKey);
+        if (childId && parentId) parentPairs.push({ childId, parentId });
+      }
+      if (parentPairs.length > 0) {
+        await repoParseGraphService.updateSymbolParents(parentPairs);
+      }
+    }
 
     const relationshipDrafts = pendingRelationships
       .map((r) => {

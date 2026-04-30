@@ -298,6 +298,120 @@ function extractSymbolsWithAst(
     });
   }
 
+  // ─── Factory return-object method extraction (heuristic #1 + type-driven #2) ──
+
+  function getReturnedObjectLiteral(
+    body: ts.Block | ts.Expression | undefined,
+  ): ts.ObjectLiteralExpression | null {
+    if (!body) return null;
+    // Arrow function shorthand: () => ({ ... })
+    if (ts.isParenthesizedExpression(body)) {
+      const inner = body.expression;
+      return ts.isObjectLiteralExpression(inner) ? inner : null;
+    }
+    if (ts.isObjectLiteralExpression(body)) return body;
+    if (!ts.isBlock(body)) return null;
+
+    // Block body: find the last return statement
+    let returnedObj: ts.ObjectLiteralExpression | null = null;
+    for (const stmt of body.statements) {
+      if (ts.isReturnStatement(stmt) && stmt.expression) {
+        const expr = ts.isParenthesizedExpression(stmt.expression)
+          ? stmt.expression.expression
+          : stmt.expression;
+        if (ts.isObjectLiteralExpression(expr)) {
+          returnedObj = expr;
+        }
+      }
+    }
+    return returnedObj;
+  }
+
+  // Heuristic #2: if the function has a return type annotation that is a TypeLiteral
+  // (e.g., ): { foo(): void; bar(): string }), extract allowed method names from it.
+  // Returns null if no type annotation or annotation is not a resolvable object type.
+  function getAllowedNamesFromReturnType(
+    node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+  ): Set<string> | null {
+    if (!node.type) return null;
+    // ): { method1(): T; method2(): U }
+    if (ts.isTypeLiteralNode(node.type)) {
+      const names = new Set<string>();
+      for (const member of node.type.members) {
+        if (
+          (ts.isMethodSignature(member) || ts.isPropertySignature(member)) &&
+          ts.isIdentifier(member.name)
+        ) {
+          names.add(member.name.text);
+        }
+      }
+      return names.size > 0 ? names : null;
+    }
+    return null;
+  }
+
+  function extractReturnObjectMethods(
+    fnNode: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+    parentLocalKey: string,
+    isParentExported: boolean,
+  ) {
+    const body = fnNode.body;
+    const obj = getReturnedObjectLiteral(body);
+    if (!obj) return;
+
+    const allowedNames = getAllowedNamesFromReturnType(fnNode);
+
+    for (const prop of obj.properties) {
+      let name: string | null = null;
+      let methodNode: ts.Node = prop;
+      let isMethod = false;
+
+      if (ts.isMethodDeclaration(prop) && ts.isIdentifier(prop.name)) {
+        name = prop.name.text;
+        isMethod = true;
+      } else if (ts.isPropertyAssignment(prop) && ts.isIdentifier(prop.name)) {
+        const init = prop.initializer;
+        if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+          name = prop.name.text;
+          methodNode = prop;
+          isMethod = true;
+        }
+      } else if (ts.isShorthandPropertyAssignment(prop)) {
+        // { foo } — reference to existing symbol, not a new method definition, skip
+      }
+
+      if (!name || !isMethod) continue;
+      // If type annotation present, only index names that appear in it
+      if (allowedNames && !allowedNames.has(name)) continue;
+
+      const { line, col } = getLineCol(sourceFile, methodNode.getStart(sourceFile));
+      symbols.push({
+        localKey: buildLocalSymbolKey(file.path, "method", name),
+        stableKey: buildStableSymbolKey(file.path, "method", name, line),
+        displayName: name,
+        kind: "method",
+        language: file.language!,
+        signature: getSignature(methodNode),
+        returnType: getReturnType(
+          ts.isMethodDeclaration(prop)
+            ? prop
+            : ts.isPropertyAssignment(prop)
+              ? (prop.initializer as ts.ArrowFunction | ts.FunctionExpression)
+              : prop as ts.Node,
+        ),
+        doc: getJSDoc(prop),
+        isExported: isParentExported,
+        isDefaultExport: false,
+        line,
+        col,
+        endCol: col + name.length,
+        parentSymbolLocalKey: parentLocalKey,
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   function visitTopLevel(node: ts.Node) {
     if (ts.isExportAssignment(node)) {
       const expr = node.expression;
@@ -318,7 +432,10 @@ function extractSymbolsWithAst(
     const isDefault = modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
 
     if (ts.isFunctionDeclaration(node) && node.name) {
-      pushSymbol(node.name.text, "function", node, isExported, isDefault);
+      const name = node.name.text;
+      pushSymbol(name, "function", node, isExported, isDefault);
+      const localKey = buildLocalSymbolKey(file.path, "function", name);
+      extractReturnObjectMethods(node, localKey, isExported);
       return;
     }
 
@@ -374,6 +491,13 @@ function extractSymbolsWithAst(
           kind = "function";
         }
         pushSymbol(name, kind, decl, isExported, false);
+        if (
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
+        ) {
+          const localKey = buildLocalSymbolKey(file.path, kind, name);
+          extractReturnObjectMethods(decl.initializer, localKey, isExported);
+        }
       }
     }
   }

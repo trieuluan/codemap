@@ -30,9 +30,9 @@ export default async function ProjectExplorerPage({
   });
 
   try {
-    const [project, imports, mapSnapshot] = await Promise.all([
+    const [project, firstPage, mapSnapshot] = await Promise.all([
       api.getProject(projectId),
-      api.getProjectImports(projectId),
+      api.getProjectImportPage(projectId, { limit: 1 }),
       api.getProjectMap(projectId).catch((error) => {
         if (error instanceof ProjectsApiError && error.statusCode === 404) {
           return null;
@@ -40,6 +40,7 @@ export default async function ProjectExplorerPage({
         throw error;
       }),
     ]);
+    const imports = firstPage.data;
 
     return (
       <div className="space-y-6">

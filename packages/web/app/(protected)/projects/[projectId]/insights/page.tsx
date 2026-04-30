@@ -30,14 +30,15 @@ export default async function ProjectInsightsPage({
   });
 
   try {
-    const [project, imports, insights] = await Promise.all([
+    const [project, firstPage, insights] = await Promise.all([
       api.getProject(projectId),
-      api.getProjectImports(projectId),
+      api.getProjectImportPage(projectId, { limit: 1 }),
       api.getProjectInsights(projectId, {
         file: focusFile,
         symbol: focusSymbol,
       }),
     ]);
+    const imports = firstPage.data;
 
     return (
       <div className="space-y-6">

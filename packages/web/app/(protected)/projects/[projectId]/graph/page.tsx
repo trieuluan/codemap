@@ -31,11 +31,12 @@ export default async function ProjectGraphPage({
   });
 
   try {
-    const [project, imports, graphData] = await Promise.all([
+    const [project, firstPage, graphData] = await Promise.all([
       api.getProject(projectId),
-      api.getProjectImports(projectId),
+      api.getProjectImportPage(projectId, { limit: 1 }),
       api.getProjectGraph(projectId),
     ]);
+    const imports = firstPage.data;
 
     return (
       <div className="space-y-6">

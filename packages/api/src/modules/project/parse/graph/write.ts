@@ -103,6 +103,20 @@ export function createWriteService(database: Database) {
       );
     },
 
+    async updateSymbolParents(pairs: Array<{ childId: string; parentId: string }>) {
+      for (let i = 0; i < pairs.length; i += DB_CHUNK_SIZE) {
+        const chunk = pairs.slice(i, i + DB_CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(({ childId, parentId }) =>
+            database
+              .update(repoSymbol)
+              .set({ parentSymbolId: parentId })
+              .where(eq(repoSymbol.id, childId)),
+          ),
+        );
+      }
+    },
+
     async upsertExternalSymbols(symbols: RepoExternalSymbolInsert[]) {
       if (symbols.length === 0) return [] as (typeof repoExternalSymbol.$inferSelect)[];
       return chunkInsert(symbols, (chunk) =>

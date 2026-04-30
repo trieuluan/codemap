@@ -51,12 +51,6 @@ export function createServerProjectsApi(
       });
     },
 
-    getProjectImports: async (projectId: string) => {
-      return requestApi<ProjectImport[]>(`/projects/${projectId}/imports`, {
-        cookieHeader: defaults.cookieHeader,
-      });
-    },
-
     getProjectImportPage: async (
       projectId: string,
       options?: { limit?: number; cursor?: string },

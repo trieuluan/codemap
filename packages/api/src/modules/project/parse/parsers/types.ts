@@ -21,6 +21,7 @@ export interface ParsedSymbolDraft {
   line: number;
   col: number;
   endCol: number;
+  parentSymbolLocalKey?: string; // set for methods extracted from factory return objects
 }
 
 export interface ParsedImportDraft {

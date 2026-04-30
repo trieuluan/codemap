@@ -34,7 +34,8 @@
       "mcp__codemap-mcp-dev__get_project_insights",
       "Bash(awk '$1 >= 1000 && $2 != \"total\"')",
       "mcp__codemap-mcp-dev__logout",
-      "mcp__codemap-mcp-dev__start_auth_flow"
+      "mcp__codemap-mcp-dev__start_auth_flow",
+      "mcp__codemap-mcp-dev__find_usages"
     ]
   },
   "enableAllProjectMcpServers": true,
