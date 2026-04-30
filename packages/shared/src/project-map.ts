@@ -273,3 +273,66 @@ export interface ProjectMapGraphResponse {
     folderEdgeCount: number;
   };
 }
+
+export interface ProjectSymbolGraphRange {
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+export interface ProjectSymbolGraphSummary {
+  id: string;
+  name: string;
+  kind: string;
+  signature: string | null;
+  fileId: string | null;
+  filePath: string | null;
+  parentSymbolId: string | null;
+  parentSymbolName: string | null;
+  isExported: boolean;
+  isDefaultExport: boolean;
+  range: ProjectSymbolGraphRange | null;
+  usageCount: number;
+  callerCount: number;
+  outgoingCount: number;
+  incomingCount: number;
+}
+
+export interface ProjectSymbolGraphNode {
+  id: string;
+  name: string;
+  kind: string;
+  signature: string | null;
+  filePath: string | null;
+  range: ProjectSymbolGraphRange | null;
+  role: "target" | "incoming" | "outgoing";
+  confidence: "definite" | "probable" | "potential";
+}
+
+export interface ProjectSymbolGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: string;
+  evidence: "symbol_relationship" | "occurrence" | "import";
+  confidence: "definite" | "probable" | "potential";
+  range: ProjectSymbolGraphRange | null;
+}
+
+export interface ProjectSymbolGraphResponse {
+  file: {
+    id: string;
+    path: string;
+    language: string | null;
+  } | null;
+  symbols: ProjectSymbolGraphSummary[];
+  target: ProjectSymbolGraphSummary | null;
+  nodes: ProjectSymbolGraphNode[];
+  edges: ProjectSymbolGraphEdge[];
+  meta: {
+    projectImportId: string;
+    source: "repo_parse_graph";
+    staleness: "latest_import";
+  };
+}

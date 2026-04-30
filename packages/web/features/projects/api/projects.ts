@@ -21,6 +21,7 @@ import type {
   ProjectMapSnapshot,
   ProjectMapSearchResponse,
   ProjectMapGraphResponse,
+  ProjectSymbolGraphResponse,
   ProjectSourceImportResult,
   UpdateProjectInput,
   TriggerProjectImportInput,
@@ -148,6 +149,22 @@ export function createServerProjectsApi(
         `/projects/${projectId}/map/graph`,
         {
           cookieHeader: defaults.cookieHeader,
+        },
+      );
+    },
+
+    getProjectSymbolGraph: async (
+      projectId: string,
+      options: { file: string; symbol?: string | null },
+    ) => {
+      return requestApi<ProjectSymbolGraphResponse>(
+        `/projects/${projectId}/map/symbol-graph`,
+        {
+          cookieHeader: defaults.cookieHeader,
+          queryParams: {
+            file: options.file,
+            symbol: options.symbol ?? undefined,
+          },
         },
       );
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { ProjectMapGraphResponse } from "@/features/projects/api";
 import {
   findGraphNodeById,
@@ -135,6 +135,33 @@ export function useProjectMapGraphState({
     ({ graphData: initialGraphData, initialFocusFile: initialFile }) =>
       createInitialState(initialGraphData, initialFile),
   );
+  const lastAppliedInitialFocusFileRef = useRef<string | null>(
+    initialFocusFile ?? null,
+  );
+
+  useEffect(() => {
+    const nextFocusFile = initialFocusFile ?? null;
+
+    if (!nextFocusFile) {
+      lastAppliedInitialFocusFileRef.current = null;
+      return;
+    }
+
+    if (lastAppliedInitialFocusFileRef.current === nextFocusFile) {
+      return;
+    }
+
+    const node = findGraphNodeByPath(graphData.nodes, nextFocusFile);
+
+    if (!node) {
+      lastAppliedInitialFocusFileRef.current = nextFocusFile;
+      return;
+    }
+
+    lastAppliedInitialFocusFileRef.current = nextFocusFile;
+    dispatch({ type: "ENTER_FOCUS", nodeId: node.id, relationMode: "all" });
+    dispatch({ type: "OPEN_DRAWER", nodeId: node.id });
+  }, [graphData.nodes, initialFocusFile]);
 
   const allCycleNodeIds = useMemo(
     () => new Set(graphData.cycles.flatMap((cycle) => cycle.nodeIds)),

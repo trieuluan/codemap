@@ -141,7 +141,11 @@ export function ProjectMapSearchDialog({
     const encodedPath = encodeURIComponent(filePath);
 
     if (destination === "graph") {
-      return `/projects/${projectId}/graph?file=${encodedPath}`;
+      const symbolQuery = item.symbolName
+        ? `&symbol=${encodeURIComponent(item.symbolName)}`
+        : "";
+
+      return `/projects/${projectId}/graph?file=${encodedPath}${symbolQuery}`;
     }
 
     if (destination === "insights") {

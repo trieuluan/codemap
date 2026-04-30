@@ -143,6 +143,11 @@ export const projectSymbolUsagesQuerySchema = z.object({
   path: z.string().trim().min(1).max(2000).optional(),
 });
 
+export const projectSymbolGraphQuerySchema = z.object({
+  file: z.string().trim().min(1).max(2000),
+  symbol: z.string().trim().min(1).max(255).optional(),
+});
+
 export const createProjectFromUploadQuerySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().min(1).max(500).optional(),
@@ -177,6 +182,9 @@ export type ProjectEditLocationsQuery = z.infer<
 >;
 export type ProjectSymbolUsagesQuery = z.infer<
   typeof projectSymbolUsagesQuerySchema
+>;
+export type ProjectSymbolGraphQuery = z.infer<
+  typeof projectSymbolGraphQuerySchema
 >;
 export type CreateProjectFromUploadQuery = z.infer<
   typeof createProjectFromUploadQuerySchema

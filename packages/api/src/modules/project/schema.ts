@@ -16,6 +16,7 @@ import {
   type ProjectImportCompareQuery,
   type ProjectListInclude,
   type ProjectMapSearchQuery,
+  type ProjectSymbolGraphQuery,
   type ProjectSymbolUsagesQuery,
   type TriggerProjectImportInput,
   type UpdateProjectInput,
@@ -74,6 +75,7 @@ export {
   projectImportCompareQuerySchema,
   projectListIncludeSchema,
   projectMapSearchQuerySchema,
+  projectSymbolGraphQuerySchema,
   projectSymbolUsagesQuerySchema,
 } from "@codemap/shared";
 
@@ -93,5 +95,6 @@ export type {
   ProjectImportCompareQuery,
   ProjectListInclude,
   ProjectMapSearchQuery,
+  ProjectSymbolGraphQuery,
   ProjectSymbolUsagesQuery,
 };

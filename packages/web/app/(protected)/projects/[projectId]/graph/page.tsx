@@ -21,10 +21,11 @@ export default async function ProjectGraphPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ file?: string }>;
+  searchParams: Promise<{ file?: string; symbol?: string }>;
 }) {
   const { projectId } = await params;
-  const { file: initialFocusFile } = await searchParams;
+  const { file: initialFocusFile, symbol: initialFocusSymbol } =
+    await searchParams;
   const api = createServerProjectsApi({
     cookieHeader: (await cookies()).toString(),
   });
@@ -92,6 +93,7 @@ export default async function ProjectGraphPage({
           projectId={project.id}
           graphData={graphData}
           initialFocusFile={initialFocusFile}
+          initialFocusSymbol={initialFocusSymbol}
         />
       </div>
     );

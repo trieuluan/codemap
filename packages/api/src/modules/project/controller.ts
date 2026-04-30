@@ -31,6 +31,7 @@ import {
   projectMapInsightsQuerySchema,
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
+  projectSymbolGraphQuerySchema,
   projectParamsSchema,
   projectSymbolParamsSchema,
   projectSymbolUsagesQuerySchema,
@@ -699,6 +700,37 @@ export function createProjectController(fastify: FastifyInstance) {
 
       const graph = await repoParseGraphService.getProjectGraph(
         latestMapWithSource.importRecord.id,
+      );
+
+      return reply.success(graph);
+    },
+
+    getProjectSymbolGraph: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectSymbolGraphQuerySchema.parse(request.query ?? {});
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      if (!latestMapWithSource.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const graph = await repoParseGraphService.getProjectSymbolGraph(
+        latestMapWithSource.importRecord.id,
+        {
+          filePath: query.file,
+          symbolName: query.symbol,
+        },
       );
 
       return reply.success(graph);

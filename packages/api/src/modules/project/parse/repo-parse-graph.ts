@@ -7,6 +7,7 @@ import { createGraphService } from "./graph/graph";
 import { createImportEdgeQueryService } from "./graph/import-edge-queries";
 import { createInsightsService } from "./graph/insights";
 import { createSearchService } from "./graph/search";
+import { createSymbolGraphService } from "./graph/symbol-graph";
 import { createSymbolUsagesService } from "./graph/symbol-usages";
 import { createWriteService } from "./graph/write";
 
@@ -21,6 +22,7 @@ export function createRepoParseGraphService(database: Database) {
     ...createGraphService(database),
     ...createSearchService(database),
     ...createEditLocationsService(database),
+    ...createSymbolGraphService(database),
     ...createSymbolUsagesService(database),
     ...createDiffService(database),
   };
