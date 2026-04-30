@@ -291,10 +291,18 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
 
     // importedSymbols: sourceFileId → (importedName → symbolId) — for cross-file call resolution
     // built from import edges: if file A imports { foo } from file B, lookup foo in B's symbols
+    // targetPathText may lack extension (e.g. "service.shared" vs "service.shared.ts") — resolve with prefix match
+    const fileIdByPathPrefix = new Map<string, string>();
+    for (const [path, row] of fileRowByPath) {
+      const withoutExt = path.replace(/\.[^/.]+$/, "");
+      fileIdByPathPrefix.set(withoutExt, row.id);
+      fileIdByPathPrefix.set(path, row.id);
+    }
+
     const importedSymbols = new Map<string, Map<string, string>>();
     for (const edge of importEdgeDrafts) {
       if (!edge.importedNames?.length || !edge.targetPathText) continue;
-      const targetFileId = fileRowByPath.get(edge.targetPathText)?.id;
+      const targetFileId = fileIdByPathPrefix.get(edge.targetPathText);
       const targetLocalSymbols = targetFileId ? fileLocalSymbols.get(targetFileId) : null;
       if (!targetLocalSymbols) continue;
 
