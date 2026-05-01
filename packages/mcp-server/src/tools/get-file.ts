@@ -423,7 +423,7 @@ export function registerGetFileTool(
             },
           );
         } catch {
-          // Best-effort — if file not found locally or BE rejects, use existing data
+          // Best-effort — local file may not exist (remote provider) or BE may reject
         }
 
         const sections = include ?? ["content", "outline"];

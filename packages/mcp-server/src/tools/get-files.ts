@@ -133,10 +133,10 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
     {
       title: "Get Files (Batch Outline)",
       description:
-        "Fetches outline for multiple files in a single call — imports, exported-by, exports, and symbols with signatures. " +
-        "Use this after suggest_edit_locations when you need to survey several files before deciding where to edit. " +
+        "Fetches outline for multiple files in one call — imports, imported-by, exports, and symbols with signatures. " +
+        "Use when you need to survey several files at once (e.g. after suggest_edit_locations). " +
         "Runs all requests in parallel. Maximum 7 files per call. " +
-        "Does not support full content — use get_file for that. " +
+        "No file content — use get_file(include=[outline]) for a single file, or get_file(include=[content,outline]) for content too. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         paths: z

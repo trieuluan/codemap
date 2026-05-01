@@ -79,9 +79,26 @@ function buildResultData(
   timedOut: boolean,
   health: ReturnType<typeof buildImportHealth>,
 ) {
+  // Only include lightweight import summary — full import JSON is large and rarely needed
+  const importSummary = imp
+    ? {
+        id: imp.id,
+        status: imp.status,
+        parseStatus: imp.parseStatus,
+        branch: imp.branch,
+        commitSha: imp.commitSha,
+        completedAt: imp.completedAt,
+        indexedFileCount: imp.indexedFileCount,
+        indexedSymbolCount: imp.indexedSymbolCount,
+        indexedEdgeCount: imp.indexedEdgeCount,
+        errorMessage: imp.errorMessage ?? null,
+        parseError: imp.parseError ?? null,
+      }
+    : null;
+
   return {
     projectId,
-    import: imp,
+    import: importSummary,
     status: imp?.status ?? "missing",
     parseStatus: imp?.parseStatus ?? null,
     timedOut,

@@ -18,11 +18,11 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
     {
       title: "Find Callers",
       description:
-        "Find who calls or imports a specific symbol — returns only the files that reference this symbol, " +
-        "not internal usages within the same file. " +
-        "Use find_usages instead when you need all references including definitions and in-file occurrences. " +
-        "Results are capped at 50; check totalCallers in data to know if results were truncated. " +
-        "Callers are static analysis results, not guaranteed runtime call graph edges. " +
+        "Find which OTHER files call or import a specific symbol. " +
+        "Requires both file path and symbol name — use this when you know exactly which symbol to look up. " +
+        "Returns only cross-file references (not in-file occurrences). " +
+        "Use find_usages instead when: you don't know the file path, or you need definitions + in-file occurrences too. " +
+        "Results capped at 50; check totalCallers in data for full count. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         path: z

@@ -19,8 +19,9 @@ export function registerCheckGitlabConnectionTool(
       title: "Check GitLab Connection",
       description:
         "Checks whether the current user has connected their GitLab account to CodeMap. " +
-        "Call this before any operation that requires cloning a private GitLab repository. " +
-        "If the result is connected=false, call get_gitlab_connect_url and prompt the user to authorize access.",
+        "Prefer check_auth_status which checks GitHub and GitLab in a single call. " +
+        "Use this only when you need detailed GitLab scope/token info. " +
+        "If connected=false, call get_gitlab_connect_url and prompt the user to authorize.",
       inputSchema: {},
     },
     withToolError(async () => {

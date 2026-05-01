@@ -5,6 +5,10 @@ import { getMcpWhoAmI } from "../lib/mcp-auth.js";
 import { success, errorContent } from "../lib/tool-response.js";
 import type { GithubStatus } from "../lib/api-types.js";
 
+type GitlabStatus =
+  | { connected: false }
+  | { connected: true; gitlabLogin: string; scope: string; connectedAt: string };
+
 export function registerCheckAuthStatusTool(
   server: McpServer,
   config: McpServerConfig,
@@ -38,49 +42,38 @@ export function registerCheckAuthStatusTool(
       }
 
       try {
-        const response = await getMcpWhoAmI(client);
-        let github: GithubStatus | null = null;
-        let githubCheckError: string | null = null;
+        const [response, githubResult, gitlabResult] = await Promise.allSettled([
+          getMcpWhoAmI(client),
+          client.request<GithubStatus>("/github/status", { authRequired: true }),
+          client.request<GitlabStatus>("/gitlab/status", { authRequired: true }),
+        ]);
 
-        try {
-          github = await client.request<GithubStatus>("/github/status", {
-            authRequired: true,
-          });
-        } catch (error) {
-          githubCheckError =
-            error instanceof Error ? error.message : "Unable to check GitHub";
-        }
+        if (response.status === "rejected") throw response.reason;
+
+        const whoami = response.value;
+        const github = githubResult.status === "fulfilled" ? githubResult.value : null;
+        const gitlab = gitlabResult.status === "fulfilled" ? gitlabResult.value : null;
 
         const summary = [
           "Authenticated with CodeMap.",
-          `API URL: ${response.apiUrl}`,
-          response.user.email ? `Email: ${response.user.email}` : null,
-          response.user.name ? `Name: ${response.user.name}` : null,
-          response.user.id ? `User ID: ${response.user.id}` : null,
-          github?.connected
-            ? `GitHub: connected as @${github.githubLogin}`
-            : "GitHub: not connected",
-          github?.connected
-            ? "Next action: call get_project to check project/index health, or create_project if this workspace is not linked yet."
-            : "Next action: GitHub is optional; call `get_github_connect_url` if repository import needs GitHub access.",
-          githubCheckError ? `GitHub status check: ${githubCheckError}` : null,
+          `API URL: ${whoami.apiUrl}`,
+          whoami.user.email ? `Email: ${whoami.user.email}` : null,
+          whoami.user.name ? `Name: ${whoami.user.name}` : null,
+          github?.connected ? `GitHub: connected as @${github.githubLogin}` : "GitHub: not connected",
+          gitlab?.connected ? `GitLab: connected as @${gitlab.gitlabLogin}` : "GitLab: not connected",
+          "Next action: call get_project to check project/index health, or create_project if this workspace is not linked yet.",
         ]
           .filter(Boolean)
           .join("\n");
 
         return success(summary, {
           authenticated: true,
-          apiUrl: response.apiUrl,
-          user: response.user,
+          apiUrl: whoami.apiUrl,
+          user: whoami.user,
           loginRequired: false,
-          github: github ?? {
-            connected: false,
-            githubLogin: null,
-            checkError: githubCheckError,
-          },
-          nextAction: github?.connected
-            ? "ready"
-            : "optional_github_connect",
+          github: github ?? { connected: false },
+          gitlab: gitlab ?? { connected: false },
+          nextAction: "ready",
         });
       } catch (error) {
         return errorContent(error);
