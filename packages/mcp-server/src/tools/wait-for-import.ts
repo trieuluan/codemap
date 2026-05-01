@@ -78,42 +78,48 @@ function buildResultData(
   imp: ProjectImportDetail | null,
   timedOut: boolean,
   health: ReturnType<typeof buildImportHealth>,
+  verbose = false,
 ) {
-  // Only include lightweight import summary — full import JSON is large and rarely needed
-  const importSummary = imp
-    ? {
-        id: imp.id,
-        status: imp.status,
-        parseStatus: imp.parseStatus,
-        branch: imp.branch,
-        commitSha: imp.commitSha,
-        completedAt: imp.completedAt,
-        indexedFileCount: imp.indexedFileCount,
-        indexedSymbolCount: imp.indexedSymbolCount,
-        indexedEdgeCount: imp.indexedEdgeCount,
-        errorMessage: imp.errorMessage ?? null,
-        parseError: imp.parseError ?? null,
-      }
+  const importData = imp
+    ? verbose
+      ? imp
+      : {
+          id: imp.id,
+          status: imp.status,
+          parseStatus: imp.parseStatus,
+          branch: imp.branch,
+          commitSha: imp.commitSha,
+          completedAt: imp.completedAt,
+          indexedFileCount: imp.indexedFileCount,
+          indexedSymbolCount: imp.indexedSymbolCount,
+          indexedEdgeCount: imp.indexedEdgeCount,
+          errorMessage: imp.errorMessage ?? null,
+          parseError: imp.parseError ?? null,
+        }
     : null;
+
+  const healthData = verbose
+    ? health
+    : {
+        state: health.state,
+        isReady: health.isReady,
+        isStale: health.isStale,
+        needsReimport: health.needsReimport,
+        nextAction: health.nextAction,
+        commitComparison: health.commitComparison,
+        workspaceResolution: health.workspaceResolution,
+      };
 
   return {
     projectId,
-    import: importSummary,
+    import: importData,
     status: imp?.status ?? "missing",
     parseStatus: imp?.parseStatus ?? null,
     timedOut,
     completed: imp ? isDone(imp.status) : false,
     commit: imp?.commitSha ?? null,
     completedAt: imp?.completedAt ?? null,
-    health: {
-      state: health.state,
-      isReady: health.isReady,
-      isStale: health.isStale,
-      needsReimport: health.needsReimport,
-      nextAction: health.nextAction,
-      commitComparison: health.commitComparison,
-      workspaceResolution: health.workspaceResolution,
-    },
+    health: healthData,
     nextAction: health.nextAction,
   };
 }
@@ -149,9 +155,14 @@ export function registerWaitForImportTool(
           .max(120_000)
           .optional()
           .describe(`Max milliseconds to wait per call. Defaults to ${DEFAULT_TIMEOUT_MS}.`),
+        verbose: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Return full import and health objects. Use only when debugging a failed import."),
       },
     },
-    withToolError(async ({ project_id, timeout_ms }) => {
+    withToolError(async ({ project_id, timeout_ms, verbose }) => {
       const resolvedProjectId = project_id ?? await readWorkspaceProjectId();
 
       if (!resolvedProjectId) {
@@ -199,7 +210,7 @@ export function registerWaitForImportTool(
             ["No imports found for this project.", describeImportHealth(health)]
               .filter(Boolean)
               .join("\n\n"),
-            buildResultData(resolvedProjectId, null, false, health),
+            buildResultData(resolvedProjectId, null, false, health, verbose),
           );
         }
 
@@ -213,7 +224,7 @@ export function registerWaitForImportTool(
           });
           return success(
             formatResult(latest, false, health),
-            buildResultData(resolvedProjectId, latest, false, health),
+            buildResultData(resolvedProjectId, latest, false, health, verbose),
           );
         }
 
@@ -228,7 +239,7 @@ export function registerWaitForImportTool(
           });
           return success(
             formatResult(latest, true, health),
-            buildResultData(resolvedProjectId, latest, true, health),
+            buildResultData(resolvedProjectId, latest, true, health, verbose),
           );
         }
 
