@@ -207,11 +207,21 @@ export function registerGetProjectInsightsTool(
         lines.push("");
       }
 
+      const insightsTrimmed = {
+        ...(include("totals") && { totals: insights.totals }),
+        ...(include("cycles") && { circularDependencyCandidates: insights.circularDependencyCandidates }),
+        ...(include("entry_points") && { entryLikeFiles: insights.entryLikeFiles }),
+        ...(include("top_by_imports") && { topFilesByImportCount: insights.topFilesByImportCount }),
+        ...(include("top_by_inbound") && { topFilesByInboundDependencyCount: insights.topFilesByInboundDependencyCount }),
+        ...(include("orphans") && { orphanFiles: insights.orphanFiles }),
+        ...(include("folders") && { topFoldersBySourceFileCount: insights.topFoldersBySourceFileCount }),
+      };
+
       return success(lines.join("\n"), {
         projectId: resolvedProjectId,
         available: true,
         sections: sections ?? null,
-        insights,
+        insights: insightsTrimmed,
       });
     }),
   );
