@@ -97,6 +97,7 @@ export const createProjectFromGithubInputSchema = z.object({
   externalRepoId: nullableShortString.optional(),
   defaultBranch: nullableShortString.optional(),
   branch: z.string().trim().min(1).max(255).optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 export const createProjectFromGitlabInputSchema =

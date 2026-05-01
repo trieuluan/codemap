@@ -375,6 +375,10 @@ export function createMcpService(
         return session;
       }
 
+      const personalWorkspace = await workspaceService.ensurePersonalWorkspace(user.id);
+      const entitlements = workspaceService.getWorkspaceEntitlements(personalWorkspace);
+      workspaceService.assertCanUseMcp(entitlements);
+
       const preparedApiKey = await prepareApiKeyForSession({
         session,
         user,
@@ -391,9 +395,6 @@ export function createMcpService(
 
       await saveSession(session);
 
-      const personalWorkspace = await workspaceService.ensurePersonalWorkspace(
-        user.id,
-      );
       await workspaceService.recordUsageEvent({
         workspaceId: personalWorkspace.id,
         userId: user.id,

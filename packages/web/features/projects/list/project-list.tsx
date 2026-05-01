@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, Github, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,7 @@ import {
 import type { ProjectListItem, ProjectStatus } from "@/features/projects/api";
 import { CreateProjectDialog } from "./components/create-project-dialog";
 import { DeleteProjectDialog } from "./components/delete-project-dialog";
+import { ImportFromGithubDialog } from "./components/import-from-github-dialog";
 import { ProjectListCard } from "./components/project-list-card";
 
 const statusOptions: Array<{ label: string; value: ProjectStatus | "all" }> = [
@@ -93,6 +94,14 @@ export function ProjectList({
               ))}
             </SelectContent>
           </Select>
+          <ImportFromGithubDialog
+            trigger={
+              <Button variant="outline">
+                <Github className="size-4" />
+                Import from GitHub
+              </Button>
+            }
+          />
           <CreateProjectDialog
             trigger={
               <Button>

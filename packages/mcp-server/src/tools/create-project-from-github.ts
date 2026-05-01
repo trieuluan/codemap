@@ -34,6 +34,12 @@ export function registerCreateProjectFromGithubTool(
           .describe(
             "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",
           ),
+        is_private: z
+          .boolean()
+          .optional()
+          .describe(
+            "Whether the repository is private. Pass the 'private' field from list_github_repositories. Enforces privateRepoImports entitlement.",
+          ),
       },
     },
     withToolError(async ({
@@ -44,6 +50,7 @@ export function registerCreateProjectFromGithubTool(
       default_branch,
       branch,
       workspace_id,
+      is_private,
     }) => {
       const result = await client.request<ProjectSourceImportResult>(
         "/projects/from-github",
@@ -57,6 +64,7 @@ export function registerCreateProjectFromGithubTool(
             defaultBranch: default_branch,
             branch,
             workspaceId: workspace_id,
+            isPrivate: is_private,
           },
           authRequired: true,
         },

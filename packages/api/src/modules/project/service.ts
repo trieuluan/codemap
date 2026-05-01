@@ -304,15 +304,17 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: CreateProjectFromGithubBody,
     ) {
-      if (input.workspaceId) {
-        const access = await workspaceService.assertWorkspaceRole(
-          ownerUserId,
-          input.workspaceId,
-          ["owner", "admin"],
-        );
-        if (!access) {
-          throw new Error("WORKSPACE_ACCESS_DENIED");
-        }
+      const targetWorkspace = input.workspaceId
+        ? (await workspaceService.assertWorkspaceRole(ownerUserId, input.workspaceId, ["owner", "admin"]))?.workspace
+        : await workspaceService.ensurePersonalWorkspace(ownerUserId);
+
+      if (!targetWorkspace) {
+        throw new Error("WORKSPACE_ACCESS_DENIED");
+      }
+
+      if (input.isPrivate) {
+        const entitlements = workspaceService.getWorkspaceEntitlements(targetWorkspace);
+        workspaceService.assertCanUsePrivateRepo(entitlements);
       }
 
       const existingProject = await getOwnedProjectByGithubSource(ownerUserId, {
@@ -371,22 +373,22 @@ export function createProjectService(database: Database) {
     ) {
       const normalizedRepositoryUrl = normalizeRepositoryUrl(input.repositoryUrl);
 
-      if (input.workspaceId) {
-        const access = await workspaceService.assertWorkspaceRole(
-          ownerUserId,
-          input.workspaceId,
-          ["owner", "admin"],
-        );
-        if (!access) {
-          throw new Error("WORKSPACE_ACCESS_DENIED");
-        }
+      const targetWorkspace = input.workspaceId
+        ? (await workspaceService.assertWorkspaceRole(ownerUserId, input.workspaceId, ["owner", "admin"]))?.workspace
+        : await workspaceService.ensurePersonalWorkspace(ownerUserId);
+
+      if (!targetWorkspace) {
+        throw new Error("WORKSPACE_ACCESS_DENIED");
+      }
+
+      if (input.isPrivate) {
+        const entitlements = workspaceService.getWorkspaceEntitlements(targetWorkspace);
+        workspaceService.assertCanUsePrivateRepo(entitlements);
       }
 
       const existingProject = await database.query.project.findFirst({
         where: and(
-          input.workspaceId
-            ? eq(project.workspaceId, input.workspaceId)
-            : eq(project.ownerUserId, ownerUserId),
+          eq(project.workspaceId, targetWorkspace.id),
           eq(project.provider, "gitlab"),
           eq(project.repositoryUrl, normalizedRepositoryUrl),
         ),
@@ -415,7 +417,7 @@ export function createProjectService(database: Database) {
       }
 
       return this.createProject(ownerUserId, {
-        workspaceId: input.workspaceId,
+        workspaceId: targetWorkspace.id,
         name:
           input.name ??
           normalizedRepositoryUrl.split("/").filter(Boolean).at(-1) ??
