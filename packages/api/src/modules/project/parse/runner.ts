@@ -445,6 +445,17 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
 
     await reportProjectParseProgress(context, 96, "cleaning-superseded-source");
     await cleanupSupersededProjectImports(projectRecord.id, importId);
+
+    // For remote providers, delete the clone after parse — content is fetchable via API
+    if (projectRecord.provider !== "local_workspace" && importRecord.sourceWorkspacePath) {
+      try {
+        await repositoryWorkspaceService.removeWorkspaceByPath(importRecord.sourceWorkspacePath);
+        await projectService.clearImportSourceMetadata(importId);
+      } catch (cleanupError) {
+        console.error("Unable to clean up post-parse repository workspace", cleanupError);
+      }
+    }
+
     await reportProjectParseProgress(context, 100, "completed");
   } catch (error) {
     await projectService.markParseAsFailed(importId, toParseFailureMessage(error));

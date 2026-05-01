@@ -1,4 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { and, eq } from "drizzle-orm";
+import { account } from "../../db/schema";
 import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import { cacheKeys } from "../../lib/redis-cache";
 import {
@@ -8,6 +10,7 @@ import {
   getProjectRawImageFile,
   normalizeRepositoryFilePath,
 } from "./map/file-preview";
+import { fetchRemoteFileContent } from "./map/remote-file-fetch";
 import { createRepositoryWorkspaceService } from "./import/repository-workspace";
 import {
   findProjectTreeNodeByPath,
@@ -448,10 +451,36 @@ export function createProjectController(fastify: FastifyInstance) {
         );
       }
 
-      if (
-        !latestMapWithSource.importRecord?.sourceAvailable ||
-        !latestMapWithSource.importRecord.sourceWorkspacePath
-      ) {
+      const { project: projectRecord, importRecord } = latestMapWithSource;
+      const sourceReady =
+        importRecord?.sourceAvailable && importRecord.sourceWorkspacePath;
+
+      if (!sourceReady) {
+        // For remote providers, fetch content directly from GitHub/GitLab API
+        const provider = projectRecord.provider;
+        if (
+          (provider === "github" || provider === "gitlab") &&
+          importRecord?.commitSha &&
+          projectRecord.repositoryUrl
+        ) {
+          const oauthAccount = await fastify.db.query.account.findFirst({
+            where: and(
+              eq(account.userId, userId),
+              eq(account.providerId, provider),
+            ),
+          });
+
+          const preview = await fetchRemoteFileContent({
+            provider,
+            repositoryUrl: projectRecord.repositoryUrl,
+            commitSha: importRecord.commitSha,
+            filePath: normalizedPath,
+            accessToken: oauthAccount?.accessToken ?? null,
+          });
+
+          return reply.success(preview);
+        }
+
         return reply.success(
           buildUnavailableFilePreview({
             path: normalizedPath,
@@ -464,7 +493,7 @@ export function createProjectController(fastify: FastifyInstance) {
       }
 
       const preview = await getProjectFilePreview({
-        workspacePath: latestMapWithSource.importRecord.sourceWorkspacePath,
+        workspacePath: importRecord.sourceWorkspacePath!,
         treeNode,
         startLine: query.startLine,
         endLine: query.endLine,

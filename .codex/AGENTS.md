@@ -48,14 +48,30 @@ Then add task-specific rules as needed:
 - project map / explorer / graph work → `@map`
 - DB schema or Better Auth table changes → `@db`
 
-### MCP-first exploration
+### MCP-first workflow
 
-Inside `codemap`, prefer MCP tools before direct file reads:
+Inside `codemap`, use CodeMap MCP before direct file reads or shell search for
+codebase tasks. This is not just a preference; it is the default workflow for
+understanding, editing, reviewing, cleanup, refactors, and feature work.
 
-1. `search_codebase`
-2. `get_file`
-3. `get_project_map`
-4. direct file reads / shell search only when MCP is not enough
+Default order:
+
+1. Read current project/index health with `get_project` or the
+   `codemap://project/context` resource when available.
+2. Locate likely files with `suggest_edit_locations` for broad tasks or
+   `search_codebase` for known names, paths, symbols, and exports.
+3. Read app source with `get_file` / `get_files`, following MCP read hints and
+   read plans before loading full file content.
+4. Use `find_usages`, `find_callers`, `get_project_insights`, or
+   `get_project_map` for refactor, dead-code, dependency, and impact questions.
+5. Use direct shell/file reads only for builds/tests, git operations,
+   package internals such as `node_modules`, generated output, or checks MCP
+   cannot perform well.
+6. After pushed or index-sensitive code changes, call `trigger_reimport` and
+   `wait_for_import` when the user asks for fresh MCP data.
+
+If you use shell/file reads for something MCP could have handled, stop and
+switch back to MCP for the next codebase exploration step.
 
 ### Skill / plugin hints
 
