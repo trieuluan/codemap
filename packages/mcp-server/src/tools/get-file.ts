@@ -306,17 +306,10 @@ export function registerGetFileTool(
     {
       title: "Get File",
       description:
-        "Returns detailed information about a file in the CodeMap project. " +
-        "Default includes source code (content) and a full outline: imports, " +
-        "imported-by, exports, and symbols with signatures and line numbers. " +
-        "Add blast_radius when you need impact analysis — use it before editing a file " +
-        "to understand how many files depend on it (directly or transitively), or when " +
-        "the user asks about the impact/risk of changing a file, wants to know blast radius, " +
-        "or asks which files would break if this file changed. " +
-        "blast_radius is NOT needed for general file exploration — only include it when " +
-        "the task involves assessing change risk or editing a shared/utility file. " +
-        "WARNING: blast_radius adds significant latency (1-2s extra per file). Do NOT include it for routine file reading. " +
-        "Content and parse data are fetched in parallel. " +
+        "Read a file: source code and/or outline (imports, exports, symbols). " +
+        "Default include=[content,outline]. Use include=[outline] to skip content and save tokens. " +
+        "Use include=[symbols] + symbol_names to read only specific function bodies. " +
+        "Add blast_radius only when assessing change risk — adds 1-2s latency, skip for routine reads. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         path: z
@@ -336,20 +329,14 @@ export function registerGetFileTool(
           .default(["content", "outline"])
           .describe(
             "Sections to include. Default: [content, outline]. " +
-              "outline covers imports, imported-by, exports, and symbols with signatures. " +
-              "symbols fetches full source body of specific symbols listed in symbol_names — " +
-              "use this instead of content+start_line/end_line when you know which functions/classes to read. " +
-              "Add blast_radius when assessing change risk: before editing a shared file, " +
-              "when asked about impact/blast radius, or when a file has many dependents. " +
-              "Omit blast_radius for routine file reading — it adds latency.",
+              "outline = imports/exports/symbols with signatures. " +
+              "symbols = full source body of symbol_names (prefer over content+line range). " +
+              "blast_radius = impact analysis (slow, only for change risk assessment).",
           ),
         symbol_names: z
           .array(z.string().min(1))
           .optional()
-          .describe(
-            "Symbol names to fetch full source bodies for. Only used when 'symbols' is in include. " +
-              "Example: [\"parseDartFile\", \"parsePhpFile\"]. Case-insensitive.",
-          ),
+          .describe("Symbol names for 'symbols' include. Case-insensitive."),
         blast_radius_max_files: z
           .number()
           .int()

@@ -18,12 +18,9 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
     {
       title: "Find Callers",
       description:
-        "Find which OTHER files call or import a specific symbol. " +
-        "Requires both file path and symbol name — use this when you know exactly which symbol to look up. " +
-        "Returns only cross-file references (not in-file occurrences). " +
-        "Use find_usages instead when: you don't know the file path, or you need definitions + in-file occurrences too. " +
-        "Results capped at 50; check totalCallers in data for full count. " +
-        "project_id is optional if this workspace was linked via create_project.",
+        "Find which files call or import a symbol — cross-file only, not in-file occurrences. " +
+        "Requires file path + symbol name. Use find_usages when you don't know the file path. " +
+        "Capped at 50. project_id is optional if workspace is linked.",
       inputSchema: {
         path: z
           .string()

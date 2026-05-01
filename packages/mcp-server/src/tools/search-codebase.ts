@@ -112,10 +112,8 @@ export function registerSearchCodebaseTool(
     {
       title: "Search Codebase",
       description:
-        "Full-text search across files, symbols, and exports in a CodeMap project. " +
-        "Returns matching file paths, symbol definitions (functions, classes, interfaces, etc.), " +
-        "and exported names. Use this to locate where things are defined or exported in the codebase. " +
-        "project_id is optional if this workspace was linked via create_project.",
+        "Search files, symbols, and exports by keyword. Use to locate where things are defined or exported. " +
+        "project_id is optional if workspace is linked.",
       inputSchema: {
         query: z.string().min(1).describe("Search query string."),
         project_id: z
@@ -134,11 +132,7 @@ export function registerSearchCodebaseTool(
         symbol_kinds: z
           .array(z.enum(SYMBOL_KIND_VALUES))
           .optional()
-          .describe(
-            "Filter symbol results by kind. Only applies when 'symbols' is included in kinds. " +
-            "Valid values: module, namespace, class, interface, trait, mixin, enum, enum_member, " +
-            "function, component, method, constructor, property, field, variable, constant, type_alias, parameter.",
-          ),
+          .describe("Filter symbols by kind (function, class, method, etc.). Only used when kinds includes 'symbols'."),
       },
     },
     withToolError(async ({ query, project_id, kinds, symbol_kinds }) => {

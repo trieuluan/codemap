@@ -114,7 +114,7 @@ export function registerTriggerReimportTool(
       return success(summary, {
         triggered: true,
         projectId: resolvedProjectId,
-        import: result,
+        import: { id: result.id, status: result.status, branch: result.branch ?? null },
         reason: null,
         branch: result.branch ?? branch ?? null,
         nextAction: "wait_for_import",

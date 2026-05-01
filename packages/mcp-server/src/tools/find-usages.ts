@@ -37,11 +37,10 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
     {
       title: "Find Usages",
       description:
-        "Find all references to a symbol by name — definitions, in-file occurrences, and cross-file callers. " +
-        "Use this when you only know the symbol name (not which file it's in), or need a complete picture across the codebase. " +
-        "Use find_callers instead when you already know the exact file path — it's faster and more precise. " +
-        "Results per category are capped at 25; check totalUsages and totalCallers in data for full counts. " +
-        "project_id is optional if this workspace was linked via create_project.",
+        "Find all references to a symbol by name: definitions, in-file occurrences, callers. " +
+        "Use when you only know the name, not which file. " +
+        "Use find_callers instead when you know the exact file — faster and more precise. " +
+        "Capped at 25 per category. project_id is optional if workspace is linked.",
       inputSchema: {
         symbol_name: z
           .string()
