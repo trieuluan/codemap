@@ -105,7 +105,15 @@ function buildResultData(
     completed: imp ? isDone(imp.status) : false,
     commit: imp?.commitSha ?? null,
     completedAt: imp?.completedAt ?? null,
-    health,
+    health: {
+      state: health.state,
+      isReady: health.isReady,
+      isStale: health.isStale,
+      needsReimport: health.needsReimport,
+      nextAction: health.nextAction,
+      commitComparison: health.commitComparison,
+      workspaceResolution: health.workspaceResolution,
+    },
     nextAction: health.nextAction,
   };
 }

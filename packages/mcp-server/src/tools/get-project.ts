@@ -155,22 +155,46 @@ export function registerGetProjectTool(
             .catch(() => null)
         : null;
 
+      const healthSummary = {
+        state: health.state,
+        isReady: health.isReady,
+        isStale: health.isStale,
+        needsReimport: health.needsReimport,
+        nextAction: health.nextAction,
+        commitComparison: health.commitComparison,
+        workspaceResolution: health.workspaceResolution,
+      };
+      const latestImport = health.latestImport
+        ? {
+            id: health.latestImport.id,
+            status: health.latestImport.status,
+            parseStatus: health.latestImport.parseStatus,
+            branch: health.latestImport.branch,
+            commitSha: health.latestImport.commitSha,
+            completedAt: health.latestImport.completedAt,
+            indexedFileCount: health.latestImport.indexedFileCount,
+            indexedSymbolCount: health.latestImport.indexedSymbolCount,
+            indexedEdgeCount: health.latestImport.indexedEdgeCount,
+            errorMessage: health.latestImport.errorMessage ?? null,
+            parseError: health.latestImport.parseError ?? null,
+          }
+        : null;
+
       return success(formatProject(project, health, accountWorkspace), {
         linkedWorkspace: true,
         workspaceRootPath: workspaceConfig.workspaceRootPath,
         projectId: resolvedProjectId,
         found: true,
         project,
-        health,
+        health: healthSummary,
         workspace: accountWorkspace?.workspace ?? null,
         entitlements: accountWorkspace?.entitlements ?? null,
         usage: accountWorkspace?.usage ?? null,
         projectContext: {
           project,
-          latestImport: health.latestImport,
-          health,
+          latestImport,
+          health: healthSummary,
           workspace: accountWorkspace?.workspace ?? null,
-          localWorkspace: health.workspace,
           entitlements: accountWorkspace?.entitlements ?? null,
           usage: accountWorkspace?.usage ?? null,
           recommendedNextAction: health.nextAction,
