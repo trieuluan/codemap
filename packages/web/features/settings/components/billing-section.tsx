@@ -2,7 +2,6 @@
 
 import useSWR from "swr";
 import { useTransition } from "react";
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Check } from "lucide-react";
 import {
   Card,
@@ -22,8 +21,12 @@ import {
   cancelSubscription,
   listPayments,
 } from "@/features/billing/api";
+import PayPalWrapper from "@/features/billing/paypal-wrapper";
+import {
+  PayPalSubscriptionButton,
+  type OnApproveDataSubscriptions,
+} from "@paypal/react-paypal-js/sdk-v6";
 import type { WorkspacePlan } from "@/features/workspaces/api/workspaces.types";
-import type { OnApproveData } from "@paypal/paypal-js";
 
 const api = browserWorkspacesApi();
 
@@ -171,42 +174,38 @@ function PayPalButton({
   const { toast } = useToast();
 
   return (
-    <PayPalButtons
-      style={{
-        layout: "horizontal",
-        color: "blue",
-        shape: "rect",
-        label: "subscribe",
-        height: 36,
-      }}
-      createSubscription={async () => {
-        const { subscriptionId } = await createSubscription({
-          plan,
-          workspaceId,
-        });
-        return subscriptionId;
-      }}
-      onApprove={async (data: OnApproveData) => {
-        toast({
-          title: "Subscription activated!",
-          description: data.subscriptionID
-            ? `ID: ${data.subscriptionID}`
-            : "PayPal confirmed the subscription.",
-        });
-        onSuccess();
-      }}
-      onError={(err: unknown) => {
-        console.error("PayPal error", err);
-        toast({
-          title: "Payment failed",
-          description: "Please try again.",
-          variant: "destructive",
-        });
-      }}
-      onCancel={() => {
-        toast({ title: "Payment cancelled" });
-      }}
-    />
+    <div className="w-full [&_paypal-button]:block [&_paypal-button]:w-full">
+      <PayPalSubscriptionButton
+        presentationMode="auto"
+        createSubscription={async () => {
+          const { subscriptionId } = await createSubscription({
+            plan,
+            workspaceId,
+          });
+          return { subscriptionId };
+        }}
+        onApprove={async (data: OnApproveDataSubscriptions) => {
+          toast({
+            title: "Subscription activated!",
+            description: data.subscriptionId
+              ? `ID: ${data.subscriptionId}`
+              : "PayPal confirmed the subscription.",
+          });
+          onSuccess();
+        }}
+        onError={(err: unknown) => {
+          console.error("PayPal error", err);
+          toast({
+            title: "Payment failed",
+            description: "Please try again.",
+            variant: "destructive",
+          });
+        }}
+        onCancel={() => {
+          toast({ title: "Payment cancelled" });
+        }}
+      />
+    </div>
   );
 }
 
@@ -241,7 +240,7 @@ function PlanCard({
   return (
     <div
       className={cn(
-        "rounded-lg border p-5 space-y-4 relative",
+        "relative flex h-full flex-col rounded-lg border p-5",
         config.highlight
           ? "border-primary/50 bg-primary/5"
           : "border-border/70 bg-card",
@@ -272,7 +271,7 @@ function PlanCard({
         <p className="text-xs text-muted-foreground">{config.description}</p>
       </div>
 
-      <Separator />
+      <Separator className="my-4" />
 
       <ul className="space-y-2">
         {config.features.map((f) => (
@@ -283,21 +282,23 @@ function PlanCard({
         ))}
       </ul>
 
-      {!current && config.paypalPlanKey && workspaceId ? (
-        <PayPalButton
-          plan={config.paypalPlanKey}
-          workspaceId={workspaceId}
-          onSuccess={onSubscribed}
-        />
-      ) : current && plan !== "beta" ? (
-        <button
-          onClick={handleCancel}
-          disabled={isCancelling}
-          className="w-full text-xs text-muted-foreground underline underline-offset-2 hover:text-destructive transition-colors disabled:opacity-50"
-        >
-          {isCancelling ? "Cancelling…" : "Cancel subscription"}
-        </button>
-      ) : null}
+      <div className="mt-auto pt-5">
+        {!current && config.paypalPlanKey && workspaceId ? (
+          <PayPalButton
+            plan={config.paypalPlanKey}
+            workspaceId={workspaceId}
+            onSuccess={onSubscribed}
+          />
+        ) : current && plan !== "beta" ? (
+          <button
+            onClick={handleCancel}
+            disabled={isCancelling}
+            className="w-full text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-destructive disabled:opacity-50"
+          >
+            {isCancelling ? "Cancelling…" : "Cancel subscription"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -436,7 +437,7 @@ export function BillingSection() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid items-stretch gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
             {(["beta", "developer", "team"] as WorkspacePlan[]).map((plan) => (
               <PlanCard
                 key={plan}
@@ -518,17 +519,5 @@ export function BillingSection() {
     </>
   );
 
-  if (!paypalClientId) return content;
-
-  return (
-    <PayPalScriptProvider
-      options={{
-        clientId: paypalClientId,
-        vault: true,
-        intent: "subscription",
-      }}
-    >
-      {content}
-    </PayPalScriptProvider>
-  );
+  return <PayPalWrapper clientId={paypalClientId}>{content}</PayPalWrapper>;
 }
