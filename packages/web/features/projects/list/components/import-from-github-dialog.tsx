@@ -67,7 +67,7 @@ export function ImportFromGithubDialog({
         });
 
         handleClose();
-        router.push(workspaceId ? `/w/${workspaceId}/projects/${result.project.id}` : `/projects/${result.project.id}`);
+        router.push(workspaceId ? `/w/${workspaceId}/projects/${result.project.id}` : "/projects");
         router.refresh();
       } catch (error) {
         toast({

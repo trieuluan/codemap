@@ -106,17 +106,24 @@ function EmptyInsight({ title }: { title: string }) {
   );
 }
 
-function buildInsightsFileHref(projectId: string, filePath: string) {
-  return `/projects/${projectId}/insights?file=${encodeURIComponent(filePath)}`;
+function buildInsightsFileHref(
+  projectId: string,
+  filePath: string,
+  workspaceId?: string,
+) {
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  return `${projectBase}/${projectId}/insights?file=${encodeURIComponent(filePath)}`;
 }
 
 function FileInsightList({
   projectId,
+  workspaceId,
   items,
   metricLabel,
   focusFile,
 }: {
   projectId: string;
+  workspaceId?: string;
   items: Array<{
     path: string;
     language: string | null;
@@ -138,7 +145,7 @@ function FileInsightList({
       {(items ?? []).map((item, index) => (
         <Link
           key={`${item.path}:${index}`}
-          href={buildInsightsFileHref(projectId, item.path)}
+          href={buildInsightsFileHref(projectId, item.path, workspaceId)}
           className={cn(
             "flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/40",
             focusFile === item.path &&
@@ -162,10 +169,12 @@ function FileInsightList({
 
 function FocusedEdgeList({
   projectId,
+  workspaceId,
   items,
   emptyLabel,
 }: {
   projectId: string;
+  workspaceId?: string;
   items: ProjectInsightFocusedEdgeFile[];
   emptyLabel: string;
 }) {
@@ -178,7 +187,7 @@ function FocusedEdgeList({
       {(items ?? []).map((item, index) => (
         <Link
           key={`${item.path}:${item.moduleSpecifier}:${index}`}
-          href={buildInsightsFileHref(projectId, item.path)}
+          href={buildInsightsFileHref(projectId, item.path, workspaceId)}
           className="block rounded-md border border-border/70 bg-background/70 p-2 transition-colors hover:bg-accent/40"
         >
           <p className="break-all font-mono text-xs text-foreground">
@@ -326,6 +335,7 @@ export function ProjectMapInsightsView({
                 </p>
                 <FocusedEdgeList
                   projectId={project.id}
+                  workspaceId={workspaceId}
                   items={focusedFile.directImporters ?? []}
                   emptyLabel="No indexed internal files import this file."
                 />
@@ -336,6 +346,7 @@ export function ProjectMapInsightsView({
                 </p>
                 <FocusedEdgeList
                   projectId={project.id}
+                  workspaceId={workspaceId}
                   items={focusedFile.directDependencies ?? []}
                   emptyLabel="This file has no indexed internal dependencies."
                 />
@@ -446,6 +457,7 @@ export function ProjectMapInsightsView({
         >
           <FileInsightList
             projectId={project.id}
+            workspaceId={workspaceId}
             items={topFilesByImportCount}
             focusFile={focusFile}
             metricLabel={(item) =>
@@ -461,6 +473,7 @@ export function ProjectMapInsightsView({
         >
           <FileInsightList
             projectId={project.id}
+            workspaceId={workspaceId}
             items={topFilesByInboundDependencyCount}
             focusFile={focusFile}
             metricLabel={(item) =>
@@ -502,6 +515,7 @@ export function ProjectMapInsightsView({
         >
           <FileInsightList
             projectId={project.id}
+            workspaceId={workspaceId}
             items={orphanFiles}
             focusFile={focusFile}
             metricLabel={() => "0 incoming • 0 outgoing"}
@@ -520,7 +534,7 @@ export function ProjectMapInsightsView({
               {entryLikeFiles.map((item, index) => (
                 <Link
                   key={`${item.path}:${index}`}
-                  href={buildInsightsFileHref(project.id, item.path)}
+                  href={buildInsightsFileHref(project.id, item.path, workspaceId)}
                   className={cn(
                     "flex items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/40",
                     focusFile === item.path &&
@@ -578,7 +592,7 @@ export function ProjectMapInsightsView({
                     {item.paths.map((path, index) => (
                       <li key={path + index}>
                         <Link
-                          href={buildInsightsFileHref(project.id, path)}
+                          href={buildInsightsFileHref(project.id, path, workspaceId)}
                           className={cn(
                             "break-all font-mono text-xs text-foreground underline-offset-4 hover:underline",
                             focusFile === path && "font-semibold text-primary",

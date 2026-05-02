@@ -96,7 +96,7 @@ function GlobalSearch() {
   function handleSelect(project: ProjectListItem) {
     setQuery("");
     setOpen(false);
-    router.push(wid ? `/w/${wid}/projects/${project.id}` : `/projects/${project.id}`);
+    router.push(wid ? `/w/${wid}/projects/${project.id}` : "/projects");
   }
 
   return (
@@ -246,7 +246,7 @@ function NotificationBell() {
           recentImports.map((item) => (
             <DropdownMenuItem key={`${item.projectId}-${item.startedAt}`} asChild>
               <Link
-                href={wid ? `/w/${wid}/projects/${item.projectId}` : `/projects/${item.projectId}`}
+                href={wid ? `/w/${wid}/projects/${item.projectId}` : "/projects"}
                 className="flex items-center gap-2.5"
               >
                 {importStatusIcon(item.status)}

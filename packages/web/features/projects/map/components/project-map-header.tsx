@@ -15,9 +15,9 @@ import { ProjectMapSearchDialog } from "../explorer/components/project-map-searc
 import type { ProjectImportParseStatus } from "@/features/projects/api";
 
 const makeNavItems = (wid: string) => [
-  { key: "mapping", href: (id: string) => wid ? `/w/${wid}/projects/${id}/explorer` : `/projects/${id}/explorer`, icon: Workflow, label: "Explorer" },
-  { key: "insights", href: (id: string) => wid ? `/w/${wid}/projects/${id}/insights` : `/projects/${id}/insights`, icon: BarChart2, label: "Insights" },
-  { key: "graph", href: (id: string) => wid ? `/w/${wid}/projects/${id}/graph` : `/projects/${id}/graph`, icon: Network, label: "Graph" },
+  { key: "mapping", href: (id: string) => wid ? `/w/${wid}/projects/${id}/explorer` : "/projects", icon: Workflow, label: "Explorer" },
+  { key: "insights", href: (id: string) => wid ? `/w/${wid}/projects/${id}/insights` : "/projects", icon: BarChart2, label: "Insights" },
+  { key: "graph", href: (id: string) => wid ? `/w/${wid}/projects/${id}/graph` : "/projects", icon: Network, label: "Graph" },
 ] as const;
 
 export function ProjectMapHeader({

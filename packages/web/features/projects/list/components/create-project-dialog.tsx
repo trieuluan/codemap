@@ -86,7 +86,7 @@ export function CreateProjectDialog({
 
         setOpen(false);
         resetForm();
-        router.push(workspaceId ? `/w/${workspaceId}/projects/${project.id}` : `/projects/${project.id}`);
+        router.push(workspaceId ? `/w/${workspaceId}/projects/${project.id}` : "/projects");
         router.refresh();
       } catch (error) {
         toast({

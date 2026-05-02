@@ -266,7 +266,7 @@ export function ProjectMapGraphView({
     params.delete("file");
     params.delete("symbol");
     const qs = params.toString();
-    router.replace(`/projects/${projectId}/graph${qs ? `?${qs}` : ""}`);
+    router.replace(`${projectBase}/${projectId}/graph${qs ? `?${qs}` : ""}`);
   }
 
   const { data: symbolGraph, isLoading: isSymbolGraphLoading } = useSWR(
@@ -372,7 +372,7 @@ export function ProjectMapGraphView({
             const params = new URLSearchParams(searchParams.toString());
             params.delete("file");
             params.delete("symbol");
-            router.replace(`/projects/${projectId}/graph${params.toString() ? `?${params.toString()}` : ""}`);
+            router.replace(`${projectBase}/${projectId}/graph${params.toString() ? `?${params.toString()}` : ""}`);
             actions.handleSelectByPath(path);
           } else {
             actions.handleSelectByPath(path);

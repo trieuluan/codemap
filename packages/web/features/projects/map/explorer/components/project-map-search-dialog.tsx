@@ -149,7 +149,7 @@ export function ProjectMapSearchDialog({
         ? `&symbol=${encodeURIComponent(item.symbolName)}`
         : "";
 
-      return `/projects/${projectId}/graph?file=${encodedPath}${symbolQuery}`;
+      return `${projectBase}/${projectId}/graph?file=${encodedPath}${symbolQuery}`;
     }
 
     if (destination === "insights") {
@@ -157,10 +157,10 @@ export function ProjectMapSearchDialog({
         ? `&symbol=${encodeURIComponent(item.symbolName)}`
         : "";
 
-      return `/projects/${projectId}/insights?file=${encodedPath}${symbolQuery}`;
+      return `${projectBase}/${projectId}/insights?file=${encodedPath}${symbolQuery}`;
     }
 
-    return `/projects/${projectId}/explorer?path=${encodedPath}`;
+    return `${projectBase}/${projectId}/explorer?path=${encodedPath}`;
   };
 
   const targets = useMemo<NavigatorTarget[]>(() => {
