@@ -7,6 +7,8 @@ export type {
   WorkspaceMember,
   WorkspacePlan,
   WorkspaceRole,
+  WorkspaceSubscription,
   WorkspaceType,
   WorkspaceUsageSummary,
+  SubscriptionStatus,
 } from "@codemap/shared";

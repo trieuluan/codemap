@@ -136,6 +136,7 @@ export interface AdminWorkspaceDetail {
     id: string;
     plan: WorkspacePlan;
     provider: string;
+    providerSubscriptionId: string | null;
     status: string;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;

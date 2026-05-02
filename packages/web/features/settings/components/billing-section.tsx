@@ -2,7 +2,14 @@
 
 import useSWR from "swr";
 import { useTransition } from "react";
-import { Check } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  CreditCard,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -27,7 +34,11 @@ import {
   PayPalSubscriptionButton,
   type OnApproveDataSubscriptions,
 } from "@paypal/react-paypal-js/sdk-v6";
-import type { WorkspacePlan } from "@/features/workspaces/api/workspaces.types";
+import type {
+  SubscriptionStatus,
+  WorkspacePlan,
+  WorkspaceSubscription,
+} from "@/features/workspaces/api/workspaces.types";
 
 const api = browserWorkspacesApi();
 
@@ -114,9 +125,35 @@ function formatLimit(value: number | null) {
   return value === null ? "Unlimited" : value.toLocaleString();
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function usagePercent(current: number, max: number | null) {
   if (max === null || max <= 0) return 0;
   return Math.min(100, Math.round((current / max) * 100));
+}
+
+function SubscriptionBadge({ status }: { status: SubscriptionStatus }) {
+  const className =
+    status === "active"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : status === "past_due"
+        ? "border-destructive/30 bg-destructive/10 text-destructive"
+        : status === "trialing" || status === "paused"
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-border bg-muted text-muted-foreground";
+
+  return (
+    <Badge variant="outline" className={cn("capitalize", className)}>
+      {status.replace("_", " ")}
+    </Badge>
+  );
 }
 
 function UsageRow({
@@ -214,11 +251,15 @@ function PlanCard({
   plan,
   current,
   workspaceId,
+  canManageBilling,
+  paypalReady,
   onSubscribed,
 }: {
   plan: WorkspacePlan;
   current: boolean;
   workspaceId?: string;
+  canManageBilling: boolean;
+  paypalReady: boolean;
   onSubscribed: () => void;
 }) {
   const config = PLAN_CONFIG[plan];
@@ -284,22 +325,110 @@ function PlanCard({
       </ul>
 
       <div className="mt-auto pt-5">
-        {!current && config.paypalPlanKey && workspaceId ? (
+        {!current && config.paypalPlanKey && workspaceId && canManageBilling && paypalReady ? (
           <PayPalButton
             plan={config.paypalPlanKey}
             workspaceId={workspaceId}
             onSuccess={onSubscribed}
           />
+        ) : !current && config.paypalPlanKey && workspaceId && !paypalReady ? (
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            PayPal checkout is not configured for this environment.
+          </div>
+        ) : !current && config.paypalPlanKey && !canManageBilling ? (
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            Ask a workspace owner or admin to change plans.
+          </div>
         ) : current && plan !== "beta" ? (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
             onClick={handleCancel}
-            disabled={isCancelling}
-            className="w-full text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-destructive disabled:opacity-50"
+            disabled={isCancelling || !canManageBilling}
+            className="w-full text-xs text-muted-foreground hover:text-destructive"
           >
             {isCancelling ? "Cancelling…" : "Cancel subscription"}
-          </button>
+          </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function BillingLifecycleCard({
+  subscription,
+  latestSubscription,
+}: {
+  subscription: WorkspaceSubscription | null;
+  latestSubscription: WorkspaceSubscription | null;
+}) {
+  const visibleSubscription = subscription ?? latestSubscription;
+  const status = visibleSubscription?.status;
+  const icon =
+    status === "active" ? (
+      <CheckCircle2 className="size-4 text-emerald-600" />
+    ) : status === "past_due" ? (
+      <AlertCircle className="size-4 text-destructive" />
+    ) : (
+      <CreditCard className="size-4 text-muted-foreground" />
+    );
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-md border bg-background">
+            {icon}
+          </div>
+          <div>
+            <p className="text-sm font-medium">Billing status</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {visibleSubscription
+                ? `${visibleSubscription.provider} subscription for ${PLAN_CONFIG[visibleSubscription.plan].label}.`
+                : "No paid subscription is attached to this workspace yet."}
+            </p>
+          </div>
+        </div>
+        {visibleSubscription ? (
+          <SubscriptionBadge status={visibleSubscription.status} />
+        ) : (
+          <Badge variant="outline">Free beta</Badge>
+        )}
+      </div>
+
+      {visibleSubscription && (
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <Stat
+            label="Provider"
+            value={<span className="capitalize">{visibleSubscription.provider}</span>}
+          />
+          <Stat
+            label="Current period"
+            value={
+              <span>
+                {formatDate(visibleSubscription.currentPeriodStart)} -{" "}
+                {formatDate(visibleSubscription.currentPeriodEnd)}
+              </span>
+            }
+          />
+          <Stat
+            label="Subscription ID"
+            value={
+              <span className="font-mono text-xs">
+                {visibleSubscription.providerSubscriptionId ?? "—"}
+              </span>
+            }
+          />
+        </div>
+      )}
+
+      {latestSubscription?.status === "trialing" && !subscription && (
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <CalendarClock className="mt-0.5 size-3.5 shrink-0" />
+          PayPal approval is pending. The plan switches after PayPal confirms the
+          subscription webhook.
+        </div>
+      )}
     </div>
   );
 }
@@ -315,7 +444,7 @@ export function BillingSection() {
     activeWorkspace ? ["settings-billing-workspace", activeWorkspace.id] : null,
     ([, workspaceId]) => api.getWorkspace(workspaceId),
   );
-  const { data: payments } = useSWR(
+  const { data: payments, mutate: mutatePayments } = useSWR(
     activeWorkspace ? ["billing-payments", activeWorkspace.id] : null,
     ([, workspaceId]) => listPayments(workspaceId),
   );
@@ -323,9 +452,12 @@ export function BillingSection() {
   const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
   const isLoading = workspacesLoading || detailLoading;
   const currentPlan = detail?.workspace.plan as WorkspacePlan | undefined;
+  const canManageBilling =
+    detail?.membership.role === "owner" || detail?.membership.role === "admin";
 
   function handleSubscribed() {
     void mutate();
+    void mutatePayments();
   }
 
   const content = (
@@ -370,6 +502,10 @@ export function BillingSection() {
                   value={detail.entitlements.mcpAccess ? "Enabled" : "Disabled"}
                 />
               </div>
+              <BillingLifecycleCard
+                subscription={detail.activeSubscription}
+                latestSubscription={detail.latestSubscription}
+              />
               <Separator />
               <div className="space-y-4">
                 <p className="text-sm font-medium">Usage this month</p>
@@ -442,6 +578,8 @@ export function BillingSection() {
                 plan={plan}
                 current={currentPlan === plan}
                 workspaceId={activeWorkspace?.id}
+                canManageBilling={canManageBilling}
+                paypalReady={Boolean(paypalClientId)}
                 onSubscribed={handleSubscribed}
               />
             ))}
@@ -450,15 +588,15 @@ export function BillingSection() {
       </Card>
 
       {/* Payment history */}
-      {payments && payments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment history</CardTitle>
-            <CardDescription>
-              Recent payments for this workspace.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment history</CardTitle>
+          <CardDescription>
+            Recent payment events for this workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {payments && payments.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -511,9 +649,14 @@ export function BillingSection() {
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No payment records yet. Subscription approvals and renewals will
+              appear here after PayPal confirms them.
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 

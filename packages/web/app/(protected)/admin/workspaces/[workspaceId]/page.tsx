@@ -26,6 +26,10 @@ function shortSha(value: string | null) {
   return value ? value.slice(0, 7) : "—";
 }
 
+function shortId(value: string | null) {
+  return value ? `${value.slice(0, 10)}…` : "—";
+}
+
 function StatusBadge({ value }: { value: string }) {
   const className =
     value === "completed" || value === "ready" || value === "active"
@@ -101,9 +105,18 @@ export default async function AdminWorkspacePage({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Billing
             </p>
-            <p className="mt-2 text-2xl font-semibold">
-              {activeSubscription?.status ?? "none"}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {activeSubscription ? (
+                <>
+                  <StatusBadge value={activeSubscription.status} />
+                  <span className="text-sm font-medium capitalize">
+                    {activeSubscription.plan}
+                  </span>
+                </>
+              ) : (
+                <span className="text-2xl font-semibold">none</span>
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card className="gap-3 py-4">
@@ -200,7 +213,9 @@ export default async function AdminWorkspacePage({
         <Card>
           <CardHeader>
             <CardTitle>Subscriptions</CardTitle>
-            <CardDescription>Billing state for this workspace.</CardDescription>
+            <CardDescription>
+              Provider lifecycle and current billing period.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {detail.subscriptions.map((subscription) => (
@@ -214,9 +229,17 @@ export default async function AdminWorkspacePage({
                   </p>
                   <StatusBadge value={subscription.status} />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  period ends {formatDate(subscription.currentPeriodEnd)}
-                </p>
+                <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <span>
+                    Period: {formatDate(subscription.currentPeriodStart)} -{" "}
+                    {formatDate(subscription.currentPeriodEnd)}
+                  </span>
+                  <span>Cancelled: {formatDate(subscription.cancelledAt)}</span>
+                  <span className="font-mono">
+                    Provider ID: {shortId(subscription.providerSubscriptionId)}
+                  </span>
+                  <span>Updated: {formatDate(subscription.updatedAt)}</span>
+                </div>
               </div>
             ))}
             {detail.subscriptions.length === 0 && (

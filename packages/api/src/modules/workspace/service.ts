@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gte, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ne } from "drizzle-orm";
 import type { db as dbType } from "../../db";
 import {
   project,
@@ -6,6 +6,7 @@ import {
   user,
   workspace,
   workspaceMember,
+  workspaceSubscription,
 } from "../../db/schema";
 import type {
   WorkspaceEntitlements,
@@ -301,12 +302,25 @@ export function createWorkspaceService(database: Database) {
     async getWorkspaceDetail(userId: string, workspaceId: string) {
       const access = await getWorkspaceAccess(userId, workspaceId);
       if (!access) return null;
+      const subscriptions = await database.query.workspaceSubscription.findMany({
+        where: eq(workspaceSubscription.workspaceId, workspaceId),
+        orderBy: [
+          desc(workspaceSubscription.updatedAt),
+          desc(workspaceSubscription.createdAt),
+        ],
+        limit: 5,
+      });
+      const activeSubscription =
+        subscriptions.find((subscription) => subscription.status === "active") ??
+        null;
 
       return {
         workspace: access.workspace,
         membership: access.membership,
         entitlements: getWorkspaceEntitlements(access.workspace),
         usage: await getUsageSummary(workspaceId),
+        activeSubscription,
+        latestSubscription: subscriptions[0] ?? null,
       };
     },
 

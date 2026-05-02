@@ -1,6 +1,13 @@
 export type WorkspaceType = "personal" | "team";
 export type WorkspacePlan = "beta" | "developer" | "team";
 export type WorkspaceRole = "owner" | "admin" | "member";
+export type BillingProvider = "paypal" | "stripe" | "manual";
+export type SubscriptionStatus =
+  | "active"
+  | "cancelled"
+  | "past_due"
+  | "paused"
+  | "trialing";
 export type UsageEventType =
   | "project_created"
   | "import_triggered"
@@ -51,9 +58,26 @@ export interface WorkspaceUsageSummary {
   mcpSessionsCreatedThisMonth: number;
 }
 
+export interface WorkspaceSubscription {
+  id: string;
+  workspaceId: string;
+  plan: WorkspacePlan;
+  provider: BillingProvider;
+  providerSubscriptionId: string | null;
+  providerPlanId: string | null;
+  status: SubscriptionStatus;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WorkspaceDetail {
   workspace: Workspace;
   membership: WorkspaceMember;
   entitlements: WorkspaceEntitlements;
   usage: WorkspaceUsageSummary;
+  activeSubscription: WorkspaceSubscription | null;
+  latestSubscription: WorkspaceSubscription | null;
 }

@@ -370,6 +370,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         id: subscription.id,
         plan: subscription.plan,
         provider: subscription.provider,
+        providerSubscriptionId: subscription.providerSubscriptionId,
         status: subscription.status,
         currentPeriodStart: serializeDate(subscription.currentPeriodStart),
         currentPeriodEnd: serializeDate(subscription.currentPeriodEnd),
