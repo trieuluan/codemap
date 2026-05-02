@@ -67,10 +67,6 @@ function GlobalSearch() {
           .slice(0, 6)
       : [];
 
-  if (!wid) {
-    return null;
-  }
-
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "/") {
@@ -101,6 +97,10 @@ function GlobalSearch() {
     setQuery("");
     setOpen(false);
     router.push(`/w/${project.workspaceId}/projects/${project.id}`);
+  }
+
+  if (!wid) {
+    return null;
   }
 
   return (
