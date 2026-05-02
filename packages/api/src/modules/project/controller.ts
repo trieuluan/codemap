@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, eq } from "drizzle-orm";
-import { account } from "../../db/schema";
+import { eq } from "drizzle-orm";
+import { userGithubConnection, userGitlabConnection } from "../../db/schema";
 import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import { cacheKeys } from "../../lib/redis-cache";
 import {
@@ -58,6 +58,27 @@ export function createProjectController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
   const repoParseGraphService = createRepoParseGraphService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
+
+  async function getRepositoryAccessToken(
+    userId: string,
+    provider: "github" | "gitlab",
+  ) {
+    if (provider === "github") {
+      const connection = await fastify.db.query.userGithubConnection.findFirst({
+        where: eq(userGithubConnection.userId, userId),
+        columns: { accessToken: true },
+      });
+
+      return connection?.accessToken ?? null;
+    }
+
+    const connection = await fastify.db.query.userGitlabConnection.findFirst({
+      where: eq(userGitlabConnection.userId, userId),
+      columns: { accessToken: true },
+    });
+
+    return connection?.accessToken ?? null;
+  }
 
   function throwWorkspaceHttpError(error: unknown): never {
     if (error instanceof Error) {
@@ -466,19 +487,14 @@ export function createProjectController(fastify: FastifyInstance) {
           importRecord?.commitSha &&
           projectRecord.repositoryUrl
         ) {
-          const oauthAccount = await fastify.db.query.account.findFirst({
-            where: and(
-              eq(account.userId, userId),
-              eq(account.providerId, provider),
-            ),
-          });
+          const accessToken = await getRepositoryAccessToken(userId, provider);
 
           const preview = await fetchRemoteFileContent({
             provider,
             repositoryUrl: projectRecord.repositoryUrl,
             commitSha: importRecord.commitSha,
             filePath: normalizedPath,
-            accessToken: oauthAccount?.accessToken ?? null,
+            accessToken,
           });
 
           return reply.success(preview);

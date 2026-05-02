@@ -12,6 +12,23 @@ const subscribeBodySchema = z.object({
   workspaceId: z.uuid(),
 });
 
+function buildWorkspaceBillingUrl(
+  webAppUrl: string,
+  workspaceId: string,
+  params: Record<string, string>,
+) {
+  const url = new URL(
+    `/w/${workspaceId}/settings/billing`,
+    webAppUrl.endsWith("/") ? webAppUrl : `${webAppUrl}/`,
+  );
+
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  return url.toString();
+}
+
 const billingRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   const paypal = createPayPalClientFromEnv(fastify.config);
   const billingService = createBillingService(fastify.db);
@@ -49,8 +66,12 @@ const billingRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
     }
 
     const webAppUrl = fastify.config.WEB_APP_URL ?? "http://localhost:3000";
-    const returnUrl = `${webAppUrl}/dashboard/settings/billing?paypal=success&workspaceId=${workspaceId}`;
-    const cancelUrl = `${webAppUrl}/dashboard/settings/billing?paypal=cancelled`;
+    const returnUrl = buildWorkspaceBillingUrl(webAppUrl, workspaceId, {
+      paypal: "success",
+    });
+    const cancelUrl = buildWorkspaceBillingUrl(webAppUrl, workspaceId, {
+      paypal: "cancelled",
+    });
 
     const subscription = await paypal.createSubscription(planId, returnUrl, cancelUrl);
 
