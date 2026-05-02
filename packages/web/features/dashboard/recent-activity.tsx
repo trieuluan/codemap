@@ -11,9 +11,12 @@ import {
   type ProjectListItem,
 } from "@/features/projects/api";
 
-function useRecentActivity() {
-  return useSWR("dashboard-activity", () =>
-    browserProjectsApi.getProjects({ include: ["latestImport"] }),
+function useRecentActivity(workspaceId: string) {
+  return useSWR(["dashboard-activity", workspaceId], () =>
+    browserProjectsApi.getProjects({
+      workspaceId,
+      include: ["latestImport"],
+    }),
   );
 }
 
@@ -50,8 +53,8 @@ function buildActivities(projects: ProjectListItem[]) {
     .slice(0, 10);
 }
 
-export function RecentActivity() {
-  const { data: projects, isLoading } = useRecentActivity();
+export function RecentActivity({ workspaceId }: { workspaceId: string }) {
+  const { data: projects, isLoading } = useRecentActivity(workspaceId);
   const activities = projects ? buildActivities(projects) : [];
 
   return (
@@ -79,8 +82,7 @@ export function RecentActivity() {
             description="Your recent activity will appear here once you start using CodeMap."
           >
             <p className="text-center text-sm text-muted-foreground">
-              To get started, create a new project and import your code. Happy
-              coding!
+              Create a project in this workspace and imports will show up here.
             </p>
           </Empty>
         ) : (

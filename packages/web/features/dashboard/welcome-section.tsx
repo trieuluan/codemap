@@ -1,10 +1,17 @@
 "use client"
 
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Book } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 
-export function WelcomeSection() {
+export function WelcomeSection({
+  workspaceId,
+  workspaceName,
+}: {
+  workspaceId: string
+  workspaceName?: string | null
+}) {
   const { data: session } = authClient.useSession()
   const userName = session?.user?.name?.split(" ")[0] ?? "there"
 
@@ -15,7 +22,9 @@ export function WelcomeSection() {
           Welcome, {userName}
         </h1>
         <p className="text-muted-foreground">
-          Here&apos;s an overview of your workspace and getting started guide.
+          {workspaceName
+            ? `Here's what's happening in ${workspaceName}.`
+            : "Here's what's happening in this workspace."}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -26,10 +35,10 @@ export function WelcomeSection() {
           </a>
         </Button>
         <Button size="sm" asChild>
-          <a href="/dashboard/projects/new">
+          <Link href={`/w/${workspaceId}/projects`}>
             New Project
             <ArrowRight className="ml-2 size-4" />
-          </a>
+          </Link>
         </Button>
       </div>
     </section>

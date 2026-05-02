@@ -31,11 +31,56 @@ function PlanBadge({ plan }: { plan: string }) {
   return <Badge className={colors[plan]}>{plan}</Badge>;
 }
 
+type AdminUserWorkspace = AdminUser["workspaces"][number];
+
+function WorkspacePlanControl({
+  workspace,
+  disabled,
+  onUpdate,
+}: {
+  workspace: AdminUserWorkspace;
+  disabled: boolean;
+  onUpdate: () => void;
+}) {
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+
+  function handlePlanChange(plan: string) {
+    startTransition(async () => {
+      try {
+        await setWorkspacePlan(workspace.id, plan);
+        toast({ title: `${workspace.name} plan updated to ${plan}` });
+        onUpdate();
+      } catch {
+        toast({ title: "Failed to update plan", variant: "destructive" });
+      }
+    });
+  }
+
+  return (
+    <Select
+      value={workspace.plan}
+      onValueChange={handlePlanChange}
+      disabled={disabled || isPending}
+    >
+      <SelectTrigger className="h-7 w-28 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {PLAN_OPTIONS.map((p) => (
+          <SelectItem key={p} value={p} className="text-xs">
+            {p}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: () => void }) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const isAdmin = user.systemRoles.includes("admin");
-  const primaryWorkspace = user.workspaces[0];
 
   function handleRoleToggle() {
     startTransition(async () => {
@@ -45,19 +90,6 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: () => void }) 
         onUpdate();
       } catch {
         toast({ title: "Failed to update role", variant: "destructive" });
-      }
-    });
-  }
-
-  function handlePlanChange(plan: string) {
-    if (!primaryWorkspace) return;
-    startTransition(async () => {
-      try {
-        await setWorkspacePlan(primaryWorkspace.id, plan);
-        toast({ title: `Plan updated to ${plan}` });
-        onUpdate();
-      } catch {
-        toast({ title: "Failed to update plan", variant: "destructive" });
       }
     });
   }
@@ -74,34 +106,41 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: () => void }) 
         <RoleBadge roles={user.systemRoles} />
       </td>
       <td className="px-4 py-3">
-        {primaryWorkspace ? (
-          <div className="space-y-0.5">
-            <p className="text-xs text-muted-foreground">{primaryWorkspace.name}</p>
-            <PlanBadge plan={primaryWorkspace.plan} />
+        {user.workspaces.length > 0 ? (
+          <div className="space-y-3">
+            {user.workspaces.map((workspace) => (
+              <div
+                key={workspace.id}
+                className="flex min-w-72 items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-xs font-medium">
+                      {workspace.name}
+                    </p>
+                    <PlanBadge plan={workspace.plan} />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {workspace.role}
+                  </p>
+                </div>
+                {workspace.role === "owner" ? (
+                  <WorkspacePlanControl
+                    workspace={workspace}
+                    disabled={isPending}
+                    onUpdate={onUpdate}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    read-only
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
-      </td>
-      <td className="px-4 py-3">
-        {primaryWorkspace ? (
-          <Select
-            value={primaryWorkspace.plan}
-            onValueChange={handlePlanChange}
-            disabled={isPending}
-          >
-            <SelectTrigger className="h-7 w-28 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PLAN_OPTIONS.map((p) => (
-                <SelectItem key={p} value={p} className="text-xs">
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
       </td>
       <td className="px-4 py-3">
         <Button
@@ -147,8 +186,7 @@ export function AdminUsersTable({
             <tr className="border-b border-border/70 bg-muted/30">
               <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">User</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">System role</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Workspace</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Set plan</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Workspaces</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>

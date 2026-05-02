@@ -1,16 +1,14 @@
 import { Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { ArrowRight, CreditCard, GitBranch, Sparkles } from "lucide-react";
+import { ArrowRight, CreditCard, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { WelcomeSection } from "@/features/dashboard/welcome-section";
 import { StatsSummary } from "@/features/dashboard/stats-summary";
 import { OnboardingCards } from "@/features/dashboard/onboarding-cards";
 import { RecentActivity } from "@/features/dashboard/recent-activity";
-import { GithubConnectCard } from "@/features/github/components/github-connect-card";
 import { GithubOAuthToast } from "@/features/github/components/github-oauth-toast";
-import { GitlabConnectCard } from "@/features/gitlab/components/gitlab-connect-card";
 import { GitlabOAuthToast } from "@/features/gitlab/components/gitlab-oauth-toast";
 import { createServerProjectsApi } from "@/features/projects/api";
 import { createServerSettingsApi } from "@/features/settings/api";
@@ -121,11 +119,18 @@ export default async function DashboardPage({
         <GitlabOAuthToast />
       </Suspense>
 
-      <WelcomeSection />
+      <WelcomeSection
+        workspaceId={workspaceId}
+        workspaceName={workspaceDetail?.workspace.name}
+      />
 
       {!hasProjects ? <FirstProjectCallout workspaceId={workspaceId} /> : null}
 
-      <StatsSummary projectCount={projectCount} />
+      <StatsSummary
+        projectCount={projectCount}
+        usage={workspaceDetail?.usage ?? null}
+        hasMcpConnection={hasMcpConnection}
+      />
 
       <OnboardingCards
         hasProjects={hasProjects}
@@ -136,15 +141,9 @@ export default async function DashboardPage({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RecentActivity />
+          <RecentActivity workspaceId={workspaceId} />
         </div>
-        <div id="repository-providers" className="space-y-4 scroll-mt-20">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="size-4 text-muted-foreground" />
-            Optional setup
-          </div>
-          <GithubConnectCard />
-          <GitlabConnectCard />
+        <div className="space-y-4">
           <BillingV2Card workspace={workspaceDetail} workspaceId={workspaceId} />
         </div>
       </div>

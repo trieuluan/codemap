@@ -48,7 +48,7 @@ export function OnboardingCards({
       description: "Optional, useful for importing private repositories.",
       icon: Github,
       completed: false,
-      href: "#repository-providers",
+      href: "/account/integrations",
       cta: "Connect provider",
       optional: true,
     },
@@ -74,8 +74,8 @@ export function OnboardingCards({
         <div>
           <h2 className="text-lg font-semibold">Getting started</h2>
           <p className="text-sm text-muted-foreground">
-            Complete the essentials, then connect providers when private repo
-            access is needed.
+            Complete the essentials for this workspace. Provider integrations
+            live in account settings.
           </p>
         </div>
         <div className="flex items-center gap-3">

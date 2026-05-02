@@ -1,11 +1,18 @@
 import { Card, CardContent } from "@/components/ui/card"
-import { FolderKanban, Code, Users, Activity } from "lucide-react"
+import { Activity, Bot, FolderKanban, GitBranch } from "lucide-react"
+import type { WorkspaceUsageSummary } from "@/features/workspaces/api"
 
 interface StatsSummaryProps {
   projectCount: number
+  usage?: WorkspaceUsageSummary | null
+  hasMcpConnection: boolean
 }
 
-export function StatsSummary({ projectCount }: StatsSummaryProps) {
+export function StatsSummary({
+  projectCount,
+  usage,
+  hasMcpConnection,
+}: StatsSummaryProps) {
   const stats = [
     {
       id: "projects",
@@ -14,22 +21,22 @@ export function StatsSummary({ projectCount }: StatsSummaryProps) {
       icon: FolderKanban,
     },
     {
-      id: "api-calls",
-      label: "API Calls",
-      value: "—",
-      icon: Code,
+      id: "imports",
+      label: "Imports this month",
+      value: String(usage?.importsThisMonth ?? 0),
+      icon: GitBranch,
     },
     {
-      id: "team-members",
-      label: "Team Members",
-      value: "—",
-      icon: Users,
-    },
-    {
-      id: "uptime",
-      label: "Uptime",
-      value: "—",
+      id: "indexed-files",
+      label: "Indexed files",
+      value: (usage?.indexedFilesThisMonth ?? 0).toLocaleString(),
       icon: Activity,
+    },
+    {
+      id: "mcp",
+      label: "MCP",
+      value: hasMcpConnection ? "Connected" : "Not set up",
+      icon: Bot,
     },
   ]
 
