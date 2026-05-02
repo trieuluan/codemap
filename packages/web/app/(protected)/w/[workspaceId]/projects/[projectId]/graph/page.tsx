@@ -29,6 +29,7 @@ export default async function ProjectGraphPage({
       api.getProjectImportPage(projectId, { limit: 1 }),
       api.getProjectGraph(projectId),
     ]);
+    if (project.workspaceId !== workspaceId) notFound();
 
     return (
       <div className="space-y-6">

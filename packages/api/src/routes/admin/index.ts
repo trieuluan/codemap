@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
-import { asc, count, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
+import {
+  adminListUsersQuerySchema,
+  type AdminProjectImportSummary,
+} from "@codemap/shared";
 import {
   project,
   projectImport,
@@ -8,6 +12,7 @@ import {
   user,
   userRole,
   workspace,
+  workspaceMember,
   workspacePayment,
   workspaceSubscription,
 } from "../../db/schema";
@@ -33,6 +38,27 @@ const userParamsSchema = z.object({ userId: z.string().min(1) });
 const setUserRoleBodySchema = z.object({
   role: z.enum(["admin", "user"]),
 });
+
+function serializeDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function serializeImportSummary(
+  value: typeof projectImport.$inferSelect | null | undefined,
+): AdminProjectImportSummary | null {
+  if (!value) return null;
+  return {
+    id: value.id,
+    status: value.status,
+    parseStatus: value.parseStatus,
+    commitSha: value.commitSha,
+    indexedFileCount: value.indexedFileCount,
+    indexedSymbolCount: value.indexedSymbolCount,
+    indexedEdgeCount: value.indexedEdgeCount,
+    completedAt: serializeDate(value.completedAt),
+  };
+}
 
 const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.addHook("preHandler", (request, reply, done) => {
@@ -142,7 +168,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         projectCount: row.projects.length,
         activeSubscription:
           row.subscriptions.find((sub) => sub.status === "active") ?? null,
-        updatedAt: row.updatedAt,
+        updatedAt: serializeDate(row.updatedAt),
       })),
       projects: projects.map((row) => ({
         id: row.id,
@@ -153,8 +179,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         visibility: row.visibility,
         workspaceId: row.workspaceId,
         workspaceName: row.workspace.name,
-        latestImport: row.imports[0] ?? null,
-        updatedAt: row.updatedAt,
+        latestImport: serializeImportSummary(row.imports[0]),
+        updatedAt: serializeDate(row.updatedAt),
       })),
       imports: imports.map((row) => ({
         id: row.id,
@@ -174,8 +200,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         indexedFileCount: row.indexedFileCount,
         indexedSymbolCount: row.indexedSymbolCount,
         indexedEdgeCount: row.indexedEdgeCount,
-        startedAt: row.startedAt,
-        completedAt: row.completedAt,
+        startedAt: serializeDate(row.startedAt),
+        completedAt: serializeDate(row.completedAt),
       })),
       subscriptions: subscriptions.map((row) => ({
         id: row.id,
@@ -184,8 +210,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         plan: row.plan,
         provider: row.provider,
         status: row.status,
-        currentPeriodEnd: row.currentPeriodEnd,
-        updatedAt: row.updatedAt,
+        currentPeriodEnd: serializeDate(row.currentPeriodEnd),
+        updatedAt: serializeDate(row.updatedAt),
       })),
       payments: payments.map((row) => ({
         id: row.id,
@@ -196,22 +222,41 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         currency: row.currency,
         status: row.status,
         plan: row.plan,
-        createdAt: row.createdAt,
+        createdAt: serializeDate(row.createdAt),
       })),
     });
   });
 
-  fastify.get("/users", async (_request, reply) => {
-    const users = await fastify.db.query.user.findMany({
-      orderBy: [asc(user.createdAt)],
-      with: {
-        userRoles: { with: { role: true } },
-      },
-    });
+  fastify.get("/users", async (request, reply) => {
+    const query = adminListUsersQuerySchema.parse(request.query ?? {});
+    const search = query.q?.trim();
+    const where = search
+      ? or(ilike(user.email, `%${search}%`), ilike(user.name, `%${search}%`))
+      : undefined;
+    const offset = (query.page - 1) * query.pageSize;
 
-    const memberships = await fastify.db.query.workspaceMember.findMany({
-      with: { workspace: true },
-    });
+    const [users, totalRows] = await Promise.all([
+      fastify.db.query.user.findMany({
+        where,
+        orderBy: [asc(user.createdAt)],
+        limit: query.pageSize,
+        offset,
+        with: {
+          userRoles: { with: { role: true } },
+        },
+      }),
+      where
+        ? fastify.db.select({ value: count() }).from(user).where(where)
+        : fastify.db.select({ value: count() }).from(user),
+    ]);
+
+    const userIds = users.map((u) => u.id);
+    const memberships = userIds.length
+      ? await fastify.db.query.workspaceMember.findMany({
+          where: inArray(workspaceMember.userId, userIds),
+          with: { workspace: true },
+        })
+      : [];
 
     const membershipByUserId = new Map<string, typeof memberships>();
     for (const m of memberships) {
@@ -220,11 +265,11 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
       membershipByUserId.set(m.userId, list);
     }
 
-    const result = users.map((u) => ({
+    const items = users.map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
-      createdAt: u.createdAt,
+      createdAt: serializeDate(u.createdAt),
       systemRoles: u.userRoles.map((ur) => ur.role.name),
       workspaces: (membershipByUserId.get(u.id) ?? []).map((m) => ({
         id: m.workspaceId,
@@ -234,7 +279,16 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
       })),
     }));
 
-    return reply.success(result, 200, { count: result.length });
+    const total = totalRows[0]?.value ?? 0;
+    return reply.success({
+      items,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+      },
+    });
   });
 
   fastify.get("/workspaces/:workspaceId", async (request, reply) => {
@@ -287,13 +341,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
           name: found.owner.name,
           email: found.owner.email,
         },
-        createdAt: found.createdAt,
-        updatedAt: found.updatedAt,
+        createdAt: serializeDate(found.createdAt),
+        updatedAt: serializeDate(found.updatedAt),
       },
       members: found.members.map((member) => ({
         userId: member.userId,
         role: member.role,
-        createdAt: member.createdAt,
+        createdAt: serializeDate(member.createdAt),
         user: {
           id: member.user.id,
           name: member.user.name,
@@ -309,27 +363,29 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         provider: projectRecord.provider,
         visibility: projectRecord.visibility,
         repositoryUrl: projectRecord.repositoryUrl,
-        latestImport: projectRecord.imports[0] ?? null,
-        updatedAt: projectRecord.updatedAt,
+        latestImport: serializeImportSummary(projectRecord.imports[0]),
+        updatedAt: serializeDate(projectRecord.updatedAt),
       })),
       subscriptions: found.subscriptions.map((subscription) => ({
         id: subscription.id,
         plan: subscription.plan,
         provider: subscription.provider,
         status: subscription.status,
-        currentPeriodStart: subscription.currentPeriodStart,
-        currentPeriodEnd: subscription.currentPeriodEnd,
-        cancelledAt: subscription.cancelledAt,
-        updatedAt: subscription.updatedAt,
+        currentPeriodStart: serializeDate(subscription.currentPeriodStart),
+        currentPeriodEnd: serializeDate(subscription.currentPeriodEnd),
+        cancelledAt: serializeDate(subscription.cancelledAt),
+        updatedAt: serializeDate(subscription.updatedAt),
       })),
       payments: found.payments.map((payment) => ({
         id: payment.id,
+        workspaceId: payment.workspaceId,
+        workspaceName: found.name,
         provider: payment.provider,
         amount: payment.amount,
         currency: payment.currency,
         status: payment.status,
         plan: payment.plan,
-        createdAt: payment.createdAt,
+        createdAt: serializeDate(payment.createdAt),
       })),
     });
   });

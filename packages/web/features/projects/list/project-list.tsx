@@ -38,12 +38,12 @@ export function ProjectList({
   initialProjects,
   workspaceMap = {},
   showWorkspace = false,
-  workspaceId = "",
+  workspaceId,
 }: {
   initialProjects: ProjectListItem[];
   workspaceMap?: Record<string, string>;
   showWorkspace?: boolean;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
   const [projects, setProjects] = useState(initialProjects);
   const [query, setQuery] = useState("");

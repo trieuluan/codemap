@@ -47,11 +47,11 @@ function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
+  const wid = activeWorkspace?.workspace.id;
 
   const { data: allProjects } = useSWR(
-    "global-projects-search",
-    () => browserProjectsApi.getProjects(),
+    wid ? ["workspace-projects-search", wid] : null,
+    () => browserProjectsApi.getProjects({ workspaceId: wid }),
     { revalidateOnFocus: false },
   );
 
@@ -66,6 +66,10 @@ function GlobalSearch() {
           )
           .slice(0, 6)
       : [];
+
+  if (!wid) {
+    return null;
+  }
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -96,7 +100,7 @@ function GlobalSearch() {
   function handleSelect(project: ProjectListItem) {
     setQuery("");
     setOpen(false);
-    router.push(wid ? `/w/${wid}/projects/${project.id}` : "/projects");
+    router.push(`/w/${project.workspaceId}/projects/${project.id}`);
   }
 
   return (
@@ -158,7 +162,7 @@ function GlobalSearch() {
               ))}
               <li className="border-t border-border/70">
                 <Link
-                  href={wid ? `/w/${wid}/projects?q=${encodeURIComponent(query)}` : `/projects?q=${encodeURIComponent(query)}`}
+                  href={`/w/${wid}/projects?q=${encodeURIComponent(query)}`}
                   onClick={() => { setOpen(false); setQuery(""); }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -191,10 +195,14 @@ function importStatusIcon(status: string) {
 
 function NotificationBell() {
   const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
+  const wid = activeWorkspace?.workspace.id;
   const { data: projects } = useSWR(
-    "global-projects-notifications",
-    () => browserProjectsApi.getProjects({ include: ["latestImport"] }),
+    wid ? ["workspace-projects-notifications", wid] : null,
+    () =>
+      browserProjectsApi.getProjects({
+        workspaceId: wid,
+        include: ["latestImport"],
+      }),
     {
       revalidateOnFocus: true,
       refreshInterval: (data) => {
@@ -219,6 +227,15 @@ function NotificationBell() {
   const activeCount = recentImports.filter(
     (i) => i.status === "running" || i.status === "queued" || i.status === "pending",
   ).length;
+
+  if (!wid) {
+    return (
+      <Button variant="ghost" size="icon" disabled>
+        <Bell className="size-4" />
+        <span className="sr-only">Notifications</span>
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>
@@ -246,7 +263,7 @@ function NotificationBell() {
           recentImports.map((item) => (
             <DropdownMenuItem key={`${item.projectId}-${item.startedAt}`} asChild>
               <Link
-                href={wid ? `/w/${wid}/projects/${item.projectId}` : "/projects"}
+                href={`/w/${wid}/projects/${item.projectId}`}
                 className="flex items-center gap-2.5"
               >
                 {importStatusIcon(item.status)}
@@ -263,7 +280,7 @@ function NotificationBell() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href={wid ? `/w/${wid}/projects` : "/projects"} className="text-xs text-muted-foreground justify-center">
+          <Link href={`/w/${wid}/projects`} className="text-xs text-muted-foreground justify-center">
             View all projects
           </Link>
         </DropdownMenuItem>
@@ -290,7 +307,7 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
+  const wid = activeWorkspace?.workspace.id;
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const { data: session, isPending } = authClient.useSession();
@@ -373,7 +390,9 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href={wid ? `/w/${wid}/projects` : "/projects"}>Projects</Link>
+              <Link href={wid ? `/w/${wid}/projects` : "/dashboard"}>
+                Projects
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/account/settings">Account</Link>

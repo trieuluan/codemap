@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useWorkspace } from "@/features/workspaces/workspace-context";
 import {
   FileCode2,
   FolderTree,
@@ -32,6 +31,7 @@ import {
 
 interface DetailPanelDetailsTabProps {
   projectId: string;
+  workspaceId: string;
   file: RepositoryTreeNode;
   fileContent?: ProjectFileContent;
   parseData?: ProjectFileParseData;
@@ -51,6 +51,7 @@ interface DetailPanelDetailsTabProps {
 
 export function DetailPanelDetailsTab({
   projectId,
+  workspaceId,
   file,
   fileContent,
   parseData,
@@ -58,9 +59,7 @@ export function DetailPanelDetailsTab({
   parseDataLoading = false,
   onNavigateToFile,
 }: DetailPanelDetailsTabProps) {
-  const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
-  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const fileKind = getFileKind({
     name: file.name,
     extension: file.extension,

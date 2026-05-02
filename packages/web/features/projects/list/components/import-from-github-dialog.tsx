@@ -26,10 +26,10 @@ import type { GithubRepositoryOption } from "@/features/projects/api";
 
 export function ImportFromGithubDialog({
   trigger,
-  workspaceId = "",
+  workspaceId,
 }: {
   trigger: React.ReactNode;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -55,6 +55,7 @@ export function ImportFromGithubDialog({
       try {
         const result = await createProjectFromGithub({
           repositoryUrl: selected.repositoryUrl,
+          workspaceId,
           name: selected.name,
           defaultBranch: selected.defaultBranch ?? undefined,
           externalRepoId: selected.id,
@@ -67,7 +68,7 @@ export function ImportFromGithubDialog({
         });
 
         handleClose();
-        router.push(workspaceId ? `/w/${workspaceId}/projects/${result.project.id}` : "/projects");
+        router.push(`/w/${workspaceId}/projects/${result.project.id}`);
         router.refresh();
       } catch (error) {
         toast({

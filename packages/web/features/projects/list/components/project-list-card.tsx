@@ -33,15 +33,15 @@ export function ProjectListCard({
   project,
   onDelete,
   workspaceName,
-  workspaceId = "",
+  workspaceId,
 }: {
   project: ProjectListItem;
   onDelete: (project: ProjectListItem) => void;
   workspaceName?: string;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
   const latestImport = project.latestImport ?? null;
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
 
   return (
     <Card className="border-border/80 bg-card">

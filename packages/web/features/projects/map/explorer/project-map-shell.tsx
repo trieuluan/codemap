@@ -55,11 +55,13 @@ export function ProjectMapShell({
   imports,
   mapSnapshot,
   initialSelectedFilePath,
+  workspaceId,
 }: {
   project: Project;
   imports: ProjectImport[];
   mapSnapshot: ProjectMapSnapshot | null;
   initialSelectedFilePath?: string | null;
+  workspaceId: string;
 }) {
   const defaultRelationshipSections = ["imports", "imported-by"];
   const [activeDetailTab, setActiveDetailTab] = useState("details");
@@ -381,6 +383,7 @@ export function ProjectMapShell({
                 {selectedNode ? (
                   <DetailPanel
                     projectId={project.id}
+                    workspaceId={workspaceId}
                     file={selectedNode}
                     fileContent={selectedFileContent}
                     parseData={

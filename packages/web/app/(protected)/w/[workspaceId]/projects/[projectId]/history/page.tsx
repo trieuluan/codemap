@@ -23,6 +23,7 @@ export default async function ProjectHistoryPage({
       api.getProject(projectId),
       api.getProjectImportPage(projectId, { limit: 50 }),
     ]);
+    if (project.workspaceId !== workspaceId) notFound();
 
     return (
       <div className="space-y-6">

@@ -49,7 +49,7 @@ interface ProjectMapGraphSidebarProps {
   onFocusSelectedNode: (mode: GraphRelationMode) => void;
   onOpenDrawer: (nodeId: string) => void;
   onCopyPath: (path: string) => void;
-  workspaceId?: string;
+  workspaceId: string;
 }
 
 export function ProjectMapGraphSidebar({
@@ -72,9 +72,9 @@ export function ProjectMapGraphSidebar({
   onFocusSelectedNode,
   onOpenDrawer,
   onCopyPath,
-  workspaceId = "",
+  workspaceId,
 }: ProjectMapGraphSidebarProps) {
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   return (
     <aside className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border border-border/70 bg-card p-4">
       {mode === "overview" ? (

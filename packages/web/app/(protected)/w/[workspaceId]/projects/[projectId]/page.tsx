@@ -21,6 +21,7 @@ export default async function ProjectDetailPage({
       api.getProject(projectId),
       api.getProjectImportPage(projectId, { limit: 20 }),
     ]);
+    if (project.workspaceId !== workspaceId) notFound();
 
     return (
       <div className="space-y-6">

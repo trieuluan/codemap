@@ -25,10 +25,10 @@ type FieldErrors = Partial<
 
 export function CreateProjectDialog({
   trigger,
-  workspaceId = "",
+  workspaceId,
 }: {
   trigger: React.ReactNode;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -57,6 +57,7 @@ export function CreateProjectDialog({
 
     const parsed = createProjectInputSchema.safeParse({
       name,
+      workspaceId,
       description: description.trim() ? description : null,
       repositoryUrl: repositoryUrl.trim() ? repositoryUrl : null,
       defaultBranch: defaultBranch.trim() ? defaultBranch : null,
@@ -86,7 +87,7 @@ export function CreateProjectDialog({
 
         setOpen(false);
         resetForm();
-        router.push(workspaceId ? `/w/${workspaceId}/projects/${project.id}` : "/projects");
+        router.push(`/w/${workspaceId}/projects/${project.id}`);
         router.refresh();
       } catch (error) {
         toast({

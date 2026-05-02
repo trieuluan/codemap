@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import useSWR from "swr";
-import { useWorkspace } from "@/features/workspaces/workspace-context";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +24,13 @@ function SymbolsTab({
   node,
   symbolGraph,
   isLoading,
-  projectBase = "/projects",
+  projectBase,
 }: {
   projectId: string;
   node: ProjectMapGraphNode;
   symbolGraph?: ProjectSymbolGraphResponse;
   isLoading: boolean;
-  projectBase?: string;
+  projectBase: string;
 }) {
   if (isLoading) {
     return (
@@ -103,6 +102,7 @@ interface GraphNodeDrawerProps {
   graphEdges: ProjectMapGraphEdge[];
   onClose: () => void;
   onSelectByPath: (path: string) => void;
+  workspaceId: string;
 }
 
 export function GraphNodeDrawer({
@@ -114,10 +114,9 @@ export function GraphNodeDrawer({
   graphEdges,
   onClose,
   onSelectByPath,
+  workspaceId,
 }: GraphNodeDrawerProps) {
-  const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
-  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const { data: fileContent, isLoading: contentLoading } =
     useSWR<ProjectFileContent>(
       node ? ["graph-drawer-content", projectId, node.path] : null,

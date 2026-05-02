@@ -12,17 +12,17 @@ interface OnboardingCardsProps {
   hasProjects: boolean;
   hasMcpConnection: boolean;
   firstProjectId?: string;
-  workspaceId?: string;
+  workspaceId: string;
 }
 
 export function OnboardingCards({
   hasProjects,
   hasMcpConnection,
   firstProjectId,
-  workspaceId = "",
+  workspaceId,
 }: OnboardingCardsProps) {
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
-  const apiBase = workspaceId ? `/w/${workspaceId}/api` : "/api";
+  const projectBase = `/w/${workspaceId}/projects`;
+  const apiBase = `/w/${workspaceId}/api`;
   const steps = [
     {
       id: "connect-project",

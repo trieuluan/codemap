@@ -92,8 +92,8 @@ function Step({
 
 export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
   const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
-  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
+  const wid = activeWorkspace?.workspace.id;
+  const projectBase = wid ? `/w/${wid}/projects` : "/dashboard";
   const { data: apiKeys, mutate } = useSWR("settings-api-keys", () =>
     api.listApiKeys(),
   );

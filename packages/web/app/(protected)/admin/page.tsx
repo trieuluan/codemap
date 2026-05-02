@@ -245,9 +245,9 @@ function BillingPanel({
 
 export default async function AdminPage() {
   const cookieHeader = (await cookies()).toString();
-  const [overview, users] = await Promise.all([
+  const [overview, usersResponse] = await Promise.all([
     getAdminOverview(cookieHeader),
-    listAdminUsers(cookieHeader),
+    listAdminUsers({ page: 1, pageSize: 10 }, cookieHeader),
   ]);
 
   return (
@@ -284,7 +284,7 @@ export default async function AdminPage() {
         />
       </div>
 
-      <AdminUsersTable initialUsers={users} />
+      <AdminUsersTable initialResponse={usersResponse} />
     </div>
   );
 }

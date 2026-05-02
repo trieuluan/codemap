@@ -56,18 +56,18 @@ function canTriggerImport(project: Project) {
 export function ProjectOverview({
   initialProject,
   initialImports,
-  workspaceId = "",
+  workspaceId,
 }: {
   initialProject: Project;
   initialImports: ProjectImport[];
-  workspaceId?: string;
+  workspaceId: string;
 }) {
   const { toast } = useToast();
   const router = useRouter();
   const [isImportPending, startImportTransition] = useTransition();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const projectId = initialProject.id;
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const swrBase = {
@@ -587,11 +587,10 @@ export function ProjectOverview({
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onDeleted={() => {
-          router.push(workspaceId ? `/w/${workspaceId}/projects` : "/projects");
+          router.push(`/w/${workspaceId}/projects`);
           router.refresh();
         }}
       />
     </div>
   );
 }
-

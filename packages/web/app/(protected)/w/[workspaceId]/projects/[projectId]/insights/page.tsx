@@ -29,6 +29,7 @@ export default async function ProjectInsightsPage({
       api.getProjectImportPage(projectId, { limit: 1 }),
       api.getProjectInsights(projectId, { file: focusFile, symbol: focusSymbol }),
     ]);
+    if (project.workspaceId !== workspaceId) notFound();
 
     return (
       <div className="space-y-6">

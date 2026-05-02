@@ -1,8 +1,12 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { useState, useTransition } from "react";
+import type { FormEvent } from "react";
+import type { WorkspacePlan } from "@codemap/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -11,7 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { setUserRole, setWorkspacePlan, type AdminUser } from "./api";
+import {
+  listAdminUsers,
+  setUserRole,
+  setWorkspacePlan,
+  type AdminUser,
+  type AdminUserListResponse,
+} from "./api";
 
 const PLAN_OPTIONS = ["beta", "developer", "team"] as const;
 
@@ -46,9 +56,10 @@ function WorkspacePlanControl({
   const [isPending, startTransition] = useTransition();
 
   function handlePlanChange(plan: string) {
+    if (!PLAN_OPTIONS.includes(plan as WorkspacePlan)) return;
     startTransition(async () => {
       try {
-        await setWorkspacePlan(workspace.id, plan);
+        await setWorkspacePlan(workspace.id, plan as WorkspacePlan);
         toast({ title: `${workspace.name} plan updated to ${plan}` });
         onUpdate();
       } catch {
@@ -158,27 +169,62 @@ function UserRow({ user, onUpdate }: { user: AdminUser; onUpdate: () => void }) 
 }
 
 export function AdminUsersTable({
-  initialUsers,
+  initialResponse,
 }: {
-  initialUsers: AdminUser[];
+  initialResponse: AdminUserListResponse;
 }) {
-  const [users, setUsers] = useState(initialUsers);
+  const [response, setResponse] = useState(initialResponse);
+  const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [isLoading, startTransition] = useTransition();
 
-  async function reload() {
-    try {
-      const { listAdminUsers } = await import("./api");
-      const fresh = await listAdminUsers();
-      setUsers(fresh);
-    } catch {
-      // silently ignore — stale data ok
-    }
+  const users = response.items;
+  const { page, pageSize, total, totalPages } = response.pagination;
+
+  function loadUsers(nextPage: number, nextQuery = submittedQuery) {
+    startTransition(async () => {
+      try {
+        const fresh = await listAdminUsers({
+          page: nextPage,
+          pageSize,
+          q: nextQuery || undefined,
+        });
+        setResponse(fresh);
+        setSubmittedQuery(nextQuery);
+      } catch {
+        // stale data is acceptable for this admin utility surface
+      }
+    });
+  }
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    loadUsers(1, query.trim());
   }
 
   return (
     <div className="rounded-lg border border-border/70 bg-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-        <p className="text-sm font-medium">Users</p>
-        <span className="text-xs text-muted-foreground">{users.length} total</span>
+      <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-medium">Users</p>
+          <p className="text-xs text-muted-foreground">
+            {total.toLocaleString()} total · page {page} of {totalPages}
+          </p>
+        </div>
+        <form className="flex w-full gap-2 lg:w-80" onSubmit={handleSearch}>
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search users..."
+              className="pl-8"
+            />
+          </div>
+          <Button type="submit" variant="outline" disabled={isLoading}>
+            Search
+          </Button>
+        </form>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -192,10 +238,43 @@ export function AdminUsersTable({
           </thead>
           <tbody>
             {users.map((u) => (
-              <UserRow key={u.id} user={u} onUpdate={reload} />
+              <UserRow key={u.id} user={u} onUpdate={() => loadUsers(page)} />
             ))}
+            {users.length === 0 && (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
+                  No users found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-border/70 px-4 py-3">
+        <p className="text-xs text-muted-foreground">
+          Showing {users.length.toLocaleString()} of {total.toLocaleString()}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLoading || page <= 1}
+            onClick={() => loadUsers(page - 1)}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLoading || page >= totalPages}
+            onClick={() => loadUsers(page + 1)}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   );

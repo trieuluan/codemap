@@ -17,6 +17,7 @@ import { DetailPanelRelationshipsTab } from "./detail-panel-relationships-tab";
 
 export interface DetailPanelProps {
   projectId: string;
+  workspaceId: string;
   file: RepositoryTreeNode;
   fileContent?: ProjectFileContent;
   parseData?: ProjectFileParseData;
@@ -45,6 +46,7 @@ export interface DetailPanelProps {
 
 export function DetailPanel({
   projectId,
+  workspaceId,
   file,
   fileContent,
   parseData,
@@ -83,6 +85,7 @@ export function DetailPanel({
           <TabsContent value="details" className="mt-0 space-y-4">
             <DetailPanelDetailsTab
               projectId={projectId}
+              workspaceId={workspaceId}
               file={file}
               fileContent={fileContent}
               parseData={parseData}

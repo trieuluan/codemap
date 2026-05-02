@@ -109,9 +109,9 @@ function EmptyInsight({ title }: { title: string }) {
 function buildInsightsFileHref(
   projectId: string,
   filePath: string,
-  workspaceId?: string,
+  workspaceId: string,
 ) {
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   return `${projectBase}/${projectId}/insights?file=${encodeURIComponent(filePath)}`;
 }
 
@@ -123,7 +123,7 @@ function FileInsightList({
   focusFile,
 }: {
   projectId: string;
-  workspaceId?: string;
+  workspaceId: string;
   items: Array<{
     path: string;
     language: string | null;
@@ -174,7 +174,7 @@ function FocusedEdgeList({
   emptyLabel,
 }: {
   projectId: string;
-  workspaceId?: string;
+  workspaceId: string;
   items: ProjectInsightFocusedEdgeFile[];
   emptyLabel: string;
 }) {
@@ -211,16 +211,16 @@ export function ProjectMapInsightsView({
   insights,
   focusFile,
   focusSymbol,
-  workspaceId = "",
+  workspaceId,
 }: {
   project: Project;
   imports: ProjectImport[];
   insights: ProjectMapInsightsResponse;
   focusFile?: string | null;
   focusSymbol?: string | null;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const focusSections = getFocusSections(insights, focusFile);
   const focusedFile = insights.focusedFile;
   const hasFocusedFile = Boolean(focusedFile);

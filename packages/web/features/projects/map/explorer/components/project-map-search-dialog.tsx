@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { useWorkspace } from "@/features/workspaces/workspace-context";
 import {
   BarChart2,
   CornerDownRight,
@@ -33,6 +32,7 @@ interface ProjectMapSearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  workspaceId: string;
   importId?: string | null;
   parseStatus?: ProjectImportParseStatus | null;
 }
@@ -81,13 +81,12 @@ export function ProjectMapSearchDialog({
   open,
   onOpenChange,
   projectId,
+  workspaceId,
   importId,
   parseStatus,
 }: ProjectMapSearchDialogProps) {
   const router = useRouter();
-  const { activeWorkspace } = useWorkspace();
-  const wid = activeWorkspace?.workspace.id ?? "";
-  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<NavigatorFilter>("all");

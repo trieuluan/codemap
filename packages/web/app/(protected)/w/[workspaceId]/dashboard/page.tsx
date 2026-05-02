@@ -8,6 +8,10 @@ import { WelcomeSection } from "@/features/dashboard/welcome-section";
 import { StatsSummary } from "@/features/dashboard/stats-summary";
 import { OnboardingCards } from "@/features/dashboard/onboarding-cards";
 import { RecentActivity } from "@/features/dashboard/recent-activity";
+import {
+  pickActiveProject,
+  WorkspaceIndexCard,
+} from "@/features/dashboard/workspace-index-card";
 import { GithubOAuthToast } from "@/features/github/components/github-oauth-toast";
 import { GitlabOAuthToast } from "@/features/gitlab/components/gitlab-oauth-toast";
 import { createServerProjectsApi } from "@/features/projects/api";
@@ -94,7 +98,7 @@ export default async function DashboardPage({
   let workspaceDetail: WorkspaceDetail | null = null;
 
   try {
-    projects = await api.getProjects({ workspaceId });
+    projects = await api.getProjects({ workspaceId, include: ["latestImport"] });
   } catch { }
   try {
     apiKeys = await settingsApi.listApiKeys();
@@ -106,6 +110,7 @@ export default async function DashboardPage({
   const projectCount = projects.length;
   const hasProjects = projectCount > 0;
   const firstProjectId = projects[0]?.id;
+  const activeProject = pickActiveProject(projects);
   const hasMcpConnection = apiKeys.some((key) => {
     if (!key.enabled) return false;
     if (key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now()) return false;
@@ -131,6 +136,10 @@ export default async function DashboardPage({
         usage={workspaceDetail?.usage ?? null}
         hasMcpConnection={hasMcpConnection}
       />
+
+      {hasProjects ? (
+        <WorkspaceIndexCard project={activeProject} workspaceId={workspaceId} />
+      ) : null}
 
       <OnboardingCards
         hasProjects={hasProjects}

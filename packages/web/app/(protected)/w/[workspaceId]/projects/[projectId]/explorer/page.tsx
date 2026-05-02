@@ -32,6 +32,7 @@ export default async function ProjectExplorerPage({
         throw e;
       }),
     ]);
+    if (project.workspaceId !== workspaceId) notFound();
 
     return (
       <div className="space-y-6">
@@ -63,7 +64,7 @@ export default async function ProjectExplorerPage({
             </Button>
           </div>
         </div>
-        <ProjectMapShell project={project} imports={firstPage.data} mapSnapshot={mapSnapshot} initialSelectedFilePath={path} />
+        <ProjectMapShell project={project} imports={firstPage.data} mapSnapshot={mapSnapshot} initialSelectedFilePath={path} workspaceId={workspaceId} />
       </div>
     );
   } catch (error) {

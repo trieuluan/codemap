@@ -41,7 +41,7 @@ interface ProjectMapGraphViewProps {
   graphData: ProjectMapGraphResponse;
   initialFocusFile?: string | null;
   initialFocusSymbol?: string | null;
-  workspaceId?: string;
+  workspaceId: string;
 }
 
 // ─── Symbol Graph Sidebar ─────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ function SymbolGraphSidebar({
   isLoading,
   onBack,
   onCopyPath,
-  workspaceId = "",
+  workspaceId,
 }: {
   projectId: string;
   filePath: string;
@@ -63,9 +63,9 @@ function SymbolGraphSidebar({
   isLoading: boolean;
   onBack: () => void;
   onCopyPath: (text: string) => void;
-  workspaceId?: string;
+  workspaceId: string;
 }) {
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
   const target = graph?.target;
   const fileName = filePath.split("/").pop() ?? filePath;
   const dirPath = filePath.includes("/")
@@ -228,11 +228,11 @@ export function ProjectMapGraphView({
   graphData,
   initialFocusFile,
   initialFocusSymbol,
-  workspaceId = "",
+  workspaceId,
 }: ProjectMapGraphViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const projectBase = `/w/${workspaceId}/projects`;
 
   const activeFile = searchParams.get("file") ?? initialFocusFile ?? null;
   const activeSymbol = searchParams.get("symbol") ?? initialFocusSymbol ?? null;
@@ -378,6 +378,7 @@ export function ProjectMapGraphView({
             actions.handleSelectByPath(path);
           }
         }}
+        workspaceId={workspaceId}
       />
     </>
   );
