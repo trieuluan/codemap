@@ -41,6 +41,7 @@ interface ProjectMapGraphViewProps {
   graphData: ProjectMapGraphResponse;
   initialFocusFile?: string | null;
   initialFocusSymbol?: string | null;
+  workspaceId?: string;
 }
 
 // ─── Symbol Graph Sidebar ─────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ function SymbolGraphSidebar({
   isLoading,
   onBack,
   onCopyPath,
+  workspaceId = "",
 }: {
   projectId: string;
   filePath: string;
@@ -61,7 +63,9 @@ function SymbolGraphSidebar({
   isLoading: boolean;
   onBack: () => void;
   onCopyPath: (text: string) => void;
+  workspaceId?: string;
 }) {
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
   const target = graph?.target;
   const fileName = filePath.split("/").pop() ?? filePath;
   const dirPath = filePath.includes("/")
@@ -84,7 +88,7 @@ function SymbolGraphSidebar({
         Back to file graph
       </Button>
       <Button variant="ghost" size="sm" className="justify-start gap-2" asChild>
-        <Link href={`/projects/${projectId}/graph`}>
+        <Link href={`${projectBase}/${projectId}/graph`}>
           <Home className="size-4" />
           Back to overview
         </Link>
@@ -153,7 +157,7 @@ function SymbolGraphSidebar({
             asChild
           >
             <Link
-              href={`/projects/${projectId}/explorer?path=${encodeURIComponent(filePath)}`}
+              href={`${projectBase}/${projectId}/explorer?path=${encodeURIComponent(filePath)}`}
               target="_blank"
             >
               <ExternalLink className="size-3" />
@@ -224,9 +228,11 @@ export function ProjectMapGraphView({
   graphData,
   initialFocusFile,
   initialFocusSymbol,
+  workspaceId = "",
 }: ProjectMapGraphViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
 
   const activeFile = searchParams.get("file") ?? initialFocusFile ?? null;
   const activeSymbol = searchParams.get("symbol") ?? initialFocusSymbol ?? null;
@@ -284,6 +290,7 @@ export function ProjectMapGraphView({
             isLoading={isSymbolGraphLoading}
             onBack={handleExitSymbolGraph}
             onCopyPath={handleCopyPath}
+            workspaceId={workspaceId}
           />
         ) : (
           <ProjectMapGraphSidebar
@@ -307,6 +314,7 @@ export function ProjectMapGraphView({
             onFocusSelectedNode={actions.handleFocusSelectedNode}
             onOpenDrawer={actions.handleOpenDrawer}
             onCopyPath={handleCopyPath}
+            workspaceId={workspaceId}
           />
         )}
 

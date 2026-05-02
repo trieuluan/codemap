@@ -202,13 +202,16 @@ export function ProjectMapInsightsView({
   insights,
   focusFile,
   focusSymbol,
+  workspaceId = "",
 }: {
   project: Project;
   imports: ProjectImport[];
   insights: ProjectMapInsightsResponse;
   focusFile?: string | null;
   focusSymbol?: string | null;
+  workspaceId?: string;
 }) {
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
   const focusSections = getFocusSections(insights, focusFile);
   const focusedFile = insights.focusedFile;
   const hasFocusedFile = Boolean(focusedFile);
@@ -296,19 +299,19 @@ export function ProjectMapInsightsView({
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               <Link
-                href={`/projects/${project.id}/insights`}
+                href={`${projectBase}/${project.id}/insights`}
                 className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 Clear focus
               </Link>
               <Link
-                href={`/projects/${project.id}/explorer?path=${encodeURIComponent(focusFile)}`}
+                href={`${projectBase}/${project.id}/explorer?path=${encodeURIComponent(focusFile)}`}
                 className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
               >
                 Open in Explorer
               </Link>
               <Link
-                href={`/projects/${project.id}/graph?file=${encodeURIComponent(focusFile)}`}
+                href={`${projectBase}/${project.id}/graph?file=${encodeURIComponent(focusFile)}`}
                 className="rounded-md border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
               >
                 Focus in Graph

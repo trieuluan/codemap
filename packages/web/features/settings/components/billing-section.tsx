@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { browserWorkspacesApi } from "@/features/workspaces/api";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 import {
   createSubscription,
   cancelSubscription,
@@ -304,11 +305,8 @@ function PlanCard({
 }
 
 export function BillingSection() {
-  const { data: workspaceRows, isLoading: workspacesLoading } = useSWR(
-    "settings-billing-workspaces",
-    () => api.listWorkspaces(),
-  );
-  const activeWorkspace = workspaceRows?.[0]?.workspace ?? null;
+  const { activeWorkspace: activeRow, isLoading: workspacesLoading } = useWorkspace();
+  const activeWorkspace = activeRow?.workspace ?? null;
   const {
     data: detail,
     isLoading: detailLoading,

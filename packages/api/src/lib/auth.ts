@@ -56,14 +56,21 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
-          const userRoleRecord = await db.query.role.findFirst({
-            where: eq(role.name, "user"),
-          });
-          if (!userRoleRecord) return;
-          await db
-            .insert(userRole)
-            .values({ userId: user.id, roleId: userRoleRecord.id })
-            .onConflictDoNothing();
+          const { createWorkspaceService } = await import("../modules/workspace/service.js");
+          const workspaceService = createWorkspaceService(db);
+
+          await Promise.all([
+            // Assign default user role
+            db.query.role.findFirst({ where: eq(role.name, "user") }).then(async (userRoleRecord) => {
+              if (!userRoleRecord) return;
+              await db
+                .insert(userRole)
+                .values({ userId: user.id, roleId: userRoleRecord.id })
+                .onConflictDoNothing();
+            }),
+            // Create personal workspace
+            workspaceService.ensurePersonalWorkspace(user.id),
+          ]);
         },
       },
     },

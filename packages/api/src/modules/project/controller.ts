@@ -64,6 +64,9 @@ export function createProjectController(fastify: FastifyInstance) {
       if (error.message === "WORKSPACE_ACCESS_DENIED") {
         throw fastify.httpErrors.forbidden("Workspace access denied");
       }
+      if (error.message === "WORKSPACE_WRITE_ACCESS_REQUIRED") {
+        throw fastify.httpErrors.forbidden("Workspace owner or admin role required");
+      }
       if (error.message === "WORKSPACE_PROJECT_LIMIT_EXCEEDED") {
         throw fastify.httpErrors.forbidden("Workspace project limit exceeded");
       }

@@ -1,14 +1,12 @@
 import { cookies } from "next/headers";
-import { ProjectList } from "@/features/projects/list/project-list";
-import { createServerProjectsApi } from "@/features/projects/api";
+import { redirect } from "next/navigation";
+import { createServerWorkspacesApi } from "@/features/workspaces/api";
 
-export default async function ProjectsPage() {
-  const api = createServerProjectsApi({
-    cookieHeader: (await cookies()).toString(),
-  });
-  const projects = await api.getProjects({
-    include: ["latestImport"],
-  });
-
-  return <ProjectList initialProjects={projects} />;
+export default async function ProjectsRedirectPage() {
+  const cookieHeader = (await cookies()).toString();
+  const api = createServerWorkspacesApi({ cookieHeader });
+  const workspaces = await api.listWorkspaces().catch(() => []);
+  const workspaceId = workspaces[0]?.workspace.id;
+  if (!workspaceId) redirect("/account/settings");
+  redirect(`/w/${workspaceId}/projects`);
 }

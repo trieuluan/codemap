@@ -56,15 +56,18 @@ function canTriggerImport(project: Project) {
 export function ProjectOverview({
   initialProject,
   initialImports,
+  workspaceId = "",
 }: {
   initialProject: Project;
   initialImports: ProjectImport[];
+  workspaceId?: string;
 }) {
   const { toast } = useToast();
   const router = useRouter();
   const [isImportPending, startImportTransition] = useTransition();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const projectId = initialProject.id;
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const swrBase = {
@@ -236,19 +239,19 @@ export function ProjectOverview({
           <Separator orientation="vertical" className="h-6" />
 
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/projects/${project.id}/explorer`}>
+            <Link href={`${projectBase}/${project.id}/explorer`}>
               <Workflow className="size-3.5" />
               Explorer
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/projects/${project.id}/insights`}>
+            <Link href={`${projectBase}/${project.id}/insights`}>
               <BarChart2 className="size-3.5" />
               Insights
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/projects/${project.id}/graph`}>
+            <Link href={`${projectBase}/${project.id}/graph`}>
               <Network className="size-3.5" />
               Graph
             </Link>
@@ -257,7 +260,7 @@ export function ProjectOverview({
           <Separator orientation="vertical" className="h-6" />
 
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/projects/${project.id}/history`}>
+            <Link href={`${projectBase}/${project.id}/history`}>
               <History className="size-3.5" />
               History
             </Link>
@@ -339,7 +342,7 @@ export function ProjectOverview({
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/projects/${project.id}/history`}>
+              <Link href={`${projectBase}/${project.id}/history`}>
                 <History className="size-3.5" />
                 View history
               </Link>
@@ -368,7 +371,7 @@ export function ProjectOverview({
                 Retry import
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/projects/${project.id}/history`}>
+                <Link href={`${projectBase}/${project.id}/history`}>
                   <History className="size-3.5" />
                   View history
                 </Link>
@@ -389,19 +392,19 @@ export function ProjectOverview({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" asChild>
-                <Link href={`/projects/${project.id}/explorer`}>
+                <Link href={`${projectBase}/${project.id}/explorer`}>
                   <Workflow className="size-3.5" />
                   Open Explorer
                 </Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/projects/${project.id}/graph`}>
+                <Link href={`${projectBase}/${project.id}/graph`}>
                   <Network className="size-3.5" />
                   Open Graph
                 </Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/projects/${project.id}/insights`}>
+                <Link href={`${projectBase}/${project.id}/insights`}>
                   <BarChart2 className="size-3.5" />
                   View Insights
                 </Link>
@@ -584,7 +587,7 @@ export function ProjectOverview({
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onDeleted={() => {
-          router.push("/projects");
+          router.push(workspaceId ? `/w/${workspaceId}/projects` : "/projects");
           router.refresh();
         }}
       />

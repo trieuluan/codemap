@@ -8,46 +8,44 @@ import {
   LayoutDashboard,
   FolderKanban,
   Code,
-  Users,
   Settings,
   HelpCircle,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 import { useAdminCheck } from "@/features/auth/use-admin-check";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 
-const navigation = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "API", href: "/api", icon: Code },
-  { name: "Team", href: "/settings/team", icon: Users },
+const workspaceNav = (wid: string) => [
+  { name: "Overview", href: `/w/${wid}/dashboard`, icon: LayoutDashboard },
+  { name: "Projects", href: `/w/${wid}/projects`, icon: FolderKanban },
+  { name: "API", href: `/w/${wid}/api`, icon: Code },
+  { name: "Settings", href: `/w/${wid}/settings/team`, icon: Settings },
 ];
 
-const secondaryNavigation = [
-  { name: "Settings", href: "/settings", icon: Settings },
+const accountNav = [
+  { name: "Account", href: "/account/settings", icon: UserRound },
   { name: "Help", href: "/help", icon: HelpCircle },
 ];
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ workspaceId: propWorkspaceId }: { workspaceId?: string }) {
   const pathname = usePathname();
   const { isAdmin } = useAdminCheck();
+  const { activeWorkspace } = useWorkspace();
+  const wid = propWorkspaceId ?? activeWorkspace?.workspace.id ?? "";
 
   return (
     <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
       <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-        <Link href="/dashboard">
+        <Link href={wid ? `/w/${wid}/dashboard` : "/dashboard"}>
           <Logo />
         </Link>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-3">
         <div className="space-y-1">
-          {navigation.map((item) => {
-            const isActive =
-              item.href === "/projects"
-                ? pathname === item.href || pathname.startsWith("/projects/")
-                : item.href === "/dashboard"
-                  ? pathname === item.href
-                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          {wid && workspaceNav(wid).map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.name}
@@ -81,7 +79,7 @@ export function DashboardSidebar() {
               Admin
             </Link>
           )}
-          {secondaryNavigation.map((item) => {
+          {accountNav.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link

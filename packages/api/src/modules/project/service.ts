@@ -45,6 +45,27 @@ export function createProjectService(database: Database) {
     return access ? projectRecord : null;
   }
 
+  // Ensures user has write access (owner or admin) to the project's workspace
+  async function assertProjectWriteAccess(projectId: string, userId: string) {
+    const projectRecord = await database.query.project.findFirst({
+      where: eq(project.id, projectId),
+    });
+
+    if (!projectRecord) return null;
+
+    if (!projectRecord.workspaceId) {
+      return projectRecord.ownerUserId === userId ? projectRecord : null;
+    }
+
+    const access = await workspaceService.getWorkspaceAccess(userId, projectRecord.workspaceId);
+    if (!access) return null;
+    if (!["owner", "admin"].includes(access.membership.role)) {
+      throw new Error("WORKSPACE_WRITE_ACCESS_REQUIRED");
+    }
+
+    return projectRecord;
+  }
+
   async function getWorkspaceForProjectAccess(
     userId: string,
     projectRecord: typeof project.$inferSelect,
@@ -250,7 +271,7 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: UpdateProjectBody,
     ) {
-      const existingProject = await getAccessibleProject(projectId, ownerUserId);
+      const existingProject = await assertProjectWriteAccess(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;
@@ -475,7 +496,7 @@ export function createProjectService(database: Database) {
     },
 
     async deleteProject(projectId: string, ownerUserId: string) {
-      const existingProject = await getAccessibleProject(projectId, ownerUserId);
+      const existingProject = await assertProjectWriteAccess(projectId, ownerUserId);
       if (!existingProject) return null;
 
       const [deletedProject] = await database
@@ -514,7 +535,7 @@ export function createProjectService(database: Database) {
       ownerUserId: string,
       input: CreateProjectImportBody,
     ) {
-      const existingProject = await getAccessibleProject(projectId, ownerUserId);
+      const existingProject = await assertProjectWriteAccess(projectId, ownerUserId);
 
       if (!existingProject) {
         return null;

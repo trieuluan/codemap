@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import useSWR from "swr";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,11 +25,13 @@ function SymbolsTab({
   node,
   symbolGraph,
   isLoading,
+  projectBase = "/projects",
 }: {
   projectId: string;
   node: ProjectMapGraphNode;
   symbolGraph?: ProjectSymbolGraphResponse;
   isLoading: boolean;
+  projectBase?: string;
 }) {
   if (isLoading) {
     return (
@@ -53,7 +56,7 @@ function SymbolsTab({
         {symbolGraph.symbols.map((symbol) => (
           <Link
             key={symbol.id}
-            href={`/projects/${projectId}/graph?file=${encodeURIComponent(node.path)}&symbol=${encodeURIComponent(symbol.name)}`}
+            href={`${projectBase}/${projectId}/graph?file=${encodeURIComponent(node.path)}&symbol=${encodeURIComponent(symbol.name)}`}
             className="block rounded-lg border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent/40"
           >
             <div className="flex items-start justify-between gap-3">
@@ -112,6 +115,9 @@ export function GraphNodeDrawer({
   onClose,
   onSelectByPath,
 }: GraphNodeDrawerProps) {
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
+  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
   const { data: fileContent, isLoading: contentLoading } =
     useSWR<ProjectFileContent>(
       node ? ["graph-drawer-content", projectId, node.path] : null,
@@ -231,6 +237,7 @@ export function GraphNodeDrawer({
                   node={node}
                   symbolGraph={symbolGraph}
                   isLoading={symbolLoading}
+                  projectBase={projectBase}
                 />
               </TabsContent>
 
@@ -253,7 +260,7 @@ export function GraphNodeDrawer({
             <div className="shrink-0 border-t px-5 py-3">
               <Button variant="outline" size="sm" asChild>
                 <Link
-                  href={`/projects/${projectId}/explorer?path=${encodeURIComponent(node.path)}`}
+                  href={`${projectBase}/${projectId}/explorer?path=${encodeURIComponent(node.path)}`}
                 >
                   Open in Mapping
                   <ArrowRight className="ml-1.5 size-3.5" />

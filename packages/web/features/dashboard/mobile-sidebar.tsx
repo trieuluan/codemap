@@ -7,40 +7,33 @@ import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet"
 import {
-  LayoutDashboard,
-  FolderKanban,
-  Code,
-  Users,
-  Settings,
-  HelpCircle,
-  Menu,
-  ShieldCheck,
+  LayoutDashboard, FolderKanban, Code, Settings,
+  HelpCircle, Menu, ShieldCheck, UserRound,
 } from "lucide-react"
 import { useAdminCheck } from "@/features/auth/use-admin-check"
-
-const navigation = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "API", href: "/api", icon: Code },
-  { name: "Team", href: "/settings/team", icon: Users },
-]
-
-const secondaryNavigation = [
-  { name: "Settings", href: "/settings", icon: Settings },
-  { name: "Help", href: "/help", icon: HelpCircle },
-]
+import { useWorkspace } from "@/features/workspaces/workspace-context"
 
 export function MobileSidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const { isAdmin } = useAdminCheck()
+  const { activeWorkspace } = useWorkspace()
+  const wid = activeWorkspace?.workspace.id ?? ""
+
+  const navigation = wid ? [
+    { name: "Overview", href: `/w/${wid}/dashboard`, icon: LayoutDashboard },
+    { name: "Projects", href: `/w/${wid}/projects`, icon: FolderKanban },
+    { name: "API", href: `/w/${wid}/api`, icon: Code },
+    { name: "Settings", href: `/w/${wid}/settings/team`, icon: Settings },
+  ] : []
+
+  const secondaryNavigation = [
+    { name: "Account", href: "/account/settings", icon: UserRound },
+    { name: "Help", href: "/help", icon: HelpCircle },
+  ]
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -52,24 +45,18 @@ export function MobileSidebar() {
       </SheetTrigger>
       <SheetContent side="left" className="w-64 p-0 bg-sidebar border-sidebar-border">
         <SheetHeader className="flex h-14 items-center border-b border-sidebar-border px-4">
-          <SheetTitle>
-            <Logo />
-          </SheetTitle>
+          <SheetTitle><Logo /></SheetTitle>
         </SheetHeader>
 
         <nav className="flex flex-1 flex-col gap-1 p-3">
           <div className="space-y-1">
             {navigation.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
+                <Link key={item.name} href={item.href} onClick={() => setOpen(false)}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    isActive ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >
@@ -82,9 +69,7 @@ export function MobileSidebar() {
 
           <div className="mt-8 space-y-1">
             {isAdmin && (
-              <Link
-                href="/admin"
-                onClick={() => setOpen(false)}
+              <Link href="/admin" onClick={() => setOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   pathname === "/admin" || pathname.startsWith("/admin/")
@@ -97,16 +82,12 @@ export function MobileSidebar() {
               </Link>
             )}
             {secondaryNavigation.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
+                <Link key={item.name} href={item.href} onClick={() => setOpen(false)}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    isActive ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >

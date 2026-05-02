@@ -9,6 +9,8 @@ const workspaceRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.get("/:workspaceId", controller.getWorkspace);
   fastify.patch("/:workspaceId", controller.updateWorkspace);
   fastify.get("/:workspaceId/members", controller.listMembers);
+  fastify.post("/:workspaceId/members", controller.inviteMember);
+  fastify.delete("/:workspaceId/members/:memberId", controller.removeMember);
   fastify.get("/:workspaceId/usage", controller.getUsage);
 };
 

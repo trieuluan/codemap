@@ -43,5 +43,17 @@ export function browserWorkspacesApi() {
         method: "PATCH",
         body: input,
       }),
+
+    inviteMember: (workspaceId: string, email: string) =>
+      requestApi<{ member: WorkspaceMember; user: { id: string; name: string | null; email: string } }>(
+        `/workspaces/${workspaceId}/members`,
+        { method: "POST", body: { email } },
+      ),
+
+    removeMember: (workspaceId: string, memberId: string) =>
+      requestApi<{ removed: boolean }>(
+        `/workspaces/${workspaceId}/members/${memberId}`,
+        { method: "DELETE" },
+      ),
   };
 }

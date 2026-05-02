@@ -39,6 +39,7 @@ export interface WorkspaceEntitlements {
   maxIndexedFilesPerImport: number | null;
   privateRepoImports: boolean;
   mcpAccess: boolean;
+  teamMembers: boolean;
 }
 
 export interface WorkspaceUsageSummary {

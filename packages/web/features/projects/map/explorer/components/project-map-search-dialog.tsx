@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 import {
   BarChart2,
   CornerDownRight,
@@ -84,6 +85,9 @@ export function ProjectMapSearchDialog({
   parseStatus,
 }: ProjectMapSearchDialogProps) {
   const router = useRouter();
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
+  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<NavigatorFilter>("all");
@@ -207,7 +211,7 @@ export function ProjectMapSearchDialog({
           label: "Open Explorer",
           description: "Browse files and inspect source.",
           icon: Workflow,
-          href: `/projects/${projectId}/explorer`,
+          href: `${projectBase}/${projectId}/explorer`,
           destination: "explorer" as const,
         },
         {
@@ -215,7 +219,7 @@ export function ProjectMapSearchDialog({
           label: "Open Graph",
           description: "Explore file and folder dependencies.",
           icon: Network,
-          href: `/projects/${projectId}/graph`,
+          href: `${projectBase}/${projectId}/graph`,
           destination: "graph" as const,
         },
         {
@@ -223,7 +227,7 @@ export function ProjectMapSearchDialog({
           label: "Open Insights",
           description: "Review dependency and structure signals.",
           icon: BarChart2,
-          href: `/projects/${projectId}/insights`,
+          href: `${projectBase}/${projectId}/insights`,
           destination: "insights" as const,
         },
         {
@@ -231,11 +235,11 @@ export function ProjectMapSearchDialog({
           label: "Open History",
           description: "Compare imports and parser changes.",
           icon: History,
-          href: `/projects/${projectId}/history`,
+          href: `${projectBase}/${projectId}/history`,
           destination: "all" as const,
         },
       ].filter((item) => filter === "all" || item.destination === filter),
-    [filter, projectId],
+    [filter, projectId, projectBase],
   );
 
   return (

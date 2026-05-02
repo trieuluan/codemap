@@ -14,10 +14,10 @@ import {
 import { ProjectMapSearchDialog } from "../explorer/components/project-map-search-dialog";
 import type { ProjectImportParseStatus } from "@/features/projects/api";
 
-const NAV_ITEMS = [
-  { key: "mapping", href: (id: string) => `/projects/${id}/explorer`, icon: Workflow, label: "Explorer" },
-  { key: "insights", href: (id: string) => `/projects/${id}/insights`, icon: BarChart2, label: "Insights" },
-  { key: "graph", href: (id: string) => `/projects/${id}/graph`, icon: Network, label: "Graph" },
+const makeNavItems = (wid: string) => [
+  { key: "mapping", href: (id: string) => wid ? `/w/${wid}/projects/${id}/explorer` : `/projects/${id}/explorer`, icon: Workflow, label: "Explorer" },
+  { key: "insights", href: (id: string) => wid ? `/w/${wid}/projects/${id}/insights` : `/projects/${id}/insights`, icon: BarChart2, label: "Insights" },
+  { key: "graph", href: (id: string) => wid ? `/w/${wid}/projects/${id}/graph` : `/projects/${id}/graph`, icon: Network, label: "Graph" },
 ] as const;
 
 export function ProjectMapHeader({
@@ -25,12 +25,15 @@ export function ProjectMapHeader({
   active,
   importId,
   parseStatus,
+  workspaceId = "",
 }: {
   projectId: string;
   active: "mapping" | "insights" | "graph";
   importId?: string | null;
   parseStatus?: ProjectImportParseStatus | null;
+  workspaceId?: string;
 }) {
+  const NAV_ITEMS = makeNavItems(workspaceId);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {

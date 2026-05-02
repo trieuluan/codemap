@@ -49,6 +49,7 @@ export function getWorkspaceEntitlements(
       maxIndexedFilesPerImport: null,
       privateRepoImports: true,
       mcpAccess: true,
+      teamMembers: true,
     };
   }
 
@@ -60,6 +61,7 @@ export function getWorkspaceEntitlements(
       maxIndexedFilesPerImport: 50_000,
       privateRepoImports: true,
       mcpAccess: true,
+      teamMembers: false,
     };
   }
 
@@ -71,6 +73,7 @@ export function getWorkspaceEntitlements(
     maxIndexedFilesPerImport: null,
     privateRepoImports: true,
     mcpAccess: true,
+    teamMembers: false,
   };
 }
 
@@ -383,6 +386,63 @@ export function createWorkspaceService(database: Database) {
         },
         orderBy: [asc(workspaceMember.createdAt)],
       });
+    },
+
+    async inviteMember(userId: string, workspaceId: string, email: string) {
+      const access = await getWorkspaceAccess(userId, workspaceId);
+      if (!access) return null;
+      if (!["owner", "admin"].includes(access.membership.role)) {
+        throw new Error("WORKSPACE_ROLE_REQUIRED");
+      }
+
+      const entitlements = getWorkspaceEntitlements(access.workspace);
+      if (!entitlements.teamMembers) {
+        throw new Error("WORKSPACE_TEAM_MEMBERS_DISABLED");
+      }
+
+      const invitee = await database.query.user.findFirst({
+        where: eq(user.email, email.toLowerCase().trim()),
+        columns: { id: true, name: true, email: true },
+      });
+
+      if (!invitee) {
+        throw new Error("USER_NOT_FOUND");
+      }
+
+      const existing = await getMembership(invitee.id, workspaceId);
+      if (existing) {
+        throw new Error("ALREADY_MEMBER");
+      }
+
+      const [member] = await database
+        .insert(workspaceMember)
+        .values({ workspaceId, userId: invitee.id, role: "member" })
+        .returning();
+
+      return { member, user: invitee };
+    },
+
+    async removeMember(userId: string, workspaceId: string, targetUserId: string) {
+      const access = await getWorkspaceAccess(userId, workspaceId);
+      if (!access) return null;
+      if (!["owner", "admin"].includes(access.membership.role)) {
+        throw new Error("WORKSPACE_ROLE_REQUIRED");
+      }
+      if (access.workspace.ownerUserId === targetUserId) {
+        throw new Error("CANNOT_REMOVE_OWNER");
+      }
+
+      const [removed] = await database
+        .delete(workspaceMember)
+        .where(
+          and(
+            eq(workspaceMember.workspaceId, workspaceId),
+            eq(workspaceMember.userId, targetUserId),
+          ),
+        )
+        .returning();
+
+      return removed ?? null;
     },
   };
 }

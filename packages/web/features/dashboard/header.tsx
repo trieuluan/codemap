@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MobileSidebar } from "./mobile-sidebar";
+import { WorkspaceSwitcher } from "@/features/workspaces/workspace-switcher";
 import { authClient } from "@/lib/auth-client";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 import { useToast } from "@/components/ui/use-toast";
 import { browserProjectsApi, type ProjectListItem } from "@/features/projects/api";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,8 @@ function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
 
   const { data: allProjects } = useSWR(
     "global-projects-search",
@@ -92,7 +96,7 @@ function GlobalSearch() {
   function handleSelect(project: ProjectListItem) {
     setQuery("");
     setOpen(false);
-    router.push(`/projects/${project.id}`);
+    router.push(wid ? `/w/${wid}/projects/${project.id}` : `/projects/${project.id}`);
   }
 
   return (
@@ -154,7 +158,7 @@ function GlobalSearch() {
               ))}
               <li className="border-t border-border/70">
                 <Link
-                  href={`/projects?q=${encodeURIComponent(query)}`}
+                  href={wid ? `/w/${wid}/projects?q=${encodeURIComponent(query)}` : `/projects?q=${encodeURIComponent(query)}`}
                   onClick={() => { setOpen(false); setQuery(""); }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -186,6 +190,8 @@ function importStatusIcon(status: string) {
 }
 
 function NotificationBell() {
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
   const { data: projects } = useSWR(
     "global-projects-notifications",
     () => browserProjectsApi.getProjects({ include: ["latestImport"] }),
@@ -240,7 +246,7 @@ function NotificationBell() {
           recentImports.map((item) => (
             <DropdownMenuItem key={`${item.projectId}-${item.startedAt}`} asChild>
               <Link
-                href={`/projects/${item.projectId}`}
+                href={wid ? `/w/${wid}/projects/${item.projectId}` : `/projects/${item.projectId}`}
                 className="flex items-center gap-2.5"
               >
                 {importStatusIcon(item.status)}
@@ -257,7 +263,7 @@ function NotificationBell() {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/projects" className="text-xs text-muted-foreground justify-center">
+          <Link href={wid ? `/w/${wid}/projects` : "/projects"} className="text-xs text-muted-foreground justify-center">
             View all projects
           </Link>
         </DropdownMenuItem>
@@ -283,6 +289,8 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const { data: session, isPending } = authClient.useSession();
@@ -317,6 +325,7 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-background px-4 lg:px-6">
       <MobileSidebar />
+      <WorkspaceSwitcher />
 
       <h1 className="text-lg font-semibold">{title}</h1>
 
@@ -364,10 +373,10 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/projects">Projects</Link>
+              <Link href={wid ? `/w/${wid}/projects` : "/projects"}>Projects</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/dashboard/settings">Settings</Link>
+              <Link href="/account/settings">Account</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="text-destructive">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { useWorkspace } from "@/features/workspaces/workspace-context";
 import {
   ArrowRight,
   Check,
@@ -90,6 +91,9 @@ function Step({
 }
 
 export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
+  const { activeWorkspace } = useWorkspace();
+  const wid = activeWorkspace?.workspace.id ?? "";
+  const projectBase = wid ? `/w/${wid}/projects` : "/projects";
   const { data: apiKeys, mutate } = useSWR("settings-api-keys", () =>
     api.listApiKeys(),
   );
@@ -179,7 +183,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/settings/api-keys">
+            <Link href="/account/api-keys">
               Manage keys
               <ChevronRight className="size-3.5" />
             </Link>
@@ -343,7 +347,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
             </div>
           ) : (
             <Button variant="outline" size="sm" asChild>
-              <Link href="/projects">
+              <Link href={projectBase}>
                 Create from web instead
                 <ChevronRight className="size-3.5" />
               </Link>
@@ -415,7 +419,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
           {readyProject ? (
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/projects/${readyProject.id}/explorer`}>
+              <Link href={`${projectBase}/${readyProject.id}/explorer`}>
                 Open ready project in Explorer
                 <Network className="size-3.5" />
               </Link>
@@ -444,7 +448,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
             }
           />
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/dashboard/settings/api-keys">
+            <Link href="/account/api-keys">
               View all keys
               <ChevronRight className="size-3.5" />
             </Link>

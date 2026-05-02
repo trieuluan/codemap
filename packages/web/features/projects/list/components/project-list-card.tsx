@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Trash2,
   ArrowUpRight,
+  Building2,
 } from "lucide-react";
 import {
   Card,
@@ -31,11 +32,16 @@ import { getProjectRepositoryLabel } from "../../utils/project-helpers";
 export function ProjectListCard({
   project,
   onDelete,
+  workspaceName,
+  workspaceId = "",
 }: {
   project: ProjectListItem;
   onDelete: (project: ProjectListItem) => void;
+  workspaceName?: string;
+  workspaceId?: string;
 }) {
   const latestImport = project.latestImport ?? null;
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
 
   return (
     <Card className="border-border/80 bg-card">
@@ -46,6 +52,12 @@ export function ProjectListCard({
               {project.name}
             </h2>
             <ProjectStatusBadge status={project.status} />
+            {workspaceName && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Building2 className="size-3" />
+                {workspaceName}
+              </span>
+            )}
           </div>
           <p className="max-w-xl text-sm text-muted-foreground">
             {project.description || "No description added yet."}
@@ -61,10 +73,10 @@ export function ProjectListCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem asChild>
-              <Link href={`/projects/${project.id}`}>Open project</Link>
+              <Link href={`${projectBase}/${project.id}`}>Open project</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/projects/${project.id}/explorer`}>Open mapping</Link>
+              <Link href={`${projectBase}/${project.id}/explorer`}>Open mapping</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -121,13 +133,13 @@ export function ProjectListCard({
 
       <CardFooter className="flex flex-wrap items-center gap-2">
         <Button asChild>
-          <Link href={`/projects/${project.id}`}>
+          <Link href={`${projectBase}/${project.id}`}>
             <FolderKanban className="size-4" />
             Open project
           </Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link href={`/projects/${project.id}/explorer`}>
+          <Link href={`${projectBase}/${project.id}/explorer`}>
             <GitBranch className="size-4" />
             Open mapping
           </Link>

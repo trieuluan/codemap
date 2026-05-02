@@ -12,13 +12,17 @@ interface OnboardingCardsProps {
   hasProjects: boolean;
   hasMcpConnection: boolean;
   firstProjectId?: string;
+  workspaceId?: string;
 }
 
 export function OnboardingCards({
   hasProjects,
   hasMcpConnection,
   firstProjectId,
+  workspaceId = "",
 }: OnboardingCardsProps) {
+  const projectBase = workspaceId ? `/w/${workspaceId}/projects` : "/projects";
+  const apiBase = workspaceId ? `/w/${workspaceId}/api` : "/api";
   const steps = [
     {
       id: "connect-project",
@@ -26,7 +30,7 @@ export function OnboardingCards({
       description: "Import a repository so CodeMap can build the first index.",
       icon: GitBranch,
       completed: hasProjects,
-      href: "/projects",
+      href: projectBase,
       cta: hasProjects ? "Projects ready" : "Create project",
     },
     {
@@ -35,7 +39,7 @@ export function OnboardingCards({
       description: "Connect CodeMap to your AI tool for search and edit context.",
       icon: Bot,
       completed: hasMcpConnection,
-      href: "/dashboard/api",
+      href: apiBase,
       cta: hasMcpConnection ? "MCP connected" : "Set up MCP",
     },
     {
@@ -54,7 +58,7 @@ export function OnboardingCards({
       description: "Explore files, graph, insights, and history once indexed.",
       icon: Network,
       completed: hasProjects,
-      href: firstProjectId ? `/projects/${firstProjectId}/explorer` : "/projects",
+      href: firstProjectId ? `${projectBase}/${firstProjectId}/explorer` : projectBase,
       cta: hasProjects ? "Open Explorer" : "Waiting for project",
       disabled: !hasProjects,
     },

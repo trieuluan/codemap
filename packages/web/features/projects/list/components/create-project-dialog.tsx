@@ -25,8 +25,10 @@ type FieldErrors = Partial<
 
 export function CreateProjectDialog({
   trigger,
+  workspaceId = "",
 }: {
   trigger: React.ReactNode;
+  workspaceId?: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -84,7 +86,7 @@ export function CreateProjectDialog({
 
         setOpen(false);
         resetForm();
-        router.push(`/projects/${project.id}`);
+        router.push(workspaceId ? `/w/${workspaceId}/projects/${project.id}` : `/projects/${project.id}`);
         router.refresh();
       } catch (error) {
         toast({

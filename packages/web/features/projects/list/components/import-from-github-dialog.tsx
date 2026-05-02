@@ -26,8 +26,10 @@ import type { GithubRepositoryOption } from "@/features/projects/api";
 
 export function ImportFromGithubDialog({
   trigger,
+  workspaceId = "",
 }: {
   trigger: React.ReactNode;
+  workspaceId?: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -65,7 +67,7 @@ export function ImportFromGithubDialog({
         });
 
         handleClose();
-        router.push(`/projects/${result.project.id}`);
+        router.push(workspaceId ? `/w/${workspaceId}/projects/${result.project.id}` : `/projects/${result.project.id}`);
         router.refresh();
       } catch (error) {
         toast({

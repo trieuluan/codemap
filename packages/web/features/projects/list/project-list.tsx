@@ -36,8 +36,14 @@ const statusOptions: Array<{ label: string; value: ProjectStatus | "all" }> = [
 
 export function ProjectList({
   initialProjects,
+  workspaceMap = {},
+  showWorkspace = false,
+  workspaceId = "",
 }: {
   initialProjects: ProjectListItem[];
+  workspaceMap?: Record<string, string>;
+  showWorkspace?: boolean;
+  workspaceId?: string;
 }) {
   const [projects, setProjects] = useState(initialProjects);
   const [query, setQuery] = useState("");
@@ -95,6 +101,7 @@ export function ProjectList({
             </SelectContent>
           </Select>
           <ImportFromGithubDialog
+            workspaceId={workspaceId}
             trigger={
               <Button variant="outline">
                 <Github className="size-4" />
@@ -103,6 +110,7 @@ export function ProjectList({
             }
           />
           <CreateProjectDialog
+            workspaceId={workspaceId}
             trigger={
               <Button>
                 <Plus className="size-4" />
@@ -127,6 +135,7 @@ export function ProjectList({
           </EmptyHeader>
           <EmptyContent>
             <CreateProjectDialog
+              workspaceId={workspaceId}
               trigger={
                 <Button>
                   <Plus className="size-4" />
@@ -163,6 +172,8 @@ export function ProjectList({
               key={project.id}
               project={project}
               onDelete={setProjectToDelete}
+              workspaceName={showWorkspace && project.workspaceId ? workspaceMap[project.workspaceId] : undefined}
+              workspaceId={workspaceId}
             />
           ))}
         </div>
