@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Activity, CreditCard, FolderGit2, Users, Workflow } from "lucide-react";
+import { Activity, CreditCard, FolderGit2, Users, Workflow, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,9 +109,17 @@ function WorkspacesPanel({ workspaces }: { workspaces: AdminOverview["workspaces
 function ProjectsPanel({ projects }: { projects: AdminOverview["projects"] }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Projects</CardTitle>
-        <CardDescription>Latest projects and import state.</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <div className="space-y-1">
+          <CardTitle>Projects</CardTitle>
+          <CardDescription>Latest projects and import state.</CardDescription>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin/projects">
+            Manage all
+            <ArrowUpRight className="ml-1 size-3" />
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full text-sm">
