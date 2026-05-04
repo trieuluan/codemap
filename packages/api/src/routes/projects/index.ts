@@ -33,6 +33,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   });
   fastify.get("/", controller.listProjects);
   fastify.get("/:projectId", controller.getProjectById);
+  fastify.get("/:projectId/map/files", controller.getProjectFile);
   fastify.get("/:projectId/map/files/content", controller.getProjectFileContent);
   fastify.get("/:projectId/map/files/parse", controller.getProjectFileParseData);
   fastify.post("/:projectId/map/files/reparse", { bodyLimit: MAX_REPARSE_BODY_SIZE }, controller.reparseProjectFile);

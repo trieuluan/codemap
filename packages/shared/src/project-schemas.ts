@@ -115,6 +115,10 @@ export const projectFileContentQuerySchema = z.object({
   endLine: z.coerce.number().int().min(1).optional(),
 });
 
+export const projectFileQuerySchema = z.object({
+  path: z.string().trim().min(1).max(2000),
+});
+
 export const projectMapSearchQuerySchema = z.object({
   q: z.string().trim().min(0).max(200),
   symbolKinds: z.preprocess(
@@ -176,6 +180,7 @@ export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type ProjectFileContentQuery = z.infer<
   typeof projectFileContentQuerySchema
 >;
+export type ProjectFileQuery = z.infer<typeof projectFileQuerySchema>;
 export type ProjectMapSearchQuery = z.infer<typeof projectMapSearchQuerySchema>;
 export type ProjectMapInsightsQuery = z.infer<
   typeof projectMapInsightsQuerySchema

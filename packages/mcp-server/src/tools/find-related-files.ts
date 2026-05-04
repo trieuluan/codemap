@@ -162,7 +162,7 @@ export function registerFindRelatedFilesTool(
           if (imp.targetPath) {
             relatedFiles.push({
               path: imp.targetPath,
-              reason: "imports this file",
+              reason: "this file imports it",
               relationship: "imports",
               score: 0.9,
             });
@@ -175,7 +175,7 @@ export function registerFindRelatedFilesTool(
         for (const importer of fileData.file.importedBy) {
           relatedFiles.push({
             path: importer.sourcePath,
-            reason: "is imported by this file",
+            reason: "imports this file",
             relationship: "imported_by",
             score: 0.9,
           });

@@ -29,6 +29,7 @@ import {
   listProjectsQuerySchema,
   projectEditLocationsQuerySchema,
   projectFileContentQuerySchema,
+  projectFileQuerySchema,
   projectFileReparseBodySchema,
   projectImportCompareQuerySchema,
   projectMapInsightsQuerySchema,
@@ -432,6 +433,81 @@ export function createProjectController(fastify: FastifyInstance) {
         updatedAt: latestMap.updatedAt,
       });
     },
+
+    getProjectFile: async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectFileQuerySchema.parse(request.query ?? {});
+
+      let normalizedPath: string;
+
+      try {
+        normalizedPath = normalizeRepositoryFilePath(query.path);
+      } catch (error) {
+        throw fastify.httpErrors.badRequest(
+          error instanceof Error ? error.message : "Invalid file path",
+        );
+      }
+
+      const latestMapWithSource = await service.getLatestProjectMapWithSource(
+        projectId,
+        userId,
+      );
+
+      if (!latestMapWithSource) {
+        throw fastify.httpErrors.notFound("Project map not found");
+      }
+
+      if (!latestMapWithSource.importRecord) {
+        throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      const importRecord = latestMapWithSource.importRecord;
+
+      const fileRecord = await repoParseGraphService.getFileByPath(
+        importRecord.id,
+        normalizedPath,
+      );
+
+      if (!fileRecord) {
+        throw fastify.httpErrors.notFound(
+          `File not found: ${normalizedPath}`,
+        );
+      }
+
+      const [imports, importedBy] = await Promise.all([
+        repoParseGraphService.listFileImportEdges(
+          importRecord.id,
+          fileRecord.id,
+        ),
+        repoParseGraphService.listFileIncomingImportEdges(
+          importRecord.id,
+          fileRecord.id,
+        ),
+      ]);
+
+      return reply.success({
+        file: {
+          id: fileRecord.id,
+          path: fileRecord.path,
+          language: fileRecord.language,
+          imports: imports.map((item) => ({
+            targetPath: item.targetPathText ?? item.targetFilePath,
+            targetFileId: item.targetFileId,
+            importKind: item.importKind,
+          })),
+          importedBy: importedBy.map((item) => ({
+            sourcePath: item.sourceFilePath,
+            sourceFileId: item.sourceFileId,
+            importKind: item.importKind,
+          })),
+        },
+      });
+    },
+
 
     getProjectFileContent: async (
       request: FastifyRequest,
