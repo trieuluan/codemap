@@ -122,14 +122,8 @@ export default async function AdminProjectDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/w/${project.workspaceId}/projects/${project.id}`}>
-              Open in workspace
-              <ExternalLink className="ml-1 size-3" />
-            </Link>
-          </Button>
           {project.repositoryUrl && (
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="outline" size="sm">
               <a
                 href={project.repositoryUrl}
                 target="_blank"

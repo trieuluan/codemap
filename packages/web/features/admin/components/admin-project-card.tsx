@@ -159,12 +159,6 @@ export function AdminProjectCard({
             View details
           </Link>
         </Button>
-        <Button variant="outline" asChild>
-          <Link href={`/w/${project.workspaceId}/projects/${project.id}`}>
-            <ArrowUpRight className="size-4" />
-            Open project
-          </Link>
-        </Button>
         {project.repositoryUrl && (
           <Button variant="ghost" asChild className="ml-auto">
             <a href={project.repositoryUrl} target="_blank" rel="noreferrer">
