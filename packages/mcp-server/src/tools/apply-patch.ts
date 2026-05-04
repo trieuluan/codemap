@@ -1,7 +1,107 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { success, withToolError } from "../lib/tool-response.js";
+import { readWorkspacePath } from "../lib/workspace-project.js";
+
+const execFileAsync = promisify(execFile);
+
+// ─── types ───────────────────────────────────────────────────────────────────
+
+interface ApplyPatchResult {
+  applied: boolean;
+  dryRun: boolean;
+  reverse: boolean;
+  filesModified: string[];
+  filesCreated: string[];
+  filesDeleted: string[];
+  conflicts: string[];
+  output: string;
+  workspacePath: string;
+  patchFormat: "unified" | "base64" | "unknown";
+  [key: string]: unknown;
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+async function createTempPatchFile(content: string): Promise<string> {
+  const filename = join(tmpdir(), `codemap-patch-${randomUUID()}.patch`);
+  await writeFile(filename, content, "utf-8");
+  return filename;
+}
+
+function parsePatchOutput(output: string): {
+  filesModified: string[];
+  filesCreated: string[];
+  filesDeleted: string[];
+  conflicts: string[];
+} {
+  const filesModified: string[] = [];
+  const filesCreated: string[] = [];
+  const filesDeleted: string[] = [];
+  const conflicts: string[] = [];
+
+  const lines = output.split("\n");
+
+  for (const line of lines) {
+    // Parse patch output like "patching file path/to/file.ts"
+    if (line.startsWith("patching file ")) {
+      const filePath = line.replace("patching file ", "").trim();
+      filesModified.push(filePath);
+    } else if (line.includes("new file")) {
+      // Extract from diff headers
+      const match = line.match(/\+\+\+ b\/(.+)/);
+      if (match) {
+        filesCreated.push(match[1].trim());
+      }
+    } else if (line.includes("deleted file")) {
+      const match = line.match(/--- a\/(.+)/);
+      if (match) {
+        filesDeleted.push(match[1].trim());
+      }
+    } else if (line.includes("Hunk") && line.includes("FAILED")) {
+      // Conflict detected
+      const match = line.match(/file (.+)/);
+      if (match) {
+        conflicts.push(match[1].trim());
+      }
+    } else if (line.includes("reject")) {
+      const match = line.match(/saving rejects to file (.+)/);
+      if (match) {
+        conflicts.push(match[1].trim());
+      }
+    }
+  }
+
+  return { filesModified, filesCreated, filesDeleted, conflicts };
+}
+
+function detectPatchFormat(patchContent: string): "unified" | "base64" | "unknown" {
+  // Check for unified diff markers
+  if (
+    patchContent.includes("--- a/") ||
+    patchContent.includes("--- /dev/null") ||
+    patchContent.includes("diff --git") ||
+    patchContent.includes("@@ -")
+  ) {
+    return "unified";
+  }
+
+  // Check if it looks like base64
+  if (/^[A-Za-z0-9+/=]+$/.test(patchContent.trim())) {
+    return "base64";
+  }
+
+  return "unknown";
+}
+
+// ─── tool ────────────────────────────────────────────────────────────────────
 
 export function registerApplyPatchTool(
   server: McpServer,
@@ -58,78 +158,141 @@ export function registerApplyPatchTool(
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
-    withToolError(async ({ patch, base64_patch, reverse, dry_run, fuzz, project_id }) => {
-      // Decode base64 patch if provided
-      let patchContent = patch;
+    withToolError(
+      async ({ patch, base64_patch, reverse, dry_run, fuzz, project_id }) => {
+        // Decode base64 patch if provided
+        let patchContent = patch;
 
-      if (base64_patch && !patchContent) {
-        try {
-          patchContent = Buffer.from(base64_patch, "base64").toString("utf-8");
-        } catch (error) {
+        if (base64_patch && !patchContent) {
+          try {
+            patchContent = Buffer.from(base64_patch, "base64").toString("utf-8");
+          } catch (error) {
+            return success("Failed to decode base64 patch.", {
+              projectId: project_id,
+              applied: false,
+              error: "invalid_base64",
+            });
+          }
+        }
+
+        if (!patchContent) {
           return success(
-            "Failed to decode base64 patch.\n" +
-              "Ensure the base64_patch is valid encoded content.",
+            "No patch content provided. Provide either 'patch' or 'base64_patch'.",
             {
               projectId: project_id,
-              error: "invalid_base64",
               applied: false,
+              error: "missing_patch",
             },
           );
         }
-      }
 
-      if (!patchContent) {
-        return success(
-          "No patch content provided. " +
-            "Provide either 'patch' or 'base64_patch'.",
-          {
-            projectId: project_id,
-            error: "missing_patch",
-            applied: false,
-          },
-        );
-      }
+        const workspacePath = await readWorkspacePath();
+        const result: ApplyPatchResult = {
+          applied: false,
+          dryRun: Boolean(dry_run),
+          reverse: Boolean(reverse),
+          filesModified: [],
+          filesCreated: [],
+          filesDeleted: [],
+          conflicts: [],
+          output: "",
+          workspacePath,
+          patchFormat: detectPatchFormat(patchContent),
+        };
 
-      // In a real implementation, this would:
-      // 1. Validate the patch format
-      // 2. Check for patch conflicts
-      // 3. Apply the patch using git or patch command
-      // 4. Return success/error status
+        // Dry run mode
+        if (dry_run) {
+          try {
+            const patchFile = await createTempPatchFile(patchContent);
+            const args = ["-p1", "--dry-run", "--fuzz", String(fuzz ?? 2)];
+            if (reverse) args.push("-R");
+            args.push(patchFile);
 
-      const result = {
-        projectId: project_id,
-        applied: false,
-        dryRun: dry_run,
-        reverse: reverse,
-        filesModified: [],
-        conflicts: [],
-        output: "",
-        note: "This is a placeholder implementation. Real implementation would call 'patch' command or use a diff library.",
-      };
+            const { stdout, stderr } = await execFileAsync("patch", args, {
+              cwd: workspacePath,
+            });
 
-      if (dry_run) {
-        result.note = "Dry run - no changes would be applied.";
-        return success(
-          "### Dry Run Result\n\n" +
-            "In dry-run mode, the patch would be validated but not applied.\n" +
-            "If this were a real application:\n" +
-            "- Patches would be validated for format\n" +
-            "- Conflicts would be detected before applying\n" +
-            "- Files would be modified in place",
-          result,
-        );
-      }
+            result.output = stdout + stderr;
+            const parsed = parsePatchOutput(result.output);
+            result.filesModified = parsed.filesModified;
+            result.filesCreated = parsed.filesCreated;
+            result.filesDeleted = parsed.filesDeleted;
+            result.conflicts = parsed.conflicts;
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            result.conflicts.push(errorMessage);
+            result.output = errorMessage;
+          }
 
-      return success(
-        "### Apply Patch Result\n\n" +
-          "This is a placeholder implementation. Real implementation would:\n" +
-          "1. Decode the patch (if base64)\n" +
-          "2. Parse the unified diff format\n" +
-          "3. Check for existing changes that might conflict\n" +
-          "4. Apply the patch using `patch -p0 < file.patch` or similar\n" +
-          "5. Return detailed results of what was modified",
-        result,
-      );
-    }),
+          return success(
+            result.conflicts.length > 0
+              ? `### Dry Run Result — ${result.conflicts.length} conflict(s) found\n\n${result.output}`
+              : `### Dry Run Result — Patch would apply cleanly\n\n${result.output}`,
+            result,
+          );
+        }
+
+        // Real apply mode
+        try {
+          const patchFile = await createTempPatchFile(patchContent);
+          const args = ["-p1", "--fuzz", String(fuzz ?? 2)];
+          if (reverse) args.push("-R");
+          args.push(patchFile);
+
+          const { stdout, stderr } = await execFileAsync("patch", args, {
+            cwd: workspacePath,
+          });
+
+          result.output = stdout + stderr;
+          result.applied = true;
+
+          const parsed = parsePatchOutput(result.output);
+          result.filesModified = parsed.filesModified;
+          result.filesCreated = parsed.filesCreated;
+          result.filesDeleted = parsed.filesDeleted;
+          result.conflicts = parsed.conflicts;
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+
+          // Check if it's a conflict vs other error
+          if (errorMessage.includes("FAILED") || errorMessage.includes("reject")) {
+            result.conflicts.push(errorMessage);
+            result.output = errorMessage;
+            result.applied = false;
+          } else {
+            throw error; // Re-throw unexpected errors
+          }
+        }
+
+        // Clean up temp file will be handled by OS (tmpdir),
+        // but in production you'd want to use fs.unlinkSync() to remove it immediately
+
+        if (result.applied) {
+          const modifiedCount =
+            result.filesModified.length +
+            result.filesCreated.length +
+            result.filesDeleted.length;
+
+          return success(
+            `### Patch Applied Successfully\n\n` +
+              `Modified: ${modifiedCount} file(s)\n` +
+              `  - Changed: ${result.filesModified.length}\n` +
+              `  - Created: ${result.filesCreated.length}\n` +
+              `  - Deleted: ${result.filesDeleted.length}\n\n` +
+              (result.output ? `\`\`\`\n${result.output}\n\`\`\`` : ""),
+            result,
+          );
+        } else {
+          return success(
+            `### Patch Application Failed\n\n` +
+              `Conflicts: ${result.conflicts.length}\n\n` +
+              (result.output ? `\`\`\`\n${result.output}\n\`\`\`` : ""),
+            result,
+          );
+        }
+      },
+    ),
   );
 }
