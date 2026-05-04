@@ -284,13 +284,10 @@ export default async function AdminPage() {
         <ProjectsPanel projects={overview.projects} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1.1fr]">
-        <ImportsPanel imports={overview.imports} />
-        <BillingPanel
-          subscriptions={overview.subscriptions}
-          payments={overview.payments}
-        />
-      </div>
+      <BillingPanel
+        subscriptions={overview.subscriptions}
+        payments={overview.payments}
+      />
 
       <AdminUsersTable initialResponse={usersResponse} />
     </div>
