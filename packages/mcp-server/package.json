@@ -15,6 +15,7 @@
   "dependencies": {
     "@codemap/shared": "file:../shared",
     "@modelcontextprotocol/sdk": "^1.21.0",
+    "execa": "^9.6.1",
     "jszip": "^3.10.1"
   },
   "devDependencies": {

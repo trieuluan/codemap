@@ -150,6 +150,15 @@ function buildContextText(
   lines.push("- get_working_diff — show uncommitted changes in the local workspace (staged, unstaged, untracked); use this after edits to verify what changed before committing or reimporting. Add include_patch: true to see full diff content per file.");
   lines.push("- trigger_reimport — re-index the codebase after code changes");
   lines.push("- wait_for_import — wait until an import finishes");
+  lines.push("- find_by_pattern — search files by glob or regex pattern, with content filtering and line range support");
+  lines.push("- run_tests — run the project test suite (Jest, Vitest, Playwright, npm test) with pattern/name filtering and result parsing");
+  lines.push("- find_related_files — find files related to a given file or symbol via import relationships, shared dependencies, and code similarity");
+  lines.push("- find_cycles — detect circular dependencies in the codebase, with impact analysis and refactoring recommendations");
+  lines.push("- incremental_import — analyze git diff to identify changed files between two refs for targeted reimport (identifies changes; use trigger_reimport to apply)");
+  lines.push("- code_review — automated code review on a file or set of files, analyzing bugs, security, performance, style, complexity, and best practices");
+  lines.push("- suggest_patch — propose code patches for a given file or task");
+  lines.push("- apply_patch — apply a code patch to a file, with validation and conflict resolution");
+  lines.push("- deploy_preview — deploy a preview build of the project");
 
   lines.push("");
   lines.push("## Structured Tool Responses");
@@ -249,6 +258,14 @@ function buildContextText(
   lines.push("- Use get_working_diff after making edits to verify which files changed before committing or reimporting; prefer get_diff for comparing committed refs.");
   lines.push("- If suggest/search results look stale, a new file is missing, or local edits changed semantics, call trigger_reimport, then wait_for_import.");
   lines.push("- If search or suggest_edit_locations returns no useful results, retry with narrower domain terms, call get_project_map to inspect folders, or reimport if the index may be stale.");
+  lines.push("- Use find_by_pattern when you need to search files by glob/regex pattern with content filtering (e.g. find all .ts files containing 'TODO'). Combine with line range for large files.");
+  lines.push("- Use run_tests before committing changes to verify tests pass. Supports Jest, Vitest, Playwright, and npm test. Pass test_pattern or test_name to filter.");
+  lines.push("- Use find_related_files when editing a file and you need context on what else might be affected — follows import/imported-by relationships.");
+  lines.push("- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.");
+  lines.push("- Use incremental_import before trigger_reimport to understand which files changed since the last import — helps assess reimport scope.");
+  lines.push("- Use code_review for automated quality checks on specific files or patterns. Set focus_areas to target specific concerns (bugs, security, performance, etc.).");
+  lines.push("- Use suggest_patch / apply_patch for proposing and applying code changes — always review patch diffs before applying.");
+  lines.push("- Use deploy_preview after completing a feature to share a testable build.");
 
   lines.push("");
   lines.push("## Maintenance / Cleanup Audits");
@@ -262,6 +279,9 @@ function buildContextText(
   lines.push("- Duplicate functions: exact body duplicates are strong candidates when they are in regular app code. Prefer a shared helper only when the duplicate behavior is stable and the abstraction names a real domain concept. Keep tiny duplicates or provider-specific code separate when shared code would hide meaningful differences.");
   lines.push("- UI library components can be intentionally unused inventory. Do not delete generic components like shadcn/Radix UI wrappers just because they have no current import unless the user explicitly asks to prune UI inventory.");
   lines.push("- After cleanup edits, run package builds and get_working_diff. If code was pushed or the user wants fresh MCP data, call trigger_reimport and wait_for_import.");
+  lines.push("- After running tests (run_tests), if failures occur, use find_related_files to trace the failing module's dependencies, then code_review to analyze the specific files.");
+  lines.push("- Before applying patches (apply_patch), use find_cycles to ensure the changes don't introduce circular dependencies.");
+  lines.push("- After deploy_preview, use get_working_diff to verify what was actually deployed vs what was staged.");
 
   return lines.join("\n");
 }

@@ -33,6 +33,15 @@ import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
+import { registerFindByPatternTool } from "./tools/find-by-pattern.js";
+import { registerRunTestsTool } from "./tools/run-tests.js";
+import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
+import { registerFindCyclesTool } from "./tools/find-cycles.js";
+import { registerIncrementalImportTool } from "./tools/incremental-import.js";
+import { registerCodeReviewTool } from "./tools/code-review.js";
+import { registerSuggestPatchTool } from "./tools/suggest-patch.js";
+import { registerApplyPatchTool } from "./tools/apply-patch.js";
+import { registerDeployPreviewTool } from "./tools/deploy-preview.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
@@ -92,6 +101,17 @@ async function runMcpServer() {
   registerGetProjectMapTool(server, config);
   registerListProjectsTool(server, config);
   registerGetProjectInsightsTool(server, config);
+
+  // Additional tools
+  registerFindByPatternTool(server, config);
+  registerRunTestsTool(server, config);
+  registerFindRelatedFilesTool(server, config);
+  registerFindCyclesTool(server, config);
+  registerIncrementalImportTool(server, config);
+  registerCodeReviewTool(server, config);
+  registerSuggestPatchTool(server, config);
+  registerApplyPatchTool(server, config);
+  registerDeployPreviewTool(server, config);
 
   // Resources — automatically surfaced to Claude as session context
   registerProjectContextResource(server, config);
