@@ -3,75 +3,83 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
+import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
-import { readWorkspacePath } from "../lib/workspace-project.js";
+import { readWorkspacePath, readWorkspaceProjectId } from "../lib/workspace-project.js";
 
 const execFileAsync = promisify(execFile);
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
-interface PatchFileInfo {
+interface ChangedFile {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed";
   oldPath?: string;
-  diff?: string;
 }
 
-interface SuggestPatchResult {
+/** Information for a single changed file enriched with CodeMap intelligence. */
+interface FileIntelligenceReport {
+  changedFile: ChangedFile;
+  blastRadius?: {
+    totalCount: number;
+    directCount: number;
+    maxDepth: number;
+    hasCycles: boolean;
+    affectedFiles: string[];
+  };
+  cyclesInvolving?: Array<{
+    cycle: string[];
+    edgeCount: number;
+  }>;
+  existsInIndex: boolean;
+}
+
+/** Overall intelligence summary across all changed files. */
+interface PatchIntelligenceReport {
+  filesWithRisk: number;
+  filesWithCycles: number;
+  totalAffectedFiles: number;
+  totalCyclesInvolved: number;
+  maxBlastRadiusDepth: number;
+  highRiskFiles: Array<{
+    path: string;
+    affectedCount: number;
+    cycleCount: number;
+  }>;
+  recommendations: string[];
+}
+
+interface SuggestPatchResult extends Record<string, unknown> {
   format: string;
   contextLines: number;
   totalFiles: number;
-  files: PatchFileInfo[];
+  changedFiles: ChangedFile[];
+  intelligence?: PatchIntelligenceReport;
+  fileReports: FileIntelligenceReport[];
   patch?: string;
   base64Patch?: string;
   workspaceClean: boolean;
   generatedAt: string;
-  [key: string]: unknown;
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── helpers: git ────────────────────────────────────────────────────────────
 
-async function getChangedFiles(cwd: string): Promise<PatchFileInfo[]> {
-  const files: PatchFileInfo[] = [];
+async function getChangedFiles(cwd: string): Promise<ChangedFile[]> {
+  const files: ChangedFile[] = [];
 
-  // Get staged files
+  // Staged changes
   try {
     const { stdout: stagedRaw } = await execFileAsync(
       "git",
       ["diff", "--cached", "--name-status", "-z"],
       { cwd },
     );
-    const stagedParts = stagedRaw.split("\0").filter(Boolean);
-    let i = 0;
-    while (i < stagedParts.length) {
-      const code = stagedParts[i];
-      if (code.startsWith("R") || code.startsWith("C")) {
-        const oldPath = stagedParts[i + 1] ?? "";
-        const newPath = stagedParts[i + 2] ?? "";
-        files.push({
-          path: newPath,
-          oldPath,
-          status: "renamed",
-        });
-        i += 3;
-      } else {
-        const path = stagedParts[i + 1] ?? "";
-        if (path) {
-          const statusMap: Record<string, PatchFileInfo["status"]> = {
-            A: "added",
-            D: "deleted",
-            M: "modified",
-          };
-          files.push({ path, status: statusMap[code[0]] ?? "modified" });
-        }
-        i += 2;
-      }
-    }
+    files.push(...parseNameStatus(stagedRaw));
   } catch {
-    // No staged files
+    /* no staged */
   }
 
-  // Get unstaged files (not already in staged list)
+  // Unstaged changes (avoid duplicates)
   const stagedPaths = new Set(files.map((f) => f.path));
   try {
     const { stdout: unstagedRaw } = await execFileAsync(
@@ -79,64 +87,65 @@ async function getChangedFiles(cwd: string): Promise<PatchFileInfo[]> {
       ["diff", "--name-status", "-z"],
       { cwd },
     );
-    const unstagedParts = unstagedRaw.split("\0").filter(Boolean);
-    let i = 0;
-    while (i < unstagedParts.length) {
-      const code = unstagedParts[i];
-      if (code.startsWith("R") || code.startsWith("C")) {
-        const oldPath = unstagedParts[i + 1] ?? "";
-        const newPath = unstagedParts[i + 2] ?? "";
-        if (!stagedPaths.has(newPath)) {
-          files.push({ path: newPath, oldPath, status: "renamed" });
-        }
-        i += 3;
-      } else {
-        const filePath = unstagedParts[i + 1] ?? "";
-        if (filePath && !stagedPaths.has(filePath)) {
-          const statusMap: Record<string, PatchFileInfo["status"]> = {
-            A: "added",
-            D: "deleted",
-            M: "modified",
-          };
-          files.push({ path: filePath, status: statusMap[code[0]] ?? "modified" });
-        }
-        i += 2;
+    for (const f of parseNameStatus(unstagedRaw)) {
+      if (!stagedPaths.has(f.path)) {
+        files.push(f);
+        stagedPaths.add(f.path);
       }
     }
   } catch {
-    // No unstaged files
+    /* no unstaged */
   }
 
-  // Get untracked files
+  // Untracked
   try {
     const { stdout: untrackedRaw } = await execFileAsync(
       "git",
       ["ls-files", "--others", "--exclude-standard", "-z"],
       { cwd },
     );
-    const untrackedPaths = untrackedRaw.split("\0").filter(Boolean);
-    const existingPaths = new Set(files.map((f) => f.path));
-    for (const p of untrackedPaths) {
-      if (p && !existingPaths.has(p)) {
+    for (const p of untrackedRaw.split("\0").filter(Boolean)) {
+      if (!stagedPaths.has(p)) {
         files.push({ path: p, status: "added" });
       }
     }
   } catch {
-    // No untracked files
+    /* no untracked */
   }
 
   return files;
 }
 
-async function getUnifiedDiff(
-  cwd: string,
-  contextLines: number,
-): Promise<string> {
+function parseNameStatus(raw: string): ChangedFile[] {
+  const parts = raw.split("\0").filter(Boolean);
+  const files: ChangedFile[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const code = parts[i];
+    if (!code) { i++; continue; }
+    if (code.startsWith("R") || code.startsWith("C")) {
+      const oldPath = parts[i + 1] ?? "";
+      const newPath = parts[i + 2] ?? "";
+      files.push({ path: newPath, oldPath, status: "renamed" });
+      i += 3;
+    } else {
+      const filePath = parts[i + 1] ?? "";
+      if (filePath) {
+        const statusMap: Record<string, ChangedFile["status"]> = {
+          A: "added", D: "deleted", M: "modified",
+        };
+        files.push({ path: filePath, status: statusMap[code[0]] ?? "modified" });
+      }
+      i += 2;
+    }
+  }
+  return files;
+}
+
+async function getUnifiedDiff(cwd: string, contextLines: number): Promise<string> {
   try {
-    // Get full working tree diff (staged + unstaged combined against HEAD)
     const { stdout } = await execFileAsync(
-      "git",
-      ["diff", "HEAD", `-U${contextLines}`],
+      "git", ["diff", "HEAD", `-U${contextLines}`],
       { cwd },
     );
     return stdout.trim();
@@ -151,69 +160,339 @@ async function getUntrackedDiff(
   untrackedFiles: string[],
 ): Promise<string> {
   const diffs: string[] = [];
-
   for (const filePath of untrackedFiles) {
     try {
       const { stdout } = await execFileAsync(
         "git",
-        ["diff", "--no-index", `/dev/null`, filePath, `-U${contextLines}`],
+        ["diff", "--no-index", "--unified=" + contextLines, "/dev/null", filePath],
         { cwd },
       );
-      // Convert /dev/null path to a/ and b/ format for consistency
-      const adjusted = stdout
-        .replace(/\/dev\/null/g, filePath)
-        .replace(new RegExp(`a/${filePath}`), `a/${filePath}`)
-        .replace(new RegExp(`b/${filePath}`), `b/${filePath}`);
-      diffs.push(adjusted);
+      diffs.push(stdout.replace(/^diff --git \/dev\/null/gm, `diff --git a/${filePath}`));
     } catch {
-      // If git diff --no-index fails, read the file content directly
       try {
-        const { stdout: content } = await execFileAsync("cat", [filePath], {
-          cwd,
-        });
+        const { stdout: content } = await execFileAsync("cat", [filePath], { cwd });
         const lines = content.split("\n");
-        const diffLines = [
+        diffs.push([
           `diff --git a/${filePath} b/${filePath}`,
           `new file mode 100644`,
           `--- /dev/null`,
           `+++ b/${filePath}`,
           `@@ -0,0 +1,${lines.length} @@`,
           ...lines.map((line) => `+${line}`),
-        ];
-        diffs.push(diffLines.join("\n"));
+        ].join("\n"));
       } catch {
-        // Skip files we can't read
+        /* skip unreadable */
+      }
+    }
+  }
+  return diffs.join("\n");
+}
+
+// ─── helpers: CodeMap intelligence ───────────────────────────────────────────
+
+async function fetchBlastRadius(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+  filePath: string,
+): Promise<
+  { totalCount: number; directCount: number; maxDepth: number; hasCycles: boolean; files: string[] } | null
+> {
+  try {
+    const result = await client.request<{
+      blastRadius?: {
+        totalCount: number;
+        directCount: number;
+        maxDepth: number;
+        hasCycles: boolean;
+        files: Array<{ path: string; depth: number }>;
+      };
+    }>(
+      `/projects/${encodeURIComponent(projectId)}/map/files/parse`,
+      { authRequired: true, query: { path: filePath } },
+    );
+    if (!result.blastRadius) return null;
+    return {
+      totalCount: result.blastRadius.totalCount,
+      directCount: result.blastRadius.directCount,
+      maxDepth: result.blastRadius.maxDepth,
+      hasCycles: result.blastRadius.hasCycles,
+      files: result.blastRadius.files?.map((f) => f.path) ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchProjectCycles(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+): Promise<Array<{ paths: string[]; edgeCount: number; kind: string; summary: string }>> {
+  try {
+    const insights = await client.request<{
+      circularDependencyCandidates?: Array<{
+        paths: string[];
+        edgeCount: number;
+        kind: string;
+        summary: string;
+      }>;
+    }>(
+      `/projects/${encodeURIComponent(projectId)}/map/insights`,
+      { authRequired: true, query: { sections: "cycles" } },
+    );
+    return insights.circularDependencyCandidates ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check which changed files exist in the CodeMap parse index.
+ */
+async function checkFilesInIndex(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+  filePaths: string[],
+): Promise<Map<string, boolean>> {
+  const results = new Map<string, boolean>();
+
+  await Promise.all(
+    filePaths.map(async (fp) => {
+      try {
+        await client.request<Record<string, unknown>>(
+          `/projects/${encodeURIComponent(projectId)}/map/files/parse`,
+          { authRequired: true, query: { path: fp } },
+        );
+        results.set(fp, true);
+      } catch {
+        results.set(fp, false);
+      }
+    }),
+  );
+
+  return results;
+}
+
+async function buildIntelligenceReport(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+  changedFiles: ChangedFile[],
+): Promise<{
+  fileReports: FileIntelligenceReport[];
+  summary: PatchIntelligenceReport;
+}> {
+  const fileReports: FileIntelligenceReport[] = [];
+  const recommendations: string[] = [];
+  const highRiskFiles: Array<{ path: string; affectedCount: number; cycleCount: number }> = [];
+
+  // Check which files exist in the parse index
+  const trackedPaths = changedFiles
+    .filter((f) => f.status !== "added")
+    .map((f) => f.path);
+  const indexMap = await checkFilesInIndex(client, projectId, trackedPaths);
+
+  // Fetch all existing cycles
+  const allCycles = await fetchProjectCycles(client, projectId);
+
+  // Fetch blast radius for each tracked changed file
+  for (const file of changedFiles) {
+    const report: FileIntelligenceReport = {
+      changedFile: file,
+      existsInIndex: indexMap.get(file.path) ?? false,
+    };
+
+    // Only analyze blast radius for files that exist in the index
+    // (deleted files: check blast radius of the old path before deletion)
+    const pathToCheck =
+      file.status === "renamed" && file.oldPath
+        ? file.oldPath
+        : file.path;
+
+    if (file.status !== "added" || file.oldPath) {
+      const blast = await fetchBlastRadius(client, projectId, pathToCheck);
+      if (blast) {
+        report.blastRadius = {
+          totalCount: blast.totalCount,
+          directCount: blast.directCount,
+          maxDepth: blast.maxDepth,
+          hasCycles: blast.hasCycles,
+          affectedFiles: blast.files,
+        };
+      }
+    }
+
+    // Check if this file is involved in any cycle
+    const cyclesInvolving = allCycles.filter((c) =>
+      c.paths.includes(file.path) || (file.oldPath && c.paths.includes(file.oldPath)),
+    );
+    if (cyclesInvolving.length > 0) {
+      report.cyclesInvolving = cyclesInvolving.map((c) => ({
+        cycle: c.paths,
+        edgeCount: c.edgeCount,
+      }));
+    }
+
+    fileReports.push(report);
+  }
+
+  // ── Build summary
+  let totalAffected = 0;
+  let filesWithCycles = 0;
+  let totalCyclesInvolved = 0;
+  let maxDepth = 0;
+  let filesWithRisk = 0;
+
+  for (const r of fileReports) {
+    if (r.blastRadius) {
+      totalAffected += r.blastRadius.affectedFiles.length;
+      maxDepth = Math.max(maxDepth, r.blastRadius.maxDepth);
+
+      // Risk thresholds: >10 affected, depth >3, or cycles
+      const isHighRisk =
+        r.blastRadius.directCount > 10 ||
+        r.blastRadius.maxDepth > 3 ||
+        r.blastRadius.hasCycles ||
+        (r.cyclesInvolving && r.cyclesInvolving.length > 0);
+
+      if (isHighRisk) filesWithRisk++;
+
+      if (r.cyclesInvolving && r.cyclesInvolving.length > 0) {
+        filesWithCycles++;
+        totalCyclesInvolved += r.cyclesInvolving.length;
+        highRiskFiles.push({
+          path: r.changedFile.path,
+          affectedCount: r.blastRadius.affectedFiles.length,
+          cycleCount: r.cyclesInvolving.length,
+        });
+      } else if (r.blastRadius && r.blastRadius.totalCount > 10) {
+        highRiskFiles.push({
+          path: r.changedFile.path,
+          affectedCount: r.blastRadius.totalCount,
+          cycleCount: 0,
+        });
+      }
+    }
+
+    // Warn if changed file is not in parse index (new file or unsupported language)
+    if (r.changedFile.status === "added" && !r.existsInIndex) {
+      recommendations.push(
+        `\`${r.changedFile.path}\` không có trong parse index — có thể là file mới hoặc language chưa được hỗ trợ. AI sẽ không thể phân tích blast radius cho file này.`,
+      );
+    }
+
+    // High blast radius warning
+    if (r.blastRadius && r.blastRadius.totalCount > 50) {
+      recommendations.push(
+        `\`${r.changedFile.path}\` có blast radius lớn (${r.blastRadius.totalCount} files bị ảnh hưởng). Cân nhắc review kỹ trước khi merge.`,
+      );
+    }
+
+    // File in cycle warning
+    if (r.cyclesInvolving && r.cyclesInvolving.length > 0) {
+      for (const cycle of r.cyclesInvolving) {
+        recommendations.push(
+          `\`${r.changedFile.path}\` đang nằm trong circular dependency: ${cycle.cycle.join(" → ")}`,
+        );
       }
     }
   }
 
-  return diffs.join("\n");
+  // General recommendation if there are deep dependency chains
+  if (maxDepth > 5) {
+    recommendations.push(
+      `Một số thay đổi có mức độ ảnh hưởng sâu (depth ${maxDepth}). Đảm bảo test kỹ các layers sâu.`,
+    );
+  }
+
+  const summary: PatchIntelligenceReport = {
+    filesWithRisk,
+    filesWithCycles,
+    totalAffectedFiles: totalAffected,
+    totalCyclesInvolved: totalCyclesInvolved,
+    maxBlastRadiusDepth: maxDepth,
+    highRiskFiles,
+    recommendations,
+  };
+
+  return { fileReports, summary };
 }
 
-function buildSummary(files: PatchFileInfo[], diffLength: number): string {
+// ─── helpers: build output text ──────────────────────────────────────────────
+
+const STATUS_ICON: Record<string, string> = {
+  modified: "~",
+  added: "+",
+  deleted: "-",
+  renamed: "→",
+};
+
+function buildSummary(
+  files: ChangedFile[],
+  diffLength: number,
+  intelligence?: PatchIntelligenceReport,
+): string {
   const lines: string[] = [];
 
   if (files.length === 0) {
-    lines.push("No changes detected — working directory is clean.");
-    return lines.join("\n");
+    return "✨ No changes detected — working directory is clean.";
   }
 
-  lines.push(`Patch generated from ${files.length} changed file(s):\n`);
+  // ── Changes overview
+  lines.push(`📝 Patch generated: ${files.length} file(s) changed`);
+  lines.push("");
 
-  const byStatus = files.reduce(
-    (acc, f) => {
-      acc[f.status] = (acc[f.status] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  for (const f of files) {
+    const icon = STATUS_ICON[f.status] ?? "?";
+    const rename = f.oldPath ? ` (renamed from ${f.oldPath})` : "";
+    lines.push(`  ${icon} ${f.path}${rename}`);
+  }
 
-  if (byStatus.modified) lines.push(`  Modified: ${byStatus.modified} file(s)`);
-  if (byStatus.added) lines.push(`  Added: ${byStatus.added} file(s)`);
-  if (byStatus.deleted) lines.push(`  Deleted: ${byStatus.deleted} file(s)`);
-  if (byStatus.renamed) lines.push(`  Renamed: ${byStatus.renamed} file(s)`);
+  lines.push("");
+  lines.push(`📦 Diff size: ${(diffLength / 1024).toFixed(1)} KB`);
 
-  lines.push(`\nTotal diff size: ${diffLength} bytes`);
+  // ── Intelligence section
+  if (intelligence) {
+    lines.push("");
+    lines.push("──".repeat(30));
+    lines.push("🧠 Blast Radius & Cycle Analysis");
+    lines.push("──".repeat(30));
+    lines.push("");
+
+    if (intelligence.filesWithRisk === 0 && intelligence.totalAffectedFiles === 0) {
+      lines.push("✅ **Không phát hiện rủi ro lớn.** Không có file nào thay đổi có blast radius hoặc cycle đáng kể.");
+    } else {
+      // Risk overview
+      lines.push(`⚠️ **Risk Summary:**`);
+      lines.push(`  - High-risk files: ${intelligence.filesWithRisk}`);
+      lines.push(`  - Files in cycles: ${intelligence.filesWithCycles}`);
+      lines.push(`  - Total affected files (downstream): ${intelligence.totalAffectedFiles}`);
+      lines.push(`  - Max blast radius depth: ${intelligence.maxBlastRadiusDepth}`);
+      lines.push(`  - Total cycles involved: ${intelligence.totalCyclesInvolved}`);
+
+      // High-risk files
+      if (intelligence.highRiskFiles.length > 0) {
+        lines.push("");
+        lines.push("🔴 **High-Risk Files:**");
+        for (const hf of intelligence.highRiskFiles.slice(0, 10)) {
+          const parts: string[] = [`\`${hf.path}\``];
+          if (hf.affectedCount > 0) parts.push(`${hf.affectedCount} affected`);
+          if (hf.cycleCount > 0) parts.push(`${hf.cycleCount} cycles`);
+          lines.push(`  - ${parts.join(" | ")}`);
+        }
+        if (intelligence.highRiskFiles.length > 10) {
+          lines.push(`  ... and ${intelligence.highRiskFiles.length - 10} more`);
+        }
+      }
+
+      // Recommendations
+      if (intelligence.recommendations.length > 0) {
+        lines.push("");
+        lines.push("💡 **Recommendations:**");
+        for (const rec of intelligence.recommendations.slice(0, 10)) {
+          lines.push(`  - ${rec}`);
+        }
+      }
+    }
+  }
 
   return lines.join("\n");
 }
@@ -224,6 +503,8 @@ export function registerSuggestPatchTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
+  const client = createCodeMapClient(config);
+
   server.registerTool(
     "suggest_patch",
     {
@@ -232,6 +513,9 @@ export function registerSuggestPatchTool(
         "Analyze changes and suggest a patch/base64-encoded diff for review or application. " +
         "Compares the current workspace state against the last committed state " +
         "to generate a patch that can be applied elsewhere. " +
+        "Automatically includes blast radius analysis (which downstream files are affected), " +
+        "cycle detection (whether changed files are involved in circular dependencies), " +
+        "and AI-ready recommendations. " +
         "Supports both unified diff format and base64 encoding.",
       inputSchema: {
         format: z
@@ -247,30 +531,36 @@ export function registerSuggestPatchTool(
           .number()
           .optional()
           .default(3)
+          .describe("Number of context lines to include around changes. Default: 3."),
+        with_intelligence: z
+          .boolean()
+          .optional()
+          .default(true)
           .describe(
-            "Number of context lines to include around changes. Default: 3.",
+            "Include blast radius and cycle analysis for changed files. " +
+              "Requires a linked CodeMap project with parse index. Default: true.",
           ),
         project_id: z
           .string()
           .uuid()
           .optional()
-          .describe(
-            "CodeMap project UUID. Auto-resolved from workspace if omitted.",
-          ),
+          .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
-    withToolError(async ({ format, context_lines, project_id }) => {
+    withToolError(async ({ format, context_lines, with_intelligence, project_id }) => {
       const workspacePath = await readWorkspacePath();
+      const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
       const contextLines = context_lines ?? 3;
       const outputFormat = format ?? "unified";
+      const includeIntelligence = with_intelligence !== false;
 
-      // Get list of changed files
+      // Get changed files
       const changedFiles = await getChangedFiles(workspacePath);
 
-      // Get unified diff for tracked files
+      // Generate unified diff
       const trackedDiff = await getUnifiedDiff(workspacePath, contextLines);
 
-      // Get diff for untracked files
+      // Untracked files diff
       const untrackedFiles = changedFiles.filter(
         (f) => f.status === "added" && !f.oldPath,
       );
@@ -280,20 +570,42 @@ export function registerSuggestPatchTool(
         untrackedFiles.map((f) => f.path),
       );
 
-      // Combine diffs
+      // Combine
       let fullDiff = trackedDiff;
       if (untrackedDiff) {
         fullDiff = fullDiff ? `${fullDiff}\n\n${untrackedDiff}` : untrackedDiff;
       }
 
-      // Build response based on format
+      // Intelligence analysis
+      let intelligenceResult:
+        | { fileReports: FileIntelligenceReport[]; summary: PatchIntelligenceReport }
+        | undefined;
+
+      if (includeIntelligence && resolvedProjectId && changedFiles.length > 0) {
+        try {
+          intelligenceResult = await buildIntelligenceReport(
+            client,
+            resolvedProjectId,
+            changedFiles,
+          );
+        } catch {
+          // Intelligence failed — still return the diff
+          intelligenceResult = undefined;
+        }
+      }
+
+      // Build response
       const result: SuggestPatchResult = {
         format: outputFormat,
         contextLines,
         totalFiles: changedFiles.length,
-        files: changedFiles,
+        changedFiles,
+        fileReports: intelligenceResult?.fileReports ?? [],
+        intelligence: intelligenceResult?.summary,
         workspaceClean: changedFiles.length === 0,
         generatedAt: new Date().toISOString(),
+        hasIntelligence: !!intelligenceResult,
+        projectId: resolvedProjectId,
       };
 
       if (outputFormat === "unified" || outputFormat === "both") {
@@ -306,7 +618,11 @@ export function registerSuggestPatchTool(
           : undefined;
       }
 
-      const summary = buildSummary(changedFiles, fullDiff?.length ?? 0);
+      const summary = buildSummary(
+        changedFiles,
+        fullDiff?.length ?? 0,
+        intelligenceResult?.summary,
+      );
 
       return success(summary, result);
     }),
