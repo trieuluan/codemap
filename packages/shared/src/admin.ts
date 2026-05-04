@@ -182,3 +182,34 @@ export interface AdminPaymentSummary {
   plan: WorkspacePlan;
   createdAt: string;
 }
+
+export interface AdminProject {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  ownerUserId: string;
+  workspaceId: string;
+  visibility: string;
+  status: string;
+  defaultBranch: string | null;
+  repositoryUrl: string | null;
+  localWorkspacePath: string | null;
+  provider: string | null;
+  externalRepoId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestImport: null | AdminProjectImportSummary;
+}
+
+export interface AdminProjectListQuery {
+  workspaceId?: string;
+  ownerUserId?: string;
+}
+
+// Admin workspace list response for dropdown in create/edit dialogs
+export interface AdminWorkspaceOption {
+  id: string;
+  name: string;
+  slug: string;
+}
