@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Search, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,6 +122,14 @@ export function AdminProjectsView({
 
   return (
     <div className="space-y-6">
+      {/* Back to Admin Dashboard */}
+      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2">
+        <Link href="/admin">
+          <ArrowLeft className="mr-2 size-4" />
+          Back to Dashboard
+        </Link>
+      </Button>
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Projects</h1>
