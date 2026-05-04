@@ -14,7 +14,13 @@ export const adminListUsersQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(5).max(50).default(10),
 });
 
+export const adminListProjectImportsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().optional(),
+});
+
 export type AdminListUsersQuery = z.infer<typeof adminListUsersQuerySchema>;
+export type AdminListProjectImportsQuery = z.infer<typeof adminListProjectImportsQuerySchema>;
 
 export interface AdminUser {
   id: string;

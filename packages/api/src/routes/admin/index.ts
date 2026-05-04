@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
-import { asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   adminListUsersQuerySchema,
+  adminListProjectImportsQuerySchema,
   type AdminProjectImportSummary,
 } from "@codemap/shared";
 import {
@@ -461,6 +462,23 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
     const deleted = await adminProjectService.deleteProject(projectId);
     if (!deleted) throw fastify.httpErrors.notFound("Project not found");
     return reply.success(deleted);
+  });
+
+  fastify.get("/projects/:projectId/imports", async (request, reply) => {
+    const { projectId } = projectParamsSchema.parse(request.params);
+    const query = adminListProjectImportsQuerySchema.parse(request.query ?? {});
+
+    const result = await adminProjectService.listProjectImports(projectId, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+
+    if (!result) throw fastify.httpErrors.notFound("Project not found");
+
+    return reply.success(result.items, 200, {
+      count: result.items.length,
+      nextCursor: result.nextCursor,
+    });
   });
 };
 

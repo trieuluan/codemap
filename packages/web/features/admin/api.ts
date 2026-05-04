@@ -8,6 +8,7 @@ import type {
   AdminProject,
   AdminProjectListQuery,
   AdminWorkspaceOption,
+  AdminListProjectImportsQuery,
   WorkspacePlan,
 } from "@codemap/shared";
 
@@ -20,6 +21,7 @@ export type {
   AdminProject,
   AdminProjectListQuery,
   AdminWorkspaceOption,
+  AdminListProjectImportsQuery,
   WorkspacePlan,
 };
 
@@ -141,4 +143,21 @@ export async function listAdminWorkspaces(
     name: w.name,
     slug: w.slug,
   }));
+}
+
+export async function listAdminProjectImports(
+  projectId: string,
+  params?: AdminListProjectImportsQuery,
+): Promise<import("@/features/projects/api").ProjectImport[]> {
+  return requestApi<import("@/features/projects/api").ProjectImport[]>(
+    `/admin/projects/${projectId}/imports`,
+    {
+      queryParams: params
+        ? {
+            limit: params.limit,
+            cursor: params.cursor,
+          }
+        : undefined,
+    },
+  );
 }

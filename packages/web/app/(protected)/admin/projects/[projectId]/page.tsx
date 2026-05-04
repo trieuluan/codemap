@@ -26,8 +26,7 @@ import { Separator } from "@/components/ui/separator";
 import { getAdminProject, listAdminWorkspaces } from "@/features/admin/api";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { ProjectImportStatusBadge } from "@/features/projects/components/project-import-status-badge";
-import { requestApi } from "@/lib/api/client";
-import type { ProjectImport } from "@/features/projects/api";
+import { AdminImportHistory } from "@/features/admin/components/admin-import-history";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -84,16 +83,6 @@ export default async function AdminProjectDetailPage({
     project = await getAdminProject(projectId, cookieHeader);
   } catch {
     notFound();
-  }
-
-  let imports: ProjectImport[] = [];
-  try {
-    imports = await requestApi<ProjectImport[]>(
-      `/projects/${projectId}/imports`,
-      { cookieHeader, queryParams: { limit: 20 } },
-    );
-  } catch {
-    // imports may not exist yet
   }
 
   const workspaces = await listAdminWorkspaces(cookieHeader);
@@ -258,62 +247,8 @@ export default async function AdminProjectDetailPage({
         </Card>
       )}
 
-      {/* Import History */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Import History</CardTitle>
-          <CardDescription>
-            Recent imports for this project.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {imports.length > 0 ? (
-            <div className="space-y-3">
-              {imports.map((imp) => (
-                <div
-                  key={imp.id}
-                  className="flex items-center justify-between gap-4 rounded-lg border border-border/70 p-3"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {shortSha(imp.commitSha)}
-                      </p>
-                      {imp.branch && (
-                        <Badge variant="secondary" className="text-xs">
-                          {imp.branch}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Started {formatDate(imp.startedAt)}
-                      {imp.completedAt && ` · Completed ${formatDate(imp.completedAt)}`}
-                    </p>
-                    {imp.parseStatsJson && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {imp.parseStatsJson.parsedFileCount ?? imp.indexedFileCount} files ·{" "}
-                        {imp.parseStatsJson.dependencyCount ?? imp.indexedEdgeCount} deps
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ProjectImportStatusBadge status={imp.status} />
-                    {imp.parseStatus && imp.status === "completed" && (
-                      <Badge variant="outline" className="text-xs">
-                        {imp.parseStatus}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-              No import history yet. Trigger an import from the project page.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Import History - SWR Infinite Scroll */}
+      <AdminImportHistory projectId={projectId} />
 
       {/* Project Metadata */}
       <Card>

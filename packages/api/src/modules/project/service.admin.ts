@@ -1,13 +1,15 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { project, projectImport } from "../../db/schema";
 import { createWorkspaceService } from "../workspace/service";
 import type { CreateProjectBody, UpdateProjectBody } from "./schema";
 import {
   type Database,
+  type ProjectImportRecord,
   ensureUniqueSlug,
   normalizeLocalWorkspacePath,
   normalizeRepositoryUrl,
   slugifyProjectName,
+  withCommitMessages,
 } from "./service.shared";
 
 export function createAdminProjectService(database: Database) {
@@ -152,6 +154,38 @@ export function createAdminProjectService(database: Database) {
         .returning({ id: project.id });
 
       return deleted ?? null;
+    },
+
+    async listProjectImports(
+      projectId: string,
+      options?: { limit?: number; cursor?: string },
+    ) {
+      const existingProject = await database.query.project.findFirst({
+        where: eq(project.id, projectId),
+      });
+
+      if (!existingProject) {
+        return null;
+      }
+
+      const limit = options?.limit ?? 20;
+      const cursorDate = options?.cursor ? new Date(options.cursor) : undefined;
+
+      const imports = await database.query.projectImport.findMany({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          cursorDate ? lt(projectImport.startedAt, cursorDate) : undefined,
+        ),
+        orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
+        limit: limit + 1,
+      });
+
+      const hasMore = imports.length > limit;
+      const page = hasMore ? imports.slice(0, limit) : imports;
+      const nextCursor = hasMore ? page[page.length - 1]?.startedAt?.toISOString() : null;
+
+      const items = await withCommitMessages(page as ProjectImportRecord[]);
+      return { items, nextCursor };
     },
   };
 }
