@@ -1,10 +1,192 @@
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
-import { readWorkspaceProjectId } from "../lib/workspace-project.js";
-import type { ImportStatus } from "../lib/api-types.js";
+import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
+import type { FileReparseResult, ImportStatus } from "../lib/api-types.js";
+
+const execFileAsync = promisify(execFile);
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const PARSEABLE_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".dart", ".php", ".py",
+]);
+
+const REPARSE_CONCURRENCY = 5;
+
+// ── Git helpers ───────────────────────────────────────────────────────────────
+
+interface LocalFile {
+  path: string;
+  status: "added" | "modified" | "renamed" | "deleted" | "untracked";
+  staged: boolean;
+}
+
+function parseNameStatus(raw: string, staged: boolean): LocalFile[] {
+  const parts = raw.split("\0").filter(Boolean);
+  const files: LocalFile[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const code = parts[i];
+    if (!code) { i++; continue; }
+    if (code.startsWith("R") || code.startsWith("C")) {
+      const newPath = parts[i + 2] ?? "";
+      files.push({ path: newPath, status: "renamed", staged });
+      i += 3;
+    } else {
+      const path = parts[i + 1] ?? "";
+      const status: LocalFile["status"] =
+        code[0] === "A" ? "added"
+        : code[0] === "D" ? "deleted"
+        : "modified";
+      files.push({ path, status, staged });
+      i += 2;
+    }
+  }
+  return files.filter((f) => f.path);
+}
+
+async function getLocalChanges(cwd: string): Promise<LocalFile[]> {
+  const [staged, unstaged, untracked] = await Promise.all([
+    execFileAsync("git", ["diff", "--cached", "--name-status", "-z"], { cwd })
+      .then(({ stdout }) => parseNameStatus(stdout, true))
+      .catch(() => [] as LocalFile[]),
+    execFileAsync("git", ["diff", "--name-status", "-z"], { cwd })
+      .then(({ stdout }) => parseNameStatus(stdout, false))
+      .catch(() => [] as LocalFile[]),
+    execFileAsync("git", ["ls-files", "--others", "--exclude-standard", "-z"], { cwd })
+      .then(({ stdout }) =>
+        stdout.split("\0").filter(Boolean).map((p): LocalFile => ({
+          path: p, status: "untracked", staged: false,
+        })),
+      )
+      .catch(() => [] as LocalFile[]),
+  ]);
+
+  // Deduplicate: staged wins over unstaged for same path
+  const seen = new Map<string, LocalFile>();
+  for (const f of [...staged, ...unstaged, ...untracked]) {
+    if (!seen.has(f.path) || f.staged) seen.set(f.path, f);
+  }
+  return [...seen.values()];
+}
+
+// ── Reparse helpers ───────────────────────────────────────────────────────────
+
+function isParseable(filePath: string): boolean {
+  const dot = filePath.lastIndexOf(".");
+  return dot !== -1 && PARSEABLE_EXTENSIONS.has(filePath.slice(dot).toLowerCase());
+}
+
+interface ReparseOutcome {
+  path: string;
+  result: "reparsed" | "skipped" | "error";
+  reason?: string;
+}
+
+async function reparseFile(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+  workspacePath: string,
+  file: LocalFile,
+): Promise<ReparseOutcome> {
+  if (file.status === "deleted") {
+    return { path: file.path, result: "skipped", reason: "deleted — will be cleaned up on next full reimport" };
+  }
+  if (!isParseable(file.path)) {
+    return { path: file.path, result: "skipped", reason: "not a parseable file type" };
+  }
+
+  try {
+    const absPath = `${workspacePath}/${file.path}`;
+    const content = await readFile(absPath, "utf8");
+    const contentHash = createHash("sha256").update(content).digest("hex");
+
+    await client.request<FileReparseResult>(
+      `/projects/${encodeURIComponent(projectId)}/map/files/reparse`,
+      {
+        authRequired: true,
+        method: "POST",
+        body: { path: file.path, content, contentHash },
+      },
+    );
+
+    return { path: file.path, result: "reparsed" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { path: file.path, result: "error", reason: msg };
+  }
+}
+
+async function reparseBatch(
+  client: ReturnType<typeof createCodeMapClient>,
+  projectId: string,
+  workspacePath: string,
+  files: LocalFile[],
+): Promise<ReparseOutcome[]> {
+  const results: ReparseOutcome[] = [];
+  for (let i = 0; i < files.length; i += REPARSE_CONCURRENCY) {
+    const batch = files.slice(i, i + REPARSE_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((f) => reparseFile(client, projectId, workspacePath, f)),
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// ── Output ────────────────────────────────────────────────────────────────────
+
+function buildOutput(
+  outcomes: ReparseOutcome[],
+  committedCount: number,
+): string {
+  const reparsed = outcomes.filter((o) => o.result === "reparsed");
+  const skipped = outcomes.filter((o) => o.result === "skipped");
+  const errors = outcomes.filter((o) => o.result === "error");
+
+  const lines: string[] = ["## Incremental Import", ""];
+
+  if (outcomes.length === 0) {
+    lines.push("No changed files found — index is up to date.");
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `Reparsed ${reparsed.length} file(s), skipped ${skipped.length}, errors ${errors.length}.`,
+    committedCount > 0
+      ? `Also found ${committedCount} committed file(s) since last import — use trigger_reimport for a full sync.`
+      : "",
+    "",
+  );
+
+  if (reparsed.length > 0) {
+    lines.push(`### Reparsed (${reparsed.length})`);
+    reparsed.forEach((o) => lines.push(`  ✓ ${o.path}`));
+    lines.push("");
+  }
+
+  if (errors.length > 0) {
+    lines.push(`### Errors (${errors.length})`);
+    errors.forEach((o) => lines.push(`  ✗ ${o.path}: ${o.reason}`));
+    lines.push("");
+  }
+
+  if (skipped.length > 0) {
+    lines.push(`### Skipped (${skipped.length})`);
+    skipped.forEach((o) => lines.push(`  – ${o.path}: ${o.reason}`));
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+// ── Tool registration ─────────────────────────────────────────────────────────
 
 export function registerIncrementalImportTool(
   server: McpServer,
@@ -15,29 +197,12 @@ export function registerIncrementalImportTool(
     {
       title: "Incremental Import",
       description:
-        "Trigger an incremental import that only processes changed files. " +
-        "Compared to a full re-import, this is faster and more efficient. " +
-        "Uses git diff to identify modified files and only re-parses those. " +
+        "Reparse only locally changed files (staged + unstaged + untracked) without a full reimport. " +
+        "Reads each changed file from disk, computes its hash, and sends it to the parse API. " +
+        "Faster than trigger_reimport for small edits. " +
+        "Does not handle deleted files or cross-file relationship recomputation — use trigger_reimport for those. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
-        from_ref: z
-          .string()
-          .optional()
-          .describe(
-            "Base git reference (commit SHA, branch name, or tag). " +
-              "Defaults to the previous import's commit.",
-          ),
-        to_ref: z
-          .string()
-          .optional()
-          .describe(
-            "Target git reference. Defaults to the current workspace HEAD.",
-          ),
-        include_unstaged: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe("Include uncommitted local changes in the diff. Default: false."),
         project_id: z
           .string()
           .uuid()
@@ -45,164 +210,92 @@ export function registerIncrementalImportTool(
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
-    withToolError(async ({ from_ref, to_ref, include_unstaged, project_id }) => {
+    withToolError(async ({ project_id }) => {
       const client = createCodeMapClient(config);
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
         return success(
-          "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-          {
-            projectId: null,
-            status: "no_project",
-          },
+          "No project linked. Run link_project or get_project first.",
+          { projectId: null, status: "no_project" },
         );
       }
 
-      // First, get the current project state to find the last import commit
-      let baseCommit = from_ref;
+      const workspacePath = await readWorkspacePath();
 
-      if (!baseCommit) {
+      // ── Phase 1: local git changes ────────────────────────────────────────
+
+      const localFiles = await getLocalChanges(workspacePath);
+
+      // ── Phase 2: committed-but-not-imported files (informational) ─────────
+
+      let committedCount = 0;
+      try {
         const projectData = await client.request<{
-          latestImport: {
-            commit: string | null;
-            status: ImportStatus;
-          };
-        }>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}`,
-          { authRequired: true },
-        );
+          latestImport?: { commitSha?: string | null; status?: ImportStatus };
+        }>(`/projects/${encodeURIComponent(resolvedProjectId)}`, { authRequired: true });
 
-        if (!projectData.latestImport?.commit) {
-          return success(
-            "No previous import found to compare against. Falling back to full import.\n" +
-              "Use `trigger_reimport` tool for a full re-import.",
-            {
-              projectId: resolvedProjectId,
-              status: "full_import_fallback",
-              reason: "no_previous_commit",
-            },
-          );
+        const lastImportCommit = projectData.latestImport?.commitSha;
+        if (lastImportCommit) {
+          const { stdout } = await execFileAsync(
+            "git",
+            ["diff", "--name-only", lastImportCommit, "HEAD"],
+            { cwd: workspacePath },
+          ).catch(() => ({ stdout: "" }));
+          const committedFiles = stdout.split("\n").filter(Boolean);
+          // Count files in commits that are NOT already in local changes
+          const localPaths = new Set(localFiles.map((f) => f.path));
+          committedCount = committedFiles.filter((p) => !localPaths.has(p)).length;
         }
-
-        baseCommit = projectData.latestImport.commit;
+      } catch {
+        // Non-fatal: proceed with local changes only
       }
 
-      // Get the diff between commits
-      const diffResult = await client.request<{
-        files: Array<{
-          path: string;
-          status: "added" | "modified" | "removed" | "renamed" | "copied";
-        }>;
-        total: number;
-      }>(
-        `/projects/${encodeURIComponent(resolvedProjectId)}/diff`,
-        {
-          authRequired: true,
-          query: {
-            from: baseCommit,
-            to: to_ref,
+      if (localFiles.length === 0) {
+        return success(
+          committedCount > 0
+            ? `No uncommitted changes. ${committedCount} committed file(s) since last import — run trigger_reimport to sync.`
+            : "No local changes and index is up to date.",
+          {
+            projectId: resolvedProjectId,
+            status: "no_local_changes",
+            committedCount,
+            reparsed: [],
+            skipped: [],
+            errors: [],
+            suggestedNextTools: committedCount > 0 ? ["trigger_reimport()"] : [],
           },
-        },
-      );
-
-      const changedFiles = diffResult.files || [];
-      const totalChanged = changedFiles.length;
-
-      if (totalChanged === 0) {
-        const summary = `No files changed since ${baseCommit}.\n` +
-          "Nothing to import.";
-
-        return success(summary, {
-          projectId: resolvedProjectId,
-          status: "no_changes",
-          baseCommit,
-          targetCommit: to_ref || "HEAD",
-          filesChanged: 0,
-        });
+        );
       }
 
-      // Trigger reimport for changed files
-      // Note: CodeMap's trigger_reimport triggers a full re-import
-      // For true incremental import, we'd need backend support
-      // This tool simulates it by showing what would be imported
+      // ── Phase 3: reparse changed files ───────────────────────────────────
 
-      const summary = buildSummary(
-        resolvedProjectId,
-        baseCommit,
-        to_ref,
-        changedFiles,
-        totalChanged,
-      );
+      const outcomes = await reparseBatch(client, resolvedProjectId, workspacePath, localFiles);
 
-      return success(summary, {
+      const reparsed = outcomes.filter((o) => o.result === "reparsed").map((o) => o.path);
+      const skipped = outcomes.filter((o) => o.result === "skipped");
+      const errors = outcomes.filter((o) => o.result === "error");
+
+      const suggestedNextTools: string[] = [];
+      if (errors.length > 0) {
+        suggestedNextTools.push("trigger_reimport()  // some files failed — full reimport recommended");
+      } else if (committedCount > 0) {
+        suggestedNextTools.push("trigger_reimport()  // committed files not yet synced");
+      } else {
+        suggestedNextTools.push("get_working_diff()  // verify local changes");
+      }
+
+      return success(buildOutput(outcomes, committedCount), {
         projectId: resolvedProjectId,
-        status: "incremental_detected",
-        baseCommit,
-        targetCommit: to_ref || "HEAD",
-        filesChanged: totalChanged,
-        changedFiles: changedFiles.slice(0, 100), // Limit for response size
-        note: "Note: Current CodeMap implementation requires full re-import. " +
-          "This tool identified files that would be processed.",
+        status: "completed",
+        workspacePath,
+        localFilesFound: localFiles.length,
+        committedCount,
+        reparsed,
+        skipped: skipped.map((o) => ({ path: o.path, reason: o.reason })),
+        errors: errors.map((o) => ({ path: o.path, reason: o.reason })),
+        suggestedNextTools,
       });
     }),
   );
-}
-
-function buildSummary(
-  projectId: string,
-  baseCommit: string,
-  targetRef: string | undefined,
-  changedFiles: Array<{ path: string; status: string }>,
-  total: number,
-): string {
-  const lines: string[] = [];
-
-  lines.push("## Incremental Import Analysis");
-  lines.push("");
-  lines.push(`**Project:** ${projectId}`);
-  lines.push(`**Base:** ${baseCommit}`);
-  lines.push(`**Target:** ${targetRef || "HEAD"}`);
-  lines.push("");
-
-  lines.push(`**Files changed:** ${total}`);
-  lines.push("");
-
-  if (total > 0) {
-    lines.push("### Changed Files");
-    lines.push("");
-
-    const byStatus: Record<string, string[]> = {};
-    for (const file of changedFiles) {
-      const status = file.status || "modified";
-      if (!byStatus[status]) byStatus[status] = [];
-      byStatus[status].push(file.path);
-    }
-
-    for (const [status, files] of Object.entries(byStatus)) {
-      lines.push(`#### ${status.toUpperCase()} (${files.length})`);
-      lines.push("");
-      files.slice(0, 20).forEach((f) => lines.push(`- ${f}`));
-      if (files.length > 20) {
-        lines.push(`... and ${files.length - 20} more`);
-      }
-      lines.push("");
-    }
-
-    if (total > 100) {
-      lines.push(`... and ${total - 100} more changed files`);
-      lines.push("");
-    }
-  }
-
-  lines.push("### Actions");
-  lines.push("");
-  lines.push("To apply this incremental import:");
-  lines.push("1. Review the changed files above");
-  lines.push("2. Run `git add` for any staged changes you want to include");
-  lines.push("3. Use `trigger_reimport` tool to start the import");
-  lines.push("");
-
-  return lines.join("\n");
 }
