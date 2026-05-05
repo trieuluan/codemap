@@ -30,6 +30,7 @@ export interface McpServerConfig {
   auth: McpConfigAuth | null;
   projectConfigPath: string;
   globalConfigPath: string;
+  toolMode: "lite" | "standard" | "full";
 }
 
 function readOptionalEnv(name: string) {
@@ -171,6 +172,10 @@ export async function loadConfig(cwd = process.cwd()): Promise<McpServerConfig> 
     apiToken: readOptionalEnv("CODEMAP_API_KEY"),
   };
 
+  const toolModeRaw = readOptionalEnv("CODEMAP_TOOL_MODE");
+  const toolMode: McpServerConfig["toolMode"] =
+    toolModeRaw === "lite" || toolModeRaw === "standard" ? toolModeRaw : "full";
+
   let resolved: McpServerConfig = {
     apiUrl: DEFAULT_API_URL,
     apiToken: null,
@@ -178,6 +183,7 @@ export async function loadConfig(cwd = process.cwd()): Promise<McpServerConfig> 
     auth: null,
     projectConfigPath,
     globalConfigPath,
+    toolMode,
   };
 
   resolved = applyLayer(resolved, envConfig);

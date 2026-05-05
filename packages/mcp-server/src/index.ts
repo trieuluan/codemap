@@ -58,6 +58,7 @@ import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
+import { registerExploreTaskTool } from "./tools/explore-task.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -66,52 +67,62 @@ async function runMcpServer() {
     version: "1.0.0",
   });
 
+  const { toolMode } = config;
+
+  // ── Lite tier: core exploration + auth (always registered) ──────────────
   registerPingTool(server, config);
   registerCheckAuthStatusTool(server, config);
-  registerLogoutTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);
-  registerCheckGithubConnectionTool(server, config);
-  registerGetGithubConnectUrlTool(server, config);
-  registerDisconnectGithubTool(server, config);
-  registerCheckGitlabConnectionTool(server, config);
-  registerGetGitlabConnectUrlTool(server, config);
-  registerDisconnectGitlabTool(server, config);
-  registerOpenUrlTool(server);
-  registerGetCurrentWorkspaceInfoTool(server);
-  registerListGithubRepositoriesTool(server, config);
-  registerSearchGithubRepositoriesTool(server, config);
-  registerCreateProjectTool(server, config);
-  registerCreateProjectFromGithubTool(server, config);
-  registerCreateProjectFromGitlabTool(server, config);
-  registerLinkProjectTool(server, config);
-  registerWaitForImportTool(server, config);
-  registerTriggerReimportTool(server, config);
+  registerLogoutTool(server, config);
   registerGetProjectTool(server, config);
+  registerLinkProjectTool(server, config);
+  registerExploreTaskTool(server, config);
   registerSearchCodebaseTool(server, config);
-  registerSuggestEditLocationsTool(server, config);
   registerGetFileTool(server, config);
-  registerGetFilesTool(server, config);
-  registerMoveSymbolsTool(server, config);
-  registerRenameSymbolTool(server, config);
-  registerFindCallersTool(server, config);
-  registerFindUsagesTool(server, config);
-  registerGetDiffTool(server, config);
-  registerGetWorkingDiffTool(server);
+  registerSuggestEditLocationsTool(server, config);
   registerGetProjectMapTool(server, config);
-  registerListProjectsTool(server, config);
-  registerGetProjectInsightsTool(server, config);
+  registerGetWorkingDiffTool(server);
+  registerTriggerReimportTool(server, config);
+  registerWaitForImportTool(server, config);
 
-  // Additional tools
-  registerFindByPatternTool(server, config);
-  registerRunTestsTool(server, config);
-  registerFindRelatedFilesTool(server, config);
-  registerFindCyclesTool(server, config);
-  registerIncrementalImportTool(server, config);
-  registerCodeReviewTool(server, config);
-  registerSuggestPatchTool(server, config);
-  registerApplyPatchTool(server, config);
-  registerDeployPreviewTool(server, config);
+  // ── Standard tier: deeper analysis + project management ─────────────────
+  if (toolMode === "standard" || toolMode === "full") {
+    registerGetFilesTool(server, config);
+    registerFindUsagesTool(server, config);
+    registerFindCallersTool(server, config);
+    registerFindByPatternTool(server, config);
+    registerGetDiffTool(server, config);
+    registerGetProjectInsightsTool(server, config);
+    registerRunTestsTool(server, config);
+    registerFindRelatedFilesTool(server, config);
+    registerIncrementalImportTool(server, config);
+    registerCreateProjectTool(server, config);
+    registerCreateProjectFromGithubTool(server, config);
+    registerCreateProjectFromGitlabTool(server, config);
+    registerListProjectsTool(server, config);
+  }
+
+  // ── Full tier: refactoring, CI/CD, integrations ──────────────────────────
+  if (toolMode === "full") {
+    registerMoveSymbolsTool(server, config);
+    registerRenameSymbolTool(server, config);
+    registerFindCyclesTool(server, config);
+    registerCodeReviewTool(server, config);
+    registerSuggestPatchTool(server, config);
+    registerApplyPatchTool(server, config);
+    registerDeployPreviewTool(server, config);
+    registerCheckGithubConnectionTool(server, config);
+    registerGetGithubConnectUrlTool(server, config);
+    registerDisconnectGithubTool(server, config);
+    registerCheckGitlabConnectionTool(server, config);
+    registerGetGitlabConnectUrlTool(server, config);
+    registerDisconnectGitlabTool(server, config);
+    registerOpenUrlTool(server);
+    registerGetCurrentWorkspaceInfoTool(server);
+    registerListGithubRepositoriesTool(server, config);
+    registerSearchGithubRepositoriesTool(server, config);
+  }
 
   // Resources — automatically surfaced to Claude as session context
   registerProjectContextResource(server, config);
