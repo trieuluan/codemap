@@ -91,6 +91,19 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         }
       }
 
+      const suggestedNextTools: string[] = [
+        `get_file("${filePath}", include=["symbols"], symbol_names=["${symbol_name}"])`,
+      ];
+      if (result.callers.length > 0) {
+        suggestedNextTools.push(`get_file("${result.callers[0].filePath}", include=["outline"])`);
+      }
+      if (result.callers.length === 0 && result.target.isExported) {
+        suggestedNextTools.push(
+          `search_codebase("${symbol_name}")  // cross-check dynamic or string-based usage`,
+        );
+      }
+      suggestedNextTools.push("get_working_diff()  // after making changes");
+
       return success(lines.join("\n"), {
         projectId: resolvedProjectId,
         path: filePath,
@@ -104,6 +117,7 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
         totalUsages: result.totals.usages,
         truncated: result.callers.length >= 50,
         meta: result.meta,
+        suggestedNextTools,
       });
     }),
   );

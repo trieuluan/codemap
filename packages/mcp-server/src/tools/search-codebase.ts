@@ -202,6 +202,16 @@ export function registerSearchCodebaseTool(
       const exports = activeKinds.has("exports") ? results.exports : [];
       const total = files.length + symbols.length + exports.length;
 
+      const suggestedNextTools: string[] = [];
+      if (symbols.length > 0) {
+        suggestedNextTools.push(
+          `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
+        );
+        suggestedNextTools.push(`find_usages("${symbols[0].displayName}")`);
+      } else if (files.length > 0) {
+        suggestedNextTools.push(`get_file("${files[0].path}", include=["outline"])`);
+      }
+
       return success(buildOutput(query, results, activeKinds), {
         projectId: resolvedProjectId,
         query,
@@ -212,6 +222,7 @@ export function registerSearchCodebaseTool(
         exports,
         total,
         found: total > 0,
+        suggestedNextTools,
       });
     }),
   );

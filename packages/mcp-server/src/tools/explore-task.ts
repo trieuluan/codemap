@@ -7,72 +7,258 @@ import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
   CodebaseSearchResponse,
   EditLocationsResponse,
-  EditLocationSuggestion,
+  EditLocationReadPlan,
 } from "../lib/api-types.js";
 
-function formatReadHint(s: EditLocationSuggestion): string {
-  const plan = s.readPlan;
-  const parts: string[] = [`include=${JSON.stringify(plan.include)}`];
-  if (plan.symbolNames && plan.symbolNames.length > 0) {
-    parts.push(`symbol_names=${JSON.stringify(plan.symbolNames)}`);
-  }
-  return `get_file("${s.path}", ${parts.join(", ")})`;
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ContextFile {
+  path: string;
+  language: string | null;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+  readPlan: EditLocationReadPlan;
+  blastRadius?: number;
 }
 
-function buildOutput(
-  task: string,
-  search: CodebaseSearchResponse,
-  editLocs: EditLocationsResponse,
-): string {
-  const lines: string[] = [`## explore_task: "${task}"`, ""];
+interface ContextSymbol {
+  name: string;
+  kind: string;
+  filePath: string;
+  startLine: number | null;
+  signature: string | null;
+}
 
-  const totalSearch =
-    search.files.length + search.symbols.length + search.exports.length;
+interface ContextRisk {
+  level: "high" | "medium";
+  file: string;
+  reason: string;
+}
 
-  if (totalSearch > 0) {
-    lines.push(`### Keyword matches (${totalSearch})`);
-    search.symbols.slice(0, 5).forEach((sym, i) => {
-      lines.push(
-        `${i + 1}. ${sym.displayName} [${sym.symbolKind}] — ${sym.filePath}:${sym.startLine ?? ""}`,
-      );
-    });
-    search.files.slice(0, 3).forEach((f) => {
-      lines.push(`  file: ${f.path}`);
-    });
-    lines.push("");
+interface RecommendedRead {
+  path: string;
+  priority: number;
+  readPlan: EditLocationReadPlan;
+  why: string;
+}
+
+interface ContextPack {
+  task: string;
+  summary: string;
+  likelyFiles: ContextFile[];
+  entrypoints: ContextFile[];
+  symbols: ContextSymbol[];
+  risks: ContextRisk[];
+  recommendedReads: RecommendedRead[];
+  suggestedNextTools: string[];
+}
+
+interface FileRelationship {
+  imports: Array<{ targetPath: string | null }>;
+  importedBy: Array<{ sourcePath: string }>;
+}
+
+// ── Entrypoint detection ──────────────────────────────────────────────────────
+
+const ENTRYPOINT_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\/routes\/[^/]+\/index\.[jt]sx?$/, label: "API route" },
+  { pattern: /\/app\/.*\/page\.tsx?$/, label: "Next.js page" },
+  { pattern: /\/controller\.[jt]sx?$/, label: "controller" },
+  { pattern: /\.worker\.[jt]s$/, label: "worker" },
+  { pattern: /\/plugins\/\d+\.[^/]+\.[jt]s$/, label: "Fastify plugin" },
+];
+
+function detectEntrypoint(path: string): string | null {
+  for (const { pattern, label } of ENTRYPOINT_PATTERNS) {
+    if (pattern.test(path)) return label;
   }
+  return null;
+}
 
-  const highMed = editLocs.suggestions.filter(
-    (s) => s.confidence === "high" || s.confidence === "medium",
-  );
+// ── Risk detection ────────────────────────────────────────────────────────────
 
-  if (highMed.length > 0) {
-    lines.push(`### Files to edit (top ${Math.min(highMed.length, 6)})`);
-    highMed.slice(0, 6).forEach((s, i) => {
-      const lang = s.language ? ` [${s.language}]` : "";
-      lines.push(`${i + 1}. ${s.path}${lang}  [${s.confidence}]`);
-      lines.push(`   Reason: ${s.reason}`);
-      lines.push(`   Read: ${formatReadHint(s)}`);
-    });
-    lines.push("");
+const RISK_PATTERNS: Array<{
+  pattern: RegExp;
+  reason: string;
+  level: "high" | "medium";
+}> = [
+  {
+    pattern: /schema\.[jt]sx?$/,
+    reason: "Schema file — changes affect DB structure and API types",
+    level: "high",
+  },
+  {
+    pattern: /better-auth|05\.better-auth/,
+    reason: "Auth plugin — changes affect all authenticated routes",
+    level: "high",
+  },
+  {
+    pattern: /(^|\/)auth\.[jt]sx?$/,
+    reason: "Core auth module — changes affect session handling",
+    level: "high",
+  },
+  {
+    pattern: /\/middleware\.[jt]sx?$/,
+    reason: "Middleware — changes affect all requests",
+    level: "high",
+  },
+  {
+    pattern: /\/plugins\/\d+\./,
+    reason: "Fastify plugin — changes affect the request pipeline",
+    level: "medium",
+  },
+];
+
+function detectPathRisk(path: string): ContextRisk | null {
+  for (const { pattern, reason, level } of RISK_PATTERNS) {
+    if (pattern.test(path)) return { level, file: path, reason };
   }
+  return null;
+}
 
-  lines.push("### Next step");
-  if (highMed.length > 0) {
-    lines.push(`Call: ${formatReadHint(highMed[0])}`);
-  } else if (search.symbols.length > 0) {
-    const sym = search.symbols[0];
-    lines.push(`Call: get_file("${sym.filePath}", include=["outline"])`);
-  } else if (search.files.length > 0) {
-    lines.push(`Call: get_file("${search.files[0].path}", include=["outline"])`);
-  } else {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatReadCall(path: string, plan: EditLocationReadPlan): string {
+  const parts: string[] = [`include=${JSON.stringify(plan.include)}`];
+  if (plan.symbolNames?.length)
+    parts.push(`symbol_names=${JSON.stringify(plan.symbolNames)}`);
+  return `get_file("${path}", ${parts.join(", ")})`;
+}
+
+const OUTLINE_PLAN: EditLocationReadPlan = { include: ["outline"] };
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+
+function buildSummary(pack: Omit<ContextPack, "summary" | "suggestedNextTools">): string {
+  const lines: string[] = [];
+
+  const domains = [
+    ...new Set(
+      [...pack.likelyFiles, ...pack.entrypoints]
+        .flatMap((f) =>
+          f.path
+            .split("/")
+            .filter(
+              (p) =>
+                ![
+                  "src", "features", "packages", "modules", "routes",
+                  "app", "(auth)", "(protected)", "components", "api",
+                  "lib", "utils", "hooks", "web", "index",
+                ].includes(p) && !/\.[jt]sx?$/.test(p) && p.length > 2,
+            )
+            .slice(0, 2),
+        ),
+    ),
+  ].slice(0, 4);
+
+  lines.push(`Domain: ${domains.join(", ") || "unknown"}`);
+
+  const highCount = pack.likelyFiles.filter((f) => f.confidence === "high").length;
+  const totalFiles = pack.likelyFiles.length + pack.entrypoints.length;
+  if (totalFiles > 0) {
     lines.push(
-      "No results found. Call get_project_map() to browse structure, or trigger_reimport() if index may be stale.",
+      `${totalFiles} relevant file(s)${highCount > 0 ? ` — ${highCount} high-confidence` : ""}`,
+    );
+  }
+
+  if (pack.symbols.length > 0) {
+    lines.push(
+      `Key symbols: ${pack.symbols
+        .slice(0, 3)
+        .map((s) => s.name)
+        .join(", ")}`,
+    );
+  }
+
+  const highRisks = pack.risks.filter((r) => r.level === "high");
+  if (highRisks.length > 0) {
+    lines.push(
+      `⚠ High-risk: ${highRisks.map((r) => r.file.split("/").pop()).join(", ")} — edit carefully`,
     );
   }
 
   return lines.join("\n");
 }
+
+// ── suggestedNextTools ────────────────────────────────────────────────────────
+
+function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools">): string[] {
+  const tools: string[] = [];
+
+  if (pack.recommendedReads.length > 0) {
+    const top = pack.recommendedReads[0];
+    tools.push(formatReadCall(top.path, top.readPlan));
+  }
+
+  if (pack.symbols.length > 0) {
+    tools.push(`find_usages("${pack.symbols[0].name}")`);
+  }
+
+  const highRisk = pack.risks.find((r) => r.level === "high");
+  if (highRisk) {
+    const name = highRisk.file.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? "";
+    tools.push(`find_callers("${name}")  // check before editing high-risk file`);
+  }
+
+  tools.push("get_working_diff()  // verify changes after editing");
+  return tools;
+}
+
+// ── Text output ───────────────────────────────────────────────────────────────
+
+function buildTextOutput(pack: ContextPack): string {
+  const lines = [`## explore_task: "${pack.task}"`, "", pack.summary, ""];
+
+  if (pack.entrypoints.length > 0) {
+    lines.push("### Entry points");
+    pack.entrypoints.forEach((f, i) => {
+      lines.push(`${i + 1}. ${f.path}  [${f.reason}]`);
+    });
+    lines.push("");
+  }
+
+  if (pack.likelyFiles.length > 0) {
+    lines.push("### Files to edit");
+    pack.likelyFiles.forEach((f, i) => {
+      const br = f.blastRadius !== undefined ? `  (${f.blastRadius} importers)` : "";
+      lines.push(`${i + 1}. ${f.path}  [${f.confidence}]${br}`);
+      lines.push(`   ${f.reason}`);
+    });
+    lines.push("");
+  }
+
+  if (pack.risks.length > 0) {
+    lines.push("### Risks");
+    pack.risks.forEach((r) => {
+      lines.push(`⚠ [${r.level}] ${r.file}`);
+      lines.push(`  ${r.reason}`);
+    });
+    lines.push("");
+  }
+
+  if (pack.symbols.length > 0) {
+    lines.push("### Key symbols");
+    pack.symbols.slice(0, 5).forEach((s) => {
+      const loc = s.startLine ? `:${s.startLine}` : "";
+      lines.push(`• ${s.name} [${s.kind}] — ${s.filePath}${loc}`);
+    });
+    lines.push("");
+  }
+
+  lines.push("### Recommended reads (in order)");
+  pack.recommendedReads.slice(0, 6).forEach((r, i) => {
+    lines.push(`${i + 1}. ${formatReadCall(r.path, r.readPlan)}`);
+    lines.push(`   Why: ${r.why}`);
+  });
+
+  lines.push("");
+  lines.push("### Next tools");
+  pack.suggestedNextTools.forEach((t) => lines.push(`→ ${t}`));
+
+  return lines.join("\n");
+}
+
+// ── Tool registration ─────────────────────────────────────────────────────────
 
 export function registerExploreTaskTool(
   server: McpServer,
@@ -85,8 +271,10 @@ export function registerExploreTaskTool(
     {
       title: "Explore Task",
       description:
-        "Starting point for any coding task. Finds relevant files and suggests edit locations in one call. " +
-        "Runs keyword search + edit-location analysis in parallel and returns a ranked list of files to read next. " +
+        "Full context pack for any coding task. Returns: likelyFiles (what to edit), " +
+        "entrypoints (flow entry points), symbols (relevant functions/classes), " +
+        "risks (high blast-radius or dangerous files), recommendedReads (ordered reading list), " +
+        "and suggestedNextTools (exact tool calls to make next). " +
         "Use this first — replaces calling search_codebase + suggest_edit_locations separately.",
       inputSchema: {
         task: z
@@ -111,6 +299,8 @@ export function registerExploreTaskTool(
         );
       }
 
+      // ── Phase 1: parallel — keyword search + edit locations ──────────────
+
       const [searchResult, editLocsResult] = await Promise.allSettled([
         client.request<CodebaseSearchResponse>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
@@ -118,7 +308,7 @@ export function registerExploreTaskTool(
         ),
         client.request<EditLocationsResponse>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/edit-locations`,
-          { authRequired: true, query: { q: task, limit: "8" } },
+          { authRequired: true, query: { q: task, limit: "10" } },
         ),
       ]);
 
@@ -132,16 +322,155 @@ export function registerExploreTaskTool(
           ? editLocsResult.value
           : ({ suggestions: [] } as unknown as EditLocationsResponse);
 
-      return success(buildOutput(task, search, editLocs), {
+      // ── Phase 2: classify into likelyFiles, entrypoints, symbols ─────────
+
+      const likelyFiles: ContextFile[] = editLocs.suggestions
+        .filter((s) => s.confidence === "high" || s.confidence === "medium")
+        .slice(0, 8)
+        .map((s) => ({
+          path: s.path,
+          language: s.language ?? null,
+          confidence: s.confidence,
+          reason: s.reason,
+          readPlan: s.readPlan,
+        }));
+
+      const entrypointMap = new Map<string, string>();
+      const allPaths = [
+        ...search.files.map((f) => f.path),
+        ...search.symbols.map((s) => s.filePath),
+        ...likelyFiles.map((f) => f.path),
+      ];
+      for (const path of allPaths) {
+        const label = detectEntrypoint(path);
+        if (label && !entrypointMap.has(path)) entrypointMap.set(path, label);
+      }
+
+      const entrypoints: ContextFile[] = [...entrypointMap.entries()].map(
+        ([path, label]) => ({
+          path,
+          language: null,
+          confidence: "medium" as const,
+          reason: label,
+          readPlan: OUTLINE_PLAN,
+        }),
+      );
+
+      const symbols: ContextSymbol[] = search.symbols.slice(0, 8).map((s) => ({
+        name: s.displayName,
+        kind: s.symbolKind,
+        filePath: s.filePath,
+        startLine: s.startLine ?? null,
+        signature: s.signature ?? null,
+      }));
+
+      // ── Phase 3: blast radius for top-4 likely files ──────────────────────
+
+      const topPaths = likelyFiles.slice(0, 4).map((f) => f.path);
+      const blastResults = await Promise.allSettled(
+        topPaths.map((path) =>
+          client.request<{ file: FileRelationship }>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files`,
+            { authRequired: true, query: { path } },
+          ),
+        ),
+      );
+
+      const importerCounts = new Map<string, number>();
+      blastResults.forEach((result, i) => {
+        if (result.status === "fulfilled") {
+          importerCounts.set(topPaths[i], result.value.file.importedBy?.length ?? 0);
+        }
+      });
+
+      likelyFiles.forEach((f) => {
+        const count = importerCounts.get(f.path);
+        if (count !== undefined) f.blastRadius = count;
+      });
+
+      // ── Phase 4: risks — path patterns + blast radius ─────────────────────
+
+      const risksSeen = new Set<string>();
+      const risks: ContextRisk[] = [];
+
+      const allRiskCandidates = [
+        ...likelyFiles.map((f) => f.path),
+        ...entrypoints.map((f) => f.path),
+      ];
+
+      for (const path of allRiskCandidates) {
+        if (risksSeen.has(path)) continue;
+        const r = detectPathRisk(path);
+        if (r) {
+          risks.push(r);
+          risksSeen.add(path);
+        }
+      }
+
+      for (const [path, count] of importerCounts) {
+        if (risksSeen.has(path)) continue;
+        if (count >= 10) {
+          risks.push({
+            level: "high",
+            file: path,
+            reason: `${count} files import this — high blast radius`,
+          });
+          risksSeen.add(path);
+        } else if (count >= 5) {
+          risks.push({
+            level: "medium",
+            file: path,
+            reason: `${count} files import this — medium blast radius`,
+          });
+          risksSeen.add(path);
+        }
+      }
+
+      // ── Phase 5: recommendedReads — entrypoints first, then likelyFiles ──
+
+      const readsSeen = new Set<string>();
+      const recommendedReads: RecommendedRead[] = [];
+      let priority = 1;
+
+      for (const f of entrypoints.slice(0, 2)) {
+        if (readsSeen.has(f.path)) continue;
+        recommendedReads.push({
+          path: f.path,
+          priority: priority++,
+          readPlan: OUTLINE_PLAN,
+          why: `${f.reason} — understand the flow before editing`,
+        });
+        readsSeen.add(f.path);
+      }
+
+      for (const f of likelyFiles) {
+        if (readsSeen.has(f.path)) continue;
+        const isHighRisk = risks.some(
+          (r) => r.file === f.path && r.level === "high",
+        );
+        recommendedReads.push({
+          path: f.path,
+          priority: priority++,
+          readPlan: f.readPlan,
+          why: isHighRisk
+            ? `${f.reason} — ⚠ high-risk file, read carefully before editing`
+            : f.reason,
+        });
+        readsSeen.add(f.path);
+      }
+
+      // ── Phase 6: assemble ContextPack ────────────────────────────────────
+
+      const packBase = { task, likelyFiles, entrypoints, symbols, risks, recommendedReads };
+      const summary = buildSummary(packBase);
+      const suggestedNextTools = buildNextTools(packBase);
+
+      const pack: ContextPack = { ...packBase, summary, suggestedNextTools };
+
+      return success(buildTextOutput(pack), {
         projectId: resolvedProjectId,
-        task,
         available: true,
-        searchResults: {
-          files: search.files,
-          symbols: search.symbols,
-          exports: search.exports,
-        },
-        editSuggestions: editLocs.suggestions,
+        ...pack,
       });
     }),
   );

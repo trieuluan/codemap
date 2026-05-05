@@ -391,6 +391,13 @@ export function registerFindRelatedFilesTool(
           .sort((a, b) => b.score - a.score)
           .slice(0, max_results ?? 10);
 
+        const suggestedNextTools: string[] = results
+          .slice(0, 3)
+          .map((r) => `get_file("${r.path}", include=["outline"])`);
+        if (results.length === 0) {
+          suggestedNextTools.push("get_project_map()  // browse structure manually");
+        }
+
         return success(buildOutput(query, anchorPath, results), {
           projectId: resolvedProjectId,
           query,
@@ -402,6 +409,7 @@ export function registerFindRelatedFilesTool(
             signals: r.signals,
           })),
           total: results.length,
+          suggestedNextTools,
         });
       },
     ),

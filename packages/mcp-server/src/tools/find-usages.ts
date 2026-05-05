@@ -147,6 +147,24 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
       const totalUsages = usageResults.reduce((sum, item) => sum + item.totals.usages, 0);
       const totalCallers = usageResults.reduce((sum, item) => sum + item.totals.callers, 0);
 
+      const defFile = usageResults[0]?.target.filePath;
+      const topCaller = usageResults[0]?.callers[0]?.filePath;
+      const suggestedNextTools: string[] = [];
+      if (defFile) {
+        suggestedNextTools.push(
+          `get_file("${defFile}", include=["symbols"], symbol_names=["${symbol_name}"])`,
+        );
+      }
+      if (topCaller && topCaller !== defFile) {
+        suggestedNextTools.push(`get_file("${topCaller}", include=["outline"])`);
+      }
+      if (totalCallers > 10) {
+        suggestedNextTools.push(
+          `find_related_files(symbol_name="${symbol_name}")  // ${totalCallers} callers — check impact`,
+        );
+      }
+      suggestedNextTools.push("get_working_diff()  // after making changes");
+
       return success(lines.join("\n").trim(), {
         projectId: resolvedProjectId,
         symbolName: symbol_name,
@@ -156,6 +174,7 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
         totalUsages,
         totalCallers,
         truncated: usageResults.some((r) => r.usages.length >= 25 || r.callers.length >= 25),
+        suggestedNextTools,
       });
     }),
   );
