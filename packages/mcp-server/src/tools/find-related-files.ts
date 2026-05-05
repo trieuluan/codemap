@@ -31,6 +31,12 @@ interface ScoredFile {
   reasons: string[];
 }
 
+interface ResultGroup {
+  label: string;
+  description: string;
+  files: ScoredFile[];
+}
+
 // ── Weights ───────────────────────────────────────────────────────────────────
 
 const WEIGHTS: SignalSet = {
@@ -144,12 +150,63 @@ function buildReasons(sig: Partial<SignalSet>): string[] {
   return reasons.length > 0 ? reasons : ["related via import graph"];
 }
 
+function getPrimaryGroup(result: ScoredFile): string {
+  if (result.signals.directImport || result.signals.reverseImport) {
+    return "Direct graph";
+  }
+  if ((result.signals.symbolUsage ?? 0) > 0 || (result.signals.searchRelevance ?? 0) > 0) {
+    return "Search and symbol matches";
+  }
+  if (result.signals.sameFeature || result.signals.sameFolder) {
+    return "Same feature or folder";
+  }
+  return "Expanded graph";
+}
+
+function groupResults(results: ScoredFile[]): ResultGroup[] {
+  const groups: ResultGroup[] = [
+    {
+      label: "Direct graph",
+      description: "Files that directly import the anchor or are directly imported by it.",
+      files: [],
+    },
+    {
+      label: "Search and symbol matches",
+      description: "Files surfaced by keyword, filename, or symbol matches.",
+      files: [],
+    },
+    {
+      label: "Same feature or folder",
+      description: "Files that share feature-domain or folder signals with the query/anchor.",
+      files: [],
+    },
+    {
+      label: "Expanded graph",
+      description: "Second-hop or weaker graph/context matches.",
+      files: [],
+    },
+  ];
+
+  const byLabel = new Map(groups.map((group) => [group.label, group]));
+  for (const result of results) {
+    byLabel.get(getPrimaryGroup(result))?.files.push(result);
+  }
+
+  return groups.filter((group) => group.files.length > 0);
+}
+
+function formatGetFilesCall(results: ScoredFile[]) {
+  const paths = results.slice(0, 7).map((result) => result.path);
+  return `get_files(${JSON.stringify(paths)})`;
+}
+
 // ── Output ────────────────────────────────────────────────────────────────────
 
 function buildOutput(
   query: string | undefined,
   anchorPath: string | undefined,
   results: ScoredFile[],
+  groups: ResultGroup[],
 ): string {
   const label = query
     ? `"${query}"`
@@ -165,12 +222,25 @@ function buildOutput(
     return lines.join("\n");
   }
 
-  results.forEach((f, i) => {
-    lines.push(`${i + 1}. **${f.path}**  score=${f.score.toFixed(2)}`);
-    lines.push(`   Signals: ${f.reasons.join(", ")}`);
-    lines.push(`   → get_file("${f.path}", include=["outline"])`);
-    lines.push("");
+  lines.push("### Recommended read order");
+  results.slice(0, 7).forEach((f, i) => {
+    lines.push(`${i + 1}. ${f.path}  score=${f.score.toFixed(2)} · ${f.reasons.join(", ")}`);
   });
+  lines.push("");
+  lines.push("### Next tool calls");
+  lines.push(`→ ${formatGetFilesCall(results)}  // survey outlines for the top candidates`);
+  lines.push(`→ get_file("${results[0]!.path}", include=["outline"])  // deep-dive the top candidate`);
+  lines.push("");
+
+  for (const group of groups) {
+    lines.push(`### ${group.label}`);
+    lines.push(group.description);
+    group.files.forEach((f) => {
+      lines.push(`- **${f.path}**  score=${f.score.toFixed(2)}`);
+      lines.push(`  Signals: ${f.reasons.join(", ")}`);
+    });
+    lines.push("");
+  }
 
   return lines.join("\n").trimEnd();
 }
@@ -392,17 +462,32 @@ export function registerFindRelatedFilesTool(
           }))
           .sort((a, b) => b.score - a.score)
           .slice(0, max_results ?? 10);
+        const groups = groupResults(results);
+        const recommendedReads = results.slice(0, 7).map((result, index) => ({
+          path: result.path,
+          priority: index + 1,
+          score: result.score,
+          reasons: result.reasons,
+          readPlan: { include: ["outline"] as const },
+        }));
 
-        const suggestedNextTools: string[] = results
-          .slice(0, 3)
-          .map((r) => `get_file("${r.path}", include=["outline"])`);
+        const suggestedNextTools: string[] = results.length > 0
+          ? [
+              formatGetFilesCall(results),
+              `get_file("${results[0]!.path}", include=["outline"])`,
+            ]
+          : [];
         if (results.length === 0) {
           suggestedNextTools.push("get_project_map()  // browse structure manually");
         }
 
-        return success(buildOutput(query, anchorPath, results), {
+        return success(buildOutput(query, anchorPath, results, groups), {
           projectId: resolvedProjectId,
           query,
+          anchor: {
+            filePath: anchorPath ?? null,
+            symbolName: symbol_name ?? null,
+          },
           anchorFile: anchorPath,
           relatedFiles: results.map((r) => ({
             path: r.path,
@@ -410,7 +495,14 @@ export function registerFindRelatedFilesTool(
             reasons: r.reasons,
             signals: r.signals,
           })),
+          resultGroups: groups.map((group) => ({
+            label: group.label,
+            description: group.description,
+            files: group.files.map((file) => file.path),
+          })),
+          recommendedReads,
           total: results.length,
+          nextAction: results.length > 0 ? "get_files" : "get_project_map",
           suggestedNextTools,
         });
       },

@@ -184,6 +184,13 @@ function buildSummary(pack: Omit<ContextPack, "summary" | "suggestedNextTools">)
 
 function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools">): string[] {
   const tools: string[] = [];
+  const readPaths = pack.recommendedReads
+    .slice(0, 7)
+    .map((read) => read.path);
+
+  if (readPaths.length > 1) {
+    tools.push(`get_files(${JSON.stringify(readPaths)})`);
+  }
 
   if (pack.recommendedReads.length > 0) {
     const top = pack.recommendedReads[0];
@@ -200,6 +207,7 @@ function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools"
     tools.push(`find_callers("${name}")  // check before editing high-risk file`);
   }
 
+  tools.push(`find_related_files(query="${pack.task}")  // use if the task is mainly asking for scope/related files`);
   tools.push("get_working_diff()  // verify changes after editing");
   return tools;
 }
@@ -208,6 +216,13 @@ function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools"
 
 function buildTextOutput(pack: ContextPack): string {
   const lines = [`## explore_task: "${pack.task}"`, "", pack.summary, ""];
+
+  lines.push("### How to use this result");
+  lines.push("- Start with the Recommended reads section; use the exact tool calls shown.");
+  lines.push("- If this is only a scope/reading-list question, call find_related_files instead of editing.");
+  lines.push("- Use get_files for a quick outline survey, then get_file(include=[\"symbols\"]) for the exact body you need.");
+  lines.push("- Check Risks before editing high blast-radius files.");
+  lines.push("");
 
   if (pack.entrypoints.length > 0) {
     lines.push("### Entry points");
@@ -246,6 +261,9 @@ function buildTextOutput(pack: ContextPack): string {
   }
 
   lines.push("### Recommended reads (in order)");
+  if (pack.recommendedReads.length > 1) {
+    lines.push(`Batch survey: get_files(${JSON.stringify(pack.recommendedReads.slice(0, 7).map((r) => r.path))})`);
+  }
   pack.recommendedReads.slice(0, 6).forEach((r, i) => {
     lines.push(`${i + 1}. ${formatReadCall(r.path, r.readPlan)}`);
     lines.push(`   Why: ${r.why}`);
