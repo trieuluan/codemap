@@ -1,15 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 
+const DEFAULT_REDIRECT = "/dashboard";
+
+function getSafeRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return DEFAULT_REDIRECT;
+  }
+
+  return value;
+}
+
 export function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -57,17 +68,14 @@ export function SignupForm() {
         setIsLoading(false);
         return;
       }
-      router.push("/dashboard");
+      router.push(getSafeRedirect(searchParams.get("redirect")));
+      router.refresh();
     } catch (error) {
       console.log(error);
       setError("An unexpected error occurred. Please try again.");
       setIsLoading(false);
       return;
     }
-
-    // Redirect to dashboard on successful signup
-    router.push("/dashboard");
-    setIsLoading(false);
   }
 
   return (

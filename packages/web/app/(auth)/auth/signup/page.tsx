@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 import { SignupForm } from "@/features/auth/signup-form";
 import { Logo } from "@/components/logo";
 import Link from "next/link";
@@ -10,7 +11,16 @@ export const metadata: Metadata = {
   description: "Create your CodeMap account",
 };
 
-export default function SignupPage() {
+interface SignupPageProps {
+  searchParams: Promise<{ redirect?: string }>;
+}
+
+export default async function SignupPage({ searchParams }: SignupPageProps) {
+  const { redirect } = await searchParams;
+  const signinHref = redirect
+    ? `/auth?redirect=${encodeURIComponent(redirect)}`
+    : "/auth";
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
@@ -24,12 +34,18 @@ export default function SignupPage() {
           </p>
         </div>
 
-        <SignupForm />
+        <Suspense
+          fallback={
+            <div className="h-9 rounded-md border border-border bg-secondary/40" />
+          }
+        >
+          <SignupForm />
+        </Suspense>
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link
-            href="/auth"
+            href={signinHref}
             className="text-foreground underline-offset-4 hover:underline"
           >
             Sign in

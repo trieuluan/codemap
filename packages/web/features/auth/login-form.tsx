@@ -9,6 +9,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
 
+const DEFAULT_REDIRECT = "/dashboard";
+
+function getSafeRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return DEFAULT_REDIRECT;
+  }
+
+  return value;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,7 +47,7 @@ export function LoginForm() {
         });
         return;
       }
-      const redirectTo = searchParams.get("redirect") || "/dashboard";
+      const redirectTo = getSafeRedirect(searchParams.get("redirect"));
       router.push(redirectTo);
       router.refresh();
     } catch (error) {

@@ -9,7 +9,16 @@ export const metadata: Metadata = {
   description: "Sign in to your CodeMap account",
 };
 
-export default function AuthPage() {
+interface AuthPageProps {
+  searchParams: Promise<{ redirect?: string }>;
+}
+
+export default async function AuthPage({ searchParams }: AuthPageProps) {
+  const { redirect } = await searchParams;
+  const signupHref = redirect
+    ? `/auth/signup?redirect=${encodeURIComponent(redirect)}`
+    : "/auth/signup";
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
@@ -36,7 +45,7 @@ export default function AuthPage() {
         <p className="text-center text-sm text-muted-foreground">
           {"Don't have an account? "}
           <Link
-            href="/auth/signup"
+            href={signupHref}
             className="text-foreground underline-offset-4 hover:underline"
           >
             Sign up

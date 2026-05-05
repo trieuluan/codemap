@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const DEFAULT_REDIRECT = "/dashboard";
-const PROTECTED_ROUTES = ["/dashboard", "/projects"];
+const PROTECTED_ROUTES = ["/dashboard", "/projects", "/w", "/admin", "/account", "/settings"];
 const GUEST_ONLY_ROUTES = ["/auth"];
 
 function getApiBaseUrl() {
@@ -17,6 +17,14 @@ function matchesRoute(pathname: string, routes: string[]) {
   return routes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
+}
+
+function getSafeRedirect(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return DEFAULT_REDIRECT;
+  }
+
+  return value;
 }
 
 async function hasValidSession(request: NextRequest) {
@@ -47,7 +55,7 @@ export async function proxy(request: NextRequest) {
   const isGuestOnlyRoute = matchesRoute(pathname, GUEST_ONLY_ROUTES);
 
   if (authenticated && isGuestOnlyRoute) {
-    const redirectTo = searchParams.get("redirect") || DEFAULT_REDIRECT;
+    const redirectTo = getSafeRedirect(searchParams.get("redirect"));
     return NextResponse.redirect(new URL(redirectTo, request.url));
   }
 
@@ -61,5 +69,14 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/auth", "/auth/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/projects/:path*",
+    "/w/:path*",
+    "/admin/:path*",
+    "/account/:path*",
+    "/settings/:path*",
+    "/auth",
+    "/auth/:path*",
+  ],
 };
