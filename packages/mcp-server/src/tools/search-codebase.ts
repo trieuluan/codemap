@@ -112,7 +112,9 @@ export function registerSearchCodebaseTool(
     {
       title: "Search Codebase",
       description:
-        "Search files, symbols, and exports by keyword. Use to locate where things are defined or exported. " +
+        "Use this for narrow lookup when you know a keyword, filename, symbol, or export. " +
+        "Search files, symbols, and exports by keyword to locate where things are defined or exported. " +
+        "For broad implementation tasks use explore_task first; for related-file questions use find_related_files. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
         query: z.string().min(1).describe("Search query string."),

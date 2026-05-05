@@ -186,11 +186,13 @@ export function registerFindRelatedFilesTool(
     {
       title: "Find Related Files",
       description:
+        "Use this for questions like 'which files should I read?', 'what files are related?', or 'what is the scope around this file/symbol?'. " +
         "Find files related to a query, file, or symbol using multi-signal ranking. " +
         "Scores candidates by: direct imports (1.0), reverse imports (0.9), symbol usage (0.7), " +
         "same feature domain (0.5), filename similarity (0.45), 2nd-hop imports (0.4), " +
         "search relevance (0.35), same folder (0.3). " +
         "Accepts natural-language queries (e.g. 'login bug', 'add pagination') or a file path as anchor. " +
+        "After results, use get_files to survey outlines before reading content. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
         query: z

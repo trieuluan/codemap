@@ -54,11 +54,13 @@ import { registerGetProjectMapTool } from "./tools/get-project-map.js";
 import { registerListProjectsTool } from "./tools/list-projects.js";
 import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
 import { registerProjectContextResource } from "./resources/project-context.js";
+import { registerAgentRuleResources } from "./resources/agent-rules.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
+import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -71,6 +73,7 @@ async function runMcpServer() {
 
   // ── Lite tier: core exploration + auth (always registered) ──────────────
   registerPingTool(server, config);
+  registerGetAgentWorkflowTool(server);
   registerCheckAuthStatusTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);
@@ -126,6 +129,7 @@ async function runMcpServer() {
 
   // Resources — automatically surfaced to Claude as session context
   registerProjectContextResource(server, config);
+  registerAgentRuleResources(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

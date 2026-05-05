@@ -271,11 +271,13 @@ export function registerExploreTaskTool(
     {
       title: "Explore Task",
       description:
+        "Use this first for broad coding tasks such as fixing bugs, implementing features, or investigating issues. " +
         "Full context pack for any coding task. Returns: likelyFiles (what to edit), " +
         "entrypoints (flow entry points), symbols (relevant functions/classes), " +
         "risks (high blast-radius or dangerous files), recommendedReads (ordered reading list), " +
         "and suggestedNextTools (exact tool calls to make next). " +
-        "Use this first — replaces calling search_codebase + suggest_edit_locations separately.",
+        "Replaces calling search_codebase + suggest_edit_locations separately. " +
+        "If the user asks only which files are related or which files to read, use find_related_files instead.",
       inputSchema: {
         task: z
           .string()

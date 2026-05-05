@@ -304,7 +304,8 @@ export function registerGetFileTool(
     {
       title: "Get File",
       description:
-        "Read a file: source code and/or outline (imports, exports, symbols). " +
+        "Read a specific file after explore_task, find_related_files, search_codebase, or get_files has identified it. " +
+        "Reads source code and/or outline (imports, exports, symbols). " +
         "Default include=[content,outline]. Use include=[outline] to skip content and save tokens. " +
         "Use include=[symbols] + symbol_names to read only specific function bodies. " +
         "Add blast_radius only when assessing change risk — adds 1-2s latency, skip for routine reads. " +

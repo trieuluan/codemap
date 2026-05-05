@@ -12,3 +12,4 @@ Detailed rules are split into focused files under `.claude/rules/`:
 | `.claude/rules/ui-map.md` | Map feature layout, 3-column explorer, component file reference |
 | `.claude/rules/tone-of-voice.md` | Giọng văn khi Claude phản hồi: tiếng Việt thân thiện, dịch thoát ý, giữ nguyên jargon IT |
 | `.claude/rules/mcp-first.md` | Ưu tiên dùng MCP tools trước Read/grep khi explore code |
+| `.claude/rules/task-lifecycle.md` | Workflow chuẩn: explore, confirm, implement, verify, diff, reimport, final summary |
