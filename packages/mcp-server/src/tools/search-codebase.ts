@@ -68,6 +68,78 @@ function formatExportResult(r: SearchExportResult, index: number): string {
   return `${index + 1}. ${r.exportName}\n   ${r.filePath}:${r.startLine}${hint}`;
 }
 
+function queryTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/[\s\-_/.,:]+/)
+    .map((term) => term.replace(/[^a-z0-9]/g, ""))
+    .filter((term) => term.length > 2);
+}
+
+function filename(path: string): string {
+  return path.split("/").pop()?.toLowerCase() ?? path.toLowerCase();
+}
+
+function rankPath(path: string, terms: string[], baseRank: number): number {
+  const lowerPath = path.toLowerCase();
+  const lowerName = filename(path);
+  let score = 100 - baseRank;
+
+  for (const term of terms) {
+    if (lowerName === `${term}.ts` || lowerName === `${term}.tsx`) score += 30;
+    else if (lowerName.includes(term)) score += 18;
+    if (lowerPath.includes(`/${term}/`)) score += 16;
+    else if (lowerPath.includes(term)) score += 8;
+  }
+
+  if (lowerName === "loading.tsx" || lowerName === "error.tsx") score -= 35;
+  if (lowerPath.includes("/node_modules/")) score -= 100;
+  if (lowerPath.includes("/features/")) score += 4;
+  if (lowerPath.includes("/routes/") || lowerPath.includes("/modules/")) score += 4;
+  if (lowerPath.includes("/db/") || lowerPath.includes("/shared/src/")) score += 3;
+
+  return score;
+}
+
+function rankName(name: string, terms: string[], baseRank: number): number {
+  const lower = name.toLowerCase();
+  let score = 100 - baseRank;
+  for (const term of terms) {
+    if (lower === term) score += 30;
+    else if (lower.includes(term)) score += 18;
+  }
+  return score;
+}
+
+function rerankResults(
+  query: string,
+  results: CodebaseSearchResponse,
+): CodebaseSearchResponse {
+  const terms = queryTerms(query);
+  return {
+    ...results,
+    files: [...results.files].sort(
+      (a, b) =>
+        rankPath(b.path, terms, results.files.indexOf(b)) -
+        rankPath(a.path, terms, results.files.indexOf(a)),
+    ),
+    symbols: [...results.symbols].sort(
+      (a, b) =>
+        rankName(b.displayName, terms, results.symbols.indexOf(b)) +
+          rankPath(b.filePath, terms, results.symbols.indexOf(b)) -
+        (rankName(a.displayName, terms, results.symbols.indexOf(a)) +
+          rankPath(a.filePath, terms, results.symbols.indexOf(a))),
+    ),
+    exports: [...results.exports].sort(
+      (a, b) =>
+        rankName(b.exportName, terms, results.exports.indexOf(b)) +
+          rankPath(b.filePath, terms, results.exports.indexOf(b)) -
+        (rankName(a.exportName, terms, results.exports.indexOf(a)) +
+          rankPath(a.filePath, terms, results.exports.indexOf(a))),
+    ),
+  };
+}
+
 function buildOutput(
   query: string,
   results: CodebaseSearchResponse,
@@ -96,6 +168,23 @@ function buildOutput(
 
   if (totalCount === 0) {
     sections.push("No results found.");
+  } else {
+    const visibleSymbols = kinds.has("symbols") ? results.symbols : [];
+    const visibleFiles = kinds.has("files") ? results.files : [];
+    const topFiles = [
+      ...visibleSymbols.slice(0, 3).map((symbol) => symbol.filePath),
+      ...visibleFiles.slice(0, 4).map((file) => file.path),
+    ];
+    const uniqueTopFiles = [...new Set(topFiles)].slice(0, 7);
+    sections.push("\nBest next read:");
+    if (visibleSymbols[0]) {
+      sections.push(
+        `→ get_symbol_context(symbol_name="${visibleSymbols[0].displayName}", file_path="${visibleSymbols[0].filePath}")`,
+      );
+    }
+    if (uniqueTopFiles.length > 0) {
+      sections.push(`→ get_files(${JSON.stringify(uniqueTopFiles)})`);
+    }
   }
 
   return sections.join("\n");
@@ -199,6 +288,8 @@ export function registerSearchCodebaseTool(
         throw error;
       }
 
+      results = rerankResults(query, results);
+
       const files = activeKinds.has("files") ? results.files : [];
       const symbols = activeKinds.has("symbols") ? results.symbols : [];
       const exports = activeKinds.has("exports") ? results.exports : [];
@@ -207,9 +298,11 @@ export function registerSearchCodebaseTool(
       const suggestedNextTools: string[] = [];
       if (symbols.length > 0) {
         suggestedNextTools.push(
+          `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+        );
+        suggestedNextTools.push(
           `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
         );
-        suggestedNextTools.push(`find_usages("${symbols[0].displayName}")`);
       } else if (files.length > 0) {
         suggestedNextTools.push(`get_file("${files[0].path}", include=["outline"])`);
       }

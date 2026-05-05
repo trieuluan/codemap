@@ -29,6 +29,7 @@ interface ScoredFile {
   score: number;
   signals: Partial<SignalSet>;
   reasons: string[];
+  symbols?: string[];
 }
 
 interface ResultGroup {
@@ -224,12 +225,21 @@ function buildOutput(
 
   lines.push("### Recommended read order");
   results.slice(0, 7).forEach((f, i) => {
-    lines.push(`${i + 1}. ${f.path}  score=${f.score.toFixed(2)} · ${f.reasons.join(", ")}`);
+    const symbols = f.symbols?.length
+      ? ` · symbols: ${f.symbols.slice(0, 3).join(", ")}`
+      : "";
+    lines.push(`${i + 1}. ${f.path}  score=${f.score.toFixed(2)} · ${f.reasons.join(", ")}${symbols}`);
   });
   lines.push("");
   lines.push("### Next tool calls");
   lines.push(`→ ${formatGetFilesCall(results)}  // survey outlines for the top candidates`);
-  lines.push(`→ get_file("${results[0]!.path}", include=["outline"])  // deep-dive the top candidate`);
+  if (results[0]?.symbols?.[0]) {
+    lines.push(
+      `→ get_symbol_context(symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")  // read only the top matched symbol`,
+    );
+  } else {
+    lines.push(`→ get_file("${results[0]!.path}", include=["outline"])  // deep-dive the top candidate`);
+  }
   lines.push("");
 
   for (const group of groups) {
@@ -324,6 +334,7 @@ export function registerFindRelatedFilesTool(
         }
 
         const sigMap = new Map<string, Partial<SignalSet>>();
+        const symbolMap = new Map<string, Set<string>>();
         const keywords = query ? extractKeywords(query) : [];
 
         const addSignal = (path: string, update: Partial<SignalSet>) => {
@@ -335,6 +346,11 @@ export function registerFindRelatedFilesTool(
             merged[key] = Math.max(existing[key] ?? 0, v as number);
           }
           sigMap.set(path, merged);
+        };
+        const addSymbol = (path: string, symbolName: string) => {
+          const symbols = symbolMap.get(path) ?? new Set<string>();
+          symbols.add(symbolName);
+          symbolMap.set(path, symbols);
         };
 
         // ── Phase 1: resolve anchor file from symbol ─────────────────────────
@@ -370,6 +386,7 @@ export function registerFindRelatedFilesTool(
                   });
                   results.symbols.slice(0, 12).forEach((s, i) => {
                     addSignal(s.filePath, { symbolUsage: 1 / (i + 1) });
+                    addSymbol(s.filePath, s.displayName);
                     const sim = computeFilenameSimilarityScore(s.filePath, keywords);
                     if (sim > 0) addSignal(s.filePath, { filenameSimilarity: sim });
                   });
@@ -459,6 +476,7 @@ export function registerFindRelatedFilesTool(
             score: computeScore(sig),
             signals: sig,
             reasons: buildReasons(sig),
+            symbols: [...(symbolMap.get(path) ?? [])],
           }))
           .sort((a, b) => b.score - a.score)
           .slice(0, max_results ?? 10);
@@ -468,13 +486,22 @@ export function registerFindRelatedFilesTool(
           priority: index + 1,
           score: result.score,
           reasons: result.reasons,
-          readPlan: { include: ["outline"] as const },
+          symbols: result.symbols ?? [],
+          readPlan: result.symbols?.[0]
+            ? {
+                tool: "get_symbol_context",
+                symbolName: result.symbols[0],
+                filePath: result.path,
+              }
+            : { include: ["outline"] as const },
         }));
 
         const suggestedNextTools: string[] = results.length > 0
           ? [
               formatGetFilesCall(results),
-              `get_file("${results[0]!.path}", include=["outline"])`,
+              results[0]?.symbols?.[0]
+                ? `get_symbol_context(symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")`
+                : `get_file("${results[0]!.path}", include=["outline"])`,
             ]
           : [];
         if (results.length === 0) {
@@ -494,6 +521,7 @@ export function registerFindRelatedFilesTool(
             score: r.score,
             reasons: r.reasons,
             signals: r.signals,
+            symbols: r.symbols ?? [],
           })),
           resultGroups: groups.map((group) => ({
             label: group.label,

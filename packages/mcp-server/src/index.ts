@@ -32,6 +32,8 @@ import { registerWaitForImportTool } from "./tools/wait-for-import.js";
 import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
+import { registerGetSymbolContextTool } from "./tools/get-symbol-context.js";
+import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area.js";
 import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
 import { registerFindByPatternTool } from "./tools/find-by-pattern.js";
 import { registerRunTestsTool } from "./tools/run-tests.js";
@@ -82,6 +84,7 @@ async function runMcpServer() {
   registerLinkProjectTool(server, config);
   registerExploreTaskTool(server, config);
   registerSearchCodebaseTool(server, config);
+  registerGetSymbolContextTool(server, config);
   registerGetFileTool(server, config);
   registerSuggestEditLocationsTool(server, config);
   registerGetProjectMapTool(server, config);
@@ -100,6 +103,7 @@ async function runMcpServer() {
     registerGetProjectInsightsTool(server, config);
     registerRunTestsTool(server, config);
     registerFindRelatedFilesTool(server, config);
+    registerSummarizeFeatureAreaTool(server, config);
     registerCreateProjectTool(server, config);
     registerCreateProjectFromGithubTool(server, config);
     registerCreateProjectFromGitlabTool(server, config);
