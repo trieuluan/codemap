@@ -27,11 +27,106 @@ function formatProvider(provider: string | null): string {
   return "Unknown";
 }
 
+// ── Tool lists per tier ───────────────────────────────────────────────────────
+
+const TOOLS_LITE = [
+  "- explore_task — starting point for any task; returns likelyFiles, entrypoints, symbols, risks, recommendedReads, and suggestedNextTools in one call",
+  "- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint showing the optimal get_file include mode",
+  "- get_file — read a file with include modes: content, outline (symbol list), symbols (specific function bodies), blast_radius (impact analysis)",
+  "- suggest_edit_locations — candidate generator for likely files/symbols to edit for a natural-language task; each suggestion includes a readPlan",
+  "- get_project_map — browse the full file tree",
+  "- get_project — get the current linked project from .codemap/mcp.json; call with no arguments",
+  "- link_project — link the workspace to an existing CodeMap project; auto-detects by git remote URL",
+  "- get_working_diff — show uncommitted changes (staged, unstaged, untracked); use after edits to verify what changed",
+  "- incremental_import — reparse only locally changed files without a full reimport; faster than trigger_reimport for small edits",
+  "- trigger_reimport — re-index the codebase after large changes or when incremental_import is not enough",
+  "- wait_for_import — wait until an import finishes",
+  "- check_auth_status — verify MCP authentication, current API URL, user, and next action",
+  "- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset",
+];
+
+const TOOLS_STANDARD_EXTRA = [
+  "- get_files — batch outline fetch for up to 7 files in one call; use after suggest_edit_locations to survey candidates",
+  "- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase",
+  "- find_callers — find static callers of a symbol from a given file; faster than find_usages when file is known",
+  "- find_by_pattern — search files by glob or regex pattern with content filtering and line range support",
+  "- get_diff — show git diff between two refs (commits, branches, tags)",
+  "- get_project_insights — full codebase health report: cycles, entry points, orphans, top files",
+  "- run_tests — run the project test suite (Jest, Vitest, Playwright, npm test) with pattern/name filtering",
+  "- find_related_files — find files related to a query, file, or symbol using multi-signal ranking",
+  "- create_project — create or reuse a CodeMap project from the current workspace",
+  "- create_project_from_github — create or reuse a CodeMap project from a GitHub repository",
+  "- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository",
+  "- list_projects — list all accessible projects",
+];
+
+const TOOLS_FULL_EXTRA = [
+  "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
+  "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call trigger_reimport after",
+  "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
+  "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
+  "- suggest_patch / apply_patch — propose and apply code changes; always review patch diffs before applying",
+  "- deploy_preview — deploy a preview build of the project",
+  "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
+  "- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage GitLab OAuth for repository imports",
+  "- list_github_repositories / search_github_repositories — discover GitHub repositories",
+  "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
+  "- open_url — open a URL in the default browser",
+];
+
+// ── Workflow hints per tier ───────────────────────────────────────────────────
+
+const WORKFLOW_LITE = [
+  "- Start with check_auth_status if API calls fail or auth is unclear.",
+  "- Use get_project to confirm the current linked project. If no project is linked, call link_project first (no arguments) — it auto-detects by git remote.",
+  "- Use explore_task first for any coding task — returns likelyFiles, entrypoints, symbols, risks, and suggestedNextTools in one call.",
+  "- Follow suggestedNextTools returned by explore_task — it provides exact get_file calls to make next.",
+  "- Use search_codebase when you know a specific keyword. Follow the read hint in each result.",
+  "- Use get_file with include: [\"outline\"] to see a file's symbol list, then include: [\"symbols\"] + symbol_names for specific function bodies.",
+  "- Use get_working_diff after making edits to verify what changed before committing.",
+  "- Use incremental_import after editing files to reparse only changed files — faster than trigger_reimport.",
+  "- Use trigger_reimport then wait_for_import when incremental_import is not enough (deleted files, large refactors, stale index).",
+];
+
+const WORKFLOW_STANDARD_EXTRA = [
+  "- After suggest_edit_locations returns candidates, use get_files to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
+  "- Use find_usages to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names.",
+  "- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
+  "- Use find_related_files with a natural-language query (e.g. 'login bug') to find related files across feature boundaries.",
+  "- Use get_project_insights for global signals: orphans, cycles, top fan-out/fan-in files.",
+  "- Use run_tests before committing to verify tests pass.",
+  "- Use find_by_pattern to search files by glob/regex with content filtering.",
+  "- Use get_diff to compare committed refs; use get_working_diff for uncommitted local changes.",
+];
+
+const WORKFLOW_FULL_EXTRA = [
+  "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
+  "- Use rename_symbol to rename a symbol codebase-wide — call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true.",
+  "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
+  "- Use code_review for automated quality checks. Set focus_areas to target specific concerns (bugs, security, performance, etc.).",
+  "- Use suggest_patch / apply_patch for proposing and applying code changes — always review patch diffs before applying.",
+  "- Use deploy_preview after completing a feature to share a testable build.",
+];
+
+const MAINTENANCE_SECTION = [
+  "## Maintenance / Cleanup Audits",
+  "- For dead code, dead files, and large-file cleanup, combine CodeMap semantic tools with local static checks. MCP import graph is the first pass; TypeScript/compiler or ripgrep checks are the confirmation pass.",
+  "- Use get_project_insights first for global signals: orphan files, cycles, top fan-out/fan-in files, parse quality, and entry-like files.",
+  "- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins, CLI scripts, worker entrypoints, tests, or generated config files solely because the static graph has no importer.",
+  "- Dead functions: use find_usages or find_callers. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
+  "- find_usages occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
+  "- After cleanup edits, run package builds and get_working_diff. Call trigger_reimport and wait_for_import to refresh MCP data.",
+  "- Before applying patches (apply_patch), use find_cycles to ensure no new circular dependencies are introduced.",
+];
+
+// ── Main builder ──────────────────────────────────────────────────────────────
+
 function buildContextText(
   project: ProjectDetail,
   latestImport: ProjectImportDetail | null,
   health: ImportHealth,
   accountWorkspace: WorkspaceDetail | null,
+  toolMode: "lite" | "standard" | "full",
 ): string {
   const lines: string[] = [
     "# CodeMap Project Context",
@@ -122,43 +217,15 @@ function buildContextText(
   lines.push("- Runtime/dynamic access: obj[methodName], eval, require with variable path");
   lines.push("Always cross-check with Bash grep before concluding a symbol is dead.");
 
+  // ── Available Tools (filtered by toolMode) ──────────────────────────────────
   lines.push("");
   lines.push("## Available Tools");
-  lines.push("- check_auth_status — verify MCP authentication, current API URL, user, GitHub status, and next action");
-  lines.push("- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset");
-  lines.push("- check_github_connection / get_github_connect_url / disconnect_github — manage optional GitHub OAuth access for GitHub repository imports");
-  lines.push("- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage optional GitLab OAuth access (gitlab.com) for GitLab repository imports");
-  lines.push("- list_projects — list all accessible projects");
-  lines.push("- get_project — get the current linked project from .codemap/mcp.json; call with no arguments. If no project is linked, call create_project or link_project.");
-  lines.push("- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project");
-  lines.push("- create_project — create or reuse a CodeMap project from the current workspace");
-  lines.push("- create_project_from_github — create or reuse a CodeMap project from a GitHub repository; call check_github_connection first for private repos");
-  lines.push("- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository; call check_gitlab_connection first for private repos");
-  lines.push("- link_project — link the current workspace to an existing CodeMap project; auto-detects by git remote URL, or lists all projects for manual selection; can also update the project's repositoryUrl and defaultBranch from the workspace");
-  lines.push("- list_github_repositories / search_github_repositories — discover GitHub repositories available to the authenticated user");
-  lines.push("- get_project_map — browse the full file tree");
-  lines.push("- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint (→ get_file ...) showing the optimal include mode to use next");
-  lines.push("- suggest_edit_locations — deterministic candidate generator for likely files and symbols to inspect/edit for a natural-language task; each suggestion includes a readPlan field specifying the optimal get_file include mode (symbols/outline/content) — always follow readPlan instead of defaulting to content");
-  lines.push("- get_file — read a file with include modes: content, outline (symbol list), symbols (extract specific symbol bodies by name), blast_radius (impact analysis). Auto-reparses if local file has changed since last import.");
-  lines.push("- get_files — batch outline fetch for up to 7 files in a single call; use after suggest_edit_locations to survey multiple candidates before deciding where to edit");
-  lines.push("- get_project_insights — full codebase health report: cycles, entry points, orphans, top files");
-  lines.push("- get_diff — show git diff between two refs (commits, branches, tags); useful for understanding recent changes");
-  lines.push("- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase");
-  lines.push("- find_callers — find static callers/usages of a symbol from a given file, with occurrence ranges, evidence, confidence, and parse staleness metadata");
-  lines.push("- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase, with confidence metadata");
-  lines.push("- rename_symbol — rename a function, class, or variable across the entire codebase using the parse index; updates all call sites and import statements automatically; call trigger_reimport after. Use rename_in_file_only: true for unexported symbols. Does not rename files or handle dynamic access like obj[\"methodName\"].");
-  lines.push("- get_working_diff — show uncommitted changes in the local workspace (staged, unstaged, untracked); use this after edits to verify what changed before committing or reimporting. Add include_patch: true to see full diff content per file.");
-  lines.push("- trigger_reimport — re-index the codebase after code changes");
-  lines.push("- wait_for_import — wait until an import finishes");
-  lines.push("- find_by_pattern — search files by glob or regex pattern, with content filtering and line range support");
-  lines.push("- run_tests — run the project test suite (Jest, Vitest, Playwright, npm test) with pattern/name filtering and result parsing");
-  lines.push("- find_related_files — find files related to a given file or symbol via import relationships, shared dependencies, and code similarity");
-  lines.push("- find_cycles — detect circular dependencies in the codebase, with impact analysis and refactoring recommendations");
-  lines.push("- incremental_import — analyze git diff to identify changed files between two refs for targeted reimport (identifies changes; use trigger_reimport to apply)");
-  lines.push("- code_review — automated code review on a file or set of files, analyzing bugs, security, performance, style, complexity, and best practices");
-  lines.push("- suggest_patch — propose code patches for a given file or task");
-  lines.push("- apply_patch — apply a code patch to a file, with validation and conflict resolution");
-  lines.push("- deploy_preview — deploy a preview build of the project");
+  const toolList = [
+    ...TOOLS_LITE,
+    ...(toolMode === "standard" || toolMode === "full" ? TOOLS_STANDARD_EXTRA : []),
+    ...(toolMode === "full" ? TOOLS_FULL_EXTRA : []),
+  ];
+  toolList.forEach((t) => lines.push(t));
 
   lines.push("");
   lines.push("## Structured Tool Responses");
@@ -233,55 +300,21 @@ function buildContextText(
     );
   }
 
+  // ── Recommended Workflow (filtered by toolMode) ──────────────────────────────
   lines.push("");
   lines.push("## Recommended Workflow");
-  lines.push("- Start with check_auth_status if API calls fail or auth is unclear.");
-  lines.push("- If not authenticated, call start_auth_flow and then wait_for_auth after the user approves the browser prompt.");
-  lines.push("- If GitHub access is needed and disconnected, call get_github_connect_url; GitHub is optional for MCP auth but required for private GitHub repository imports.");
-  lines.push("- If GitLab access is needed and disconnected, call get_gitlab_connect_url; required for private gitlab.com repository imports.");
-  lines.push("- Use get_project to confirm the current linked project saved in .codemap/mcp.json; do not pass project_id to get_project.");
-  lines.push("- If get_project reports health.nextAction as trigger_reimport, call trigger_reimport and then wait_for_import.");
-  lines.push("- If get_project reports health.nextAction as wait_for_import, call wait_for_import before relying on search or symbol tools.");
-  lines.push("- If get_project reports no linked project: call link_project first (no arguments) — it auto-detects by git remote and suggests a match if found, or lists all projects for manual selection. Only call create_project if no suitable project exists yet.");
-  lines.push("- After link_project confirms the link, if the project has no repositoryUrl and the workspace has a git remote, call link_project with update_repo: true to update the project's repositoryUrl and defaultBranch.");
-  lines.push("- Use get_current_workspace_info before create_project or link_project when you need to inspect the local git remote and branch first.");
-  lines.push("- Use search_codebase first when you know a specific keyword (function name, class name, file name). Each result includes a read hint (→ get_file ...) — follow it directly instead of calling get_file with content.");
-  lines.push("- Use suggest_edit_locations for broad tasks where you do not know which files are relevant. Each suggestion includes a readPlan — always use it to call get_file with the right include mode instead of defaulting to content. Treat results as candidates, not final truth; prefer high-confidence entries.");
-  lines.push("- After suggest_edit_locations returns multiple candidates, use get_files to survey all of them in one batch call (outline only), then use get_file with include: [\"symbols\"] to deep-dive the specific file you need to edit.");
-  lines.push("- Use get_file with include: [\"outline\"] first to see a file's symbol list, then include: [\"symbols\"] with symbol_names to fetch only the bodies you need — avoids loading the full file.");
-  lines.push("- Add blast_radius to get_file before risky edits to shared files, services, schemas, or MCP tools; do not request blast_radius for routine file reading.");
-  lines.push("- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof, because external/runtime usages may exist.");
-  lines.push("- Use find_usages to locate definitions, occurrence ranges, caller evidence, and confidence metadata when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names — no grep needed. Results include parentSymbolName so you can see which factory owns the method.");
-  lines.push("- To find dead code: use get_file with include: [\"outline\"] and check importedBy — if empty, the file has no known importers. Then confirm with find_usages on the exported symbol. Cross-check with Bash grep for dynamic usage before deleting.");
-  lines.push("- Use move_symbols to relocate code between files — it handles removing from source, appending to dest, and rewriting imports in all callers.");
-  lines.push("- Use rename_symbol to rename a symbol codebase-wide — provide the definition file and current name; it uses the parse index to find all occurrences and rewrites imports automatically. Call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true to avoid false positives in unrelated files.");
-  lines.push("- Use get_working_diff after making edits to verify which files changed before committing or reimporting; prefer get_diff for comparing committed refs.");
-  lines.push("- If suggest/search results look stale, a new file is missing, or local edits changed semantics, call trigger_reimport, then wait_for_import.");
-  lines.push("- If search or suggest_edit_locations returns no useful results, retry with narrower domain terms, call get_project_map to inspect folders, or reimport if the index may be stale.");
-  lines.push("- Use find_by_pattern when you need to search files by glob/regex pattern with content filtering (e.g. find all .ts files containing 'TODO'). Combine with line range for large files.");
-  lines.push("- Use run_tests before committing changes to verify tests pass. Supports Jest, Vitest, Playwright, and npm test. Pass test_pattern or test_name to filter.");
-  lines.push("- Use find_related_files when editing a file and you need context on what else might be affected — follows import/imported-by relationships.");
-  lines.push("- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.");
-  lines.push("- Use incremental_import before trigger_reimport to understand which files changed since the last import — helps assess reimport scope.");
-  lines.push("- Use code_review for automated quality checks on specific files or patterns. Set focus_areas to target specific concerns (bugs, security, performance, etc.).");
-  lines.push("- Use suggest_patch / apply_patch for proposing and applying code changes — always review patch diffs before applying.");
-  lines.push("- Use deploy_preview after completing a feature to share a testable build.");
+  const workflow = [
+    ...WORKFLOW_LITE,
+    ...(toolMode === "standard" || toolMode === "full" ? WORKFLOW_STANDARD_EXTRA : []),
+    ...(toolMode === "full" ? WORKFLOW_FULL_EXTRA : []),
+  ];
+  workflow.forEach((w) => lines.push(w));
 
-  lines.push("");
-  lines.push("## Maintenance / Cleanup Audits");
-  lines.push("- For dead code, dead files, duplicate functions, and large-file cleanup tasks, combine CodeMap semantic tools with local static checks. MCP import graph data is the first pass; TypeScript/compiler or ripgrep checks are the confirmation pass.");
-  lines.push("- Use get_project_insights first for global signals: orphan files, cycles, top fan-out/fan-in files, parse quality, and entry-like files.");
-  lines.push("- Use get_project_map for folder-level scope, then get_files for outlines of candidate files. Avoid reading full content until a candidate is confirmed.");
-  lines.push("- Large files: use line-count shell checks such as rg --files plus wc -l, excluding generated folders (.next, dist, coverage, node_modules). Then inspect the largest files with get_file include: [\"outline\"] and split only when there is a clear concern boundary.");
-  lines.push("- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins/routes, CLI scripts, worker entrypoints, tests, generated config files, or MCP tool registration files solely because the static import graph has no importer. Framework-convention files loaded by name (Next.js proxy.ts/middleware.ts, page.tsx, layout.tsx; Fastify autoload plugins) will always appear as orphans in the static graph.");
-  lines.push("- Dead functions/exports: use find_usages or find_callers on the symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage, framework conventions, test-only usage, or external public API contracts before deleting. Common false negatives: BullMQ worker files use dynamic import() with no importedNames — all exports appear unreferenced but are used at runtime; Fastify controller methods are registered via object destructuring, not direct calls.");
-  lines.push("- find_usages occurrenceRole guidance: 'definition' = declaration site; 'call' = direct call or method call; 'reference' = property access (OBJ.prop) or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.");
-  lines.push("- Duplicate functions: exact body duplicates are strong candidates when they are in regular app code. Prefer a shared helper only when the duplicate behavior is stable and the abstraction names a real domain concept. Keep tiny duplicates or provider-specific code separate when shared code would hide meaningful differences.");
-  lines.push("- UI library components can be intentionally unused inventory. Do not delete generic components like shadcn/Radix UI wrappers just because they have no current import unless the user explicitly asks to prune UI inventory.");
-  lines.push("- After cleanup edits, run package builds and get_working_diff. If code was pushed or the user wants fresh MCP data, call trigger_reimport and wait_for_import.");
-  lines.push("- After running tests (run_tests), if failures occur, use find_related_files to trace the failing module's dependencies, then code_review to analyze the specific files.");
-  lines.push("- Before applying patches (apply_patch), use find_cycles to ensure the changes don't introduce circular dependencies.");
-  lines.push("- After deploy_preview, use get_working_diff to verify what was actually deployed vs what was staged.");
+  // ── Maintenance (full mode only) ──────────────────────────────────────────
+  if (toolMode === "full") {
+    lines.push("");
+    MAINTENANCE_SECTION.forEach((m) => lines.push(m));
+  }
 
   return lines.join("\n");
 }
@@ -384,7 +417,7 @@ export function registerProjectContextResource(
           {
             uri: uri.href,
             mimeType: "text/plain",
-            text: buildContextText(project, latestImport, health, accountWorkspace),
+            text: buildContextText(project, latestImport, health, accountWorkspace, config.toolMode),
           },
         ],
       };

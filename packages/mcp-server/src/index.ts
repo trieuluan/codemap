@@ -83,6 +83,7 @@ async function runMcpServer() {
   registerSuggestEditLocationsTool(server, config);
   registerGetProjectMapTool(server, config);
   registerGetWorkingDiffTool(server);
+  registerIncrementalImportTool(server, config);
   registerTriggerReimportTool(server, config);
   registerWaitForImportTool(server, config);
 
@@ -96,7 +97,6 @@ async function runMcpServer() {
     registerGetProjectInsightsTool(server, config);
     registerRunTestsTool(server, config);
     registerFindRelatedFilesTool(server, config);
-    registerIncrementalImportTool(server, config);
     registerCreateProjectTool(server, config);
     registerCreateProjectFromGithubTool(server, config);
     registerCreateProjectFromGitlabTool(server, config);
