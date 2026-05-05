@@ -9,8 +9,10 @@ import type {
   AdminProjectListQuery,
   AdminWorkspaceOption,
   AdminListProjectImportsQuery,
+  AdminProjectImportsResponse,
   WorkspacePlan,
 } from "@codemap/shared";
+import type { ProjectImport } from "@/features/projects/api";
 
 export type {
   AdminListUsersQuery,
@@ -22,6 +24,7 @@ export type {
   AdminProjectListQuery,
   AdminWorkspaceOption,
   AdminListProjectImportsQuery,
+  AdminProjectImportsResponse,
   WorkspacePlan,
 };
 
@@ -148,14 +151,14 @@ export async function listAdminWorkspaces(
 export async function listAdminProjectImports(
   projectId: string,
   params?: AdminListProjectImportsQuery,
-): Promise<import("@/features/projects/api").ProjectImport[]> {
-  return requestApi<import("@/features/projects/api").ProjectImport[]>(
+): Promise<AdminProjectImportsResponse<ProjectImport>> {
+  return requestApi<AdminProjectImportsResponse<ProjectImport>>(
     `/admin/projects/${projectId}/imports`,
     {
       queryParams: params
         ? {
-            limit: params.limit,
-            cursor: params.cursor,
+            page: params.page,
+            pageSize: params.pageSize,
           }
         : undefined,
     },

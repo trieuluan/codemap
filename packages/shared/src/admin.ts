@@ -15,8 +15,8 @@ export const adminListUsersQuerySchema = z.object({
 });
 
 export const adminListProjectImportsQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  cursor: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(5).max(50).default(15),
 });
 
 export type AdminListUsersQuery = z.infer<typeof adminListUsersQuerySchema>;
@@ -161,6 +161,16 @@ export interface AdminProjectImportSummary {
   indexedSymbolCount: number;
   indexedEdgeCount: number;
   completedAt: string | null;
+}
+
+export interface AdminProjectImportsResponse<TImport = unknown> {
+  items: TImport[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface AdminImportActivity extends AdminProjectImportSummary {

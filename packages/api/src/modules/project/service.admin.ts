@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { project, projectImport } from "../../db/schema";
 import { createWorkspaceService } from "../workspace/service";
 import type { CreateProjectBody, UpdateProjectBody } from "./schema";
@@ -158,7 +158,7 @@ export function createAdminProjectService(database: Database) {
 
     async listProjectImports(
       projectId: string,
-      options?: { limit?: number; cursor?: string },
+      options?: { page?: number; pageSize?: number },
     ) {
       const existingProject = await database.query.project.findFirst({
         where: eq(project.id, projectId),
@@ -168,24 +168,35 @@ export function createAdminProjectService(database: Database) {
         return null;
       }
 
-      const limit = options?.limit ?? 20;
-      const cursorDate = options?.cursor ? new Date(options.cursor) : undefined;
+      const page = options?.page ?? 1;
+      const pageSize = options?.pageSize ?? 15;
+      const offset = (page - 1) * pageSize;
 
-      const imports = await database.query.projectImport.findMany({
-        where: and(
-          eq(projectImport.projectId, projectId),
-          cursorDate ? lt(projectImport.startedAt, cursorDate) : undefined,
-        ),
-        orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
-        limit: limit + 1,
-      });
+      const [imports, totalRows] = await Promise.all([
+        database.query.projectImport.findMany({
+          where: eq(projectImport.projectId, projectId),
+          orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
+          limit: pageSize,
+          offset,
+        }),
+        database
+          .select({ value: count() })
+          .from(projectImport)
+          .where(eq(projectImport.projectId, projectId)),
+      ]);
 
-      const hasMore = imports.length > limit;
-      const page = hasMore ? imports.slice(0, limit) : imports;
-      const nextCursor = hasMore ? page[page.length - 1]?.startedAt?.toISOString() : null;
+      const items = await withCommitMessages(imports as ProjectImportRecord[]);
+      const total = totalRows[0]?.value ?? 0;
 
-      const items = await withCommitMessages(page as ProjectImportRecord[]);
-      return { items, nextCursor };
+      return {
+        items,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      };
     },
   };
 }

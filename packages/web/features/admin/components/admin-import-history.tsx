@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
-import useSWRInfinite from "swr/infinite";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,39 +11,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
-import { requestApi } from "@/lib/api/client";
 import type { ProjectImport } from "@/features/projects/api";
 import { ProjectImportStatusBadge } from "@/features/projects/components/project-import-status-badge";
+import {
+  listAdminProjectImports,
+  type AdminProjectImportsResponse,
+} from "@/features/admin/api";
 
 const PAGE_SIZE = 15;
-
-interface ImportsResponse {
-  items: ProjectImport[];
-  nextCursor: string | null;
-}
-
-async function fetchImports(
-  projectId: string,
-  cursor?: string,
-): Promise<ImportsResponse> {
-  const items = await requestApi<ProjectImport[]>(
-    `/admin/projects/${projectId}/imports`,
-    {
-      queryParams: {
-        limit: PAGE_SIZE,
-        ...(cursor ? { cursor } : {}),
-      },
-    },
-  );
-
-  const lastItem = items[items.length - 1];
-  const hasMore = items.length === PAGE_SIZE;
-  const nextCursor = hasMore && lastItem?.startedAt
-    ? new Date(lastItem.startedAt).toISOString()
-    : null;
-
-  return { items, nextCursor };
-}
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
@@ -66,35 +40,48 @@ function formatNumber(value: number | null | undefined) {
 }
 
 export function AdminImportHistory({ projectId }: { projectId: string }) {
-  const getKey = useCallback(
-    (pageIndex: number, previousPageData: ImportsResponse | null) => {
-      if (previousPageData && !previousPageData.nextCursor) return null;
-      if (pageIndex === 0) return [projectId, undefined];
-      return [projectId, previousPageData?.nextCursor];
-    },
-    [projectId],
-  );
+  const [response, setResponse] = useState<
+    AdminProjectImportsResponse<ProjectImport> | null
+  >(null);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState(false);
+  const [isLoadingPage, setIsLoadingPage] = useState(true);
 
-  const { data, size, setSize, isLoading, isValidating, error } =
-    useSWRInfinite<ImportsResponse, Error>(
-      getKey,
-      ([_id, cursor]) => fetchImports(_id, cursor as string | undefined),
-      {
-        revalidateOnFocus: false,
-        revalidateOnReconnect: true,
-        dedupingInterval: 5000,
-      },
-    );
+  const currentResponse = response;
 
-  const allImports = data?.flatMap((page) => page.items) ?? [];
-  const hasNextPage = data && data.length > 0
-    ? data[data.length - 1]?.nextCursor !== null
-    : false;
+  const loadPage = useCallback(async (nextPage: number) => {
+    setError(false);
+    setIsLoadingPage(true);
 
-  const isLoadingMore = isValidating && size > 0 && data && data.length !== 0;
-  const isEmpty = !isLoading && !isValidating && allImports.length === 0;
+    try {
+      const fresh = await listAdminProjectImports(projectId, {
+        page: nextPage,
+        pageSize: PAGE_SIZE,
+      });
+      setResponse(fresh);
+      setPage(fresh.pagination.page);
+    } catch {
+      setError(true);
+    } finally {
+      setIsLoadingPage(false);
+    }
+  }, [projectId]);
 
-  if (isLoading) {
+  useEffect(() => {
+    void loadPage(1);
+  }, [loadPage]);
+
+  const imports = currentResponse?.items ?? [];
+  const pagination = currentResponse?.pagination ?? {
+    page,
+    pageSize: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  };
+  const isInitialLoading = currentResponse === null && isLoadingPage;
+  const isEmpty = !isInitialLoading && imports.length === 0;
+
+  if (isInitialLoading) {
     return (
       <Card>
         <CardHeader>
@@ -108,7 +95,7 @@ export function AdminImportHistory({ projectId }: { projectId: string }) {
     );
   }
 
-  if (error) {
+  if (error && currentResponse === null) {
     return (
       <Card>
         <CardHeader>
@@ -138,46 +125,61 @@ export function AdminImportHistory({ projectId }: { projectId: string }) {
     );
   }
 
-  function handleLoadMore() {
-    if (hasNextPage && !isLoadingMore) {
-      setSize(size + 1);
-    }
-  }
+  const showingStart = pagination.total === 0
+    ? 0
+    : (pagination.page - 1) * pagination.pageSize + 1;
+  const showingEnd = Math.min(
+    pagination.total,
+    (pagination.page - 1) * pagination.pageSize + imports.length,
+  );
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Import History</CardTitle>
         <CardDescription>
-          {allImports.length} import{allImports.length !== 1 ? "s" : ""} found.
+          {pagination.total.toLocaleString()} import
+          {pagination.total !== 1 ? "s" : ""} found · page {pagination.page} of{" "}
+          {pagination.totalPages}
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {error && (
+          <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Failed to refresh imports. Showing the last loaded page.
+          </p>
+        )}
         <div className="space-y-3">
-          {allImports.map((imp) => (
+          {imports.map((imp) => (
             <ImportRow key={imp.id} imp={imp} />
           ))}
         </div>
 
-        {hasNextPage && (
-          <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Showing {showingStart.toLocaleString()}-{showingEnd.toLocaleString()} of{" "}
+            {pagination.total.toLocaleString()}
+          </p>
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={isLoadingMore}
-              onClick={handleLoadMore}
+              disabled={isLoadingPage || pagination.page <= 1}
+              onClick={() => loadPage(pagination.page - 1)}
             >
-              {isLoadingMore ? (
-                <>
-                  <Spinner className="mr-2 size-4" />
-                  Loading more...
-                </>
-              ) : (
-                "Load more"
-              )}
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLoadingPage || pagination.page >= pagination.totalPages}
+              onClick={() => loadPage(pagination.page + 1)}
+            >
+              {isLoadingPage ? <Spinner className="mr-2 size-4" /> : null}
+              Next
             </Button>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );

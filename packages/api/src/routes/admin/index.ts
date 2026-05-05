@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";
+import { asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   adminListUsersQuerySchema,
@@ -469,16 +469,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
     const query = adminListProjectImportsQuerySchema.parse(request.query ?? {});
 
     const result = await adminProjectService.listProjectImports(projectId, {
-      limit: query.limit,
-      cursor: query.cursor,
+      page: query.page,
+      pageSize: query.pageSize,
     });
 
     if (!result) throw fastify.httpErrors.notFound("Project not found");
 
-    return reply.success(result.items, 200, {
-      count: result.items.length,
-      nextCursor: result.nextCursor,
-    });
+    return reply.success(result);
   });
 };
 
