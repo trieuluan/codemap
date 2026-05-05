@@ -1,7 +1,11 @@
-import { count, desc, eq, inArray } from "drizzle-orm";
-import { project, projectImport } from "../../db/schema";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { project, projectImport, workspace } from "../../db/schema";
 import { createWorkspaceService } from "../workspace/service";
-import type { CreateProjectBody, UpdateProjectBody } from "./schema";
+import type {
+  CreateProjectBody,
+  CreateProjectImportBody,
+  UpdateProjectBody,
+} from "./schema";
 import {
   type Database,
   type ProjectImportRecord,
@@ -154,6 +158,108 @@ export function createAdminProjectService(database: Database) {
         .returning({ id: project.id });
 
       return deleted ?? null;
+    },
+
+    async createImport(
+      projectId: string,
+      adminUserId: string,
+      input: CreateProjectImportBody,
+    ) {
+      const existingProject = await database.query.project.findFirst({
+        where: eq(project.id, projectId),
+      });
+
+      if (!existingProject) {
+        return null;
+      }
+
+      const workspaceId =
+        existingProject.workspaceId ??
+        (await workspaceService.ensurePersonalWorkspace(existingProject.ownerUserId)).id;
+      const targetWorkspace = await database.query.workspace.findFirst({
+        where: eq(workspace.id, workspaceId),
+      });
+      const entitlements = workspaceService.getWorkspaceEntitlements(
+        targetWorkspace ?? { plan: "beta" },
+      );
+      const usage = await workspaceService.getUsageSummary(workspaceId);
+      workspaceService.assertCanTriggerImport(entitlements, usage);
+
+      const activeImport = await database.query.projectImport.findFirst({
+        where: and(
+          eq(projectImport.projectId, projectId),
+          inArray(projectImport.status, ["pending", "queued", "running"]),
+        ),
+        columns: {
+          id: true,
+        },
+      });
+
+      if (activeImport) {
+        throw new Error("PROJECT_IMPORT_ALREADY_IN_PROGRESS");
+      }
+
+      const importBranch = input.branch ?? existingProject.defaultBranch ?? null;
+      const startedAt = new Date();
+
+      const [createdImport] = await database.transaction(async (tx) => {
+        const [newImport] = await tx
+          .insert(projectImport)
+          .values({
+            projectId,
+            triggeredByUserId: adminUserId,
+            status: "pending",
+            branch: importBranch,
+            startedAt,
+          })
+          .returning();
+
+        await tx
+          .update(project)
+          .set({
+            status: "importing",
+            lastImportedAt: startedAt,
+          })
+          .where(eq(project.id, projectId));
+
+        return [newImport];
+      });
+
+      await workspaceService.recordUsageEvent({
+        workspaceId,
+        projectId,
+        userId: adminUserId,
+        type: "import_triggered",
+      });
+
+      return createdImport;
+    },
+
+    async markImportAsQueued(projectImportId: string) {
+      const [queuedImport] = await database
+        .update(projectImport)
+        .set({
+          status: "queued",
+          errorMessage: null,
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return queuedImport ?? null;
+    },
+
+    async markImportAsFailed(projectImportId: string, errorMessage: string) {
+      const [failedImport] = await database
+        .update(projectImport)
+        .set({
+          status: "failed",
+          errorMessage,
+          completedAt: new Date(),
+        })
+        .where(eq(projectImport.id, projectImportId))
+        .returning();
+
+      return failedImport ?? null;
     },
 
     async listProjectImports(

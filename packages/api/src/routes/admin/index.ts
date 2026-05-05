@@ -18,8 +18,10 @@ import {
   workspaceSubscription,
 } from "../../db/schema";
 import { assertSystemAdmin } from "../../lib/admin-guard";
+import { enqueueProjectImportJob } from "../../lib/project-import-queue";
 import { createAdminProjectService } from "../../modules/project/service.admin";
 import {
+  createProjectImportBodySchema,
   createProjectBodySchema,
   projectParamsSchema,
   updateProjectBodySchema,
@@ -462,6 +464,60 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
     const deleted = await adminProjectService.deleteProject(projectId);
     if (!deleted) throw fastify.httpErrors.notFound("Project not found");
     return reply.success(deleted);
+  });
+
+  fastify.post("/projects/:projectId/import", async (request, reply) => {
+    const adminUserId = request.session!.user.id;
+    const { projectId } = projectParamsSchema.parse(request.params);
+    const body = createProjectImportBodySchema.parse(request.body ?? {});
+
+    let createdImport;
+    try {
+      createdImport = await adminProjectService.createImport(
+        projectId,
+        adminUserId,
+        body,
+      );
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "PROJECT_IMPORT_ALREADY_IN_PROGRESS"
+      ) {
+        throw fastify.httpErrors.conflict(
+          "An import is already queued or running for this project",
+        );
+      }
+
+      if (
+        error instanceof Error &&
+        error.message === "WORKSPACE_IMPORT_LIMIT_EXCEEDED"
+      ) {
+        throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
+      }
+
+      throw error;
+    }
+
+    if (!createdImport) throw fastify.httpErrors.notFound("Project not found");
+
+    try {
+      await enqueueProjectImportJob(fastify.redis, {
+        importId: createdImport.id,
+      });
+    } catch (error) {
+      request.log.error(error, "Failed to enqueue admin project import job");
+      await adminProjectService.markImportAsFailed(
+        createdImport.id,
+        "Unable to enqueue import job",
+      );
+      throw fastify.httpErrors.internalServerError("Unable to start import job");
+    }
+
+    const queuedImport = await adminProjectService.markImportAsQueued(
+      createdImport.id,
+    );
+
+    return reply.success(queuedImport ?? createdImport, 201);
   });
 
   fastify.get("/projects/:projectId/imports", async (request, reply) => {

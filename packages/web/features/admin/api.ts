@@ -137,6 +137,16 @@ export async function deleteAdminProject(
   });
 }
 
+export async function triggerAdminProjectImport(
+  projectId: string,
+  body: { branch?: string | null } = {},
+): Promise<ProjectImport> {
+  return requestApi<ProjectImport>(`/admin/projects/${projectId}/import`, {
+    method: "POST",
+    body,
+  });
+}
+
 export async function listAdminWorkspaces(
   cookieHeader?: string,
 ): Promise<AdminWorkspaceOption[]> {

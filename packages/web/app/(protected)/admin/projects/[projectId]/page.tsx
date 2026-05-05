@@ -9,9 +9,6 @@ import {
   Clock,
   Building2,
   ExternalLink,
-  RefreshCw,
-  Pencil,
-  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +24,7 @@ import { getAdminProject, listAdminWorkspaces } from "@/features/admin/api";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { ProjectImportStatusBadge } from "@/features/projects/components/project-import-status-badge";
 import { AdminImportHistory } from "@/features/admin/components/admin-import-history";
+import { AdminProjectReimportButton } from "@/features/admin/components/admin-project-reimport-button";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -320,12 +318,10 @@ export default async function AdminProjectDetailPage({
                 Re-index the project from the latest commit.
               </p>
             </div>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/w/${project.workspaceId}/projects/${project.id}`}>
-                <RefreshCw className="mr-2 size-4" />
-                Go to project to reimport
-              </Link>
-            </Button>
+            <AdminProjectReimportButton
+              projectId={project.id}
+              defaultBranch={project.defaultBranch}
+            />
           </div>
         </CardContent>
       </Card>
