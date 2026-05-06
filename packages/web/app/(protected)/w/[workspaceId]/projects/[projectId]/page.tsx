@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { ProjectOverview } from "@/features/projects/detail/project-overview";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
+import { createServerWorkspacesApi } from "@/features/workspaces/api";
 
 export default async function ProjectDetailPage({
   params,
@@ -14,12 +15,15 @@ export default async function ProjectDetailPage({
   params: Promise<{ workspaceId: string; projectId: string }>;
 }) {
   const { workspaceId, projectId } = await params;
-  const api = createServerProjectsApi({ cookieHeader: (await cookies()).toString() });
+  const cookieHeader = (await cookies()).toString();
+  const api = createServerProjectsApi({ cookieHeader });
+  const workspacesApi = createServerWorkspacesApi({ cookieHeader });
 
   try {
-    const [project, firstPage] = await Promise.all([
+    const [project, firstPage, workspaceDetail] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImportPage(projectId, { limit: 20 }),
+      workspacesApi.getWorkspace(workspaceId),
     ]);
     if (project.workspaceId !== workspaceId) notFound();
 
@@ -41,6 +45,7 @@ export default async function ProjectDetailPage({
         <ProjectOverview
           initialProject={project}
           initialImports={firstPage.data}
+          entitlements={workspaceDetail.entitlements}
           workspaceId={workspaceId}
         />
       </div>

@@ -97,6 +97,11 @@ export function createProjectController(fastify: FastifyInstance) {
       if (error.message === "WORKSPACE_IMPORT_LIMIT_EXCEEDED") {
         throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
       }
+      if (error.message === "WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE") {
+        throw fastify.httpErrors.forbidden(
+          "Cloud import is not available on the basic plan",
+        );
+      }
     }
 
     throw error;

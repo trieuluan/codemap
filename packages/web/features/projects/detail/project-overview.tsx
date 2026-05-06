@@ -21,6 +21,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
+import type { WorkspaceEntitlements } from "@codemap/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -49,17 +50,23 @@ import { StatCard } from "./components/stat-card";
 const PAGE_SIZE = 20;
 
 // Fix #5: local_workspace không có repositoryUrl nhưng vẫn có thể re-import
-function canTriggerImport(project: Project) {
+function canTriggerImport(
+  project: Project,
+  entitlements: WorkspaceEntitlements,
+) {
+  if (!entitlements.cloudImportAccess) return false;
   return Boolean(project.repositoryUrl) || project.provider === "local_workspace";
 }
 
 export function ProjectOverview({
   initialProject,
   initialImports,
+  entitlements,
   workspaceId,
 }: {
   initialProject: Project;
   initialImports: ProjectImport[];
+  entitlements: WorkspaceEntitlements;
   workspaceId: string;
 }) {
   const { toast } = useToast();
@@ -129,7 +136,8 @@ export function ProjectOverview({
   const allImports = pages?.flatMap((p) => p.data) ?? [];
   const hasMore = Boolean(pages?.[pages.length - 1]?.nextCursor);
   const latestImport = allImports[0] ?? null;
-  const canImport = canTriggerImport(project);
+  const hasCloudImportAccess = entitlements.cloudImportAccess;
+  const canImport = canTriggerImport(project, entitlements);
   const hasImports = allImports.length > 0;
   const isImporting = project.status === "importing";
   const latestImportFailed = latestImport?.status === "failed";
@@ -156,6 +164,8 @@ export function ProjectOverview({
     ? "Importing..."
     : isImportPending
       ? "Starting..."
+      : !hasCloudImportAccess
+        ? "Upgrade to import"
       : latestImportFailed
         ? "Retry import"
         : hasImports
@@ -182,6 +192,15 @@ export function ProjectOverview({
   }
 
   function handleImport() {
+    if (!hasCloudImportAccess) {
+      toast({
+        title: "Upgrade required",
+        description:
+          "Cloud import is available on Developer and Team plans. Local MCP tools still work on basic.",
+      });
+      return;
+    }
+
     if (!canImport) {
       toast({
         title: "Repository URL required",
@@ -227,14 +246,23 @@ export function ProjectOverview({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={handleImport}
-            disabled={isImportPending || isImporting || !canImport}
-            size="sm"
-          >
-            <RefreshCcw className="size-3.5" />
-            {importLabel}
-          </Button>
+          {!hasCloudImportAccess ? (
+            <Button size="sm" asChild>
+              <Link href={`/w/${workspaceId}/upgrade`}>
+                <RefreshCcw className="size-3.5" />
+                {importLabel}
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              onClick={handleImport}
+              disabled={isImportPending || isImporting || !canImport}
+              size="sm"
+            >
+              <RefreshCcw className="size-3.5" />
+              {importLabel}
+            </Button>
+          )}
 
           <Separator orientation="vertical" className="h-6" />
 
@@ -302,7 +330,17 @@ export function ProjectOverview({
                   available once the import completes.
                 </p>
               </div>
-              {canImport ? (
+              {!hasCloudImportAccess ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">Basic plan</Badge>
+                  <Button size="sm" asChild>
+                    <Link href={`/w/${workspaceId}/upgrade`}>
+                      <RefreshCcw className="size-3.5" />
+                      Upgrade to import
+                    </Link>
+                  </Button>
+                </div>
+              ) : canImport ? (
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={handleImport} disabled={isImportPending}>
                     <RefreshCcw className="size-3.5" />

@@ -7,10 +7,12 @@ import {
   BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { CloudFeatureGate } from "@/components/cloud-feature-gate";
 import { ProjectMapInsightsView } from "@/features/projects/map/insights/project-map-insights-view";
 import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
+import { createServerWorkspacesApi } from "@/features/workspaces/api";
 
 export default async function ProjectInsightsPage({
   params,
@@ -21,15 +23,32 @@ export default async function ProjectInsightsPage({
 }) {
   const { workspaceId, projectId } = await params;
   const { file: focusFile, symbol: focusSymbol } = await searchParams;
-  const api = createServerProjectsApi({ cookieHeader: (await cookies()).toString() });
+  const cookieHeader = (await cookies()).toString();
+  const api = createServerProjectsApi({ cookieHeader });
+  const workspacesApi = createServerWorkspacesApi({ cookieHeader });
 
   try {
-    const [project, firstPage, insights] = await Promise.all([
+    const [project, firstPage, workspaceDetail] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImportPage(projectId, { limit: 1 }),
-      api.getProjectInsights(projectId, { file: focusFile, symbol: focusSymbol }),
+      workspacesApi.getWorkspace(workspaceId),
     ]);
     if (project.workspaceId !== workspaceId) notFound();
+
+    if (!workspaceDetail.entitlements.cloudImportAccess) {
+      return (
+        <CloudFeatureGate
+          feature="Project Insights"
+          projectUrl={`/w/${workspaceId}/projects/${project.id}`}
+          upgradeUrl={`/w/${workspaceId}/upgrade`}
+        />
+      );
+    }
+
+    const insights = await api.getProjectInsights(projectId, {
+      file: focusFile,
+      symbol: focusSymbol,
+    });
 
     return (
       <div className="space-y-6">

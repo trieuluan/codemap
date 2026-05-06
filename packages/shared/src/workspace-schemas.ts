@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const workspaceTypeSchema = z.enum(["personal", "team"]);
-export const workspacePlanSchema = z.enum(["beta", "developer", "team"]);
+export const workspacePlanSchema = z.enum(["basic", "beta", "developer", "team"]);
 export const workspaceRoleSchema = z.enum(["owner", "admin", "member"]);
 
 export const workspaceParamsSchema = z.object({

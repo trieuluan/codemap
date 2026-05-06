@@ -495,6 +495,15 @@ const adminRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
       }
 
+      if (
+        error instanceof Error &&
+        error.message === "WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE"
+      ) {
+        throw fastify.httpErrors.forbidden(
+          "Cloud import is not available on the basic plan",
+        );
+      }
+
       throw error;
     }
 

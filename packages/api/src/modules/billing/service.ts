@@ -108,7 +108,7 @@ export function createBillingService(database: Database) {
 
         await tx
           .update(workspace)
-          .set({ plan: "beta", updatedAt: new Date() })
+          .set({ plan: "basic", updatedAt: new Date() })
           .where(eq(workspace.id, input.workspaceId));
       });
     },

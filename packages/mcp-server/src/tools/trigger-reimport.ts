@@ -83,6 +83,25 @@ export function registerTriggerReimportTool(
           });
         }
 
+        if (
+          message.includes("WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE") ||
+          message.includes("Cloud import is not available")
+        ) {
+          return success(
+            "Cloud import is not available on the basic plan.\n" +
+              "Upgrade to Developer or Team to enable cloud indexing and web graph/insights.\n" +
+              "Local index tools (search_codebase, get_file, explore_task, find_related_files) are still available.",
+            {
+              triggered: false,
+              projectId: resolvedProjectId,
+              import: null,
+              reason: "plan_not_supported",
+              branch: branch ?? null,
+              nextAction: "upgrade_plan",
+            },
+          );
+        }
+
         if (message.includes("404")) {
           const summary =
             `Project not found: ${resolvedProjectId}\n` +

@@ -53,6 +53,19 @@ const PLAN_CONFIG: Record<
     paypalPlanKey: "developer" | "team" | null;
   }
 > = {
+  basic: {
+    label: "Basic",
+    price: "Free",
+    description: "Local MCP index access without cloud imports.",
+    features: [
+      "5 projects",
+      "Local MCP index",
+      "No cloud imports",
+      "No web graph or insights",
+    ],
+    highlight: false,
+    paypalPlanKey: null,
+  },
   beta: {
     label: "Beta",
     price: "Free",
@@ -101,6 +114,7 @@ function PlanBadge({ plan }: { plan: WorkspacePlan }) {
   const colors: Record<WorkspacePlan, string> = {
     team: "bg-primary text-primary-foreground",
     developer: "bg-emerald-600 text-white",
+    basic: "bg-muted text-muted-foreground",
     beta: "bg-muted text-muted-foreground",
   };
   return (

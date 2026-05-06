@@ -100,3 +100,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.summarize_feature_area]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.incremental_import]
+approval_mode = "approve"

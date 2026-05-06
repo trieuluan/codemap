@@ -20,6 +20,13 @@ const PARSEABLE_EXTENSIONS = new Set([
 
 const REPARSE_CONCURRENCY = 5;
 
+function isCloudImportUnavailableMessage(message: string) {
+  return (
+    message.includes("WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE") ||
+    message.includes("Cloud import is not available")
+  );
+}
+
 // ── Git helpers ───────────────────────────────────────────────────────────────
 
 interface LocalFile {
@@ -271,6 +278,29 @@ export function registerIncrementalImportTool(
       // ── Phase 3: reparse changed files ───────────────────────────────────
 
       const outcomes = await reparseBatch(client, resolvedProjectId, workspacePath, localFiles);
+      const planUnavailable = outcomes.find(
+        (o) => o.reason && isCloudImportUnavailableMessage(o.reason),
+      );
+
+      if (planUnavailable) {
+        return success(
+          "Cloud import is not available on the basic plan.\n" +
+            "Upgrade to Developer or Team to enable cloud indexing and incremental imports.\n" +
+            "Local index tools (search_codebase, get_file, explore_task, find_related_files) are still available.",
+          {
+            projectId: resolvedProjectId,
+            status: "plan_not_supported",
+            workspacePath,
+            localFilesFound: localFiles.length,
+            committedCount,
+            reparsed: [],
+            skipped: [],
+            errors: [],
+            suggestedNextTools: [],
+            nextAction: "upgrade_plan",
+          },
+        );
+      }
 
       const reparsed = outcomes.filter((o) => o.result === "reparsed").map((o) => o.path);
       const skipped = outcomes.filter((o) => o.result === "skipped");

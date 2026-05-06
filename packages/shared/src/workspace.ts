@@ -1,5 +1,5 @@
 export type WorkspaceType = "personal" | "team";
-export type WorkspacePlan = "beta" | "developer" | "team";
+export type WorkspacePlan = "basic" | "beta" | "developer" | "team";
 export type WorkspaceRole = "owner" | "admin" | "member";
 export type BillingProvider = "paypal" | "stripe" | "manual";
 export type SubscriptionStatus =
@@ -47,6 +47,7 @@ export interface WorkspaceEntitlements {
   privateRepoImports: boolean;
   mcpAccess: boolean;
   teamMembers: boolean;
+  cloudImportAccess: boolean;
 }
 
 export interface WorkspaceUsageSummary {

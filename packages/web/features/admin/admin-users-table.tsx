@@ -23,7 +23,7 @@ import {
   type AdminUserListResponse,
 } from "./api";
 
-const PLAN_OPTIONS = ["beta", "developer", "team"] as const;
+const PLAN_OPTIONS = ["basic", "beta", "developer", "team"] as const;
 
 function RoleBadge({ roles }: { roles: string[] }) {
   if (roles.includes("admin")) {
@@ -36,6 +36,7 @@ function PlanBadge({ plan }: { plan: string }) {
   const colors: Record<string, string> = {
     team: "bg-primary text-primary-foreground hover:bg-primary",
     developer: "bg-emerald-600 text-white hover:bg-emerald-600",
+    basic: "bg-muted text-muted-foreground hover:bg-muted",
     beta: "",
   };
   return <Badge className={colors[plan]}>{plan}</Badge>;

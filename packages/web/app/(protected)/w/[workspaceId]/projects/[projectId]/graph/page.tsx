@@ -7,10 +7,12 @@ import {
   BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { CloudFeatureGate } from "@/components/cloud-feature-gate";
 import { ProjectMapGraphView } from "@/features/projects/map/graph/project-map-graph-view";
 import { ProjectMapHeader } from "@/features/projects/map/components/project-map-header";
 import { ProjectStatusBadge } from "@/features/projects/components/project-status-badge";
 import { createServerProjectsApi, ProjectsApiError } from "@/features/projects/api";
+import { createServerWorkspacesApi } from "@/features/workspaces/api";
 
 export default async function ProjectGraphPage({
   params,
@@ -21,15 +23,29 @@ export default async function ProjectGraphPage({
 }) {
   const { workspaceId, projectId } = await params;
   const { file: initialFocusFile, symbol: initialFocusSymbol } = await searchParams;
-  const api = createServerProjectsApi({ cookieHeader: (await cookies()).toString() });
+  const cookieHeader = (await cookies()).toString();
+  const api = createServerProjectsApi({ cookieHeader });
+  const workspacesApi = createServerWorkspacesApi({ cookieHeader });
 
   try {
-    const [project, firstPage, graphData] = await Promise.all([
+    const [project, firstPage, workspaceDetail] = await Promise.all([
       api.getProject(projectId),
       api.getProjectImportPage(projectId, { limit: 1 }),
-      api.getProjectGraph(projectId),
+      workspacesApi.getWorkspace(workspaceId),
     ]);
     if (project.workspaceId !== workspaceId) notFound();
+
+    if (!workspaceDetail.entitlements.cloudImportAccess) {
+      return (
+        <CloudFeatureGate
+          feature="Dependency Graph"
+          projectUrl={`/w/${workspaceId}/projects/${project.id}`}
+          upgradeUrl={`/w/${workspaceId}/upgrade`}
+        />
+      );
+    }
+
+    const graphData = await api.getProjectGraph(projectId);
 
     return (
       <div className="space-y-6">

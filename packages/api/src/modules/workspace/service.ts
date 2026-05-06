@@ -42,6 +42,19 @@ export function getWorkspaceEntitlements(
 ): WorkspaceEntitlements {
   const plan = workspaceRecord.plan as WorkspacePlan;
 
+  if (plan === "basic") {
+    return {
+      plan,
+      maxProjects: 5,
+      maxImportsPerMonth: 0,
+      maxIndexedFilesPerImport: null,
+      privateRepoImports: false,
+      mcpAccess: true,
+      teamMembers: false,
+      cloudImportAccess: false,
+    };
+  }
+
   if (plan === "team") {
     return {
       plan,
@@ -51,6 +64,7 @@ export function getWorkspaceEntitlements(
       privateRepoImports: true,
       mcpAccess: true,
       teamMembers: true,
+      cloudImportAccess: true,
     };
   }
 
@@ -63,6 +77,7 @@ export function getWorkspaceEntitlements(
       privateRepoImports: true,
       mcpAccess: true,
       teamMembers: false,
+      cloudImportAccess: true,
     };
   }
 
@@ -75,6 +90,7 @@ export function getWorkspaceEntitlements(
     privateRepoImports: true,
     mcpAccess: true,
     teamMembers: false,
+    cloudImportAccess: true,
   };
 }
 
@@ -94,6 +110,10 @@ export function assertCanTriggerImport(
   entitlements: WorkspaceEntitlements,
   usage: WorkspaceUsageSummary,
 ) {
+  if (!entitlements.cloudImportAccess) {
+    throw new Error("WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE");
+  }
+
   if (
     entitlements.maxImportsPerMonth !== null &&
     usage.importsThisMonth >= entitlements.maxImportsPerMonth
@@ -174,7 +194,7 @@ export function createWorkspaceService(database: Database) {
           slug,
           type: "personal",
           ownerUserId: userId,
-          plan: "beta",
+          plan: "basic",
         })
         .returning();
 
@@ -336,7 +356,7 @@ export function createWorkspaceService(database: Database) {
             slug,
             type: input.type,
             ownerUserId: userId,
-            plan: "beta",
+            plan: "basic",
           })
           .returning();
 

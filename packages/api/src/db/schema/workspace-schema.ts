@@ -15,6 +15,7 @@ import { user } from "./auth-schema";
 
 export const workspaceTypeEnum = pgEnum("workspace_type", ["personal", "team"]);
 export const workspacePlanEnum = pgEnum("workspace_plan", [
+  "basic",
   "beta",
   "developer",
   "team",
@@ -64,7 +65,7 @@ export const workspace = pgTable(
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    plan: workspacePlanEnum("plan").default("beta").notNull(),
+    plan: workspacePlanEnum("plan").default("basic").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

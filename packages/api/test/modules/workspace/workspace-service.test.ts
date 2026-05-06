@@ -22,7 +22,7 @@ const memberMembership = {
   role: "member",
 };
 
-function workspace(plan: "beta" | "developer" | "team") {
+function workspace(plan: "basic" | "beta" | "developer" | "team") {
   return {
     id: "workspace-1",
     name: "Workspace",
@@ -36,7 +36,7 @@ function workspace(plan: "beta" | "developer" | "team") {
 }
 
 function createInviteDb(options: {
-  plan: "beta" | "developer" | "team";
+  plan: "basic" | "beta" | "developer" | "team";
   membershipRole?: "owner" | "admin" | "member";
   inviteeExists?: boolean;
   alreadyMember?: boolean;
@@ -85,21 +85,32 @@ function createInviteDb(options: {
 }
 
 test("workspace entitlements encode plan limits", () => {
+  const basic = getWorkspaceEntitlements({ plan: "basic" });
+  assert.equal(basic.maxProjects, 5);
+  assert.equal(basic.maxImportsPerMonth, 0);
+  assert.equal(basic.privateRepoImports, false);
+  assert.equal(basic.teamMembers, false);
+  assert.equal(basic.mcpAccess, true);
+  assert.equal(basic.cloudImportAccess, false);
+
   const beta = getWorkspaceEntitlements({ plan: "beta" });
   assert.equal(beta.maxProjects, null);
   assert.equal(beta.teamMembers, false);
   assert.equal(beta.mcpAccess, true);
+  assert.equal(beta.cloudImportAccess, true);
 
   const developer = getWorkspaceEntitlements({ plan: "developer" });
   assert.equal(developer.maxProjects, 20);
   assert.equal(developer.maxImportsPerMonth, 200);
   assert.equal(developer.privateRepoImports, true);
   assert.equal(developer.teamMembers, false);
+  assert.equal(developer.cloudImportAccess, true);
 
   const team = getWorkspaceEntitlements({ plan: "team" });
   assert.equal(team.maxProjects, null);
   assert.equal(team.maxImportsPerMonth, null);
   assert.equal(team.teamMembers, true);
+  assert.equal(team.cloudImportAccess, true);
 });
 
 test("workspace limit assertions throw stable entitlement errors", () => {
@@ -117,6 +128,19 @@ test("workspace limit assertions throw stable entitlement errors", () => {
         },
       ),
     /WORKSPACE_PROJECT_LIMIT_EXCEEDED/,
+  );
+
+  assert.throws(
+    () =>
+      assertCanTriggerImport(getWorkspaceEntitlements({ plan: "basic" }), {
+        projectCount: 0,
+        importsThisMonth: 0,
+        indexedFilesThisMonth: 0,
+        indexedSymbolsThisMonth: 0,
+        indexedEdgesThisMonth: 0,
+        mcpSessionsCreatedThisMonth: 0,
+      }),
+    /WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE/,
   );
 
   assert.throws(
