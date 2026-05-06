@@ -9,6 +9,14 @@ import type {
   FileContent,
   SearchSymbolResult,
 } from "../lib/api-types.js";
+import {
+  ensureLocalIndexWithSummary,
+  getLocalFileContent,
+  getLocalFileParse,
+  searchLocalIndex,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 
 interface ParseImport {
   moduleSpecifier: string;
@@ -200,26 +208,104 @@ export function registerGetSymbolContextTool(
     withToolError(async ({ symbol_name, file_path, project_id, context_lines }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
-      if (!resolvedProjectId) {
-        return success("No project linked. Run link_project or get_project first.", {
-          projectId: null,
-          symbolName: symbol_name,
-          found: false,
+      async function localResponse(projectId: string | null, reason?: string) {
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const search = searchLocalIndex({ index, query: symbol_name });
+        const symbol = chooseSymbol(search.symbols, symbol_name, file_path);
+
+        if (!symbol) {
+          return success(`Symbol not found in local index: ${symbol_name}`, {
+            projectId,
+            source: "local",
+            localIndex,
+            symbolName: symbol_name,
+            filePath: file_path ?? null,
+            found: false,
+            candidates: search.symbols.slice(0, 10),
+            ...(reason ? { errors: [`remote: ${reason}`] } : {}),
+          });
+        }
+
+        const startLine = symbol.startLine
+          ? Math.max(1, symbol.startLine - (context_lines ?? 4))
+          : undefined;
+        const endLine = symbol.endLine
+          ? symbol.endLine + (context_lines ?? 4)
+          : symbol.startLine
+            ? symbol.startLine + 80
+            : undefined;
+        const content = getLocalFileContent({
+          index,
+          filePath: symbol.filePath,
+          startLine,
+          endLine,
         });
+        const parse = getLocalFileParse({ index, filePath: symbol.filePath });
+
+        return success(
+          buildOutput({
+            symbolName: symbol_name,
+            symbol,
+            content,
+            parse,
+            range: {
+              startLine: startLine ?? null,
+              endLine: endLine ?? null,
+            },
+          }),
+          {
+            projectId,
+            source: "local",
+            localIndex,
+            symbolName: symbol_name,
+            filePath: symbol.filePath,
+            found: true,
+            selectedSymbol: symbol,
+            range: {
+              startLine: startLine ?? null,
+              endLine: endLine ?? null,
+            },
+            content,
+            outline: parse,
+            suggestedNextTools: [
+              formatSymbolCall(symbol),
+              `get_file("${symbol.filePath}", include=["outline"])`,
+            ],
+            ...(reason ? { errors: [`remote: ${reason}`] } : {}),
+          },
+        );
       }
 
-      const search = await client.request<CodebaseSearchResponse>(
-        `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-        {
-          authRequired: true,
-          query: { q: symbol_name },
-        },
-      );
+      if (!resolvedProjectId) return localResponse(null, "missing_project_id");
+
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        return localResponse(resolvedProjectId, "remote_index_not_ready_or_stale");
+      }
+
+      let search: CodebaseSearchResponse;
+      try {
+        search = await client.request<CodebaseSearchResponse>(
+          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+          {
+            authRequired: true,
+            query: { q: symbol_name },
+          },
+        );
+      } catch (error) {
+        if (shouldFallbackToLocal(error)) {
+          return localResponse(
+            resolvedProjectId,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        throw error;
+      }
       const symbol = chooseSymbol(search.symbols, symbol_name, file_path);
 
       if (!symbol) {
         return success(`Symbol not found: ${symbol_name}`, {
           projectId: resolvedProjectId,
+          source: "remote",
           symbolName: symbol_name,
           filePath: file_path ?? null,
           found: false,
@@ -258,6 +344,21 @@ export function registerGetSymbolContextTool(
         contentResult.status === "fulfilled" ? contentResult.value : null;
       const parse = parseResult.status === "fulfilled" ? parseResult.value : null;
 
+      if (!content && !parse) {
+        const remoteError =
+          contentResult.status === "rejected"
+            ? contentResult.reason
+            : parseResult.status === "rejected"
+              ? parseResult.reason
+              : null;
+        if (shouldFallbackToLocal(remoteError)) {
+          return localResponse(
+            resolvedProjectId,
+            remoteError instanceof Error ? remoteError.message : String(remoteError),
+          );
+        }
+      }
+
       return success(
         buildOutput({
           symbolName: symbol_name,
@@ -271,6 +372,7 @@ export function registerGetSymbolContextTool(
         }),
         {
           projectId: resolvedProjectId,
+          source: "remote",
           symbolName: symbol_name,
           filePath: symbol.filePath,
           found: true,

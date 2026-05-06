@@ -5,6 +5,13 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { FileContent, BlastRadius } from "../lib/api-types.js";
+import {
+  ensureLocalIndexWithSummary,
+  getLocalFileContent,
+  getLocalFileParse,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 
 // ─── types from /map/files/parse ─────────────────────────────────────────────
 
@@ -371,35 +378,130 @@ export function registerGetFileTool(
       async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line, symbol_names }) => {
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
+        const sections = include ?? ["content", "outline"];
+        const wantSymbols = sections.includes("symbols") && (symbol_names?.length ?? 0) > 0;
+        const wantContent = sections.includes("content") || wantSymbols;
+        const wantParse =
+          sections.includes("outline") || sections.includes("blast_radius") || wantSymbols;
+        const wantBlastRadius = sections.includes("blast_radius");
 
-        if (!resolvedProjectId) {
-          const summary =
-            "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.";
+        async function localResponse(projectId: string | null, reason?: string) {
+          const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+          const content = wantContent
+            ? getLocalFileContent({ index, filePath, startLine: start_line, endLine: end_line })
+            : null;
+          const parse = wantParse ? getLocalFileParse({ index, filePath }) : null;
+          const errors: string[] = reason ? [`remote: ${reason}`] : [];
 
-          return success(summary, {
-            projectId: null,
+          if (!content && !parse) {
+            return success(`File not found in local index: ${filePath}`, {
+              projectId,
+              source: "local",
+              localIndex,
+              path: filePath,
+              found: false,
+              sections,
+              range: {
+                startLine: start_line ?? null,
+                endLine: end_line ?? null,
+              },
+              content: null,
+              outline: null,
+              blastRadius: null,
+              errors,
+            });
+          }
+
+          const output: string[] = [`# ${filePath}`, ""];
+
+          if (sections.includes("content")) {
+            output.push("## Content");
+            if (content) {
+              output.push(buildContentSection(content, start_line, end_line));
+            } else {
+              output.push("_Content unavailable in local index._");
+            }
+            output.push("");
+          }
+
+          if (sections.includes("outline")) {
+            output.push("## Outline");
+            if (parse) {
+              output.push(buildOutlineSection(parse));
+            } else {
+              output.push("_Outline unavailable in local index._");
+            }
+            output.push("");
+          }
+
+          if (wantSymbols && symbol_names && symbol_names.length > 0) {
+            output.push("## Symbols");
+            if (parse && content?.content) {
+              output.push(buildSymbolBodiesSection(parse, content.content, symbol_names));
+            } else {
+              output.push("_Symbol bodies unavailable — file content or parse data missing._");
+            }
+            output.push("");
+          }
+
+          if (wantBlastRadius) {
+            output.push("## Blast Radius");
+            if (parse) {
+              output.push(buildBlastRadiusSection(parse.blastRadius, blast_radius_max_files));
+            } else {
+              output.push("_Blast radius unavailable in local index._");
+            }
+            output.push("");
+          }
+
+          return success(output.join("\n").trimEnd(), {
+            projectId,
+            source: "local",
+            localIndex,
             path: filePath,
-            found: false,
-            sections: include ?? ["content", "outline"],
+            found: Boolean(content || parse),
+            sections,
             range: {
               startLine: start_line ?? null,
               endLine: end_line ?? null,
             },
-            content: null,
-            outline: null,
-            blastRadius: null,
-            errors: ["missing_project_id"],
+            content: content
+              ? {
+                  path: content.path,
+                  name: content.name,
+                  type: content.type,
+                  extension: content.extension,
+                  language: content.language,
+                  kind: content.kind,
+                  mimeType: content.mimeType,
+                  status: content.status,
+                  sizeBytes: content.sizeBytes,
+                  reason: content.reason,
+                  content: content.content,
+                }
+              : null,
+            outline: parse
+              ? {
+                  file: parse.file,
+                  imports: parse.imports,
+                  importedBy: parse.importedBy,
+                  exports: parse.exports,
+                  symbols: parse.symbols,
+                  cycles: parse.cycles,
+                }
+              : null,
+            blastRadius: wantBlastRadius && parse ? parse.blastRadius : null,
+            errors,
           });
         }
 
-        const sections = include ?? ["content", "outline"];
-        const wantSymbols = sections.includes("symbols") && (symbol_names?.length ?? 0) > 0;
-        const wantContent = sections.includes("content") || wantSymbols;
-        // outline and blast_radius both come from /files/parse — one call covers both
-        const wantParse =
-          sections.includes("outline") || sections.includes("blast_radius") || wantSymbols;
-        const wantBlastRadius = sections.includes("blast_radius");
+        if (!resolvedProjectId) {
+          return localResponse(null, "missing_project_id");
+        }
+
+        if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+          return localResponse(resolvedProjectId, "remote_index_not_ready_or_stale");
+        }
 
         const [contentResult, parseResult] = await Promise.allSettled([
           wantContent
@@ -439,24 +541,10 @@ export function registerGetFileTool(
                 : null;
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes("404")) {
-            const summary =
-              `File not found: ${filePath}\n` +
-              "Check that the path is correct and relative to the repository root.";
-
-            return success(summary, {
-              projectId: resolvedProjectId,
-              path: filePath,
-              found: false,
-              sections,
-              range: {
-                startLine: start_line ?? null,
-                endLine: end_line ?? null,
-              },
-              content: null,
-              outline: null,
-              blastRadius: null,
-              errors: ["file_not_found"],
-            });
+            return localResponse(resolvedProjectId, msg);
+          }
+          if (shouldFallbackToLocal(err)) {
+            return localResponse(resolvedProjectId, msg);
           }
           throw err;
         }
@@ -528,6 +616,7 @@ export function registerGetFileTool(
 
         return success(output.join("\n").trimEnd(), {
           projectId: resolvedProjectId,
+          source: "remote",
           path: filePath,
           found: Boolean(content || parse),
           sections,

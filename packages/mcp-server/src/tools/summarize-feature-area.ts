@@ -10,6 +10,12 @@ import type {
   SearchFileResult,
   SearchSymbolResult,
 } from "../lib/api-types.js";
+import {
+  ensureLocalIndexWithSummary,
+  searchLocalIndex,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 
 type Layer =
   | "Frontend routes"
@@ -540,29 +546,110 @@ export function registerSummarizeFeatureAreaTool(
     },
     withToolError(async ({ query, project_id, max_files }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+      const keywords = normalizeQuery(query);
 
       if (!resolvedProjectId) {
-        return success("No project linked. Run link_project or get_project first.", {
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = searchLocalIndex({ index, query });
+        const files = filterRankedFiles(buildFiles(results, keywords)).slice(
+          0,
+          max_files ?? 15,
+        );
+        const confidence = rankConfidence(files);
+        const suggestedNextTools =
+          files.length > 0
+            ? [
+                formatGetFilesCall(files),
+                files[0].symbols[0]
+                  ? `get_symbol_context(symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
+                  : `get_file("${files[0].path}", include=["outline"])`,
+              ]
+            : ["search_codebase(query)"];
+        return success(buildOutput(query, files, confidence), {
           projectId: null,
+          source: "local",
+          localIndex,
           query,
-          files: [],
-          groups: [],
-          suggestedNextTools: [],
+          confidence,
+          files: files.map((file) => ({
+            path: file.path,
+            layer: file.layer,
+            score: file.score,
+            reasons: file.reasons,
+            symbols: file.symbols,
+          })),
+          groups: LAYERS.map((layer) => ({
+            layer,
+            files: files.filter((file) => file.layer === layer).map((file) => file.path),
+          })).filter((group) => group.files.length > 0),
+          suggestedNextTools,
         });
       }
 
-      const results = await client.request<CodebaseSearchResponse>(
-        `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-        { authRequired: true, query: { q: query } },
-      );
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = searchLocalIndex({ index, query });
+        const files = filterRankedFiles(buildFiles(results, keywords)).slice(
+          0,
+          max_files ?? 15,
+        );
+        const confidence = rankConfidence(files);
+        const suggestedNextTools =
+          files.length > 0
+            ? [
+                formatGetFilesCall(files),
+                files[0].symbols[0]
+                  ? `get_symbol_context(symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
+                  : `get_file("${files[0].path}", include=["outline"])`,
+              ]
+            : ["search_codebase(query)"];
 
-      const keywords = normalizeQuery(query);
-      const rankedFiles = await applyGraphSignals(
-        client,
-        resolvedProjectId,
-        buildFiles(results, keywords),
-        keywords,
-      );
+        return success(buildOutput(query, files, confidence), {
+          projectId: resolvedProjectId,
+          source: "local",
+          localIndex,
+          query,
+          confidence,
+          files: files.map((file) => ({
+            path: file.path,
+            layer: file.layer,
+            score: file.score,
+            reasons: file.reasons,
+            symbols: file.symbols,
+          })),
+          groups: LAYERS.map((layer) => ({
+            layer,
+            files: files.filter((file) => file.layer === layer).map((file) => file.path),
+          })).filter((group) => group.files.length > 0),
+          suggestedNextTools,
+        });
+      }
+
+      let results: CodebaseSearchResponse;
+      let source: "remote" | "local" = "remote";
+      let localIndexSummary: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
+      try {
+        results = await client.request<CodebaseSearchResponse>(
+          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+          { authRequired: true, query: { q: query } },
+        );
+      } catch (error) {
+        if (!shouldFallbackToLocal(error)) throw error;
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        results = searchLocalIndex({ index, query });
+        source = "local";
+        localIndexSummary = localIndex;
+      }
+
+      const rankedFiles =
+        source === "remote"
+          ? await applyGraphSignals(
+              client,
+              resolvedProjectId,
+              buildFiles(results, keywords),
+              keywords,
+            )
+          : buildFiles(results, keywords);
       const files = filterRankedFiles(rankedFiles).slice(0, max_files ?? 15);
       const confidence = rankConfidence(files);
       const suggestedNextTools =
@@ -577,6 +664,8 @@ export function registerSummarizeFeatureAreaTool(
 
       return success(buildOutput(query, files, confidence), {
         projectId: resolvedProjectId,
+        source,
+        ...(localIndexSummary ? { localIndex: localIndexSummary } : {}),
         query,
         confidence,
         files: files.map((file) => ({

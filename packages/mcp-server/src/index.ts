@@ -69,6 +69,12 @@ import {
   parseAgentPackInstallArgs,
 } from "./lib/agent-pack-installer.js";
 import { getPluginRoot } from "./lib/agent-pack.js";
+import {
+  buildLocalIndex,
+  ensureLocalIndex,
+  getLocalIndexSummary,
+  readLocalIndex,
+} from "./lib/local-index.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -165,6 +171,29 @@ function runAgentPackPathCommand() {
   console.log(getPluginRoot());
 }
 
+function parseLocalIndexArgs(args: string[]) {
+  return {
+    force: args.includes("--force"),
+    status: args.includes("--status"),
+  };
+}
+
+async function runLocalIndexCommand(args: string[]) {
+  const options = parseLocalIndexArgs(args);
+  const index = options.status
+    ? (await readLocalIndex()) ?? (await buildLocalIndex())
+    : await ensureLocalIndex({ force: options.force });
+  const summary = await getLocalIndexSummary(index);
+
+  console.log(options.status ? "CodeMap local index status" : "CodeMap local index ready");
+  console.log(`Workspace: ${summary.workspaceRootPath}`);
+  console.log(`Cache: ${summary.cachePath}`);
+  console.log(`Indexed at: ${summary.indexedAt ?? "never"}`);
+  console.log(`Files: ${summary.fileCount}`);
+  console.log(`Symbols: ${summary.symbolCount}`);
+  console.log(`Stale: ${summary.stale ? "yes" : "no"}`);
+}
+
 async function runLoginCommand() {
   const config = await loadConfig();
   const client = createCodeMapClient(config);
@@ -241,6 +270,9 @@ async function main() {
       return;
     case "agent-pack-path":
       runAgentPackPathCommand();
+      return;
+    case "local-index":
+      await runLocalIndexCommand(process.argv.slice(3));
       return;
     default:
       await runMcpServer();

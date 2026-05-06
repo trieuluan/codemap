@@ -10,6 +10,12 @@ import type {
   SearchFileResult,
   SearchSymbolResult,
 } from "../lib/api-types.js";
+import {
+  ensureLocalIndexWithSummary,
+  searchLocalIndex,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 
 const SYMBOL_KIND_VALUES = [
   "module",
@@ -228,28 +234,81 @@ export function registerSearchCodebaseTool(
     },
     withToolError(async ({ query, project_id, kinds, symbol_kinds }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+      const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
 
       if (!resolvedProjectId) {
-        const summary =
-          "No project ID provided and no linked project found for this workspace.\n" +
-          "Run create_project first to link this workspace to a CodeMap project.";
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const localResults = rerankResults(
+          query,
+          searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null }),
+        );
+        const files = activeKinds.has("files") ? localResults.files : [];
+        const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
+        const exports = activeKinds.has("exports") ? localResults.exports : [];
+        const total = files.length + symbols.length + exports.length;
 
-        return success(summary, {
+        return success(buildOutput(query, localResults, activeKinds), {
           projectId: null,
           query,
-          kinds: kinds ?? ["files", "symbols", "exports"],
+          source: "local",
+          localIndex,
+          kinds: Array.from(activeKinds),
           symbolKinds: symbol_kinds ?? null,
-          files: [],
-          symbols: [],
-          exports: [],
-          total: 0,
-          found: false,
+          files,
+          symbols,
+          exports,
+          total,
+          found: total > 0,
+          suggestedNextTools:
+            symbols.length > 0
+              ? [
+                  `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+                  `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
+                ]
+              : files.length > 0
+                ? [`get_file("${files[0].path}", include=["outline"])`]
+                : [],
         });
       }
 
-      const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const localResults = rerankResults(
+          query,
+          searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null }),
+        );
+        const files = activeKinds.has("files") ? localResults.files : [];
+        const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
+        const exports = activeKinds.has("exports") ? localResults.exports : [];
+        const total = files.length + symbols.length + exports.length;
+
+        return success(buildOutput(query, localResults, activeKinds), {
+          projectId: resolvedProjectId,
+          query,
+          source: "local",
+          localIndex,
+          kinds: Array.from(activeKinds),
+          symbolKinds: symbol_kinds ?? null,
+          files,
+          symbols,
+          exports,
+          total,
+          found: total > 0,
+          suggestedNextTools:
+            symbols.length > 0
+              ? [
+                  `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+                  `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
+                ]
+              : files.length > 0
+                ? [`get_file("${files[0].path}", include=["outline"])`]
+                : [],
+        });
+      }
 
       let results: CodebaseSearchResponse;
+      let source: "remote" | "local" = "remote";
+      let localIndexSummary: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
 
       try {
         const searchQuery: Record<string, string> = { q: query };
@@ -265,29 +324,16 @@ export function registerSearchCodebaseTool(
           },
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        if (message.includes("404")) {
-          const summary =
-            `Project not found: ${resolvedProjectId}\n` +
-            "Check that the project ID is correct and the project has been imported.";
-
-          return success(summary, {
-            projectId: resolvedProjectId,
-            query,
-            kinds: Array.from(activeKinds),
-            symbolKinds: symbol_kinds ?? null,
-            files: [],
-            symbols: [],
-            exports: [],
-            total: 0,
-            found: false,
-          });
+        if (shouldFallbackToLocal(error)) {
+          const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+          results = searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null });
+          source = "local";
+          localIndexSummary = localIndex;
+        } else {
+          throw error;
         }
-
-        throw error;
       }
-
+      // Preserve current remote ranking and apply it to local fallback too.
       results = rerankResults(query, results);
 
       const files = activeKinds.has("files") ? results.files : [];
@@ -310,6 +356,8 @@ export function registerSearchCodebaseTool(
       return success(buildOutput(query, results, activeKinds), {
         projectId: resolvedProjectId,
         query,
+        source,
+        ...(localIndexSummary ? { localIndex: localIndexSummary } : {}),
         kinds: Array.from(activeKinds),
         symbolKinds: symbol_kinds ?? null,
         files,

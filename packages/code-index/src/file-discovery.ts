@@ -19,6 +19,7 @@ export type RepoFileParseStatus =
 
 export const IGNORED_NAMES = new Set([
   ".git",
+  ".codemap",
   "node_modules",
   "dist",
   "build",
