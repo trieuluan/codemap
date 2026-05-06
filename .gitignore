@@ -85,3 +85,5 @@ packages/web/next-env.d.ts
 .codex/config.toml
 .codemap-storage/*
 .codemap/
+
+docs/*

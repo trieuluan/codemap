@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   Sparkles,
   Terminal,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -154,6 +155,8 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
     2,
   );
 
+  const claudeCodeConfig = `claude mcp add codemap -- npx -y @codemap/mcp-server@latest`;
+
   return (
     <div className="space-y-8">
       <div className="space-y-1">
@@ -212,6 +215,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
             <TabsList>
               <TabsTrigger value="claude">Claude Desktop</TabsTrigger>
               <TabsTrigger value="vscode">VS Code</TabsTrigger>
+              <TabsTrigger value="claudecode">Claude Code CLI</TabsTrigger>
             </TabsList>
 
             <TabsContent value="claude" className="space-y-2 mt-3">
@@ -234,6 +238,16 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
                 <span className="font-medium text-foreground">settings.json</span> (or use the MCP panel):
               </p>
               <CodeBlock code={vscodeConfig} />
+            </TabsContent>
+
+            <TabsContent value="claudecode" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Run once in your terminal — registers CodeMap globally in Claude Code:
+              </p>
+              <CodeBlock code={claudeCodeConfig} />
+              <p className="text-xs text-muted-foreground">
+                No config file needed. Node.js 18+ required.
+              </p>
             </TabsContent>
           </Tabs>
 
@@ -334,9 +348,11 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            The AI should call{" "}
-            <code className="rounded bg-muted px-1 font-mono text-xs">get_project</code>{" "}
-            first. If no project is linked, it should call{" "}
+            In a new session, the AI should call{" "}
+            <code className="rounded bg-muted px-1 font-mono text-xs">get_agent_workflow</code>{" "}
+            first to load the recommended tool sequence, then{" "}
+            <code className="rounded bg-muted px-1 font-mono text-xs">get_project</code>.{" "}
+            If no project is linked, it should call{" "}
             <code className="rounded bg-muted px-1 font-mono text-xs">create_project</code>.
           </p>
 
@@ -399,10 +415,10 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
           <div className="grid gap-2 sm:grid-cols-2">
             {[
-              { q: "Get the current CodeMap project", desc: "Project health" },
-              { q: "Search CodeMap for authentication", desc: "Codebase search" },
-              { q: "Suggest edit locations for this task", desc: "Edit locations" },
-              { q: "Find callers for this function", desc: "Symbol callers" },
+              { q: "Get the agent workflow", desc: "Session start · get_agent_workflow" },
+              { q: "Explore implementing this feature", desc: "Task context · explore_task" },
+              { q: "Search CodeMap for authentication", desc: "Symbol search · search_codebase" },
+              { q: "Find callers for this function", desc: "Impact analysis · find_callers" },
             ].map(({ q, desc }) => (
               <div
                 key={q}
@@ -426,6 +442,50 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
             </Button>
           ) : null}
         </Step>
+      </div>
+
+      {/* Capabilities overview */}
+      <div className="rounded-lg border border-border/70 bg-muted/20 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Zap className="size-4 text-primary" />
+          <p className="text-sm font-medium">What CodeMap can do</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            {
+              label: "Explore",
+              tools: "explore_task · find_related_files · summarize_feature_area",
+              detail: "Task context, related files, feature area map",
+            },
+            {
+              label: "Read",
+              tools: "get_files · get_file · get_symbol_context · search_codebase",
+              detail: "Outlines, symbol bodies, keyword & file search",
+            },
+            {
+              label: "Analyze",
+              tools: "find_usages · find_callers · find_cycles · get_working_diff",
+              detail: "Impact analysis, dependency cycles, local diffs",
+            },
+            {
+              label: "Act",
+              tools: "rename_symbol · move_symbols · code_review · run_tests · deploy_preview",
+              detail: "Refactor, review, test, and deploy",
+            },
+          ].map(({ label, tools, detail }) => (
+            <div
+              key={label}
+              className="space-y-1 rounded-md border border-border/70 bg-background/50 px-3 py-2.5"
+            >
+              <p className="text-xs font-semibold">{label}</p>
+              <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{tools}</p>
+              <p className="text-[10px] text-muted-foreground">{detail}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Built-in workflows: design-first brainstorming (explore → spec → implement) and test-driven development (RED → GREEN → REFACTOR).
+        </p>
       </div>
 
       {/* Manual / advanced */}

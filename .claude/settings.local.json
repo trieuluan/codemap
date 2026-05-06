@@ -42,7 +42,9 @@
       "mcp__codemap-mcp-dev__link_project",
       "mcp__codemap-mcp-dev__get_github_connect_url",
       "mcp__codemap-mcp-dev__check_github_connection",
-      "mcp__codemap-mcp-dev__find_callers"
+      "mcp__codemap-mcp-dev__find_callers",
+      "mcp__codemap-mcp-dev__explore_task",
+      "mcp__codemap-mcp-dev__get_files"
     ]
   },
   "enableAllProjectMcpServers": true,
