@@ -12,7 +12,6 @@ import type {
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
-  searchLocalIndex,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
@@ -237,10 +236,10 @@ export function registerSearchCodebaseTool(
       const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
 
       if (!resolvedProjectId) {
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
         const localResults = rerankResults(
           query,
-          searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null }),
+          store.search(query, symbol_kinds ?? null),
         );
         const files = activeKinds.has("files") ? localResults.files : [];
         const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
@@ -272,10 +271,10 @@ export function registerSearchCodebaseTool(
       }
 
       if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
         const localResults = rerankResults(
           query,
-          searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null }),
+          store.search(query, symbol_kinds ?? null),
         );
         const files = activeKinds.has("files") ? localResults.files : [];
         const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
@@ -325,8 +324,8 @@ export function registerSearchCodebaseTool(
         );
       } catch (error) {
         if (shouldFallbackToLocal(error)) {
-          const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
-          results = searchLocalIndex({ index, query, symbolKinds: symbol_kinds ?? null });
+          const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+          results = store.search(query, symbol_kinds ?? null);
           source = "local";
           localIndexSummary = localIndex;
         } else {

@@ -11,9 +11,6 @@ import type {
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
-  getLocalFileContent,
-  getLocalFileParse,
-  searchLocalIndex,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
@@ -209,8 +206,8 @@ export function registerGetSymbolContextTool(
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       async function localResponse(projectId: string | null, reason?: string) {
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
-        const search = searchLocalIndex({ index, query: symbol_name });
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const search = store.search(symbol_name, null);
         const symbol = chooseSymbol(search.symbols, symbol_name, file_path);
 
         if (!symbol) {
@@ -234,13 +231,8 @@ export function registerGetSymbolContextTool(
           : symbol.startLine
             ? symbol.startLine + 80
             : undefined;
-        const content = getLocalFileContent({
-          index,
-          filePath: symbol.filePath,
-          startLine,
-          endLine,
-        });
-        const parse = getLocalFileParse({ index, filePath: symbol.filePath });
+        const content = store.getFileContent(symbol.filePath, startLine, endLine);
+        const parse = store.getFileParse(symbol.filePath);
 
         return success(
           buildOutput({

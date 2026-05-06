@@ -7,8 +7,6 @@ import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { FileContent, BlastRadius } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
-  getLocalFileContent,
-  getLocalFileParse,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
@@ -386,11 +384,11 @@ export function registerGetFileTool(
         const wantBlastRadius = sections.includes("blast_radius");
 
         async function localResponse(projectId: string | null, reason?: string) {
-          const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
+          const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
           const content = wantContent
-            ? getLocalFileContent({ index, filePath, startLine: start_line, endLine: end_line })
+            ? store.getFileContent(filePath, start_line, end_line)
             : null;
-          const parse = wantParse ? getLocalFileParse({ index, filePath }) : null;
+          const parse = wantParse ? store.getFileParse(filePath) : null;
           const errors: string[] = reason ? [`remote: ${reason}`] : [];
 
           if (!content && !parse) {

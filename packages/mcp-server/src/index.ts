@@ -72,7 +72,6 @@ import { getPluginRoot } from "./lib/agent-pack.js";
 import {
   buildLocalIndex,
   ensureLocalIndex,
-  getLocalIndexSummary,
   readLocalIndex,
 } from "./lib/local-index.js";
 
@@ -180,10 +179,10 @@ function parseLocalIndexArgs(args: string[]) {
 
 async function runLocalIndexCommand(args: string[]) {
   const options = parseLocalIndexArgs(args);
-  const index = options.status
+  const store = options.status
     ? (await readLocalIndex()) ?? (await buildLocalIndex())
     : await ensureLocalIndex({ force: options.force });
-  const summary = await getLocalIndexSummary(index);
+  const summary = store.getSummary();
 
   console.log(options.status ? "CodeMap local index status" : "CodeMap local index ready");
   console.log(`Workspace: ${summary.workspaceRootPath}`);
@@ -191,7 +190,6 @@ async function runLocalIndexCommand(args: string[]) {
   console.log(`Indexed at: ${summary.indexedAt ?? "never"}`);
   console.log(`Files: ${summary.fileCount}`);
   console.log(`Symbols: ${summary.symbolCount}`);
-  console.log(`Stale: ${summary.stale ? "yes" : "no"}`);
 }
 
 async function runLoginCommand() {

@@ -12,7 +12,6 @@ import type {
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
-  searchLocalIndex,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
@@ -549,8 +548,8 @@ export function registerSummarizeFeatureAreaTool(
       const keywords = normalizeQuery(query);
 
       if (!resolvedProjectId) {
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
-        const results = searchLocalIndex({ index, query });
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = store.search(query, null);
         const files = filterRankedFiles(buildFiles(results, keywords)).slice(
           0,
           max_files ?? 15,
@@ -587,8 +586,8 @@ export function registerSummarizeFeatureAreaTool(
       }
 
       if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
-        const results = searchLocalIndex({ index, query });
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = store.search(query, null);
         const files = filterRankedFiles(buildFiles(results, keywords)).slice(
           0,
           max_files ?? 15,
@@ -635,8 +634,8 @@ export function registerSummarizeFeatureAreaTool(
         );
       } catch (error) {
         if (!shouldFallbackToLocal(error)) throw error;
-        const { index, summary: localIndex } = await ensureLocalIndexWithSummary();
-        results = searchLocalIndex({ index, query });
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        results = store.search(query, null);
         source = "local";
         localIndexSummary = localIndex;
       }
