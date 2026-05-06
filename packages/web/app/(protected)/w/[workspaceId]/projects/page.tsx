@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { ProjectList } from "@/features/projects/list/project-list";
 import { createServerProjectsApi } from "@/features/projects/api";
 import { createServerWorkspacesApi } from "@/features/workspaces/api";
+import type { WorkspaceEntitlements } from "@/features/workspaces/api";
 
 export default async function ProjectsPage({
   params,
@@ -13,15 +14,17 @@ export default async function ProjectsPage({
   const projectsApi = createServerProjectsApi({ cookieHeader });
   const workspacesApi = createServerWorkspacesApi({ cookieHeader });
 
-  const [projects, workspaceRows] = await Promise.all([
+  const [projects, workspaceRows, workspaceDetail] = await Promise.all([
     projectsApi.getProjects({ include: ["latestImport"], workspaceId }),
     workspacesApi.listWorkspaces(),
+    workspacesApi.getWorkspace(workspaceId).catch(() => null),
   ]);
 
   const workspaceMap = Object.fromEntries(
     workspaceRows.map(({ workspace }) => [workspace.id, workspace.name]),
   );
   const showWorkspace = workspaceRows.length > 1;
+  const entitlements = workspaceDetail?.entitlements ?? null;
 
   return (
     <ProjectList
@@ -29,6 +32,7 @@ export default async function ProjectsPage({
       workspaceMap={workspaceMap}
       showWorkspace={showWorkspace}
       workspaceId={workspaceId}
+      entitlements={entitlements}
     />
   );
 }

@@ -9,6 +9,7 @@ import type {
   ProjectAnalysisSummary,
   CreateProjectInput,
   CreateProjectFromGithubInput,
+  CreateProjectFromGitlabInput,
   GithubRepositoryOption,
   Project,
   ProjectFileContent,
@@ -238,6 +239,15 @@ export async function createProjectFromGithub(
   input: CreateProjectFromGithubInput,
 ) {
   return requestApi<ProjectSourceImportResult>("/projects/from-github", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function createProjectFromGitlab(
+  input: CreateProjectFromGitlabInput,
+) {
+  return requestApi<ProjectSourceImportResult>("/projects/from-gitlab", {
     method: "POST",
     body: input,
   });

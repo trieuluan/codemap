@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Github, Search, Lock, Globe } from "lucide-react";
+import { Search, Lock, Globe } from "lucide-react";
+import { GithubIcon } from "@/components/brand-icons";
 import useSWR from "swr";
 import {
   Dialog,
@@ -27,9 +28,11 @@ import type { GithubRepositoryOption } from "@/features/projects/api";
 export function ImportFromGithubDialog({
   trigger,
   workspaceId,
+  isConnected = true,
 }: {
   trigger: React.ReactNode;
   workspaceId: string;
+  isConnected?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -95,7 +98,7 @@ export function ImportFromGithubDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Github className="size-4" />
+            <GithubIcon className="size-4" />
             Import from GitHub
           </DialogTitle>
           <DialogDescription>
@@ -103,6 +106,13 @@ export function ImportFromGithubDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {!isConnected ? (
+          <div className="rounded-md border border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            Connect your GitHub account in{" "}
+            <strong className="text-foreground">Account → Integrations</strong>{" "}
+            to browse and import repositories.
+          </div>
+        ) : (
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -173,6 +183,7 @@ export function ImportFromGithubDialog({
             </p>
           )}
         </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>

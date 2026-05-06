@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { FolderKanban, Github, Plus } from "lucide-react";
+import useSWR from "swr";
+import { FolderKanban, Plus } from "lucide-react";
+import { GithubIcon, GitlabIcon } from "@/components/brand-icons";
+import { browserGithubApi } from "@/features/github/api";
+import { browserGitlabApi } from "@/features/gitlab/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,10 +24,15 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import type { ProjectListItem, ProjectStatus } from "@/features/projects/api";
+import type { WorkspaceEntitlements } from "@/features/workspaces/api";
 import { CreateProjectDialog } from "./components/create-project-dialog";
 import { DeleteProjectDialog } from "./components/delete-project-dialog";
 import { ImportFromGithubDialog } from "./components/import-from-github-dialog";
+import { ImportFromGitlabDialog } from "./components/import-from-gitlab-dialog";
 import { ProjectListCard } from "./components/project-list-card";
+
+const githubApi = browserGithubApi();
+const gitlabApi = browserGitlabApi();
 
 const statusOptions: Array<{ label: string; value: ProjectStatus | "all" }> = [
   { label: "All statuses", value: "all" },
@@ -39,18 +48,35 @@ export function ProjectList({
   workspaceMap = {},
   showWorkspace = false,
   workspaceId,
+  entitlements,
 }: {
   initialProjects: ProjectListItem[];
   workspaceMap?: Record<string, string>;
   showWorkspace?: boolean;
   workspaceId: string;
+  entitlements: WorkspaceEntitlements | null;
 }) {
   const [projects, setProjects] = useState(initialProjects);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ProjectStatus | "all">("all");
-  const [projectToDelete, setProjectToDelete] = useState<ProjectListItem | null>(
-    null,
+  const [projectToDelete, setProjectToDelete] =
+    useState<ProjectListItem | null>(null);
+
+  const canImportFromProvider = entitlements?.privateRepoImports ?? false;
+
+  const { data: githubStatus } = useSWR(
+    canImportFromProvider ? "github-status" : null,
+    () => githubApi.getStatus(),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
   );
+  const { data: gitlabStatus } = useSWR(
+    canImportFromProvider ? "gitlab-status" : null,
+    () => gitlabApi.getStatus(),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+
+  const githubConnected = githubStatus?.connected === true;
+  const gitlabConnected = gitlabStatus?.connected === true;
 
   const filteredProjects = projects.filter((project) => {
     const matchesQuery =
@@ -100,15 +126,30 @@ export function ProjectList({
               ))}
             </SelectContent>
           </Select>
-          <ImportFromGithubDialog
-            workspaceId={workspaceId}
-            trigger={
-              <Button variant="outline">
-                <Github className="size-4" />
-                Import from GitHub
-              </Button>
-            }
-          />
+          {canImportFromProvider && (
+            <>
+              <ImportFromGithubDialog
+                workspaceId={workspaceId}
+                isConnected={githubConnected}
+                trigger={
+                  <Button variant="outline" disabled={!githubConnected}>
+                    <GithubIcon className="size-4" />
+                    Import from GitHub
+                  </Button>
+                }
+              />
+              <ImportFromGitlabDialog
+                workspaceId={workspaceId}
+                isConnected={gitlabConnected}
+                trigger={
+                  <Button variant="outline" disabled={!gitlabConnected}>
+                    <GitlabIcon className="size-4" />
+                    Import from GitLab
+                  </Button>
+                }
+              />
+            </>
+          )}
           <CreateProjectDialog
             workspaceId={workspaceId}
             trigger={
@@ -172,7 +213,11 @@ export function ProjectList({
               key={project.id}
               project={project}
               onDelete={setProjectToDelete}
-              workspaceName={showWorkspace && project.workspaceId ? workspaceMap[project.workspaceId] : undefined}
+              workspaceName={
+                showWorkspace && project.workspaceId
+                  ? workspaceMap[project.workspaceId]
+                  : undefined
+              }
               workspaceId={workspaceId}
             />
           ))}
@@ -188,7 +233,9 @@ export function ProjectList({
           }
         }}
         onDeleted={(projectId) => {
-          setProjects((current) => current.filter((project) => project.id !== projectId));
+          setProjects((current) =>
+            current.filter((project) => project.id !== projectId),
+          );
         }}
       />
     </div>

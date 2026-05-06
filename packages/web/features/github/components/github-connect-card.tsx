@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Github, CheckCircle2, Loader2, Unlink } from "lucide-react";
+import { CheckCircle2, Loader2, Unlink } from "lucide-react";
+import { GithubIcon } from "@/components/brand-icons";
 import useSWR from "swr";
 import {
   Card,
@@ -71,7 +72,7 @@ export function GithubConnectCard({ canConnect = true }: { canConnect?: boolean 
             {isConnected ? (
               <CheckCircle2 className="size-5 text-success" />
             ) : (
-              <Github className="size-5 text-muted-foreground" />
+              <GithubIcon className="size-5 text-muted-foreground" />
             )}
           </div>
           <div>
@@ -130,7 +131,7 @@ export function GithubConnectCard({ canConnect = true }: { canConnect?: boolean 
             {isConnecting ? (
               <Loader2 className="mr-2 size-3.5 animate-spin" />
             ) : (
-              <Github className="mr-2 size-3.5" />
+              <GithubIcon className="mr-2 size-3.5" />
             )}
             Connect GitHub
           </Button>

@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
+import {
+  ensureLocalIndexWithSummary,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 
@@ -154,22 +159,96 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
     withToolError(async ({ paths, project_id }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
-      if (!resolvedProjectId) {
-        return success(
-          "No project ID provided and no linked project found for this workspace.\n" +
-            "Run create_project first to link this workspace to a CodeMap project.",
-          { projectId: null, paths, results: [], available: false },
-        );
+      async function buildLocalResults(source: "local") {
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
+        const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
+
+        for (const filePath of paths) {
+          output.push(`## ${filePath}`);
+          output.push("");
+          const parsed = store.getFileParse(filePath);
+          if (parsed) {
+            output.push(buildOutlineSection(parsed as unknown as FileParseResponse));
+            structured.push({ path: filePath, status: "ok" });
+          } else {
+            output.push(`_File not found in local index: ${filePath}_`);
+            structured.push({ path: filePath, status: "error", error: "not found in local index" });
+          }
+          output.push("");
+        }
+
+        return success(output.join("\n").trimEnd(), {
+          projectId: resolvedProjectId ?? null,
+          source,
+          localIndex,
+          paths,
+          results: structured,
+          available: true,
+        });
       }
 
+      if (!resolvedProjectId) {
+        return buildLocalResults("local");
+      }
+
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        return buildLocalResults("local");
+      }
+
+      let source: "remote" | "local" = "remote";
+      let localIndex: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
+
       const results = await Promise.allSettled(
-        paths.map((filePath) =>
-          client.request<FileParseResponse>(
-            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
-            { authRequired: true, query: { path: filePath } },
-          ),
-        ),
+        paths.map(async (filePath) => {
+          try {
+            return await client.request<FileParseResponse>(
+              `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
+              { authRequired: true, query: { path: filePath } },
+            );
+          } catch (error) {
+            if (shouldFallbackToLocal(error)) return { _localFallback: true, filePath, error };
+            throw error;
+          }
+        }),
       );
+
+      // Check if any result triggered local fallback
+      const needsLocalFallback = results.some(
+        (r) => r.status === "fulfilled" && r.value && "_localFallback" in r.value,
+      );
+
+      if (needsLocalFallback) {
+        const { store, summary } = await ensureLocalIndexWithSummary();
+        source = "local";
+        localIndex = summary;
+
+        const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
+        const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
+
+        for (const filePath of paths) {
+          output.push(`## ${filePath}`);
+          output.push("");
+          const parsed = store.getFileParse(filePath);
+          if (parsed) {
+            output.push(buildOutlineSection(parsed as unknown as FileParseResponse));
+            structured.push({ path: filePath, status: "ok" });
+          } else {
+            output.push(`_File not found in local index: ${filePath}_`);
+            structured.push({ path: filePath, status: "error", error: "not found in local index" });
+          }
+          output.push("");
+        }
+
+        return success(output.join("\n").trimEnd(), {
+          projectId: resolvedProjectId,
+          source,
+          localIndex,
+          paths,
+          results: structured,
+          available: true,
+        });
+      }
 
       const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
       const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
@@ -181,7 +260,7 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
         output.push("");
 
         if (result.status === "fulfilled" && result.value) {
-          output.push(buildOutlineSection(result.value));
+          output.push(buildOutlineSection(result.value as FileParseResponse));
           structured.push({ path: filePath, status: "ok" });
         } else {
           const msg =
@@ -199,6 +278,8 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
 
       return success(output.join("\n").trimEnd(), {
         projectId: resolvedProjectId,
+        source,
+        ...(localIndex ? { localIndex } : {}),
         paths,
         results: structured,
         available: true,

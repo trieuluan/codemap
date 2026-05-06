@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
+import {
+  ensureLocalIndexWithSummary,
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
@@ -141,27 +146,48 @@ export function registerFindByPatternTool(
     withToolError(async ({ pattern, project_id, kinds, symbol_kinds }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
-      if (!resolvedProjectId) {
-        const summary =
-          "No project ID provided and no linked project found for this workspace.\n" +
-          "Run create_project first to link this workspace to a CodeMap project.";
+      const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
 
-        return success(summary, {
-          projectId: null,
+      function buildLocalSuccessResponse(
+        results: CodebaseSearchResponse,
+        localIndex: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"],
+        projectId: string | null,
+      ) {
+        const files = activeKinds.has("files") ? results.files : [];
+        const symbols = activeKinds.has("symbols") ? results.symbols : [];
+        const exports = activeKinds.has("exports") ? results.exports : [];
+        const total = files.length + symbols.length + exports.length;
+        return success(buildOutput(pattern, results, activeKinds), {
+          projectId,
           pattern,
-          kinds: kinds ?? ["files", "symbols", "exports"],
+          source: "local",
+          localIndex,
+          kinds: Array.from(activeKinds),
           symbolKinds: symbol_kinds ?? null,
-          files: [],
-          symbols: [],
-          exports: [],
-          total: 0,
-          found: false,
+          files,
+          symbols,
+          exports,
+          total,
+          found: total > 0,
+          suggestedNextTools: ["Note: local search uses keyword matching, not regex."],
         });
       }
 
-      const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
+      if (!resolvedProjectId) {
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = store.search(pattern, symbol_kinds ?? null);
+        return buildLocalSuccessResponse(results, localIndex, null);
+      }
+
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const results = store.search(pattern, symbol_kinds ?? null);
+        return buildLocalSuccessResponse(results, localIndex, resolvedProjectId);
+      }
 
       let results: CodebaseSearchResponse;
+      let source: "remote" | "local" = "remote";
+      let localIndex: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
 
       try {
         const searchQuery: Record<string, string> = { q: pattern };
@@ -177,27 +203,29 @@ export function registerFindByPatternTool(
           },
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        if (message.includes("404")) {
-          const summary =
-            `Project not found: ${resolvedProjectId}\n` +
-            "Check that the project ID is correct and the project has been imported.";
-
-          return success(summary, {
-            projectId: resolvedProjectId,
-            pattern,
-            kinds: Array.from(activeKinds),
-            symbolKinds: symbol_kinds ?? null,
-            files: [],
-            symbols: [],
-            exports: [],
-            total: 0,
-            found: false,
-          });
+        if (shouldFallbackToLocal(error)) {
+          const { store, summary } = await ensureLocalIndexWithSummary();
+          results = store.search(pattern, symbol_kinds ?? null);
+          source = "local";
+          localIndex = summary;
+        } else {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.includes("404")) {
+            return success(
+              `Project not found: ${resolvedProjectId}\n` +
+              "Check that the project ID is correct and the project has been imported.",
+              {
+                projectId: resolvedProjectId,
+                pattern,
+                kinds: Array.from(activeKinds),
+                symbolKinds: symbol_kinds ?? null,
+                files: [], symbols: [], exports: [],
+                total: 0, found: false,
+              },
+            );
+          }
+          throw error;
         }
-
-        throw error;
       }
 
       const files = activeKinds.has("files") ? results.files : [];
@@ -208,6 +236,8 @@ export function registerFindByPatternTool(
       return success(buildOutput(pattern, results, activeKinds), {
         projectId: resolvedProjectId,
         pattern,
+        source,
+        ...(localIndex ? { localIndex } : {}),
         kinds: Array.from(activeKinds),
         symbolKinds: symbol_kinds ?? null,
         files,

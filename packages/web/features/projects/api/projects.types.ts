@@ -1,5 +1,6 @@
 export type {
   CreateProjectFromGithubInput,
+  CreateProjectFromGitlabInput,
   CreateProjectInput,
   EditLocationsResponse,
   GithubRepository as GithubRepositoryOption,
