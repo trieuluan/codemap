@@ -9,6 +9,7 @@ import {
   AGENT_PACK_OPENCODE_URI,
   AGENT_PACK_COPILOT_URI,
   AGENT_PACK_SKILLS,
+  AGENT_PACK_TEMPLATES,
   buildAgentPackIndexMarkdown,
   buildHarnessMarkdown,
   readAgentPackFile,
@@ -102,6 +103,27 @@ export function registerAgentPackResources(server: McpServer) {
             uri: uri.href,
             mimeType: "text/markdown",
             text: await readAgentPackSkill(skill),
+          },
+        ],
+      }),
+    );
+  }
+
+  for (const template of AGENT_PACK_TEMPLATES) {
+    server.registerResource(
+      `codemap-template-${template.id}`,
+      template.uri,
+      {
+        title: `CodeMap template: ${template.title}`,
+        description: `CodeMap Agent Pack artifact template: ${template.title}.`,
+        mimeType: "text/markdown",
+      },
+      async (uri) => ({
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "text/markdown",
+            text: await readAgentPackFile(template.path),
           },
         ],
       }),

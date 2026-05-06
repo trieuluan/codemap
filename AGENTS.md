@@ -3,6 +3,8 @@
 Use CodeMap MCP before raw file reads or grep.
 
 - Start with `get_agent_workflow` and `get_project`.
+- Broad implementation/debug/review/refactor/test/research tasks: call `recommend_agent_workflow`.
+- Follow returned required skills, hard gates, artifact templates, and verification checklist.
 - Broad tasks: `explore_task`.
 - Feature areas: `summarize_feature_area`.
 - Related files: `find_related_files`.
@@ -15,5 +17,7 @@ Use CodeMap MCP before raw file reads or grep.
 
 Installed CodeMap skills live under `.codex/skills/codemap-*`:
 - `codemap-brainstorming` — design-first workflow with hard gate before implementation
+- `codemap-writing-plans` — decision-complete plan after approved design
+- `codemap-executing-plans` — execute approved plans in scoped steps
 - `codemap-test-driven-development` — RED → GREEN → REFACTOR using CodeMap tools
-
+- `codemap-verification-before-completion` — final diff/build/index/reimport gate

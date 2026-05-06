@@ -8,8 +8,13 @@ import {
 import {
   AGENT_WORKFLOW_SEQUENCE,
   AGENT_WORKFLOW_SUMMARY,
+  ARTIFACT_TEMPLATES,
   MCP_FIRST_RULE_URI,
+  SKILL_ROUTING_RULE_URI,
   TASK_LIFECYCLE_RULE_URI,
+  VERIFICATION_BEFORE_COMPLETION_RULE_URI,
+  WORKFLOW_GATES_RULE_URI,
+  WORKFLOW_ROUTES,
   buildAgentWorkflowMarkdown,
 } from "../lib/agent-workflow.js";
 import { success, withToolError } from "../lib/tool-response.js";
@@ -29,9 +34,14 @@ export function registerGetAgentWorkflowTool(server: McpServer) {
       return success(buildAgentWorkflowMarkdown(), {
         summary: AGENT_WORKFLOW_SUMMARY,
         recommendedSequence: AGENT_WORKFLOW_SEQUENCE,
+        workflowRoutes: WORKFLOW_ROUTES,
+        artifactTemplates: ARTIFACT_TEMPLATES,
         resources: [
           MCP_FIRST_RULE_URI,
           TASK_LIFECYCLE_RULE_URI,
+          SKILL_ROUTING_RULE_URI,
+          WORKFLOW_GATES_RULE_URI,
+          VERIFICATION_BEFORE_COMPLETION_RULE_URI,
           AGENT_PACK_INDEX_URI,
           AGENT_PACK_INSTALL_URI,
           ...AGENT_PACK_SKILLS.map((skill) => skillResourceUri(skill)),

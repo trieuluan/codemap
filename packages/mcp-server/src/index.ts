@@ -64,6 +64,7 @@ import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
 import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
+import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
 import {
   installAgentPack,
   parseAgentPackInstallArgs,
@@ -87,6 +88,7 @@ async function runMcpServer() {
   // ── Lite tier: core exploration + auth (always registered) ──────────────
   registerPingTool(server, config);
   registerGetAgentWorkflowTool(server);
+  registerRecommendAgentWorkflowTool(server);
   registerCheckAuthStatusTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);

@@ -10,6 +10,7 @@ export const AGENT_PACK_CURSOR_URI = "codemap://agent-pack/cursor";
 export const AGENT_PACK_GEMINI_URI = "codemap://agent-pack/gemini";
 export const AGENT_PACK_OPENCODE_URI = "codemap://agent-pack/opencode";
 export const AGENT_PACK_COPILOT_URI = "codemap://agent-pack/copilot";
+export const AGENT_PACK_TEMPLATE_BASE_URI = "codemap://agent-pack/templates";
 
 export const AGENT_PACK_SKILLS = [
   "mcp-first-exploration",
@@ -19,10 +20,36 @@ export const AGENT_PACK_SKILLS = [
   "safe-edit-and-reimport",
   "token-efficient-code-review",
   "brainstorming",
+  "writing-plans",
+  "executing-plans",
   "test-driven-development",
+  "verification-before-completion",
 ] as const;
 
 export type AgentPackSkillName = (typeof AGENT_PACK_SKILLS)[number];
+
+export const AGENT_PACK_TEMPLATES = [
+  {
+    id: "design-spec",
+    title: "Design spec template",
+    path: "templates/design-spec.md",
+    uri: `${AGENT_PACK_TEMPLATE_BASE_URI}/design-spec`,
+  },
+  {
+    id: "implementation-plan",
+    title: "Implementation plan template",
+    path: "templates/implementation-plan.md",
+    uri: `${AGENT_PACK_TEMPLATE_BASE_URI}/implementation-plan`,
+  },
+  {
+    id: "verification-report",
+    title: "Verification report template",
+    path: "templates/verification-report.md",
+    uri: `${AGENT_PACK_TEMPLATE_BASE_URI}/verification-report`,
+  },
+] as const;
+
+export type AgentPackTemplate = (typeof AGENT_PACK_TEMPLATES)[number];
 
 export function skillResourceUri(skillName: AgentPackSkillName) {
   return `codemap://skills/${skillName}`;
@@ -64,6 +91,9 @@ export function buildAgentPackIndexMarkdown() {
     "## Skills",
     ...AGENT_PACK_SKILLS.map((skill) => `- ${skillResourceUri(skill)}`),
     "",
+    "## Artifact Templates",
+    ...AGENT_PACK_TEMPLATES.map((template) => `- ${template.uri} — ${template.title}`),
+    "",
     "## Local Install",
     "",
     "```bash",
@@ -99,6 +129,6 @@ export function buildHarnessMarkdown(
     `codemap-mcp init-agent-pack --target ${harness}`,
     "```",
     "",
-    "The installed guidance tells the agent to use CodeMap MCP tools for exploration, symbol context, review, verification, and reimport.",
+    "The installed guidance tells the agent to call `recommend_agent_workflow` for broad work, use CodeMap MCP tools for exploration, and finish with verification plus index refresh/reimport decisions.",
   ].join("\n");
 }

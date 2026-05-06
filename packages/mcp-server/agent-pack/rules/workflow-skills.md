@@ -1,5 +1,9 @@
 # CodeMap Workflow Skills
 
+## Start Here: Workflow Recommendation
+
+For broad work, call `recommend_agent_workflow(task)` before implementing. Follow the returned required skills, hard gates, first tools, artifact templates, and verification checklist.
+
 ## Brainstorming (design before code)
 
 For new features or vague requirements, design first — never write production code before the design is approved.
@@ -19,6 +23,35 @@ For new functionality or bug fixes, follow RED → GREEN → REFACTOR strictly.
 - **REFACTOR**: Clean up, run `run_tests` again, then call `code_review` and `get_working_diff` before declaring done.
 
 No production code before a failing test exists.
+
+## Writing Plans
+
+Use after a design is approved and before implementation begins.
+
+1. Re-ground with CodeMap using the tools recommended by `recommend_agent_workflow`.
+2. Use `codemap://agent-pack/templates/implementation-plan`.
+3. Write exact steps, files/modules, interfaces, edge cases, and verification commands.
+4. Remove decisions from the implementer; record assumptions explicitly.
+5. Wait for approval when the task is high-risk or product-facing.
+
+## Executing Plans
+
+Use when implementing an approved plan.
+
+1. Call `get_working_diff` before edits and preserve unrelated user changes.
+2. Execute one plan step at a time.
+3. If reality contradicts the plan, revise the plan instead of broad improvisation.
+4. Run planned verification, inspect diff, then refresh local index.
+
+## Verification Before Completion
+
+Use after every file-changing task.
+
+1. Call `get_working_diff`.
+2. Run the smallest relevant build/test command.
+3. Call `refresh_local_index` after local edits.
+4. Decide whether `trigger_reimport` and `wait_for_import` are needed for cloud graph/insights.
+5. Report changed behavior, verification results, skipped checks, and residual risk.
 
 ## Feature Area Investigation
 
