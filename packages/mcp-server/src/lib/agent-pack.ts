@@ -7,12 +7,16 @@ export const AGENT_PACK_INSTALL_URI = "codemap://agent-pack/install";
 export const AGENT_PACK_CODEX_URI = "codemap://agent-pack/codex";
 export const AGENT_PACK_CLAUDE_URI = "codemap://agent-pack/claude";
 export const AGENT_PACK_CURSOR_URI = "codemap://agent-pack/cursor";
+export const AGENT_PACK_GEMINI_URI = "codemap://agent-pack/gemini";
+export const AGENT_PACK_OPENCODE_URI = "codemap://agent-pack/opencode";
+export const AGENT_PACK_COPILOT_URI = "codemap://agent-pack/copilot";
 
 export const AGENT_PACK_SKILLS = [
   "using-codemap",
   "mcp-first-exploration",
   "feature-area-investigation",
   "symbol-level-debugging",
+  "interpreting-codemap-output",
   "safe-edit-and-reimport",
   "token-efficient-code-review",
 ] as const;
@@ -52,6 +56,9 @@ export function buildAgentPackIndexMarkdown() {
     `- ${AGENT_PACK_CODEX_URI}`,
     `- ${AGENT_PACK_CLAUDE_URI}`,
     `- ${AGENT_PACK_CURSOR_URI}`,
+    `- ${AGENT_PACK_GEMINI_URI}`,
+    `- ${AGENT_PACK_OPENCODE_URI}`,
+    `- ${AGENT_PACK_COPILOT_URI}`,
     "",
     "## Skills",
     ...AGENT_PACK_SKILLS.map((skill) => `- ${skillResourceUri(skill)}`),
@@ -61,16 +68,26 @@ export function buildAgentPackIndexMarkdown() {
     "```bash",
     "codemap-mcp init-agent-pack --target all",
     "```",
+    "",
+    "Use `codemap-mcp agent-pack-path` to print the local plugin root path.",
   ].join("\n");
 }
 
-export function buildHarnessMarkdown(harness: "codex" | "claude" | "cursor") {
+export function buildHarnessMarkdown(
+  harness: "codex" | "claude" | "cursor" | "gemini" | "opencode" | "copilot",
+) {
   const title =
     harness === "codex"
       ? "Codex"
       : harness === "claude"
         ? "Claude"
-        : "Cursor";
+        : harness === "cursor"
+          ? "Cursor"
+          : harness === "gemini"
+            ? "Gemini"
+            : harness === "opencode"
+              ? "OpenCode"
+              : "GitHub Copilot CLI";
 
   return [
     `# CodeMap Agent Pack for ${title}`,

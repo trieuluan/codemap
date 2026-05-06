@@ -68,6 +68,7 @@ import {
   installAgentPack,
   parseAgentPackInstallArgs,
 } from "./lib/agent-pack-installer.js";
+import { getPluginRoot } from "./lib/agent-pack.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -154,9 +155,14 @@ async function runInitAgentPackCommand(args: string[]) {
   );
   console.log(`Root: ${result.root}`);
   console.log(`Pack: ${result.packRoot}`);
+  console.log(`Plugin root: ${result.pluginRoot}`);
   for (const item of result.installed) {
     console.log(`- ${item.action}: ${item.path}`);
   }
+}
+
+function runAgentPackPathCommand() {
+  console.log(getPluginRoot());
 }
 
 async function runLoginCommand() {
@@ -232,6 +238,9 @@ async function main() {
       return;
     case "init-agent-pack":
       await runInitAgentPackCommand(process.argv.slice(3));
+      return;
+    case "agent-pack-path":
+      runAgentPackPathCommand();
       return;
     default:
       await runMcpServer();

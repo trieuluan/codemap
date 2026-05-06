@@ -3,8 +3,11 @@ import {
   AGENT_PACK_CLAUDE_URI,
   AGENT_PACK_CODEX_URI,
   AGENT_PACK_CURSOR_URI,
+  AGENT_PACK_GEMINI_URI,
   AGENT_PACK_INDEX_URI,
   AGENT_PACK_INSTALL_URI,
+  AGENT_PACK_OPENCODE_URI,
+  AGENT_PACK_COPILOT_URI,
   AGENT_PACK_SKILLS,
   buildAgentPackIndexMarkdown,
   buildHarnessMarkdown,
@@ -39,7 +42,8 @@ export function registerAgentPackResources(server: McpServer) {
     AGENT_PACK_INSTALL_URI,
     {
       title: "Install CodeMap Agent Pack",
-      description: "Local install instructions for Codex, Claude, Cursor, or all targets.",
+      description:
+        "Local install instructions for Codex, Claude, Cursor, Gemini, OpenCode, Copilot, marketplace, or all targets.",
       mimeType: "text/markdown",
     },
     async (uri) => ({
@@ -57,6 +61,9 @@ export function registerAgentPackResources(server: McpServer) {
     ["codemap-agent-pack-codex", AGENT_PACK_CODEX_URI, "codex"] as const,
     ["codemap-agent-pack-claude", AGENT_PACK_CLAUDE_URI, "claude"] as const,
     ["codemap-agent-pack-cursor", AGENT_PACK_CURSOR_URI, "cursor"] as const,
+    ["codemap-agent-pack-gemini", AGENT_PACK_GEMINI_URI, "gemini"] as const,
+    ["codemap-agent-pack-opencode", AGENT_PACK_OPENCODE_URI, "opencode"] as const,
+    ["codemap-agent-pack-copilot", AGENT_PACK_COPILOT_URI, "copilot"] as const,
   ];
 
   for (const [name, resourceUri, harness] of harnessResources) {

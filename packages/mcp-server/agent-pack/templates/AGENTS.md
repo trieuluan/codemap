@@ -1,0 +1,16 @@
+# AGENTS.md
+
+Use CodeMap MCP before raw file reads or grep.
+
+- Start with `get_agent_workflow` and `get_project`.
+- Broad tasks: `explore_task`.
+- Feature areas: `summarize_feature_area`.
+- Related files: `find_related_files`.
+- Known symbols/files: `search_codebase`.
+- Several candidates: `get_files`.
+- Exact body: `get_symbol_context`.
+- Impact analysis: `find_usages` or `find_callers`.
+- Read MCP output by summary, ranking reasons, next steps, and resource URIs before expanding context.
+- After edits: build/test, inspect diff, then reimport when needed.
+
+Installed CodeMap skills live under `.codex/skills/codemap-*`.

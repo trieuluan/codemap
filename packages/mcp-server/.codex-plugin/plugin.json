@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "CodeMap Agent Pack",
     "shortDescription": "MCP-first codebase workflows for CodeMap",
-    "longDescription": "Use CodeMap Agent Pack to guide coding agents through MCP-first exploration, feature investigation, symbol debugging, safe edits, reimport, and token-efficient review.",
+    "longDescription": "Use CodeMap Agent Pack to guide coding agents through MCP-first exploration, feature investigation, symbol debugging, CodeMap output interpretation, safe edits, reimport, and token-efficient review.",
     "developerName": "CodeMap",
     "category": "Coding",
     "capabilities": ["Interactive", "Read", "Write"],

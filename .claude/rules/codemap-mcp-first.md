@@ -14,6 +14,5 @@ When CodeMap MCP is available, use CodeMap tools before raw file reads or grep.
 - Impact analysis: `find_usages` or `find_callers`.
 - After edits: `get_working_diff`, build/test, then reimport when needed.
 
-Read MCP output in this order: summary, ranked files/symbols, score reasons, next steps, and resource URIs. Expand to raw files only when the ranked context is not enough to answer or edit safely.
-
 Raw reads and grep are fallback tools for unindexed files, dynamic searches, or MCP gaps.
+
