@@ -1,8 +1,8 @@
 import path from "node:path";
 import { Parser, Language, Query } from "web-tree-sitter";
-import type { WorkspaceFileCandidate } from "../file-discovery";
-import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared";
-import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types";
+import type { WorkspaceFileCandidate } from "../file-discovery.js";
+import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
+import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
 
 let parserReady: Promise<{ parser: Parser; language: Language }> | null = null;
 

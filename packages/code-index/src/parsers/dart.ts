@@ -1,6 +1,6 @@
-import type { WorkspaceFileCandidate } from "../file-discovery";
-import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, maskCommentsAndTemplateLiterals, resolveRelativeTargetPath } from "./shared";
-import type { ParsedWorkspaceSemantics } from "./types";
+import type { WorkspaceFileCandidate } from "../file-discovery.js";
+import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, maskCommentsAndTemplateLiterals, resolveRelativeTargetPath } from "./shared.js";
+import type { ParsedWorkspaceSemantics } from "./types.js";
 
 export function parseDartFile(
   file: WorkspaceFileCandidate,

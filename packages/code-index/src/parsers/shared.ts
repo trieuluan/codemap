@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { RepoExternalSymbolInsert } from "../../../../db/schema";
-import type { TypeScriptResolverConfig } from "../ts-resolver";
+import type { TypeScriptResolverConfig } from "../ts-resolver.js";
+import type { ParsedExternalSymbolDraft } from "./types.js";
 
 export const JS_TS_EXTENSIONS = ["ts", "tsx", "js", "jsx"];
 export const DART_EXTENSIONS = ["dart"];
@@ -194,7 +194,7 @@ export function createExternalSymbolDraft(
   projectImportId: string,
   language: string,
   moduleSpecifier: string,
-): RepoExternalSymbolInsert {
+): ParsedExternalSymbolDraft {
   return {
     projectImportId,
     symbolKey: `${language.toLowerCase()}:${moduleSpecifier}`,

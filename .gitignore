@@ -78,8 +78,10 @@ packages/*/.env.*
 
 # Next / build caches
 .turbo
+packages/web/next-env.d.ts
 
 .continue
 
+.codex/config.toml
 .codemap-storage/*
 .codemap/

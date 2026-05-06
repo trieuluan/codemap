@@ -1,5 +1,5 @@
 import ts from "typescript";
-import type { WorkspaceFileCandidate } from "../file-discovery";
+import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import {
   buildLocalSymbolKey,
   buildStableSymbolKey,
@@ -7,15 +7,15 @@ import {
   resolveRelativeTargetPath,
   resolveTsconfigAliasTargetPath,
   createExternalSymbolDraft,
-} from "./shared";
-import type { TypeScriptResolverConfig } from "../ts-resolver";
+} from "./shared.js";
+import type { TypeScriptResolverConfig } from "../ts-resolver.js";
 import type {
   ParsedCallDraft,
   ParsedImportDraft,
   ParsedRelationshipDraft,
   ParsedSymbolDraft,
   ParsedWorkspaceSemantics,
-} from "./types";
+} from "./types.js";
 
 function createSourceFile(file: WorkspaceFileCandidate): ts.SourceFile {
   return ts.createSourceFile(

@@ -1,8 +1,8 @@
 import path from "node:path";
 import { Parser, Language, Query } from "web-tree-sitter";
-import type { WorkspaceFileCandidate } from "../file-discovery";
-import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared";
-import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types";
+import type { WorkspaceFileCandidate } from "../file-discovery.js";
+import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
+import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
 
 let parserReady: Promise<{ parser: Parser; language: Language }> | null = null;
 
@@ -36,11 +36,11 @@ export async function parsePhpFile(
   try {
     ({ parser, language } = await getPhpParser());
   } catch {
-    return { ...EMPTY_SEMANTICS };
+    return parsePhpFileWithRegexFallback(file, projectImportId);
   }
 
   const tree = parser.parse(content);
-  if (!tree) return { ...EMPTY_SEMANTICS };
+  if (!tree) return parsePhpFileWithRegexFallback(file, projectImportId);
 
   const semantics: ParsedWorkspaceSemantics = {
     symbols: [],
@@ -150,6 +150,99 @@ export async function parsePhpFile(
       );
     }
   }
+
+  return semantics;
+}
+
+function parsePhpFileWithRegexFallback(
+  file: WorkspaceFileCandidate,
+  projectImportId: string,
+): ParsedWorkspaceSemantics {
+  const semantics: ParsedWorkspaceSemantics = {
+    symbols: [],
+    imports: [],
+    exports: [],
+    relationships: [],
+    calls: [],
+    issues: [],
+    externalSymbols: [],
+  };
+  const lines = (file.content ?? "").split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    const lineNumber = index + 1;
+    const namespaceMatch = line.match(/^\s*namespace\s+([^;{]+)\s*[;{]/);
+    if (namespaceMatch?.[1]) {
+      const displayName = namespaceMatch[1].trim();
+      const col = line.indexOf(displayName);
+      semantics.symbols.push({
+        localKey: buildLocalSymbolKey(file.path, "namespace", displayName),
+        stableKey: buildStableSymbolKey(file.path, "namespace", displayName, lineNumber),
+        displayName,
+        kind: "namespace",
+        language: file.language!,
+        signature: line.trim(),
+        returnType: null,
+        doc: null,
+        isExported: true,
+        isDefaultExport: false,
+        line: lineNumber,
+        col: Math.max(col, 0),
+        endLine: lineNumber,
+        endCol: Math.max(col, 0) + displayName.length,
+      });
+      return;
+    }
+
+    const useMatch = line.match(/^\s*use\s+([^;]+)\s*;/);
+    if (useMatch?.[1]) {
+      const moduleSpecifier = useMatch[1].trim();
+      const col = line.indexOf(moduleSpecifier);
+      semantics.imports.push({
+        localKey: buildImportLocalKey(file.path, "use", moduleSpecifier, lineNumber, Math.max(col, 0)),
+        moduleSpecifier,
+        importKind: "use",
+        isTypeOnly: false,
+        importedNames: [moduleSpecifier.split("\\").pop() ?? moduleSpecifier],
+        line: lineNumber,
+        col: Math.max(col, 0),
+        endLine: lineNumber,
+        endCol: Math.max(col, 0) + moduleSpecifier.length,
+        resolutionKind: "package",
+        targetPathText: null,
+        targetExternalSymbolKey: `php:${moduleSpecifier}`,
+      });
+      semantics.externalSymbols.push(
+        createExternalSymbolDraft(projectImportId, file.language!, moduleSpecifier),
+      );
+      return;
+    }
+
+    const symbolMatch = line.match(
+      /^\s*(class|interface|trait|enum|function)\s+([A-Za-z_][A-Za-z0-9_]*)/,
+    );
+    if (!symbolMatch?.[1] || !symbolMatch[2]) return;
+
+    const kind = symbolMatch[1] as "class" | "interface" | "trait" | "enum" | "function";
+    const displayName = symbolMatch[2];
+    const col = line.indexOf(displayName);
+    semantics.symbols.push({
+      localKey: buildLocalSymbolKey(file.path, kind, displayName),
+      stableKey: buildStableSymbolKey(file.path, kind, displayName, lineNumber),
+      displayName,
+      kind,
+      language: file.language!,
+      signature: line.trim(),
+      returnType: null,
+      doc: null,
+      isExported: true,
+      isDefaultExport: false,
+      line: lineNumber,
+      col: Math.max(col, 0),
+      endLine: lineNumber,
+      endCol: Math.max(col, 0) + displayName.length,
+    });
+  });
 
   return semantics;
 }

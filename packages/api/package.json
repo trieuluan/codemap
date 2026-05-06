@@ -23,6 +23,7 @@
     "redis:cache:clear": "tsx src/scripts/clear-redis-cache.ts"
   },
   "dependencies": {
+    "@codemap/code-index": "file:../code-index",
     "@codemap/shared": "file:../shared",
     "@better-auth/api-key": "^1.6.7",
     "@bull-board/api": "^6.21.1",
@@ -46,9 +47,6 @@
     "ioredis": "^5.10.1",
     "postgres": "^3.4.8",
     "simple-git": "^3.36.0",
-    "tree-sitter-python": "^0.25.0",
-    "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.26.8",
     "zod": "^4.3.6"
   },
   "devDependencies": {

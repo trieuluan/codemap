@@ -1,19 +1,21 @@
 import nodePath from "node:path";
 import { readFile } from "node:fs/promises";
-import type { db } from "../../../db";
-import type { ProjectFileRecord, projectImport } from "../../../db/schema";
-import { createRepoParseGraphService } from "./repo-parse-graph";
-
-type ProjectImportRecord = typeof projectImport.$inferSelect;
 import {
   buildFileSha256,
   inferLanguage,
   inferMimeType,
   loadTypeScriptResolverConfigs,
   normalizeExtension,
+  PARSE_TOOL_NAME,
+  PARSE_TOOL_VERSION,
   parseWorkspaceFileSemantics,
   type WorkspaceFileCandidate,
-} from "./runner";
+} from "@codemap/code-index";
+import type { db } from "../../../db";
+import type { ProjectFileRecord, projectImport } from "../../../db/schema";
+import { createRepoParseGraphService } from "./repo-parse-graph";
+
+type ProjectImportRecord = typeof projectImport.$inferSelect;
 
 type Database = typeof db;
 
@@ -83,8 +85,8 @@ export async function reparseFileIfStale(
     ignoreReason: null,
     isParseable: true,
     parseStatus: "parsed",
-    parserName: "codemap-regex-parser",
-    parserVersion: "0.1.0",
+    parserName: PARSE_TOOL_NAME,
+    parserVersion: PARSE_TOOL_VERSION,
     lineCount: content.split(/\r?\n/).length,
     content,
   };

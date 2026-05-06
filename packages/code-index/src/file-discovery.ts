@@ -1,7 +1,5 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { normalizeRepositoryFilePath } from "../map/file-preview";
-import type { RepoFileInsert } from "../../../db/schema";
 import {
   buildFileSha256,
   isBinaryBuffer,
@@ -9,7 +7,15 @@ import {
   inferMimeType,
   normalizeExtension,
   readSampleBuffer,
-} from "./language-utils";
+} from "./language-utils.js";
+
+export type RepoFileParseStatus =
+  | "parsed"
+  | "skipped"
+  | "too_large"
+  | "binary"
+  | "unsupported"
+  | "error";
 
 export const IGNORED_NAMES = new Set([
   ".git",
@@ -46,11 +52,22 @@ export interface WorkspaceFileCandidate {
   isIgnored: boolean;
   ignoreReason: string | null;
   isParseable: boolean;
-  parseStatus: RepoFileInsert["parseStatus"];
+  parseStatus: RepoFileParseStatus;
   parserName: string | null;
   parserVersion: string | null;
   lineCount: number | null;
   content: string | null;
+}
+
+export function normalizeRepositoryFilePath(input: string) {
+  const normalizedPath = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  const resolvedPath = path.posix.normalize(normalizedPath);
+
+  if (!resolvedPath || resolvedPath === "." || resolvedPath.startsWith("../")) {
+    throw new Error("File path must stay within the repository root");
+  }
+
+  return resolvedPath;
 }
 
 export async function collectWorkspaceFiles(

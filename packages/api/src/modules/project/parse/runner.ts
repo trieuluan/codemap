@@ -7,17 +7,18 @@ import type {
   RepoSymbolOccurrenceInsert,
   RepoSymbolRelationshipInsert,
 } from "../../../db/schema";
+import {
+  collectWorkspaceFiles,
+  loadTypeScriptResolverConfigs,
+  PARSE_TOOL_NAME,
+  PARSE_TOOL_VERSION,
+  parseWorkspaceFileSemantics,
+} from "@codemap/code-index";
 import { createRepositoryWorkspaceService } from "../import/repository-workspace";
 import { createProjectService } from "../service";
 import { createRepoParseGraphService } from "./repo-parse-graph";
-import { collectWorkspaceFiles, PARSE_TOOL_NAME, PARSE_TOOL_VERSION } from "./file-discovery";
-import { loadTypeScriptResolverConfigs } from "./ts-resolver";
-import { parseWorkspaceFileSemantics } from "./parsers/index";
 
-export type { WorkspaceFileCandidate } from "./file-discovery";
-export { normalizeExtension, inferLanguage, inferMimeType, buildFileSha256 } from "./language-utils";
-export { loadTypeScriptResolverConfigs } from "./ts-resolver";
-export { parseWorkspaceFileSemantics } from "./parsers/index";
+export type { WorkspaceFileCandidate } from "@codemap/code-index";
 
 interface RunProjectParseContext {
   job?: Job;

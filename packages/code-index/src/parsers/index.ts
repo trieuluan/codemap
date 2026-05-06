@@ -1,12 +1,12 @@
-import type { WorkspaceFileCandidate } from "../file-discovery";
-import type { TypeScriptResolverConfig } from "../ts-resolver";
-import { parseDartFile } from "./dart";
-import { parsePhpFile } from "./php";
-import { parsePythonFile } from "./python";
-import { parseTypeScriptOrJavaScriptFile } from "./typescript";
-import { EMPTY_SEMANTICS } from "./types";
+import type { WorkspaceFileCandidate } from "../file-discovery.js";
+import type { TypeScriptResolverConfig } from "../ts-resolver.js";
+import { parseDartFile } from "./dart.js";
+import { parsePhpFile } from "./php.js";
+import { parsePythonFile } from "./python.js";
+import { parseTypeScriptOrJavaScriptFile } from "./typescript.js";
+import { EMPTY_SEMANTICS } from "./types.js";
 
-export type { ParsedWorkspaceSemantics } from "./types";
+export type { ParsedWorkspaceSemantics } from "./types.js";
 
 export async function parseWorkspaceFileSemantics(input: {
   file: WorkspaceFileCandidate;

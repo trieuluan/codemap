@@ -1,8 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
-import { normalizeRepositoryFilePath } from "../map/file-preview";
-import { IGNORED_NAMES } from "./file-discovery";
+import { IGNORED_NAMES, normalizeRepositoryFilePath } from "./file-discovery.js";
 
 export interface TypeScriptPathAliasPattern {
   pattern: string;

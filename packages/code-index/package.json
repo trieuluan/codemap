@@ -1,0 +1,22 @@
+{
+  "name": "@codemap/code-index",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-wasms": "^0.1.13",
+    "typescript": "~5.9.2",
+    "web-tree-sitter": "^0.26.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2"
+  }
+}
