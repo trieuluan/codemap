@@ -57,12 +57,17 @@ import { registerListProjectsTool } from "./tools/list-projects.js";
 import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
 import { registerProjectContextResource } from "./resources/project-context.js";
 import { registerAgentRuleResources } from "./resources/agent-rules.js";
+import { registerAgentPackResources } from "./resources/agent-pack.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
 import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
+import {
+  installAgentPack,
+  parseAgentPackInstallArgs,
+} from "./lib/agent-pack-installer.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -134,9 +139,24 @@ async function runMcpServer() {
   // Resources — automatically surfaced to Claude as session context
   registerProjectContextResource(server, config);
   registerAgentRuleResources(server);
+  registerAgentPackResources(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+async function runInitAgentPackCommand(args: string[]) {
+  const options = parseAgentPackInstallArgs(args);
+  const result = await installAgentPack(options);
+
+  console.log(
+    `${result.dryRun ? "Previewed" : "Installed"} CodeMap Agent Pack for target: ${result.target}`,
+  );
+  console.log(`Root: ${result.root}`);
+  console.log(`Pack: ${result.packRoot}`);
+  for (const item of result.installed) {
+    console.log(`- ${item.action}: ${item.path}`);
+  }
 }
 
 async function runLoginCommand() {
@@ -209,6 +229,9 @@ async function main() {
       return;
     case "whoami":
       await runWhoAmICommand();
+      return;
+    case "init-agent-pack":
+      await runInitAgentPackCommand(process.argv.slice(3));
       return;
     default:
       await runMcpServer();

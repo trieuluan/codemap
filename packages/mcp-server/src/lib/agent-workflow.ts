@@ -1,3 +1,10 @@
+import {
+  AGENT_PACK_INDEX_URI,
+  AGENT_PACK_INSTALL_URI,
+  AGENT_PACK_SKILLS,
+  skillResourceUri,
+} from "./agent-pack.js";
+
 export const MCP_FIRST_RULE_URI = "codemap://rules/mcp-first";
 export const TASK_LIFECYCLE_RULE_URI = "codemap://rules/task-lifecycle";
 
@@ -10,6 +17,7 @@ export const AGENT_WORKFLOW_SUMMARY = [
   "Use find_usages/find_callers for symbol impact analysis.",
   "Use get_working_diff after edits, then build/test as appropriate.",
   "Call trigger_reimport and wait_for_import after meaningful code/index changes.",
+  "Read CodeMap Agent Pack skills when the agent needs a reusable workflow.",
 ];
 
 export const AGENT_WORKFLOW_SEQUENCE = [
@@ -105,6 +113,11 @@ export function buildAgentWorkflowMarkdown() {
     "## Rule Resources",
     `- ${MCP_FIRST_RULE_URI}`,
     `- ${TASK_LIFECYCLE_RULE_URI}`,
+    `- ${AGENT_PACK_INDEX_URI}`,
+    `- ${AGENT_PACK_INSTALL_URI}`,
+    "",
+    "## Agent Pack Skills",
+    ...AGENT_PACK_SKILLS.map((skill) => `- ${skillResourceUri(skill)}`),
     "",
     MCP_FIRST_RULE_MARKDOWN,
     "",

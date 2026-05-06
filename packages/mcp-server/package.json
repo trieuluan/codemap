@@ -8,6 +8,10 @@
     "codemap-mcp": "dist/index.js"
   },
   "files": [
+    ".claude-plugin",
+    ".codex-plugin",
+    ".cursor-plugin",
+    "agent-pack",
     "dist",
     "README.md",
     "package.json"

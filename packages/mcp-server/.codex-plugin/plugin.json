@@ -1,0 +1,35 @@
+{
+  "name": "codemap-agent-pack",
+  "version": "1.0.0",
+  "description": "CodeMap MCP-first workflows, skills, and rules for token-efficient codebase exploration.",
+  "author": {
+    "name": "CodeMap"
+  },
+  "homepage": "https://codemap.dev",
+  "repository": "https://github.com/trieuluan/codemap",
+  "license": "MIT",
+  "keywords": [
+    "codemap",
+    "mcp",
+    "codebase",
+    "skills",
+    "workflow",
+    "context"
+  ],
+  "skills": "./agent-pack/skills/",
+  "interface": {
+    "displayName": "CodeMap Agent Pack",
+    "shortDescription": "MCP-first codebase workflows for CodeMap",
+    "longDescription": "Use CodeMap Agent Pack to guide coding agents through MCP-first exploration, feature investigation, symbol debugging, safe edits, reimport, and token-efficient review.",
+    "developerName": "CodeMap",
+    "category": "Coding",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "Use CodeMap to investigate this feature area.",
+      "Use CodeMap MCP-first workflow before editing this codebase."
+    ],
+    "websiteURL": "https://codemap.dev",
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

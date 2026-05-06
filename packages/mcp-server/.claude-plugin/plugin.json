@@ -1,0 +1,12 @@
+{
+  "name": "codemap-agent-pack",
+  "description": "CodeMap MCP-first skills and workflows for Claude Code.",
+  "version": "1.0.0",
+  "author": {
+    "name": "CodeMap"
+  },
+  "homepage": "https://codemap.dev",
+  "repository": "https://github.com/trieuluan/codemap",
+  "license": "MIT",
+  "keywords": ["codemap", "mcp", "skills", "workflow", "codebase"]
+}

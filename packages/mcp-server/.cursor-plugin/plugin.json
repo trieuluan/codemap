@@ -1,0 +1,16 @@
+{
+  "name": "codemap-agent-pack",
+  "displayName": "CodeMap Agent Pack",
+  "description": "CodeMap MCP-first skills, rules, and commands for Cursor.",
+  "version": "1.0.0",
+  "author": {
+    "name": "CodeMap"
+  },
+  "homepage": "https://codemap.dev",
+  "repository": "https://github.com/trieuluan/codemap",
+  "license": "MIT",
+  "keywords": ["codemap", "mcp", "skills", "workflow", "codebase"],
+  "skills": "./agent-pack/skills/",
+  "agents": "./agent-pack/agents/",
+  "commands": "./agent-pack/commands/"
+}

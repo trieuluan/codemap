@@ -1,5 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+  AGENT_PACK_INDEX_URI,
+  AGENT_PACK_INSTALL_URI,
+  AGENT_PACK_SKILLS,
+  skillResourceUri,
+} from "../lib/agent-pack.js";
+import {
   AGENT_WORKFLOW_SEQUENCE,
   AGENT_WORKFLOW_SUMMARY,
   MCP_FIRST_RULE_URI,
@@ -23,7 +29,13 @@ export function registerGetAgentWorkflowTool(server: McpServer) {
       return success(buildAgentWorkflowMarkdown(), {
         summary: AGENT_WORKFLOW_SUMMARY,
         recommendedSequence: AGENT_WORKFLOW_SEQUENCE,
-        resources: [MCP_FIRST_RULE_URI, TASK_LIFECYCLE_RULE_URI],
+        resources: [
+          MCP_FIRST_RULE_URI,
+          TASK_LIFECYCLE_RULE_URI,
+          AGENT_PACK_INDEX_URI,
+          AGENT_PACK_INSTALL_URI,
+          ...AGENT_PACK_SKILLS.map((skill) => skillResourceUri(skill)),
+        ],
       });
     }),
   );
