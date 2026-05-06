@@ -5,3 +5,13 @@ export type GitlabConnectionStatus =
 export type GitlabConnectUrlResponse = {
   url: string;
 };
+
+export type GitlabRepositoryOption = {
+  id: string;
+  name: string;
+  fullName: string;
+  ownerLogin: string;
+  defaultBranch: string | null;
+  private: boolean;
+  repositoryUrl: string;
+};

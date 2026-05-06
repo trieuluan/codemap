@@ -46,6 +46,7 @@ export default async function ProjectDetailPage({
           initialProject={project}
           initialImports={firstPage.data}
           entitlements={workspaceDetail.entitlements}
+          usage={workspaceDetail.usage}
           workspaceId={workspaceId}
         />
       </div>

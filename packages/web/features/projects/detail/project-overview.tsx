@@ -21,7 +21,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import type { WorkspaceEntitlements } from "@codemap/shared";
+import type { WorkspaceEntitlements, WorkspaceUsageSummary } from "@codemap/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -69,11 +69,13 @@ export function ProjectOverview({
   initialProject,
   initialImports,
   entitlements,
+  usage,
   workspaceId,
 }: {
   initialProject: Project;
   initialImports: ProjectImport[];
   entitlements: WorkspaceEntitlements;
+  usage?: WorkspaceUsageSummary | null;
   workspaceId: string;
 }) {
   const { toast } = useToast();
@@ -235,15 +237,6 @@ export function ProjectOverview({
       return;
     }
 
-    if (isPrivateRepoBlocked) {
-      toast({
-        title: "Private repository",
-        description:
-          "This project requires private repository access. Upgrade to Developer or Team to import it.",
-      });
-      return;
-    }
-
     if (!hasCloudImportAccess) {
       toast({
         title: "Upgrade required",
@@ -298,7 +291,7 @@ export function ProjectOverview({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {!hasCloudImportAccess ? (
+          {!hasCloudImportAccess || isPrivateRepoBlocked ? (
             <Button size="sm" asChild>
               <Link href={`/w/${workspaceId}/upgrade`}>
                 <RefreshCcw className="size-3.5" />
@@ -314,6 +307,12 @@ export function ProjectOverview({
               <RefreshCcw className="size-3.5" />
               {importLabel}
             </Button>
+          )}
+
+          {usage != null && entitlements.maxImportsPerMonth != null && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {usage.importsThisMonth}/{entitlements.maxImportsPerMonth} this month
+            </span>
           )}
 
           <Separator orientation="vertical" className="h-6" />

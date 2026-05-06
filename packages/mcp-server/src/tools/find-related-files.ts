@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
+import { shouldUseLocalIndexBeforeRemote } from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -330,6 +331,27 @@ export function registerFindRelatedFilesTool(
           return success(
             "Provide at least one of: query, file_path, or symbol_name.",
             { projectId: resolvedProjectId, relatedFiles: [] },
+          );
+        }
+
+        // ── Early exit if cloud index not ready ─────────────────────────────
+        if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+          const hint = query
+            ? `search_codebase("${query.slice(0, 60)}")`
+            : file_path
+              ? `get_file("${file_path}", include=["outline"])`
+              : `search_codebase("${symbol_name}")`;
+          return success(
+            `Cloud index not ready. Use local alternatives instead:\n→ ${hint}`,
+            {
+              projectId: resolvedProjectId,
+              query,
+              file_path,
+              relatedFiles: [],
+              available: false,
+              source: "local",
+              suggestedNextTools: [hint],
+            },
           );
         }
 

@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
+import {
+  shouldFallbackToLocal,
+  shouldUseLocalIndexBeforeRemote,
+} from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
@@ -319,6 +323,22 @@ export function registerExploreTaskTool(
         );
       }
 
+      // ── Early exit if cloud index not ready ───────────────────────────────
+      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+        const hint = `search_codebase("${task.slice(0, 60)}")`;
+        return success(
+          `Cloud index not ready for task: "${task}"\n\n` +
+          `Use search_codebase with the local index instead:\n→ ${hint}`,
+          {
+            projectId: resolvedProjectId,
+            task,
+            available: false,
+            source: "local",
+            suggestedNextTools: [hint, "get_project_map()  // browse project structure"],
+          },
+        );
+      }
+
       // ── Phase 1: parallel — keyword search + edit locations ──────────────
 
       const [searchResult, editLocsResult] = await Promise.allSettled([
@@ -341,6 +361,15 @@ export function registerExploreTaskTool(
         editLocsResult.status === "fulfilled"
           ? editLocsResult.value
           : ({ suggestions: [] } as unknown as EditLocationsResponse);
+
+      // If both cloud calls failed, hint at local fallback
+      const bothFailed =
+        searchResult.status === "rejected" && editLocsResult.status === "rejected";
+      const cloudFailed =
+        bothFailed &&
+        shouldFallbackToLocal(
+          searchResult.status === "rejected" ? searchResult.reason : null,
+        );
 
       // ── Phase 2: classify into likelyFiles, entrypoints, symbols ─────────
 
@@ -484,6 +513,12 @@ export function registerExploreTaskTool(
       const packBase = { task, likelyFiles, entrypoints, symbols, risks, recommendedReads };
       const summary = buildSummary(packBase);
       const suggestedNextTools = buildNextTools(packBase);
+
+      if (cloudFailed) {
+        suggestedNextTools.unshift(
+          `search_codebase("${task.slice(0, 60)}")  // cloud unavailable — use local index`,
+        );
+      }
 
       const pack: ContextPack = { ...packBase, summary, suggestedNextTools };
 

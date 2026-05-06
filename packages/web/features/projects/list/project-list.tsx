@@ -9,6 +9,11 @@ import { browserGitlabApi } from "@/features/gitlab/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -128,26 +133,48 @@ export function ProjectList({
           </Select>
           {canImportFromProvider && (
             <>
-              <ImportFromGithubDialog
-                workspaceId={workspaceId}
-                isConnected={githubConnected}
-                trigger={
-                  <Button variant="outline" disabled={!githubConnected}>
-                    <GithubIcon className="size-4" />
-                    Import from GitHub
-                  </Button>
-                }
-              />
-              <ImportFromGitlabDialog
-                workspaceId={workspaceId}
-                isConnected={gitlabConnected}
-                trigger={
-                  <Button variant="outline" disabled={!gitlabConnected}>
-                    <GitlabIcon className="size-4" />
-                    Import from GitLab
-                  </Button>
-                }
-              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <ImportFromGithubDialog
+                      workspaceId={workspaceId}
+                      isConnected={githubConnected}
+                      trigger={
+                        <Button variant="outline" disabled={!githubConnected}>
+                          <GithubIcon className="size-4" />
+                          Import from GitHub
+                        </Button>
+                      }
+                    />
+                  </span>
+                </TooltipTrigger>
+                {!githubConnected && (
+                  <TooltipContent>
+                    Connect GitHub in Account → Integrations first
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <ImportFromGitlabDialog
+                      workspaceId={workspaceId}
+                      isConnected={gitlabConnected}
+                      trigger={
+                        <Button variant="outline" disabled={!gitlabConnected}>
+                          <GitlabIcon className="size-4" />
+                          Import from GitLab
+                        </Button>
+                      }
+                    />
+                  </span>
+                </TooltipTrigger>
+                {!gitlabConnected && (
+                  <TooltipContent>
+                    Connect GitLab in Account → Integrations first
+                  </TooltipContent>
+                )}
+              </Tooltip>
             </>
           )}
           <CreateProjectDialog

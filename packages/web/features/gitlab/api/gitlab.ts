@@ -1,5 +1,5 @@
 import { requestApi } from "@/lib/api/client";
-import type { GitlabConnectionStatus, GitlabConnectUrlResponse } from "./gitlab.types";
+import type { GitlabConnectionStatus, GitlabConnectUrlResponse, GitlabRepositoryOption } from "./gitlab.types";
 
 export function browserGitlabApi() {
   return {
@@ -14,6 +14,14 @@ export function browserGitlabApi() {
     disconnect: () =>
       requestApi<{ disconnected: boolean }>("/gitlab/disconnect", {
         method: "DELETE",
+      }),
+
+    listRepositories: (query?: string, limit?: number) =>
+      requestApi<GitlabRepositoryOption[]>("/gitlab/repositories", {
+        queryParams: {
+          q: query,
+          limit: limit ? `${limit}` : undefined,
+        },
       }),
   };
 }
