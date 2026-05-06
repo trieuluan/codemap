@@ -87,7 +87,9 @@ export function createProjectController(fastify: FastifyInstance) {
         throw fastify.httpErrors.forbidden("Workspace access denied");
       }
       if (error.message === "WORKSPACE_WRITE_ACCESS_REQUIRED") {
-        throw fastify.httpErrors.forbidden("Workspace owner or admin role required");
+        throw fastify.httpErrors.forbidden(
+          "Workspace owner or admin role required",
+        );
       }
       if (error.message === "WORKSPACE_PROJECT_LIMIT_EXCEEDED") {
         throw fastify.httpErrors.forbidden("Workspace project limit exceeded");
@@ -434,10 +436,7 @@ export function createProjectController(fastify: FastifyInstance) {
       });
     },
 
-    getProjectFile: async (
-      request: FastifyRequest,
-      reply: FastifyReply,
-    ) => {
+    getProjectFile: async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
       const query = projectFileQuerySchema.parse(request.query ?? {});
@@ -473,9 +472,7 @@ export function createProjectController(fastify: FastifyInstance) {
       );
 
       if (!fileRecord) {
-        throw fastify.httpErrors.notFound(
-          `File not found: ${normalizedPath}`,
-        );
+        throw fastify.httpErrors.notFound(`File not found: ${normalizedPath}`);
       }
 
       const [imports, importedBy] = await Promise.all([
@@ -507,7 +504,6 @@ export function createProjectController(fastify: FastifyInstance) {
         },
       });
     },
-
 
     getProjectFileContent: async (
       request: FastifyRequest,
@@ -571,6 +567,8 @@ export function createProjectController(fastify: FastifyInstance) {
             commitSha: importRecord.commitSha,
             filePath: normalizedPath,
             accessToken,
+            startLine: query.startLine,
+            endLine: query.endLine,
           });
 
           return reply.success(preview);
@@ -673,23 +671,25 @@ export function createProjectController(fastify: FastifyInstance) {
         });
       }
 
-      const [imports, importedBy, exportsToReturn, symbols, { blastRadius, cycles }] =
-        await Promise.all([
-          repoParseGraphService.listFileImportEdges(
-            importRecord.id,
-            fileRecord.id,
-          ),
-          repoParseGraphService.listFileIncomingImportEdges(
-            importRecord.id,
-            fileRecord.id,
-          ),
-          repoParseGraphService.listExports(importRecord.id, fileRecord.id),
-          repoParseGraphService.listFileSymbols(importRecord.id, fileRecord.id),
-          repoParseGraphService.getFileAnalysis(
-            importRecord.id,
-            fileRecord.id,
-          ),
-        ]);
+      const [
+        imports,
+        importedBy,
+        exportsToReturn,
+        symbols,
+        { blastRadius, cycles },
+      ] = await Promise.all([
+        repoParseGraphService.listFileImportEdges(
+          importRecord.id,
+          fileRecord.id,
+        ),
+        repoParseGraphService.listFileIncomingImportEdges(
+          importRecord.id,
+          fileRecord.id,
+        ),
+        repoParseGraphService.listExports(importRecord.id, fileRecord.id),
+        repoParseGraphService.listFileSymbols(importRecord.id, fileRecord.id),
+        repoParseGraphService.getFileAnalysis(importRecord.id, fileRecord.id),
+      ]);
       const symbolById = new Map(symbols.map((item) => [item.id, item]));
 
       return reply.success({
@@ -823,13 +823,21 @@ export function createProjectController(fastify: FastifyInstance) {
         return reply.success(JSON.parse(cached));
       }
 
-      const insights = await repoParseGraphService.getProjectInsights(importId, {
-        file: query.file,
-        symbol: query.symbol,
-      });
+      const insights = await repoParseGraphService.getProjectInsights(
+        importId,
+        {
+          file: query.file,
+          symbol: query.symbol,
+        },
+      );
 
       if (canUseCache) {
-        await fastify.redis.set(cacheKey, JSON.stringify(insights), "EX", 86400);
+        await fastify.redis.set(
+          cacheKey,
+          JSON.stringify(insights),
+          "EX",
+          86400,
+        );
       }
 
       return reply.success(insights);
@@ -1087,10 +1095,7 @@ export function createProjectController(fastify: FastifyInstance) {
 
       const importRecord = latestMapWithSource.importRecord;
 
-      if (
-        !importRecord?.sourceAvailable ||
-        !importRecord.sourceWorkspacePath
-      ) {
+      if (!importRecord?.sourceAvailable || !importRecord.sourceWorkspacePath) {
         throw fastify.httpErrors.unprocessableEntity(
           "Retained source is not available for this project. Re-import to restore workspace access.",
         );
@@ -1218,8 +1223,11 @@ export function createProjectController(fastify: FastifyInstance) {
     ) => {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
-      const { path: filePath, content, contentHash } =
-        projectFileReparseBodySchema.parse(request.body);
+      const {
+        path: filePath,
+        content,
+        contentHash,
+      } = projectFileReparseBodySchema.parse(request.body);
 
       const normalizedPath = (() => {
         try {
@@ -1261,6 +1269,5 @@ export function createProjectController(fastify: FastifyInstance) {
 
       return reply.success(result);
     },
-
   };
 }

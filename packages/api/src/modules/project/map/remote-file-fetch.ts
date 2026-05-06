@@ -6,13 +6,13 @@ interface RemoteFileFetchInput {
   commitSha: string;
   filePath: string;
   accessToken: string | null;
+  startLine?: number;
+  endLine?: number;
 }
 
 // Extract "owner/repo" from various GitHub URL formats
 function parseGitHubRepo(repositoryUrl: string): string | null {
-  const patterns = [
-    /github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?$/,
-  ];
+  const patterns = [/github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?$/];
   for (const pattern of patterns) {
     const match = repositoryUrl.match(pattern);
     if (match) return match[1];
@@ -45,9 +45,14 @@ async function fetchGitHubFileContent(
   const res = await fetch(url, { headers });
 
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitHub API error ${res.status}: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`GitHub API error ${res.status}: ${res.statusText}`);
 
-  const data = await res.json() as { content?: string; encoding?: string; size?: number };
+  const data = (await res.json()) as {
+    content?: string;
+    encoding?: string;
+    size?: number;
+  };
 
   // Files > 1MB: GitHub returns no content, must use Git Data API
   if (!data.content && data.size && data.size > 1_000_000) {
@@ -55,7 +60,9 @@ async function fetchGitHubFileContent(
   }
 
   if (!data.content || data.encoding !== "base64") return null;
-  return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf-8");
+  return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString(
+    "utf-8",
+  );
 }
 
 async function fetchGitHubBlobContent(
@@ -76,7 +83,9 @@ async function fetchGitHubBlobContent(
   const treeRes = await fetch(treeUrl, { headers });
   if (!treeRes.ok) return null;
 
-  const tree = await treeRes.json() as { tree: Array<{ path: string; sha: string; type: string }> };
+  const tree = (await treeRes.json()) as {
+    tree: Array<{ path: string; sha: string; type: string }>;
+  };
   const blob = tree.tree.find((t) => t.path === filePath && t.type === "blob");
   if (!blob) return null;
 
@@ -86,9 +95,14 @@ async function fetchGitHubBlobContent(
   );
   if (!blobRes.ok) return null;
 
-  const blobData = await blobRes.json() as { content?: string; encoding?: string };
+  const blobData = (await blobRes.json()) as {
+    content?: string;
+    encoding?: string;
+  };
   if (!blobData.content || blobData.encoding !== "base64") return null;
-  return Buffer.from(blobData.content.replace(/\n/g, ""), "base64").toString("utf-8");
+  return Buffer.from(blobData.content.replace(/\n/g, ""), "base64").toString(
+    "utf-8",
+  );
 }
 
 async function fetchGitLabFileContent(
@@ -105,7 +119,8 @@ async function fetchGitLabFileContent(
 
   const res = await fetch(url, { headers });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitLab API error ${res.status}: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`GitLab API error ${res.status}: ${res.statusText}`);
 
   return res.text();
 }
@@ -121,14 +136,25 @@ export async function fetchRemoteFileContent(
     if (provider === "github") {
       const repoPath = parseGitHubRepo(repositoryUrl);
       if (!repoPath) throw new Error("Cannot parse GitHub repository URL");
-      content = await fetchGitHubFileContent(repoPath, commitSha, filePath, accessToken);
+      content = await fetchGitHubFileContent(
+        repoPath,
+        commitSha,
+        filePath,
+        accessToken,
+      );
     } else {
       const repoPath = parseGitLabRepo(repositoryUrl);
       if (!repoPath) throw new Error("Cannot parse GitLab repository URL");
-      content = await fetchGitLabFileContent(repoPath, commitSha, filePath, accessToken);
+      content = await fetchGitLabFileContent(
+        repoPath,
+        commitSha,
+        filePath,
+        accessToken,
+      );
     }
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "Remote fetch failed";
+    const reason =
+      error instanceof Error ? error.message : "Remote fetch failed";
     return buildRemoteUnavailable(filePath, reason);
   }
 
@@ -147,13 +173,19 @@ export async function fetchRemoteFileContent(
     kind: "text",
     mimeType: null,
     status: "ready",
-    content,
+    content: content
+      .split(/\r?\n/)
+      .slice(input.startLine ? input.startLine - 1 : 0, input.endLine)
+      .join("\n"),
     sizeBytes: Buffer.byteLength(content, "utf-8"),
     reason: null,
   };
 }
 
-function buildRemoteUnavailable(filePath: string, reason: string): ProjectFilePreviewResult {
+function buildRemoteUnavailable(
+  filePath: string,
+  reason: string,
+): ProjectFilePreviewResult {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? null;
   return {
     path: filePath,
@@ -173,14 +205,27 @@ function buildRemoteUnavailable(filePath: string, reason: string): ProjectFilePr
 function inferLanguageFromExtension(ext: string | null): string | null {
   if (!ext) return null;
   const map: Record<string, string> = {
-    ts: "TypeScript", tsx: "TypeScript",
-    js: "JavaScript", jsx: "JavaScript",
-    py: "Python", rb: "Ruby", go: "Go",
-    rs: "Rust", java: "Java", kt: "Kotlin",
-    cs: "C#", cpp: "C++", c: "C",
-    json: "JSON", yml: "YAML", yaml: "YAML",
-    toml: "TOML", md: "Markdown",
-    css: "CSS", scss: "SCSS", html: "HTML",
+    ts: "TypeScript",
+    tsx: "TypeScript",
+    js: "JavaScript",
+    jsx: "JavaScript",
+    py: "Python",
+    rb: "Ruby",
+    go: "Go",
+    rs: "Rust",
+    java: "Java",
+    kt: "Kotlin",
+    cs: "C#",
+    cpp: "C++",
+    c: "C",
+    json: "JSON",
+    yml: "YAML",
+    yaml: "YAML",
+    toml: "TOML",
+    md: "Markdown",
+    css: "CSS",
+    scss: "SCSS",
+    html: "HTML",
   };
   return map[ext] ?? null;
 }

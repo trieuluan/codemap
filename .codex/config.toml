@@ -94,3 +94,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.get_agent_workflow]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_symbol_context]
+approval_mode = "approve"
