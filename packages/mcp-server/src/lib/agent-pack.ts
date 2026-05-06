@@ -12,13 +12,14 @@ export const AGENT_PACK_OPENCODE_URI = "codemap://agent-pack/opencode";
 export const AGENT_PACK_COPILOT_URI = "codemap://agent-pack/copilot";
 
 export const AGENT_PACK_SKILLS = [
-  "using-codemap",
   "mcp-first-exploration",
   "feature-area-investigation",
   "symbol-level-debugging",
   "interpreting-codemap-output",
   "safe-edit-and-reimport",
   "token-efficient-code-review",
+  "brainstorming",
+  "test-driven-development",
 ] as const;
 
 export type AgentPackSkillName = (typeof AGENT_PACK_SKILLS)[number];
