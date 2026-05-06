@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
-import { createCodeMapClient } from "../lib/codemap-api.js";
+import { createCodeMapClient, type CodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type {
@@ -30,6 +30,13 @@ interface FeatureFile {
   symbols: string[];
 }
 
+interface ParsedFileSummary {
+  imports?: Array<{ targetPath?: string | null; targetPathText?: string | null }>;
+  importedBy?: Array<{ sourceFilePath?: string | null; sourcePath?: string | null }>;
+}
+
+type Confidence = "high" | "medium" | "low";
+
 const LAYERS: Layer[] = [
   "Frontend routes",
   "Frontend components",
@@ -41,6 +48,67 @@ const LAYERS: Layer[] = [
   "Tests and docs",
   "Other",
 ];
+
+const STOP_WORDS = new Set([
+  "sua",
+  "them",
+  "xoa",
+  "cap",
+  "nhat",
+  "tao",
+  "lam",
+  "cho",
+  "voi",
+  "fix",
+  "add",
+  "remove",
+  "delete",
+  "update",
+  "create",
+  "change",
+  "bug",
+  "loi",
+  "issue",
+  "error",
+  "feature",
+  "page",
+  "file",
+  "the",
+  "and",
+  "for",
+  "with",
+  "into",
+  "from",
+  "cua",
+  "trong",
+]);
+
+const STRUCTURAL_SEGMENTS = new Set([
+  "src",
+  "app",
+  "features",
+  "modules",
+  "routes",
+  "components",
+  "api",
+  "lib",
+  "utils",
+  "hooks",
+  "types",
+  "shared",
+  "common",
+  "packages",
+  "web",
+  "mcp-server",
+  "index",
+  "page",
+  "layout",
+  "loading",
+  "error",
+  "route",
+  "(auth)",
+  "(protected)",
+]);
 
 function classifyLayer(path: string): Layer {
   if (/\.(test|spec)\./.test(path) || path.includes("/__tests__/")) return "Tests and docs";
@@ -69,20 +137,120 @@ function normalizeQuery(query: string) {
   return query
     .toLowerCase()
     .split(/[\s\-_/.,:]+/)
-    .map((word) => word.replace(/[^a-z0-9]/g, ""))
-    .filter((word) => word.length > 2);
+    .map((word) =>
+      word
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, ""),
+    )
+    .filter((word) => word.length > 2 && !STOP_WORDS.has(word));
+}
+
+function filename(path: string) {
+  return path.split("/").pop()?.toLowerCase() ?? "";
+}
+
+function pathSegments(path: string) {
+  return path
+    .split("/")
+    .map((segment) =>
+      segment
+        .replace(/^\d+\./, "")
+        .replace(/\.(ts|tsx|js|jsx|dart|php|py|md|mdx)$/, "")
+        .toLowerCase(),
+    )
+    .filter(Boolean);
+}
+
+function extractDomains(path: string) {
+  return pathSegments(path).filter(
+    (segment) =>
+      segment.length > 2 &&
+      !STRUCTURAL_SEGMENTS.has(segment) &&
+      !/^\[.*\]$/.test(segment),
+  );
+}
+
+function symbolScore(name: string | undefined, keywords: string[]) {
+  if (!name) return 0;
+  const lower = name.toLowerCase();
+  let score = 0;
+  for (const keyword of keywords) {
+    if (lower === keyword) score += 2.4;
+    else if (lower.includes(keyword)) score += 1.1;
+  }
+  return score;
+}
+
+function layerPriority(layer: Layer, keywords: string[]) {
+  const wantsMcp = keywords.some((keyword) => ["mcp", "tool", "tools"].includes(keyword));
+  switch (layer) {
+    case "Frontend routes":
+      return 1.4;
+    case "Backend routes":
+      return 1.25;
+    case "Backend services":
+      return 1.1;
+    case "Frontend API clients":
+      return 1;
+    case "Database and shared types":
+      return 0.85;
+    case "Frontend components":
+      return 0.75;
+    case "MCP/tools":
+      return wantsMcp ? 1.2 : -0.35;
+    case "Tests and docs":
+      return -0.25;
+    case "Other":
+      return 0;
+  }
 }
 
 function pathScore(path: string, keywords: string[]) {
   const lower = path.toLowerCase();
+  const segments = pathSegments(path);
+  const domains = extractDomains(path);
   let score = 0;
+  const reasons: string[] = [];
+
   for (const keyword of keywords) {
-    if (lower.includes(`/${keyword}/`)) score += 1.4;
-    else if (lower.includes(keyword)) score += 0.8;
+    if (segments.includes(keyword)) {
+      score += 2.2;
+      reasons.push("exact feature segment");
+    } else if (domains.some((domain) => domain.includes(keyword) || keyword.includes(domain))) {
+      score += 1.3;
+      reasons.push("feature domain match");
+    } else if (lower.includes(keyword)) {
+      score += 0.7;
+      reasons.push("path keyword match");
+    }
+    if (filename(path).includes(keyword)) {
+      score += 0.8;
+      reasons.push("filename match");
+    }
   }
-  if (path.endsWith("loading.tsx") || path.endsWith("error.tsx")) score -= 0.7;
+
+  if (path.endsWith("/page.tsx") || path.endsWith("/route.ts")) {
+    score += 0.7;
+    reasons.push("entrypoint file");
+  }
+  if (path.endsWith("/api.ts")) {
+    score += 0.6;
+    reasons.push("api client");
+  }
+  if (path.endsWith("loading.tsx") || path.endsWith("error.tsx")) {
+    score -= 1.4;
+    reasons.push("low-signal shell file");
+  }
+  if (lower.includes("/components/ui/") || lower.includes("/ui/")) {
+    score -= 0.7;
+    reasons.push("generic ui component");
+  }
   if (path.includes("/node_modules/")) score -= 10;
-  return score;
+  return {
+    score,
+    reasons: [...new Set(reasons)],
+  };
 }
 
 function addFile(
@@ -117,35 +285,127 @@ function buildFiles(
   const files = new Map<string, FeatureFile>();
 
   results.files.forEach((file: SearchFileResult, index) => {
+    const pathSignal = pathScore(file.path, keywords);
+    const layer = classifyLayer(file.path);
     addFile(
       files,
       file.path,
-      3 - index * 0.08 + pathScore(file.path, keywords),
+      3 - index * 0.08 + pathSignal.score + layerPriority(layer, keywords),
       "file match",
     );
+    for (const reason of pathSignal.reasons) {
+      addFile(files, file.path, 0, reason);
+    }
   });
 
   results.symbols.forEach((symbol: SearchSymbolResult, index) => {
+    const pathSignal = pathScore(symbol.filePath, keywords);
+    const nameSignal = symbolScore(symbol.displayName, keywords);
+    const layer = classifyLayer(symbol.filePath);
     addFile(
       files,
       symbol.filePath,
-      2.4 - index * 0.05 + pathScore(symbol.filePath, keywords),
+      2.4 - index * 0.05 + pathSignal.score + nameSignal + layerPriority(layer, keywords),
       "symbol match",
       symbol.displayName,
     );
+    if (nameSignal > 0) addFile(files, symbol.filePath, 0, "symbol name matches query");
+    for (const reason of pathSignal.reasons) {
+      addFile(files, symbol.filePath, 0, reason);
+    }
   });
 
   results.exports.forEach((exp: SearchExportResult, index) => {
+    const pathSignal = pathScore(exp.filePath, keywords);
+    const nameSignal = symbolScore(exp.exportName, keywords);
+    const layer = classifyLayer(exp.filePath);
     addFile(
       files,
       exp.filePath,
-      2 - index * 0.05 + pathScore(exp.filePath, keywords),
+      2 - index * 0.05 + pathSignal.score + nameSignal + layerPriority(layer, keywords),
       "export match",
       exp.exportName,
     );
+    if (nameSignal > 0) addFile(files, exp.filePath, 0, "export name matches query");
+    for (const reason of pathSignal.reasons) {
+      addFile(files, exp.filePath, 0, reason);
+    }
   });
 
   return [...files.values()].sort((a, b) => b.score - a.score);
+}
+
+function isRouteLike(path: string) {
+  return path.includes("packages/web/app/") || path.includes("packages/api/src/routes/");
+}
+
+function sharesFeatureKeyword(path: string, keywords: string[]) {
+  const domains = extractDomains(path);
+  return keywords.some((keyword) =>
+    domains.some((domain) => domain.includes(keyword) || keyword.includes(domain)),
+  );
+}
+
+async function applyGraphSignals(
+  client: CodeMapClient,
+  projectId: string,
+  files: FeatureFile[],
+  keywords: string[],
+) {
+  const candidates = files.slice(0, 12);
+  await Promise.all(
+    candidates.map(async (file) => {
+      try {
+        const parsed = await client.request<ParsedFileSummary>(
+          `/projects/${encodeURIComponent(projectId)}/map/files/parse`,
+          {
+            authRequired: true,
+            query: { path: file.path },
+          },
+        );
+        const importedBy = parsed.importedBy ?? [];
+        const imports = parsed.imports ?? [];
+        const routeImporters = importedBy
+          .map((edge) => edge.sourceFilePath ?? edge.sourcePath ?? "")
+          .filter((sourcePath) => sourcePath && isRouteLike(sourcePath));
+        if (routeImporters.length > 0) {
+          file.score += 1.2;
+          file.reasons.push("imported by entrypoint");
+        }
+
+        const featureImporters = importedBy
+          .map((edge) => edge.sourceFilePath ?? edge.sourcePath ?? "")
+          .filter((sourcePath) => sourcePath && sharesFeatureKeyword(sourcePath, keywords));
+        if (featureImporters.length > 0) {
+          file.score += 0.6;
+          file.reasons.push("used by feature neighbor");
+        }
+
+        const candidateImports = imports
+          .map((edge) => edge.targetPath ?? edge.targetPathText ?? "")
+          .filter((targetPath) => targetPath && candidates.some((candidate) => candidate.path === targetPath));
+        if (candidateImports.length > 0) {
+          file.score += Math.min(candidateImports.length * 0.25, 0.75);
+          file.reasons.push("connects ranked files");
+        }
+
+        file.reasons = [...new Set(file.reasons)];
+      } catch {
+        file.reasons = [...new Set(file.reasons)];
+      }
+    }),
+  );
+
+  return files.sort((a, b) => b.score - a.score);
+}
+
+function rankConfidence(files: FeatureFile[]): Confidence {
+  if (files.length === 0) return "low";
+  const representedLayers = new Set(files.slice(0, 10).map((file) => file.layer));
+  const topScore = files[0]?.score ?? 0;
+  if (topScore >= 7 && representedLayers.size >= 3) return "high";
+  if (topScore >= 4.5 && representedLayers.size >= 2) return "medium";
+  return "low";
 }
 
 function formatGetFilesCall(files: FeatureFile[]) {
@@ -153,7 +413,7 @@ function formatGetFilesCall(files: FeatureFile[]) {
   return `get_files(${JSON.stringify(paths)})`;
 }
 
-function buildOutput(query: string, files: FeatureFile[]) {
+function buildOutput(query: string, files: FeatureFile[], confidence: Confidence) {
   const lines = [`# Feature area: ${query}`, ""];
 
   if (files.length === 0) {
@@ -162,13 +422,15 @@ function buildOutput(query: string, files: FeatureFile[]) {
   }
 
   const topFiles = files.slice(0, 10);
+  lines.push(`Confidence: ${confidence}`);
+  lines.push("");
 
   lines.push("## Recommended read order");
   topFiles.slice(0, 7).forEach((file, index) => {
     const symbols =
       file.symbols.length > 0 ? ` · symbols: ${file.symbols.slice(0, 3).join(", ")}` : "";
     lines.push(
-      `${index + 1}. ${file.path} · ${file.layer} · ${file.reasons.join(", ")}${symbols}`,
+      `${index + 1}. ${file.path} · score ${file.score.toFixed(2)} · ${file.layer} · ${file.reasons.join(", ")}${symbols}`,
     );
   });
 
@@ -193,7 +455,7 @@ function buildOutput(query: string, files: FeatureFile[]) {
       const symbols =
         file.symbols.length > 0 ? `; symbols: ${file.symbols.slice(0, 5).join(", ")}` : "";
       lines.push(
-        `- ${file.path} (${file.reasons.join(", ")}${symbols})`,
+        `- ${file.path} (${file.score.toFixed(2)}; ${file.reasons.join(", ")}${symbols})`,
       );
     }
   }
@@ -255,7 +517,15 @@ export function registerSummarizeFeatureAreaTool(
         { authRequired: true, query: { q: query } },
       );
 
-      const files = buildFiles(results, normalizeQuery(query)).slice(0, max_files ?? 15);
+      const keywords = normalizeQuery(query);
+      const rankedFiles = await applyGraphSignals(
+        client,
+        resolvedProjectId,
+        buildFiles(results, keywords),
+        keywords,
+      );
+      const files = rankedFiles.slice(0, max_files ?? 15);
+      const confidence = rankConfidence(files);
       const suggestedNextTools =
         files.length > 0
           ? [
@@ -266,9 +536,10 @@ export function registerSummarizeFeatureAreaTool(
             ]
           : ["search_codebase(query)"];
 
-      return success(buildOutput(query, files), {
+      return success(buildOutput(query, files, confidence), {
         projectId: resolvedProjectId,
         query,
+        confidence,
         files: files.map((file) => ({
           path: file.path,
           layer: file.layer,
