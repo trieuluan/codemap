@@ -40,6 +40,7 @@ export function parseDartFile(
         importedNames: [],
         line: lineNumber,
         col: match.index ?? 0,
+        endLine: lineNumber,
         endCol: (match.index ?? 0) + moduleSpecifier.length,
         resolutionKind: resolution.resolvedPath ? "relative_path" : "unresolved",
         targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
@@ -62,6 +63,7 @@ export function parseDartFile(
           exportKind: "re_export",
           line: lineNumber,
           col: match.index ?? 0,
+          endLine: lineNumber,
           endCol: (match.index ?? 0) + match[0].length,
           sourceImportLocalKey: localKey,
         });
@@ -96,6 +98,7 @@ export function parseDartFile(
         isDefaultExport: false,
         line: lineNumber,
         col: Math.max(col, 0),
+        endLine: lineNumber,
         endCol: Math.max(col, 0) + displayName.length,
       });
       break;

@@ -20,6 +20,7 @@ export interface ParsedSymbolDraft {
   isDefaultExport: boolean;
   line: number;
   col: number;
+  endLine: number;
   endCol: number;
   parentSymbolLocalKey?: string; // set for methods extracted from factory return objects
 }
@@ -33,6 +34,7 @@ export interface ParsedImportDraft {
   namespaceName?: string;
   line: number;
   col: number;
+  endLine: number;
   endCol: number;
   resolutionKind: RepoImportEdgeInsert["resolutionKind"];
   targetPathText: string | null;
@@ -44,6 +46,7 @@ export interface ParsedExportDraft {
   exportKind: RepoExportInsert["exportKind"];
   line: number;
   col: number;
+  endLine: number;
   endCol: number;
   symbolLocalKey?: string;
   sourceImportLocalKey?: string;

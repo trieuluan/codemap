@@ -76,6 +76,7 @@ export async function parsePhpFile(
     const kind = captureName === "namespace" ? "namespace" : captureName;
     const displayName = nameCapture.node.text;
     const startPos = defCapture.node.startPosition;
+    const endPos = defCapture.node.endPosition;
     const line = startPos.row + 1;
     const col = startPos.column;
 
@@ -92,7 +93,8 @@ export async function parsePhpFile(
       isDefaultExport: false,
       line,
       col,
-      endCol: col + displayName.length,
+      endLine: endPos.row + 1,
+      endCol: endPos.column,
     });
   }
 
@@ -117,6 +119,7 @@ export async function parsePhpFile(
 
     const stmtNode = stmtCapture.node;
     const startPos = stmtNode.startPosition;
+    const endPos = stmtNode.endPosition;
     const line = startPos.row + 1;
     const col = startPos.column;
     const isUse = stmtCapture.name === "use";
@@ -134,7 +137,8 @@ export async function parsePhpFile(
       importedNames: [],
       line,
       col,
-      endCol: stmtNode.endPosition.column,
+      endLine: endPos.row + 1,
+      endCol: endPos.column,
       resolutionKind: isUse ? "package" : "unresolved",
       targetPathText: isUse ? null : specifier,
       targetExternalSymbolKey: isUse ? `php:${specifier}` : null,

@@ -117,7 +117,12 @@ export async function reparseFileIfStale(
     docJson: sym.doc ? { text: sym.doc } : null,
     typeJson: null,
     modifiersJson: null,
-    extraJson: { line: sym.line, col: sym.col } as unknown,
+    extraJson: {
+      line: sym.line,
+      col: sym.col,
+      endLine: sym.endLine,
+      endCol: sym.endCol,
+    } as unknown,
   }));
 
   const importEdgeDrafts = semantics.imports.map((imp) => {
@@ -139,7 +144,7 @@ export async function reparseFileIfStale(
       resolutionKind: imp.resolutionKind,
       startLine: imp.line,
       startCol: imp.col,
-      endLine: imp.line,
+      endLine: imp.endLine,
       endCol: imp.endCol,
       extraJson: null,
     };
@@ -155,7 +160,7 @@ export async function reparseFileIfStale(
     targetExternalSymbolKey: exp.targetExternalSymbolKey ?? null,
     startLine: exp.line,
     startCol: exp.col,
-    endLine: exp.line,
+    endLine: exp.endLine,
     endCol: exp.endCol,
     extraJson: null,
     symbolLocalKey: exp.symbolLocalKey,

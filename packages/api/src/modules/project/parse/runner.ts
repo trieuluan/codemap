@@ -119,6 +119,10 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
       fileIdByPathPrefix.set(path.replace(/\.[^/.]+$/, ""), row.id);
     }
     const symbolDrafts: RepoSymbolInsert[] = [];
+    const symbolDefinitionRangeByLocalKey = new Map<
+      string,
+      { line: number; col: number; endLine: number; endCol: number }
+    >();
     const symbolParentLocalKeyMap = new Map<string, string>(); // localKey → parentLocalKey
     const occurrenceDrafts: RepoSymbolOccurrenceInsert[] = [];
     const pendingRelationships: Array<{
@@ -150,6 +154,12 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         });
 
         for (const symbol of semantics.symbols) {
+          symbolDefinitionRangeByLocalKey.set(symbol.localKey, {
+            line: symbol.line,
+            col: symbol.col,
+            endLine: symbol.endLine,
+            endCol: symbol.endCol,
+          });
           if (symbol.parentSymbolLocalKey) {
             symbolParentLocalKeyMap.set(symbol.localKey, symbol.parentSymbolLocalKey);
           }
@@ -171,7 +181,12 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
             docJson: symbol.doc ? { text: symbol.doc } : null,
             typeJson: null,
             modifiersJson: null,
-            extraJson: { line: symbol.line, col: symbol.col },
+            extraJson: {
+              line: symbol.line,
+              col: symbol.col,
+              endLine: symbol.endLine,
+              endCol: symbol.endCol,
+            },
           });
         }
 
@@ -200,7 +215,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
             resolutionKind: importEdge.resolutionKind,
             startLine: importEdge.line,
             startCol: importEdge.col,
-            endLine: importEdge.line,
+            endLine: importEdge.endLine,
             endCol: importEdge.endCol,
             extraJson: null,
             namespaceName: importEdge.namespaceName,
@@ -218,7 +233,7 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
             targetExternalSymbolKey: exported.targetExternalSymbolKey ?? null,
             startLine: exported.line,
             startCol: exported.col,
-            endLine: exported.line,
+            endLine: exported.endLine,
             endCol: exported.endCol,
             extraJson: null,
             symbolLocalKey: exported.symbolLocalKey,
@@ -331,7 +346,16 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     for (const symbol of symbolDrafts) {
       const fileRow = fileRowByPath.get(symbol.localSymbolKey?.split("#")[0] ?? "");
       const symbolId = symbol.localSymbolKey ? symbolIdByLocalKey.get(symbol.localSymbolKey) : null;
-      const location = (symbol.extraJson as { line: number; col: number } | null) ?? null;
+      const fallbackLocation =
+        (symbol.extraJson as {
+          line: number;
+          col: number;
+          endLine?: number;
+          endCol?: number;
+        } | null) ?? null;
+      const location = symbol.localSymbolKey
+        ? symbolDefinitionRangeByLocalKey.get(symbol.localSymbolKey) ?? fallbackLocation
+        : fallbackLocation;
 
       if (!fileRow || !symbolId || !location) continue;
 
@@ -342,8 +366,8 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         occurrenceRole: "definition",
         startLine: location.line,
         startCol: location.col,
-        endLine: location.line,
-        endCol: location.col + symbol.displayName.length,
+        endLine: location.endLine ?? location.line,
+        endCol: location.endCol ?? location.col + symbol.displayName.length,
         syntaxKind: symbol.kind,
         snippetPreview: symbol.signature,
         extraJson: null,

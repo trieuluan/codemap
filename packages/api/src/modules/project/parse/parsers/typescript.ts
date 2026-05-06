@@ -52,14 +52,30 @@ function extractImportsWithAst(
   const issues: ParsedWorkspaceSemantics["issues"] = [];
   const externalSymbols: ParsedWorkspaceSemantics["externalSymbols"] = [];
 
+  function getNodeRange(node: ts.Node): {
+    line: number;
+    col: number;
+    endLine: number;
+    endCol: number;
+  } {
+    const start = getLineCol(sourceFile, node.getStart(sourceFile));
+    const end = getLineCol(sourceFile, node.getEnd());
+    return {
+      line: start.line,
+      col: start.col,
+      endLine: end.line,
+      endCol: end.col,
+    };
+  }
+
   const pushImport = (
     moduleSpecifier: string,
     importKind: ParsedImportDraft["importKind"],
     isTypeOnly: boolean,
-    startPos: number,
+    node: ts.Node,
     importedNames: string[],
   ): string => {
-    const { line, col } = getLineCol(sourceFile, startPos);
+    const { line, col, endLine, endCol } = getNodeRange(node);
     const isRelative = moduleSpecifier.startsWith(".");
     const aliasResolution = !isRelative
       ? resolveTsconfigAliasTargetPath(workspacePath, file.path, moduleSpecifier, file.language!, filePathSet, resolverConfigs)
@@ -77,7 +93,8 @@ function extractImportsWithAst(
       importedNames,
       line,
       col,
-      endCol: col + moduleSpecifier.length,
+      endLine,
+      endCol,
       resolutionKind: isRelative
         ? resolution.resolvedPath ? "relative_path" : "unresolved"
         : aliasResolution?.resolvedPath ? "tsconfig_alias"
@@ -139,7 +156,7 @@ function extractImportsWithAst(
           // import * as ns — namespace import
           if (ts.isNamespaceImport(clause.namedBindings)) {
             const nsName = clause.namedBindings.name.text;
-            const localKey = pushImport(specifier, "import", isTypeOnly, node.getStart(sourceFile), importedNames);
+            const localKey = pushImport(specifier, "import", isTypeOnly, node, importedNames);
             // patch namespaceName onto the last pushed import
             const last = imports[imports.length - 1];
             if (last && last.localKey === localKey) last.namespaceName = nsName;
@@ -148,15 +165,14 @@ function extractImportsWithAst(
         }
       }
 
-      pushImport(specifier, "import", isTypeOnly, node.getStart(sourceFile), importedNames);
+      pushImport(specifier, "import", isTypeOnly, node, importedNames);
       return;
     }
 
     // export { A } from '...' / export * from '...' / export { A } (local)
     if (ts.isExportDeclaration(node)) {
       const specifier = getModuleSpecifier(node);
-      const { line, col } = getLineCol(sourceFile, node.getStart(sourceFile));
-      const endCol = col + node.getWidth(sourceFile);
+      const { line, col, endLine, endCol } = getNodeRange(node);
 
       if (!specifier) {
         // export { A, B } — local, no from
@@ -169,6 +185,7 @@ function extractImportsWithAst(
               exportKind: "named",
               line,
               col,
+              endLine,
               endCol,
               symbolLocalKey: buildLocalSymbolKey(file.path, "variable", localName),
             });
@@ -181,13 +198,14 @@ function extractImportsWithAst(
 
       if (node.exportClause && ts.isNamedExports(node.exportClause)) {
         // export { A, B } from '...'
-        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node.getStart(sourceFile), []);
+        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node, []);
         for (const el of node.exportClause.elements) {
           exports.push({
             exportName: el.name.text,
             exportKind: "re_export",
             line,
             col,
+            endLine,
             endCol,
             sourceImportLocalKey: importLocalKey,
             targetExternalSymbolKey: specifier.startsWith(".") ? null : `${file.language?.toLowerCase()}:${specifier}`,
@@ -195,12 +213,13 @@ function extractImportsWithAst(
         }
       } else {
         // export * from '...'
-        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node.getStart(sourceFile), []);
+        const importLocalKey = pushImport(specifier, "export_from", isTypeOnly, node, []);
         exports.push({
           exportName: "*",
           exportKind: "wildcard",
           line,
           col,
+          endLine,
           endCol,
           sourceImportLocalKey: importLocalKey,
           targetExternalSymbolKey: specifier.startsWith(".") ? null : `${file.language?.toLowerCase()}:${specifier}`,
@@ -217,9 +236,9 @@ function extractImportsWithAst(
         if (args.length === 1 && ts.isStringLiteral(args[0])) {
           const specifier = (args[0] as ts.StringLiteral).text;
           if (ts.isIdentifier(expr) && expr.text === "require") {
-            pushImport(specifier, "require", false, n.getStart(sourceFile), []);
+            pushImport(specifier, "require", false, n, []);
           } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
-            pushImport(specifier, "dynamic_import", false, n.getStart(sourceFile), []);
+            pushImport(specifier, "dynamic_import", false, n, []);
           }
         }
       }
@@ -289,6 +308,7 @@ function extractSymbolsWithAst(
     const { line, col } = nameStart >= 0
       ? getLineCol(sourceFile, nameStart)
       : getLineCol(sourceFile, node.getStart(sourceFile));
+    const end = getLineCol(sourceFile, node.getEnd());
 
     symbols.push({
       localKey: buildLocalSymbolKey(file.path, kind, name),
@@ -303,7 +323,8 @@ function extractSymbolsWithAst(
       isDefaultExport,
       line,
       col,
-      endCol: col + name.length,
+      endLine: end.line,
+      endCol: end.col,
     });
   }
 
@@ -375,6 +396,7 @@ function extractSymbolsWithAst(
         if (ts.isFunctionDeclaration(stmt) && stmt.name) {
           const name = stmt.name.text;
           const { line, col } = getLineCol(sourceFile, stmt.getStart(sourceFile));
+          const end = getLineCol(sourceFile, stmt.getEnd());
           const uniqueName = `${name}@${line}`;
           symbols.push({
             localKey: buildLocalSymbolKey(file.path, "function", uniqueName),
@@ -389,7 +411,8 @@ function extractSymbolsWithAst(
             isDefaultExport: false,
             line,
             col,
-            endCol: col + name.length,
+            endLine: end.line,
+            endCol: end.col,
             parentSymbolLocalKey: parentLocalKey,
           });
         }
@@ -425,6 +448,7 @@ function extractSymbolsWithAst(
       if (allowedNames && !allowedNames.has(name)) continue;
 
       const { line, col } = getLineCol(sourceFile, methodNode.getStart(sourceFile));
+      const end = getLineCol(sourceFile, methodNode.getEnd());
       symbols.push({
         localKey: buildLocalSymbolKey(file.path, "method", name),
         stableKey: buildStableSymbolKey(file.path, "method", name, line),
@@ -444,7 +468,8 @@ function extractSymbolsWithAst(
         isDefaultExport: false,
         line,
         col,
-        endCol: col + name.length,
+        endLine: end.line,
+        endCol: end.col,
         parentSymbolLocalKey: parentLocalKey,
       });
     }
@@ -628,6 +653,7 @@ export function parseTypeScriptOrJavaScriptFile(
       exportKind: s.isDefaultExport ? "default" : "named",
       line: s.line,
       col: s.col,
+      endLine: s.endLine,
       endCol: s.endCol,
       symbolLocalKey: s.localKey,
     }));

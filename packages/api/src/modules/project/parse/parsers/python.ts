@@ -66,6 +66,7 @@ export async function parsePythonFile(
     const isClass = defCapture.name === "class";
     const displayName = nameCapture.node.text;
     const startPos = defCapture.node.startPosition;
+    const endPos = defCapture.node.endPosition;
     const line = startPos.row + 1;
     const col = startPos.column;
 
@@ -87,7 +88,8 @@ export async function parsePythonFile(
       isDefaultExport: false,
       line,
       col,
-      endCol: col + displayName.length,
+      endLine: endPos.row + 1,
+      endCol: endPos.column,
     });
   }
 
@@ -105,6 +107,7 @@ export async function parsePythonFile(
 
     const stmtNode = stmtCapture.node;
     const startPos = stmtNode.startPosition;
+    const endPos = stmtNode.endPosition;
     const line = startPos.row + 1;
     const col = startPos.column;
 
@@ -128,7 +131,8 @@ export async function parsePythonFile(
           importedNames: [],
           line,
           col,
-          endCol: stmtNode.endPosition.column,
+          endLine: endPos.row + 1,
+          endCol: endPos.column,
           resolutionKind: "package",
           targetPathText: null,
           targetExternalSymbolKey: `python:${moduleSpecifier}`,
@@ -187,7 +191,8 @@ export async function parsePythonFile(
         importedNames,
         line,
         col,
-        endCol: stmtNode.endPosition.column,
+        endLine: endPos.row + 1,
+        endCol: endPos.column,
         resolutionKind,
         targetPathText,
         targetExternalSymbolKey: isRelative ? null : `python:${rawSpecifier}`,

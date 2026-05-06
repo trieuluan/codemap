@@ -188,7 +188,13 @@ export function createWriteService(database: Database) {
         const symbolId = symbol.localSymbolKey
           ? symbolIdByLocalKey.get(symbol.localSymbolKey)
           : null;
-        const location = (symbol.extraJson as { line: number; col: number } | null) ?? null;
+        const location =
+          (symbol.extraJson as {
+            line: number;
+            col: number;
+            endLine?: number;
+            endCol?: number;
+          } | null) ?? null;
 
         if (!symbolId || !location) continue;
 
@@ -199,8 +205,8 @@ export function createWriteService(database: Database) {
           occurrenceRole: "definition",
           startLine: location.line,
           startCol: location.col,
-          endLine: location.line,
-          endCol: location.col + symbol.displayName.length,
+          endLine: location.endLine ?? location.line,
+          endCol: location.endCol ?? location.col + symbol.displayName.length,
           syntaxKind: symbol.kind,
           snippetPreview: symbol.signature,
           extraJson: null,
