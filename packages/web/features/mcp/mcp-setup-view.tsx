@@ -157,10 +157,75 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   const claudeCodeConfig = `claude mcp add codemap -- npx -y @codemap/mcp-server@latest`;
 
+  const cursorConfig = JSON.stringify(
+    {
+      mcpServers: {
+        codemap: {
+          command: "npx",
+          args: ["-y", "@codemap/mcp-server@latest"],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const geminiCliConfig = JSON.stringify(
+    {
+      mcpServers: {
+        codemap: {
+          command: "npx",
+          args: ["-y", "@codemap/mcp-server@latest"],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const windsurfConfig = JSON.stringify(
+    {
+      mcpServers: {
+        codemap: {
+          command: "npx",
+          args: ["-y", "@codemap/mcp-server@latest"],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const opencodeConfig = JSON.stringify(
+    {
+      mcp: {
+        codemap: {
+          command: "npx",
+          args: ["-y", "@codemap/mcp-server@latest"],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const codexConfig = JSON.stringify(
+    {
+      mcpServers: {
+        codemap: {
+          command: "npx",
+          args: ["-y", "@codemap/mcp-server@latest"],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
   return (
     <div className="space-y-8">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">API & MCP</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">MCP & API</h1>
         <p className="text-sm text-muted-foreground">
           Connect CodeMap to your AI tool, link a project, and wait for the
           index before asking for codebase context.
@@ -212,10 +277,16 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
           </p>
 
           <Tabs defaultValue="claude">
-            <TabsList>
-              <TabsTrigger value="claude">Claude Desktop</TabsTrigger>
+            <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="claude">Claude</TabsTrigger>
+              <TabsTrigger value="claudecode">Claude Code</TabsTrigger>
+              <TabsTrigger value="cursor">Cursor</TabsTrigger>
               <TabsTrigger value="vscode">VS Code</TabsTrigger>
-              <TabsTrigger value="claudecode">Claude Code CLI</TabsTrigger>
+              <TabsTrigger value="gemini">Gemini CLI</TabsTrigger>
+              <TabsTrigger value="windsurf">Windsurf</TabsTrigger>
+              <TabsTrigger value="opencode">OpenCode</TabsTrigger>
+              <TabsTrigger value="codex">Codex</TabsTrigger>
+
             </TabsList>
 
             <TabsContent value="claude" className="space-y-2 mt-3">
@@ -232,14 +303,6 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
               </p>
             </TabsContent>
 
-            <TabsContent value="vscode" className="space-y-2 mt-3">
-              <p className="text-xs text-muted-foreground">
-                Add to your VS Code{" "}
-                <span className="font-medium text-foreground">settings.json</span> (or use the MCP panel):
-              </p>
-              <CodeBlock code={vscodeConfig} />
-            </TabsContent>
-
             <TabsContent value="claudecode" className="space-y-2 mt-3">
               <p className="text-xs text-muted-foreground">
                 Run once in your terminal — registers CodeMap globally in Claude Code:
@@ -249,6 +312,77 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
                 No config file needed. Node.js 18+ required.
               </p>
             </TabsContent>
+
+            <TabsContent value="cursor" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Open Cursor{" "}
+                <span className="font-medium text-foreground">Settings → MCP</span>{" "}
+                and add the following config:
+              </p>
+              <CodeBlock code={cursorConfig} />
+              <p className="text-xs text-muted-foreground">
+                Restart Cursor after saving.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="vscode" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Add to your VS Code{" "}
+                <span className="font-medium text-foreground">settings.json</span> (or use the MCP panel):
+              </p>
+              <CodeBlock code={vscodeConfig} />
+            </TabsContent>
+
+            <TabsContent value="gemini" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Open Gemini CLI config file ({" "}
+                <span className="font-medium text-foreground">
+                  ~/.gemini/settings.json
+                </span>{" "}
+                ) and add:
+              </p>
+              <CodeBlock code={geminiCliConfig} />
+              <p className="text-xs text-muted-foreground">
+                Restart Gemini CLI after saving.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="windsurf" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Open Windsurf{" "}
+                <span className="font-medium text-foreground">Settings → MCP</span>{" "}
+                and add the following config:
+              </p>
+              <CodeBlock code={windsurfConfig} />
+              <p className="text-xs text-muted-foreground">
+                Restart Windsurf after saving.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="opencode" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Add to your OpenCode config ({" "}
+                <span className="font-medium text-foreground">
+                  opencode.json
+                </span>{" "}
+                ):
+              </p>
+              <CodeBlock code={opencodeConfig} />
+              <p className="text-xs text-muted-foreground">
+                Restart OpenCode after saving.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="codex" className="space-y-2 mt-3">
+              <p className="text-xs text-muted-foreground">
+                Add to your Codex MCP config:
+              </p>
+              <CodeBlock code={codexConfig} />
+              <p className="text-xs text-muted-foreground">
+                Restart Codex after saving.
+              </p>
+            </TabsContent>
+
           </Tabs>
 
           <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">

@@ -32,12 +32,12 @@ const PLAN_CONFIG: Record<
   basic: {
     label: "Basic",
     price: "Free",
-    description: "Local MCP index for day-to-day coding work.",
+    description: "Get started with cloud indexing, limited to 20 imports per month.",
     features: [
       "5 projects",
-      "Local MCP search and file reads",
-      "No cloud imports",
-      "No web graph or insights",
+      "20 cloud imports / month",
+      "MCP search and file reads",
+      "Public repository imports",
     ],
     paypalPlanKey: null,
     highlight: false,
@@ -264,8 +264,8 @@ export function UpgradeCheckout({
                   Upgrade for cloud indexing
                 </h1>
                 <p className="max-w-2xl text-muted-foreground">
-                  Keep local MCP indexing on Basic, or unlock cloud imports,
-                  dependency graph, and project insights for the web app.
+                  Basic includes 20 cloud imports per month. Upgrade for higher
+                  limits, private repository access, and team workspaces.
                 </p>
               </div>
             </div>

@@ -33,76 +33,15 @@ async function fetchGitHubFileContent(
   filePath: string,
   accessToken: string | null,
 ): Promise<string | null> {
-  const url = `https://api.github.com/repos/${repoPath}/contents/${filePath}?ref=${commitSha}`;
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3+json",
-    "User-Agent": "codemap/1.0",
-  };
-  if (accessToken) {
-    headers["Authorization"] = `Bearer ${accessToken}`;
-  }
-
-  const res = await fetch(url, { headers });
-
-  if (res.status === 404) return null;
-  if (!res.ok)
-    throw new Error(`GitHub API error ${res.status}: ${res.statusText}`);
-
-  const data = (await res.json()) as {
-    content?: string;
-    encoding?: string;
-    size?: number;
-  };
-
-  // Files > 1MB: GitHub returns no content, must use Git Data API
-  if (!data.content && data.size && data.size > 1_000_000) {
-    return fetchGitHubBlobContent(repoPath, commitSha, filePath, accessToken);
-  }
-
-  if (!data.content || data.encoding !== "base64") return null;
-  return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString(
-    "utf-8",
-  );
-}
-
-async function fetchGitHubBlobContent(
-  repoPath: string,
-  _commitSha: string,
-  filePath: string,
-  accessToken: string | null,
-): Promise<string | null> {
-  // Resolve blob SHA via tree API
-  const [owner, repo] = repoPath.split("/");
-  const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${_commitSha}?recursive=1`;
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3+json",
-    "User-Agent": "codemap/1.0",
-  };
+  const url = `https://raw.githubusercontent.com/${repoPath}/${commitSha}/${filePath}`;
+  const headers: Record<string, string> = { "User-Agent": "codemap/1.0" };
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
 
-  const treeRes = await fetch(treeUrl, { headers });
-  if (!treeRes.ok) return null;
-
-  const tree = (await treeRes.json()) as {
-    tree: Array<{ path: string; sha: string; type: string }>;
-  };
-  const blob = tree.tree.find((t) => t.path === filePath && t.type === "blob");
-  if (!blob) return null;
-
-  const blobRes = await fetch(
-    `https://api.github.com/repos/${repoPath}/git/blobs/${blob.sha}`,
-    { headers },
-  );
-  if (!blobRes.ok) return null;
-
-  const blobData = (await blobRes.json()) as {
-    content?: string;
-    encoding?: string;
-  };
-  if (!blobData.content || blobData.encoding !== "base64") return null;
-  return Buffer.from(blobData.content.replace(/\n/g, ""), "base64").toString(
-    "utf-8",
-  );
+  const res = await fetch(url, { headers });
+  if (res.status === 404) return null;
+  if (!res.ok)
+    throw new Error(`GitHub raw fetch error ${res.status}: ${res.statusText}`);
+  return res.text();
 }
 
 async function fetchGitLabFileContent(

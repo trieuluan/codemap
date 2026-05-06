@@ -15,9 +15,39 @@ import {
   ensureUniqueSlug as ensureUniqueSlugShared,
   normalizeLocalWorkspacePath,
   normalizeRepositoryUrl,
+  resolveRepoVisibility,
   slugifyProjectName,
   withCommitMessages,
 } from "./service.shared";
+
+const VISIBILITY_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+const visibilityCheckInProgress = new Set<string>();
+
+function isVisibilityStale(checkedAt: Date | null): boolean {
+  if (!checkedAt) return true;
+  return Date.now() - checkedAt.getTime() > VISIBILITY_CHECK_TTL_MS;
+}
+
+function scheduleVisibilityCheck(
+  projectId: string,
+  repositoryUrl: string,
+  db: Database,
+) {
+  if (visibilityCheckInProgress.has(projectId)) return;
+  visibilityCheckInProgress.add(projectId);
+  void resolveRepoVisibility(repositoryUrl)
+    .then((visibility) =>
+      db
+        .update(project)
+        .set({ visibility, visibilityCheckedAt: new Date() })
+        .where(eq(project.id, projectId)),
+    )
+    .catch(() => {})
+    .finally(() => {
+      visibilityCheckInProgress.delete(projectId);
+    });
+}
 
 export function createProjectService(database: Database) {
   const workspaceService = createWorkspaceService(database);
@@ -208,6 +238,10 @@ export function createProjectService(database: Database) {
         type: "project_created",
       });
 
+      if (createdProject.repositoryUrl) {
+        scheduleVisibilityCheck(createdProject.id, createdProject.repositoryUrl, database);
+      }
+
       return createdProject;
     },
 
@@ -263,7 +297,15 @@ export function createProjectService(database: Database) {
     },
 
     async getProjectById(projectId: string, ownerUserId: string) {
-      return getAccessibleProject(projectId, ownerUserId);
+      const projectRecord = await getAccessibleProject(projectId, ownerUserId);
+      if (
+        projectRecord?.repositoryUrl &&
+        isVisibilityStale(projectRecord.visibilityCheckedAt) &&
+        (projectRecord.provider === "github" || projectRecord.provider === "gitlab")
+      ) {
+        scheduleVisibilityCheck(projectRecord.id, projectRecord.repositoryUrl, database);
+      }
+      return projectRecord;
     },
 
     async updateProject(
@@ -286,12 +328,17 @@ export function createProjectService(database: Database) {
       if (input.defaultBranch !== undefined)
         values.defaultBranch = input.defaultBranch;
       if (input.repositoryUrl !== undefined) {
-        values.repositoryUrl = input.repositoryUrl
+        const normalizedNewUrl = input.repositoryUrl
           ? normalizeRepositoryUrl(input.repositoryUrl)
           : null;
+        values.repositoryUrl = normalizedNewUrl;
         values.provider = input.repositoryUrl
           ? (input.provider ?? existingProject.provider ?? "github")
           : (input.provider ?? null);
+        if (normalizedNewUrl !== existingProject.repositoryUrl) {
+          values.visibility = "private";
+          values.visibilityCheckedAt = null;
+        }
       }
       if (input.localWorkspacePath !== undefined) {
         values.localWorkspacePath = input.localWorkspacePath
@@ -317,6 +364,10 @@ export function createProjectService(database: Database) {
         .set(values)
         .where(eq(project.id, projectId))
         .returning();
+
+      if (updatedProject?.repositoryUrl && values.visibilityCheckedAt === null) {
+        scheduleVisibilityCheck(updatedProject.id, updatedProject.repositoryUrl, database);
+      }
 
       return updatedProject;
     },
@@ -541,6 +592,10 @@ export function createProjectService(database: Database) {
         return null;
       }
 
+      if (existingProject.provider === "local_workspace") {
+        throw new Error("LOCAL_WORKSPACE_REIMPORT_VIA_MCP_ONLY");
+      }
+
       const workspaceId =
         existingProject.workspaceId ??
         (await workspaceService.ensurePersonalWorkspace(ownerUserId)).id;
@@ -551,6 +606,14 @@ export function createProjectService(database: Database) {
       const entitlements = workspaceService.getWorkspaceEntitlements(
         workspaceAccess?.workspace ?? { plan: "beta" },
       );
+
+      if (
+        (existingProject.provider === "github" || existingProject.provider === "gitlab") &&
+        existingProject.visibility !== "public"
+      ) {
+        workspaceService.assertCanUsePrivateRepo(entitlements);
+      }
+
       const usage = await workspaceService.getUsageSummary(workspaceId);
       workspaceService.assertCanTriggerImport(entitlements, usage);
 

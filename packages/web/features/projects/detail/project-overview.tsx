@@ -54,8 +54,15 @@ function canTriggerImport(
   project: Project,
   entitlements: WorkspaceEntitlements,
 ) {
+  if (project.provider === "local_workspace") return false;
   if (!entitlements.cloudImportAccess) return false;
-  return Boolean(project.repositoryUrl) || project.provider === "local_workspace";
+  if (project.repositoryUrl && !project.visibilityCheckedAt) return false;
+  if (
+    (project.provider === "github" || project.provider === "gitlab") &&
+    project.visibility !== "public" &&
+    !entitlements.privateRepoImports
+  ) return false;
+  return Boolean(project.repositoryUrl);
 }
 
 export function ProjectOverview({
@@ -93,7 +100,11 @@ export function ProjectOverview({
     {
       ...swrBase,
       fallbackData: initialProject,
-      refreshInterval: (p?: Project) => (p?.status === "importing" ? 3000 : 0),
+      refreshInterval: (p?: Project) => {
+        if (p?.status === "importing") return 3000;
+        if (p?.repositoryUrl && !p.visibilityCheckedAt) return 2000;
+        return 0;
+      },
     },
   );
 
@@ -160,10 +171,25 @@ export function ProjectOverview({
       analysisStats.parsedFiles !== null ||
       analysisStats.dependenciesFound !== null);
 
+  const isLocalWorkspace = project.provider === "local_workspace";
+  const isVisibilityChecking =
+    Boolean(project.repositoryUrl) && !project.visibilityCheckedAt;
+  const isPrivateRepoBlocked =
+    !isVisibilityChecking &&
+    (project.provider === "github" || project.provider === "gitlab") &&
+    project.visibility !== "public" &&
+    !entitlements.privateRepoImports;
+
   const importLabel = isImporting
     ? "Importing..."
     : isImportPending
       ? "Starting..."
+      : isLocalWorkspace
+        ? "MCP only"
+      : isVisibilityChecking
+        ? "Checking repo..."
+      : isPrivateRepoBlocked
+        ? "Private repo — upgrade"
       : !hasCloudImportAccess
         ? "Upgrade to import"
       : latestImportFailed
@@ -192,6 +218,32 @@ export function ProjectOverview({
   }
 
   function handleImport() {
+    if (isLocalWorkspace) {
+      toast({
+        title: "MCP only",
+        description:
+          "Local workspace projects can only be reimported via the MCP tool.",
+      });
+      return;
+    }
+
+    if (isVisibilityChecking) {
+      toast({
+        title: "Checking repository",
+        description: "Please wait while we verify the repository visibility.",
+      });
+      return;
+    }
+
+    if (isPrivateRepoBlocked) {
+      toast({
+        title: "Private repository",
+        description:
+          "This project requires private repository access. Upgrade to Developer or Team to import it.",
+      });
+      return;
+    }
+
     if (!hasCloudImportAccess) {
       toast({
         title: "Upgrade required",

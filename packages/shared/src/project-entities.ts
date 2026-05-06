@@ -50,6 +50,7 @@ export interface Project {
   provider: ProjectProvider | null;
   externalRepoId: string | null;
   lastImportedAt: string | null;
+  visibilityCheckedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -18,7 +18,7 @@ import type { GithubConnectionStatus } from "@/features/github/api";
 
 const api = browserGithubApi();
 
-export function GithubConnectCard() {
+export function GithubConnectCard({ canConnect = true }: { canConnect?: boolean }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
@@ -81,7 +81,9 @@ export function GithubConnectCard() {
                 ? "Checking status..."
                 : isConnected
                   ? `Connected as @${(status as Extract<GithubConnectionStatus, { connected: true }>).githubLogin}`
-                  : "Connect to import private repositories"}
+                  : canConnect
+                    ? "Connect to import private repositories"
+                    : "Private repository imports require a paid plan"}
             </CardDescription>
           </div>
         </div>
@@ -123,7 +125,7 @@ export function GithubConnectCard() {
             size="sm"
             className="w-full"
             onClick={handleConnect}
-            disabled={isConnecting}
+            disabled={isConnecting || !canConnect}
           >
             {isConnecting ? (
               <Loader2 className="mr-2 size-3.5 animate-spin" />

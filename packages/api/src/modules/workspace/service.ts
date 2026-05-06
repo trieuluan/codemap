@@ -46,12 +46,12 @@ export function getWorkspaceEntitlements(
     return {
       plan,
       maxProjects: 5,
-      maxImportsPerMonth: 0,
+      maxImportsPerMonth: 20,
       maxIndexedFilesPerImport: null,
       privateRepoImports: false,
       mcpAccess: true,
       teamMembers: false,
-      cloudImportAccess: false,
+      cloudImportAccess: true,
     };
   }
 

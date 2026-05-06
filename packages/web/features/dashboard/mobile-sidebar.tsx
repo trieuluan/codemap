@@ -26,7 +26,7 @@ export function MobileSidebar() {
   const navigation = wid ? [
     { name: "Overview", href: `/w/${wid}/dashboard`, icon: LayoutDashboard },
     { name: "Projects", href: `/w/${wid}/projects`, icon: FolderKanban },
-    { name: "API", href: `/w/${wid}/api`, icon: Code },
+    { name: "MCP", href: `/w/${wid}/api`, icon: Code },
     { name: "Upgrade", href: `/w/${wid}/upgrade`, icon: Sparkles },
     { name: "Settings", href: `/w/${wid}/settings/team`, icon: Settings },
   ] : []

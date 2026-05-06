@@ -81,6 +81,7 @@ export const project = pgTable(
     provider: projectProviderEnum("provider"),
     externalRepoId: text("external_repo_id"),
     lastImportedAt: timestamp("last_imported_at"),
+    visibilityCheckedAt: timestamp("visibility_checked_at"),
     // `defaultNow()` sets a DB-side default timestamp on insert.
     createdAt: timestamp("created_at").defaultNow().notNull(),
     // `$onUpdate()` refreshes the value whenever Drizzle updates the row.

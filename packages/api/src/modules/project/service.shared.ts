@@ -73,6 +73,44 @@ async function getCommitMessage(
   }
 }
 
+export async function resolveRepoVisibility(
+  repositoryUrl: string,
+): Promise<"public" | "private"> {
+  try {
+    const url = new URL(repositoryUrl);
+    const parts = url.pathname.replace(/^\//, "").replace(/\.git$/, "").split("/");
+    if (parts.length < 2) return "private";
+    const [owner, repo] = parts;
+
+    if (url.hostname === "github.com") {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}`,
+        {
+          headers: { Accept: "application/vnd.github+json" },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { private: boolean };
+        return data.private === false ? "public" : "private";
+      }
+    } else if (url.hostname === "gitlab.com") {
+      const encodedPath = encodeURIComponent(`${owner}/${repo}`);
+      const res = await fetch(
+        `https://gitlab.com/api/v4/projects/${encodedPath}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { visibility: string };
+        return data.visibility === "public" ? "public" : "private";
+      }
+    }
+  } catch {
+    // network error, timeout, non-JSON response
+  }
+  return "private";
+}
+
 export async function withCommitMessages(imports: ProjectImportRecord[]) {
   const fallbackWorkspacePath =
     imports.find((i) => i.sourceAvailable && i.sourceWorkspacePath)

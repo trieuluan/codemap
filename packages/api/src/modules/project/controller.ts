@@ -102,6 +102,16 @@ export function createProjectController(fastify: FastifyInstance) {
           "Cloud import is not available on the basic plan",
         );
       }
+      if (error.message === "LOCAL_WORKSPACE_REIMPORT_VIA_MCP_ONLY") {
+        throw fastify.httpErrors.badRequest(
+          "Local workspace projects can only be reimported via the MCP tool",
+        );
+      }
+      if (error.message === "WORKSPACE_PRIVATE_REPO_IMPORT_DISABLED") {
+        throw fastify.httpErrors.forbidden(
+          "Private repository imports require a paid plan",
+        );
+      }
     }
 
     throw error;

@@ -148,6 +148,13 @@
       "when": 1778079895007,
       "tag": "0020_superb_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1778093750842,
+      "tag": "0021_classy_blindfold",
+      "breakpoints": true
     }
   ]
 }

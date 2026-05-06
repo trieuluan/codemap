@@ -62,16 +62,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const switchWorkspace = useCallback((workspaceId: string) => {
     localStorage.setItem(STORAGE_KEY, workspaceId);
     setActiveId(workspaceId);
-
-    // Replace workspaceId in current path if on a workspace-scoped route
-    const urlMatch = pathname.match(/^\/w\/([^/]+)(.*)/);
-    if (urlMatch) {
-      const rest = urlMatch[2] || "/dashboard";
-      router.push(`/w/${workspaceId}${rest}`);
-    } else {
-      router.push(`/w/${workspaceId}/dashboard`);
-    }
-  }, [pathname, router]);
+    router.push(`/w/${workspaceId}/dashboard`);
+  }, [router]);
 
   const activeWorkspace =
     workspaces.find((w) => w.workspace.id === activeId) ?? workspaces[0] ?? null;
