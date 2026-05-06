@@ -182,6 +182,17 @@ function symbolScore(name: string | undefined, keywords: string[]) {
   return score;
 }
 
+function hasQuerySignal(pathSignal: ReturnType<typeof pathScore>, nameSignal: number) {
+  return nameSignal > 0 || pathSignal.score > 0;
+}
+
+function searchOnlyScore(baseScore: number, pathSignal: ReturnType<typeof pathScore>, nameSignal: number) {
+  if (hasQuerySignal(pathSignal, nameSignal)) {
+    return baseScore + pathSignal.score + nameSignal;
+  }
+  return Math.min(baseScore, 0.35);
+}
+
 function layerPriority(layer: Layer, keywords: string[]) {
   const wantsMcp = keywords.some((keyword) => ["mcp", "tool", "tools"].includes(keyword));
   switch (layer) {
@@ -302,14 +313,17 @@ function buildFiles(
     const pathSignal = pathScore(symbol.filePath, keywords);
     const nameSignal = symbolScore(symbol.displayName, keywords);
     const layer = classifyLayer(symbol.filePath);
+    const querySignal = hasQuerySignal(pathSignal, nameSignal);
     addFile(
       files,
       symbol.filePath,
-      2.4 - index * 0.05 + pathSignal.score + nameSignal + layerPriority(layer, keywords),
-      "symbol match",
+      searchOnlyScore(2.4 - index * 0.05, pathSignal, nameSignal) +
+        (querySignal ? layerPriority(layer, keywords) : 0),
+      querySignal ? "symbol match" : "weak symbol match",
       symbol.displayName,
     );
     if (nameSignal > 0) addFile(files, symbol.filePath, 0, "symbol name matches query");
+    if (!querySignal) addFile(files, symbol.filePath, 0, "weak search match");
     for (const reason of pathSignal.reasons) {
       addFile(files, symbol.filePath, 0, reason);
     }
@@ -319,14 +333,17 @@ function buildFiles(
     const pathSignal = pathScore(exp.filePath, keywords);
     const nameSignal = symbolScore(exp.exportName, keywords);
     const layer = classifyLayer(exp.filePath);
+    const querySignal = hasQuerySignal(pathSignal, nameSignal);
     addFile(
       files,
       exp.filePath,
-      2 - index * 0.05 + pathSignal.score + nameSignal + layerPriority(layer, keywords),
-      "export match",
+      searchOnlyScore(2 - index * 0.05, pathSignal, nameSignal) +
+        (querySignal ? layerPriority(layer, keywords) : 0),
+      querySignal ? "export match" : "weak export match",
       exp.exportName,
     );
     if (nameSignal > 0) addFile(files, exp.filePath, 0, "export name matches query");
+    if (!querySignal) addFile(files, exp.filePath, 0, "weak search match");
     for (const reason of pathSignal.reasons) {
       addFile(files, exp.filePath, 0, reason);
     }
@@ -397,6 +414,28 @@ async function applyGraphSignals(
   );
 
   return files.sort((a, b) => b.score - a.score);
+}
+
+function isWeakOnlyMatch(file: FeatureFile) {
+  const strongReasons = [
+    "file match",
+    "exact feature segment",
+    "feature domain match",
+    "path keyword match",
+    "filename match",
+    "symbol name matches query",
+    "export name matches query",
+    "imported by entrypoint",
+    "used by feature neighbor",
+    "connects ranked files",
+  ];
+  return !file.reasons.some((reason) => strongReasons.includes(reason));
+}
+
+function filterRankedFiles(files: FeatureFile[]) {
+  return files
+    .filter((file) => !isWeakOnlyMatch(file))
+    .sort((a, b) => b.score - a.score);
 }
 
 function rankConfidence(files: FeatureFile[]): Confidence {
@@ -524,7 +563,7 @@ export function registerSummarizeFeatureAreaTool(
         buildFiles(results, keywords),
         keywords,
       );
-      const files = rankedFiles.slice(0, max_files ?? 15);
+      const files = filterRankedFiles(rankedFiles).slice(0, max_files ?? 15);
       const confidence = rankConfidence(files);
       const suggestedNextTools =
         files.length > 0
