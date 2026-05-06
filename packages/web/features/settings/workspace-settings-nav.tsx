@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, Users } from "lucide-react";
+import { CreditCard, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceSettingsNav({ workspaceId }: { workspaceId: string }) {
@@ -11,6 +11,7 @@ export function WorkspaceSettingsNav({ workspaceId }: { workspaceId: string }) {
   const SECTIONS = [
     { id: "team", label: "Team", icon: Users, href: `/w/${workspaceId}/settings/team` },
     { id: "billing", label: "Billing", icon: CreditCard, href: `/w/${workspaceId}/settings/billing` },
+    { id: "upgrade", label: "Upgrade", icon: Sparkles, href: `/w/${workspaceId}/upgrade` },
   ];
 
   return (

@@ -1,11 +1,11 @@
 "use client";
 
 import useSWR from "swr";
+import Link from "next/link";
 import { useTransition } from "react";
 import {
   AlertCircle,
   CalendarClock,
-  Check,
   CheckCircle2,
   CreditCard,
 } from "lucide-react";
@@ -24,16 +24,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { browserWorkspacesApi } from "@/features/workspaces/api";
 import { useWorkspace } from "@/features/workspaces/workspace-context";
-import {
-  createSubscription,
-  cancelSubscription,
-  listPayments,
-} from "@/features/billing/api";
-import PayPalWrapper from "@/features/billing/paypal-wrapper";
-import {
-  PayPalSubscriptionButton,
-  type OnApproveDataSubscriptions,
-} from "@paypal/react-paypal-js/sdk-v6";
+import { cancelSubscription, listPayments } from "@/features/billing/api";
 import type {
   SubscriptionStatus,
   WorkspacePlan,
@@ -46,67 +37,19 @@ const PLAN_CONFIG: Record<
   WorkspacePlan,
   {
     label: string;
-    price: string;
-    description: string;
-    features: string[];
-    highlight: boolean;
-    paypalPlanKey: "developer" | "team" | null;
   }
 > = {
   basic: {
     label: "Basic",
-    price: "Free",
-    description: "Local MCP index access without cloud imports.",
-    features: [
-      "5 projects",
-      "Local MCP index",
-      "No cloud imports",
-      "No web graph or insights",
-    ],
-    highlight: false,
-    paypalPlanKey: null,
   },
   beta: {
     label: "Beta",
-    price: "Free",
-    description: "Early access — all limits unlocked during beta.",
-    features: [
-      "Unlimited projects",
-      "Unlimited imports / month",
-      "MCP access",
-      "Private repo imports",
-    ],
-    highlight: false,
-    paypalPlanKey: null,
   },
   developer: {
     label: "Developer",
-    price: "$19 / mo",
-    description: "For solo developers and small projects.",
-    features: [
-      "20 projects",
-      "200 imports / month",
-      "50 000 files / import",
-      "MCP access",
-      "Private repo imports",
-    ],
-    highlight: false,
-    paypalPlanKey: "developer",
   },
   team: {
     label: "Team",
-    price: "$49 / mo",
-    description: "For teams that need unlimited scale.",
-    features: [
-      "Unlimited projects",
-      "Unlimited imports / month",
-      "Unlimited indexed files",
-      "MCP access",
-      "Private repo imports",
-      "Team workspace",
-    ],
-    highlight: true,
-    paypalPlanKey: "team",
   },
 };
 
@@ -214,168 +157,21 @@ function UsageRow({
   );
 }
 
-function PayPalButton({
-  plan,
-  workspaceId,
-  onSuccess,
-}: {
-  plan: "developer" | "team";
-  workspaceId: string;
-  onSuccess: () => void;
-}) {
-  const { toast } = useToast();
-
-  return (
-    <div className="w-full [&_paypal-button]:block [&_paypal-button]:w-full">
-      <PayPalSubscriptionButton
-        presentationMode="auto"
-        createSubscription={async () => {
-          const { subscriptionId } = await createSubscription({
-            plan,
-            workspaceId,
-          });
-          return { subscriptionId };
-        }}
-        onApprove={async (data: OnApproveDataSubscriptions) => {
-          toast({
-            title: "Subscription activated!",
-            description: data.subscriptionId
-              ? `ID: ${data.subscriptionId}`
-              : "PayPal confirmed the subscription.",
-          });
-          onSuccess();
-        }}
-        onError={(err: unknown) => {
-          console.error("PayPal error", err);
-          toast({
-            title: "Payment failed",
-            description: "Please try again.",
-            variant: "destructive",
-          });
-        }}
-        onCancel={() => {
-          toast({ title: "Payment cancelled" });
-        }}
-      />
-    </div>
-  );
-}
-
-function PlanCard({
-  plan,
-  current,
-  workspaceId,
-  canManageBilling,
-  paypalReady,
-  onSubscribed,
-}: {
-  plan: WorkspacePlan;
-  current: boolean;
-  workspaceId?: string;
-  canManageBilling: boolean;
-  paypalReady: boolean;
-  onSubscribed: () => void;
-}) {
-  const config = PLAN_CONFIG[plan];
-  const { toast } = useToast();
-  const [isCancelling, startCancel] = useTransition();
-
-  function handleCancel() {
-    if (!workspaceId) return;
-    startCancel(async () => {
-      try {
-        await cancelSubscription(workspaceId);
-        toast({ title: "Subscription cancelled. Plan reset to Beta." });
-        onSubscribed();
-      } catch {
-        toast({ title: "Failed to cancel", variant: "destructive" });
-      }
-    });
-  }
-
-  return (
-    <div
-      className={cn(
-        "relative flex h-full flex-col rounded-lg border p-5",
-        config.highlight
-          ? "border-primary/50 bg-primary/5"
-          : "border-border/70 bg-card",
-        current && "ring-2 ring-primary",
-      )}
-    >
-      {config.highlight && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge className="bg-primary text-primary-foreground text-xs px-3">
-            Most popular
-          </Badge>
-        </div>
-      )}
-
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <p className="font-semibold">{config.label}</p>
-          {current && (
-            <Badge
-              variant="outline"
-              className="text-xs border-primary text-primary"
-            >
-              Current
-            </Badge>
-          )}
-        </div>
-        <p className="text-2xl font-bold">{config.price}</p>
-        <p className="text-xs text-muted-foreground">{config.description}</p>
-      </div>
-
-      <Separator className="my-4" />
-
-      <ul className="space-y-2">
-        {config.features.map((f) => (
-          <li key={f} className="flex items-center gap-2 text-sm">
-            <Check className="size-3.5 shrink-0 text-emerald-500" />
-            {f}
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-auto pt-5">
-        {!current && config.paypalPlanKey && workspaceId && canManageBilling && paypalReady ? (
-          <PayPalButton
-            plan={config.paypalPlanKey}
-            workspaceId={workspaceId}
-            onSuccess={onSubscribed}
-          />
-        ) : !current && config.paypalPlanKey && workspaceId && !paypalReady ? (
-          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            PayPal checkout is not configured for this environment.
-          </div>
-        ) : !current && config.paypalPlanKey && !canManageBilling ? (
-          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            Ask a workspace owner or admin to change plans.
-          </div>
-        ) : current && plan !== "beta" ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleCancel}
-            disabled={isCancelling || !canManageBilling}
-            className="w-full text-xs text-muted-foreground hover:text-destructive"
-          >
-            {isCancelling ? "Cancelling…" : "Cancel subscription"}
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function BillingLifecycleCard({
   subscription,
   latestSubscription,
+  workspaceId,
+  canManageBilling,
+  onChanged,
 }: {
   subscription: WorkspaceSubscription | null;
   latestSubscription: WorkspaceSubscription | null;
+  workspaceId?: string;
+  canManageBilling: boolean;
+  onChanged: () => void;
 }) {
+  const { toast } = useToast();
+  const [isCancelling, startCancel] = useTransition();
   const visibleSubscription = subscription ?? latestSubscription;
   const status = visibleSubscription?.status;
   const icon =
@@ -406,7 +202,7 @@ function BillingLifecycleCard({
         {visibleSubscription ? (
           <SubscriptionBadge status={visibleSubscription.status} />
         ) : (
-          <Badge variant="outline">Free beta</Badge>
+          <Badge variant="outline">Free plan</Badge>
         )}
       </div>
 
@@ -443,6 +239,39 @@ function BillingLifecycleCard({
           subscription webhook.
         </div>
       )}
+
+      {subscription ? (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!workspaceId) return;
+              startCancel(async () => {
+                try {
+                  await cancelSubscription(workspaceId);
+                  toast({
+                    title: "Subscription cancelled. Plan reset to Basic.",
+                  });
+                  onChanged();
+                } catch {
+                  toast({ title: "Failed to cancel", variant: "destructive" });
+                }
+              });
+            }}
+            disabled={isCancelling || !canManageBilling}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            {isCancelling ? "Cancelling..." : "Cancel subscription"}
+          </Button>
+          {!canManageBilling ? (
+            <p className="text-xs text-muted-foreground">
+              Ask a workspace owner or admin to manage billing.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -463,30 +292,38 @@ export function BillingSection() {
     ([, workspaceId]) => listPayments(workspaceId),
   );
 
-  const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
   const isLoading = workspacesLoading || detailLoading;
   const currentPlan = detail?.workspace.plan as WorkspacePlan | undefined;
   const canManageBilling =
     detail?.membership.role === "owner" || detail?.membership.role === "admin";
 
-  function handleSubscribed() {
+  function handleBillingChanged() {
     void mutate();
     void mutatePayments();
   }
 
-  const content = (
+  return (
     <>
       {/* Current plan + usage */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-1">
               <CardTitle>Current plan</CardTitle>
               <CardDescription>
                 Your workspace plan and usage for this month.
               </CardDescription>
             </div>
-            {currentPlan && <PlanBadge plan={currentPlan} />}
+            <div className="flex flex-wrap items-center gap-2">
+              {currentPlan && <PlanBadge plan={currentPlan} />}
+              {activeWorkspace ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/w/${activeWorkspace.id}/upgrade`}>
+                    Change plan
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -519,6 +356,9 @@ export function BillingSection() {
               <BillingLifecycleCard
                 subscription={detail.activeSubscription}
                 latestSubscription={detail.latestSubscription}
+                workspaceId={activeWorkspace?.id}
+                canManageBilling={canManageBilling}
+                onChanged={handleBillingChanged}
               />
               <Separator />
               <div className="space-y-4">
@@ -572,32 +412,6 @@ export function BillingSection() {
               personal workspace.
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Plans */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Plans</CardTitle>
-          <CardDescription>
-            Upgrade or downgrade your workspace plan. Payments processed via
-            PayPal.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid items-stretch gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            {(["beta", "developer", "team"] as WorkspacePlan[]).map((plan) => (
-              <PlanCard
-                key={plan}
-                plan={plan}
-                current={currentPlan === plan}
-                workspaceId={activeWorkspace?.id}
-                canManageBilling={canManageBilling}
-                paypalReady={Boolean(paypalClientId)}
-                onSubscribed={handleSubscribed}
-              />
-            ))}
-          </div>
         </CardContent>
       </Card>
 
@@ -673,6 +487,4 @@ export function BillingSection() {
       </Card>
     </>
   );
-
-  return <PayPalWrapper clientId={paypalClientId}>{content}</PayPalWrapper>;
 }

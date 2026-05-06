@@ -71,12 +71,17 @@ function BillingV2Card({
         </div>
         <p className="text-sm text-muted-foreground">
           {workspace
-            ? `Usage limits are tracked for ${workspace.workspace.name}. Billing collection is not enabled yet.`
+            ? `Usage limits and billing controls are tracked for ${workspace.workspace.name}.`
             : "Team seats, usage limits, and billing controls are planned for V2."}
         </p>
-        <Button asChild variant="secondary" size="sm" className="w-full">
-          <Link href={`/w/${workspaceId}/settings/billing`}>View usage</Link>
-        </Button>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button asChild variant="secondary" size="sm">
+            <Link href={`/w/${workspaceId}/settings/billing`}>View usage</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href={`/w/${workspaceId}/upgrade`}>Upgrade</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

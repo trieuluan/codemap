@@ -349,6 +349,12 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
       <div className="ml-auto flex items-center gap-3">
         <GlobalSearch />
 
+        {wid && activeWorkspace?.workspace.plan !== "team" ? (
+          <Button asChild size="sm" className="hidden sm:inline-flex">
+            <Link href={`/w/${wid}/upgrade`}>Upgrade</Link>
+          </Button>
+        ) : null}
+
         <Button
           variant="ghost"
           size="icon"
