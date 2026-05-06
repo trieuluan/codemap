@@ -11,9 +11,8 @@ Use this skill when making code changes in a CodeMap-indexed repository.
    - API build/tests for backend behavior.
    - web build/tests for frontend behavior.
 4. Call `get_working_diff` or use git diff to review scope.
-5. Call `trigger_reimport` and `wait_for_import` after meaningful code/index/rule changes or when asked.
+5. Call `refresh_local_index` after local code/index/rule changes. Call `trigger_reimport` and `wait_for_import` only when cloud/web graph and insights should refresh or when asked.
 
 ## Rule
 
 Never declare the task complete without saying what was verified or why verification was skipped.
-

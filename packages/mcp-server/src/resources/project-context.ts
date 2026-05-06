@@ -38,8 +38,8 @@ const TOOLS_LITE = [
   "- get_project — get the current linked project from .codemap/mcp.json; call with no arguments",
   "- link_project — link the workspace to an existing CodeMap project; auto-detects by git remote URL",
   "- get_working_diff — show uncommitted changes (staged, unstaged, untracked); use after edits to verify what changed",
-  "- incremental_import — reparse only locally changed files without a full reimport; faster than trigger_reimport for small edits",
-  "- trigger_reimport — re-index the codebase after large changes or when incremental_import is not enough",
+  "- refresh_local_index — refresh the local SQLite MCP index from disk; local-only, no auth or cloud API required",
+  "- trigger_reimport — run a full cloud import for web graph/insights when the workspace plan allows cloud indexing",
   "- wait_for_import — wait until an import finishes",
   "- check_auth_status — verify MCP authentication, current API URL, user, and next action",
   "- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset",
@@ -84,8 +84,8 @@ const WORKFLOW_LITE = [
   "- Use search_codebase when you know a specific keyword. Follow the read hint in each result.",
   "- Use get_file with include: [\"outline\"] to see a file's symbol list, then include: [\"symbols\"] + symbol_names for specific function bodies.",
   "- Use get_working_diff after making edits to verify what changed before committing.",
-  "- Use incremental_import after editing files to reparse only changed files — faster than trigger_reimport.",
-  "- Use trigger_reimport then wait_for_import when incremental_import is not enough (deleted files, large refactors, stale index).",
+  "- Use refresh_local_index after editing files to refresh local MCP search/read context without touching cloud indexing.",
+  "- Use trigger_reimport then wait_for_import when you need cloud indexing for web graph/insights.",
 ];
 
 const WORKFLOW_STANDARD_EXTRA = [
@@ -115,7 +115,7 @@ const MAINTENANCE_SECTION = [
   "- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins, CLI scripts, worker entrypoints, tests, or generated config files solely because the static graph has no importer.",
   "- Dead functions: use find_usages or find_callers. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
   "- find_usages occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
-  "- After cleanup edits, run package builds and get_working_diff. Call trigger_reimport and wait_for_import to refresh MCP data.",
+  "- After cleanup edits, run package builds and get_working_diff. Call refresh_local_index to refresh MCP local data; call trigger_reimport and wait_for_import only when cloud/web data should refresh.",
   "- Before applying patches (apply_patch), use find_cycles to ensure no new circular dependencies are introduced.",
 ];
 
@@ -162,7 +162,8 @@ function buildContextText(
     lines.push(
       `Entitlements: projects ${accountWorkspace.entitlements.maxProjects ?? "unlimited"}, ` +
         `imports/month ${accountWorkspace.entitlements.maxImportsPerMonth ?? "unlimited"}, ` +
-        `MCP ${accountWorkspace.entitlements.mcpAccess ? "enabled" : "disabled"}`,
+        `MCP ${accountWorkspace.entitlements.mcpAccess ? "enabled" : "disabled"}, ` +
+        `cloud import ${accountWorkspace.entitlements.cloudImportAccess ? "enabled" : "disabled"}`,
     );
     lines.push("");
   }
@@ -258,11 +259,19 @@ function buildContextText(
         "symbols before answering questions about the code.",
     );
   } else if (health.isStale) {
-    lines.push(
-      "The local workspace commit differs from the latest indexed commit. " +
-        "Call trigger_reimport, then wait_for_import before relying on search " +
-        "or symbol results for recent code changes.",
-    );
+    if (accountWorkspace?.entitlements.cloudImportAccess === false) {
+      lines.push(
+        "The local workspace commit differs from the latest cloud indexed commit, " +
+          "but cloud imports are disabled for this workspace. Call refresh_local_index " +
+          "before relying on local MCP search or symbol results for recent code changes.",
+      );
+    } else {
+      lines.push(
+        "The local workspace commit differs from the latest cloud indexed commit. " +
+          "Call refresh_local_index for local MCP work, or trigger_reimport then " +
+          "wait_for_import when web graph/insights should update.",
+      );
+    }
   } else if (project.status === "importing") {
     if (latestImport?.parseStatus === "queued") {
       lines.push(
@@ -295,8 +304,9 @@ function buildContextText(
     }
   } else {
     lines.push(
-      "The project has not been fully imported yet. Run trigger_reimport to " +
-        "index the codebase.",
+      "The project has not been fully imported in the cloud yet. Use refresh_local_index " +
+        "for local MCP indexing, or trigger_reimport to create cloud graph/insights " +
+        "when the workspace plan allows it.",
     );
   }
 

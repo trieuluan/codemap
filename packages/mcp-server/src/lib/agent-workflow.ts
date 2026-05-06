@@ -16,7 +16,7 @@ export const AGENT_WORKFLOW_SUMMARY = [
   "After you have a shortlist, call get_files for outlines, then get_file for specific content or symbols.",
   "Use find_usages/find_callers for symbol impact analysis.",
   "Use get_working_diff after edits, then build/test as appropriate.",
-  "Call trigger_reimport and wait_for_import after meaningful code/index changes.",
+  "Call refresh_local_index after local edits; call trigger_reimport and wait_for_import only when cloud/web indexing should refresh.",
   "Read CodeMap Agent Pack skills when the agent needs a reusable workflow.",
 ];
 
@@ -56,7 +56,7 @@ Choose the tool based on the shape of the question:
 - Several candidate files -> \`get_files\`.
 - Specific symbol body -> \`get_file(include=["symbols"], symbol_names=[...])\`.
 - Who calls/imports this? -> \`find_callers\` or \`find_usages\`.
-- After edits -> \`get_working_diff\`, build/test, then \`trigger_reimport\` when the index should refresh.
+- After edits -> \`get_working_diff\`, build/test, then \`refresh_local_index\` when the local MCP index should refresh.
 `;
 
 export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
@@ -88,8 +88,8 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 ## 5. Refresh Index
 
-- Use \`incremental_import\` for small changed-file reparses when appropriate.
-- Use \`trigger_reimport\` then \`wait_for_import\` after larger edits, deleted files, generated artifacts, docs/rules changes that should be indexed, or when the user asks.
+- Use \`refresh_local_index\` after local edits to refresh the MCP SQLite index without cloud access.
+- Use \`trigger_reimport\` then \`wait_for_import\` only when the cloud index, web graph, or insights should refresh.
 
 ## 6. Final Response
 

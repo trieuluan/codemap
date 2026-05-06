@@ -39,7 +39,7 @@ import { registerFindByPatternTool } from "./tools/find-by-pattern.js";
 import { registerRunTestsTool } from "./tools/run-tests.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
-import { registerIncrementalImportTool } from "./tools/incremental-import.js";
+import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerCodeReviewTool } from "./tools/code-review.js";
 import { registerSuggestPatchTool } from "./tools/suggest-patch.js";
 import { registerApplyPatchTool } from "./tools/apply-patch.js";
@@ -100,7 +100,7 @@ async function runMcpServer() {
   registerSuggestEditLocationsTool(server, config);
   registerGetProjectMapTool(server, config);
   registerGetWorkingDiffTool(server);
-  registerIncrementalImportTool(server, config);
+  registerRefreshLocalIndexTool(server);
   registerTriggerReimportTool(server, config);
   registerWaitForImportTool(server, config);
 
