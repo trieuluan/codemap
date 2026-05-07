@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# Next.js web — standalone output
+# Deps: packages/shared, packages/web
+#
+# NEXT_PUBLIC_* vars are read from packages/web/.env.production at build time.
+
+FROM node:24-alpine AS base
+WORKDIR /app
+
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM base AS build
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY package*.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/web/package.json    ./packages/web/
+
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY packages/shared ./packages/shared
+COPY packages/web    ./packages/web
+
+RUN npm run build:shared && npm run build:web
+
+# ── Runner stage ──────────────────────────────────────────────────────────────
+FROM node:24-alpine AS runner
+
+ENV HOSTNAME=0.0.0.0
+
+WORKDIR /app
+
+COPY --from=build /app/packages/web/.next/standalone     ./
+COPY --from=build /app/packages/web/.next/static         ./packages/web/.next/static
+COPY --from=build /app/packages/web/public               ./packages/web/public
+
+USER node
+
+EXPOSE 3000
+
+CMD ["node", "packages/web/server.js"]

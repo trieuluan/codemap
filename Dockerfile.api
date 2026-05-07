@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1
+# API server + worker — monorepo build
+# Deps: packages/shared, packages/code-index, packages/api
+
+FROM node:24-alpine AS base
+WORKDIR /app
+
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM base AS build
+
+# Copy workspace manifests first to maximise layer cache
+COPY package*.json ./
+COPY packages/shared/package.json     ./packages/shared/
+COPY packages/code-index/package.json ./packages/code-index/
+COPY packages/api/package.json        ./packages/api/
+
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+# Copy source
+COPY packages/shared     ./packages/shared
+COPY packages/code-index ./packages/code-index
+COPY packages/api        ./packages/api
+
+# Build in dependency order
+RUN npm run build:shared && \
+    npm run build:code-index && \
+    npm run build:api
+
+# ── Runner stage ──────────────────────────────────────────────────────────────
+FROM base AS runner
+
+# Workspace manifests — npm ci will wire up file: symlinks correctly
+COPY package*.json ./
+COPY packages/shared/package.json     ./packages/shared/
+COPY packages/code-index/package.json ./packages/code-index/
+COPY packages/api/package.json        ./packages/api/
+
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
+
+# Built artifacts (symlinked packages resolve to these paths)
+COPY --from=build /app/packages/shared/dist     ./packages/shared/dist
+COPY --from=build /app/packages/code-index/dist ./packages/code-index/dist
+COPY --from=build /app/packages/api/dist        ./packages/api/dist
+
+USER node
+
+EXPOSE 3001
+
+# Override CMD to run the worker:
+#   docker run --rm codemap/api node packages/api/dist/workers/index.js
+CMD ["node", "packages/api/dist/server.js"]

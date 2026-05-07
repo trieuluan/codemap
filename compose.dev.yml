@@ -1,9 +1,21 @@
+include:
+  - compose.yml
+
 x-codemap-volumes: &codemap-volumes
   - .:/workspace:cached
   - codemap_node_modules:/workspace/node_modules
   - ./.codemap-storage:/codemap_storage
 
 services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    container_name: codemap-redis-dev
+    ports:
+      - "6379:6379"
+
   workspace:
     build:
       context: .
@@ -50,39 +62,15 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  postgres:
-    image: postgres:${POSTGRES_IMAGE_TAG:-18}
-    container_name: ${POSTGRES_CONTAINER_NAME:-codemap_pg}
-    restart: ${POSTGRES_RESTART_POLICY:-unless-stopped}
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - codemap_postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:8-alpine
-    container_name: codemap-redis-dev
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - codemap_redis_data:/data
-
   redis-commander:
     image: rediscommander/redis-commander:latest
     environment:
-      REDIS_HOSTS: local:codemap-redis-dev:6379
+      REDIS_HOSTS: local:redis:6379
     ports:
       - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_started
 
   mcp_server:
     image: codemap/dev-workspace:latest
@@ -102,5 +90,3 @@ services:
 
 volumes:
   codemap_node_modules:
-  codemap_postgres_data:
-  codemap_redis_data:
