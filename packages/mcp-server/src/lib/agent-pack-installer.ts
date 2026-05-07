@@ -31,6 +31,7 @@ interface PlannedWrite {
   path: string;
   content?: string;
   sourcePath?: string;
+  overwrite?: boolean;
 }
 
 function parseTarget(value: string | undefined): InstallTarget {
@@ -143,6 +144,63 @@ async function planCodex(root: string): Promise<PlannedWrite[]> {
   ];
 }
 
+type HookEntry = { matcher?: string; hooks: Array<{ type: string; command: string }> };
+type SettingsShape = {
+  hooks?: { UserPromptSubmit?: HookEntry[]; PreToolUse?: HookEntry[]; PostToolUse?: HookEntry[]; [k: string]: unknown };
+  [k: string]: unknown;
+};
+
+const CODEMAP_HOOKS = {
+  sessionHint: { command: "codemap-mcp session-hint 2>/dev/null || true", marker: "codemap-mcp session-hint" },
+  preEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap-mcp pre-edit 2>/dev/null || true", marker: "codemap-mcp pre-edit" },
+  postEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap-mcp local-index 2>/dev/null || true", marker: "codemap-mcp local-index" },
+} as const;
+
+function hasCodemapMarker(entry: HookEntry, marker: string): boolean {
+  return entry.hooks.some((h) => h.command.startsWith(marker));
+}
+
+function upsertHook(list: HookEntry[], marker: string, newEntry: HookEntry): HookEntry[] {
+  return [...list.filter((e) => !hasCodemapMarker(e, marker)), newEntry];
+}
+
+async function mergeClaudeSettings(root: string): Promise<PlannedWrite> {
+  const settingsPath = path.join(root, ".claude", "settings.json");
+
+  let settings: SettingsShape = {};
+  try {
+    settings = JSON.parse(await readFile(settingsPath, "utf8")) as SettingsShape;
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+  }
+
+  const h = settings.hooks ?? {};
+
+  const merged: SettingsShape = {
+    ...settings,
+    hooks: {
+      ...h,
+      UserPromptSubmit: upsertHook(
+        Array.isArray(h.UserPromptSubmit) ? (h.UserPromptSubmit as HookEntry[]) : [],
+        CODEMAP_HOOKS.sessionHint.marker,
+        { hooks: [{ type: "command", command: CODEMAP_HOOKS.sessionHint.command }] },
+      ),
+      PreToolUse: upsertHook(
+        Array.isArray(h.PreToolUse) ? (h.PreToolUse as HookEntry[]) : [],
+        CODEMAP_HOOKS.preEdit.marker,
+        { matcher: CODEMAP_HOOKS.preEdit.matcher, hooks: [{ type: "command", command: CODEMAP_HOOKS.preEdit.command }] },
+      ),
+      PostToolUse: upsertHook(
+        Array.isArray(h.PostToolUse) ? (h.PostToolUse as HookEntry[]) : [],
+        CODEMAP_HOOKS.postEdit.marker,
+        { matcher: CODEMAP_HOOKS.postEdit.matcher, hooks: [{ type: "command", command: CODEMAP_HOOKS.postEdit.command }] },
+      ),
+    },
+  };
+
+  return { path: settingsPath, content: JSON.stringify(merged, null, 2), overwrite: true };
+}
+
 async function planClaude(root: string): Promise<PlannedWrite[]> {
   return [
     {
@@ -157,6 +215,7 @@ async function planClaude(root: string): Promise<PlannedWrite[]> {
       path: path.join(root, ".claude", "rules", "codemap-task-lifecycle.md"),
       content: await readAgentPackFile("rules/task-lifecycle.md"),
     },
+    await mergeClaudeSettings(root),
     ...(await listSkillWrites(root, "claude")),
   ];
 }
@@ -295,7 +354,7 @@ async function planWrites(
 async function applyWrite(write: PlannedWrite, options: Required<Pick<AgentPackInstallOptions, "dryRun" | "force">>) {
   const alreadyExists = await exists(write.path);
   const action = alreadyExists
-    ? options.force
+    ? options.force || write.overwrite
       ? "overwrite"
       : "backup"
     : "create";
@@ -306,7 +365,7 @@ async function applyWrite(write: PlannedWrite, options: Required<Pick<AgentPackI
 
   await mkdir(path.dirname(write.path), { recursive: true });
 
-  if (alreadyExists && !options.force) {
+  if (alreadyExists && !options.force && !write.overwrite) {
     const backupPath = `${write.path}.codemap-backup-${Date.now()}`;
     await rename(write.path, backupPath);
   }
@@ -346,6 +405,16 @@ export async function installAgentPack(options: AgentPackInstallOptions) {
     packRoot: getAgentPackRoot(),
     pluginRoot: getPluginRoot(),
   };
+}
+
+export async function ensureClaudeHooks(cwd: string): Promise<void> {
+  try {
+    const write = await mergeClaudeSettings(cwd);
+    await mkdir(path.dirname(write.path), { recursive: true });
+    await writeFile(write.path, `${write.content ?? ""}\n`, "utf8");
+  } catch {
+    // silently ignore — hooks are best-effort on startup
+  }
 }
 
 export async function listAgentPackFiles() {

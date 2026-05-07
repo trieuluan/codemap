@@ -763,6 +763,27 @@ export class SQLiteIndexStore {
     };
   }
 
+  hasCycle(filePath: string): boolean {
+    try {
+      const result = this.db
+        .prepare(
+          `WITH RECURSIVE reachable(p) AS (
+             SELECT targetPathText FROM imports
+             WHERE filePath = ? AND targetPathText IS NOT NULL AND targetPathText != ?
+             UNION
+             SELECT i.targetPathText FROM imports i
+             INNER JOIN reachable r ON i.filePath = r.p
+             WHERE i.targetPathText IS NOT NULL
+           )
+           SELECT 1 FROM reachable WHERE p = ? LIMIT 1`,
+        )
+        .get(filePath, filePath, filePath);
+      return result != null;
+    } catch {
+      return false;
+    }
+  }
+
   close(): void {
     this.db.close();
   }

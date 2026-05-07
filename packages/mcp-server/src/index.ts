@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -66,6 +67,7 @@ import { registerExploreTaskTool } from "./tools/explore-task.js";
 import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
 import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
 import {
+  ensureClaudeHooks,
   installAgentPack,
   parseAgentPackInstallArgs,
 } from "./lib/agent-pack-installer.js";
@@ -77,6 +79,8 @@ import {
 } from "./lib/local-index.js";
 
 async function runMcpServer() {
+  await ensureClaudeHooks(process.cwd());
+
   const config = await loadConfig();
   const server = new McpServer({
     name: "codemap-mcp-server",
@@ -252,6 +256,93 @@ async function runWhoAmICommand() {
   }
 }
 
+async function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    const timer = setTimeout(() => resolve(""), 500);
+    process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
+    process.stdin.on("end", () => { clearTimeout(timer); resolve(Buffer.concat(chunks).toString("utf8")); });
+    process.stdin.on("error", () => { clearTimeout(timer); resolve(""); });
+  });
+}
+
+function formatAge(date: Date): string {
+  const mins = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+async function runSessionHintCommand() {
+  const store = await readLocalIndex();
+  if (!store) {
+    console.log("[CodeMap] No local index — run `codemap-mcp local-index` first.");
+    return;
+  }
+  const summary = store.getSummary();
+  const projectName = path.basename(summary.workspaceRootPath);
+  const indexedAgo = summary.indexedAt ? formatAge(new Date(summary.indexedAt)) : "never";
+  console.log(`[CodeMap] ${projectName} · ${summary.fileCount} files · indexed ${indexedAgo}`);
+  console.log(`→ For broad tasks, call recommend_agent_workflow(task) first.`);
+}
+
+async function runPreEditCommand(args: string[]) {
+  let filePath: string | null = null;
+
+  const fileArgIdx = args.indexOf("--file");
+  if (fileArgIdx >= 0 && args[fileArgIdx + 1]) {
+    filePath = args[fileArgIdx + 1] ?? null;
+  } else if (!process.stdin.isTTY) {
+    try {
+      const raw = await readStdin();
+      if (raw.trim()) {
+        const parsed = JSON.parse(raw) as { tool_input?: { file_path?: string; path?: string } };
+        filePath = parsed.tool_input?.file_path ?? parsed.tool_input?.path ?? null;
+      }
+    } catch {
+      // not JSON — skip
+    }
+  }
+
+  if (!filePath) return;
+
+  const store = await readLocalIndex();
+  if (!store) return;
+
+  const data = store.getFileParse(filePath);
+  if (!data) return;
+
+  const lines: string[] = [`[CodeMap] Pre-edit: ${filePath}`];
+
+  const resolvedImports = data.imports.filter((i) => i.targetPathText);
+  if (resolvedImports.length > 0) {
+    const shown = resolvedImports.slice(0, 6).map((i) => path.basename(i.targetPathText!));
+    const rest = resolvedImports.length - shown.length;
+    lines.push(`Imports (${resolvedImports.length}): ${shown.join(", ")}${rest > 0 ? ` +${rest} more` : ""}`);
+  }
+
+  const blastCount = data.blastRadius.totalCount;
+  if (blastCount > 0) {
+    const shown = data.blastRadius.files.slice(0, 5).map((f) => path.basename(f.path));
+    const rest = blastCount - shown.length;
+    lines.push(`Blast radius (${blastCount}): ${shown.join(", ")}${rest > 0 ? ` +${rest} more` : ""}`);
+  }
+
+  const exportedNames = data.exports.map((e) => e.exportName);
+  if (exportedNames.length > 0) {
+    const shown = exportedNames.slice(0, 8);
+    const rest = exportedNames.length - shown.length;
+    lines.push(`Exports: ${shown.join(", ")}${rest > 0 ? ` +${rest} more` : ""}`);
+  }
+
+  const hasCycle = store.hasCycle(filePath);
+  lines.push(`Cycle risk: ${hasCycle ? "⚠ cycle detected" : "none detected"}`);
+
+  console.log(lines.join("\n"));
+}
+
 async function main() {
   const command = process.argv[2];
 
@@ -273,6 +364,12 @@ async function main() {
       return;
     case "local-index":
       await runLocalIndexCommand(process.argv.slice(3));
+      return;
+    case "session-hint":
+      await runSessionHintCommand();
+      return;
+    case "pre-edit":
+      await runPreEditCommand(process.argv.slice(3));
       return;
     default:
       await runMcpServer();
