@@ -35,7 +35,7 @@ export default async function ProjectGraphPage({
     ]);
     if (project.workspaceId !== workspaceId) notFound();
 
-    if (!workspaceDetail.entitlements.cloudImportAccess) {
+    if (!workspaceDetail.entitlements.graphAccess) {
       return (
         <CloudFeatureGate
           feature="Dependency Graph"

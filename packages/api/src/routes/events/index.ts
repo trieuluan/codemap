@@ -6,12 +6,31 @@ import { getProjectParseQueue } from "../../lib/project-parse-queue.js";
 import { createProjectService } from "../../modules/project/service.js";
 import { createWorkspaceService } from "../../modules/workspace/service.js";
 
-const SSE_HEADERS = {
+const SSE_CONTENT_HEADERS = {
   "Content-Type": "text/event-stream",
   "Cache-Control": "no-cache",
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
 } as const;
+
+// reply.hijack() bypasses @fastify/cors — inject CORS headers manually
+function buildSseHeaders(request: FastifyRequest) {
+  const origin = request.headers.origin;
+  const allowedOrigins = (process.env.CORS_ORIGIN ?? "*")
+    .split(",")
+    .map((o) => o.trim());
+
+  const allowOrigin =
+    origin && (allowedOrigins.includes("*") || allowedOrigins.includes(origin))
+      ? origin
+      : allowedOrigins[0] ?? "*";
+
+  return {
+    ...SSE_CONTENT_HEADERS,
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
 function send(res: NodeJS.WritableStream, data: Record<string, unknown>) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -40,7 +59,7 @@ export default async function eventsRoutes(fastify: FastifyInstance) {
 
     reply.hijack();
     const res = reply.raw;
-    res.writeHead(200, SSE_HEADERS);
+    res.writeHead(200, buildSseHeaders(request));
     res.write(": ok\n\n");
 
     const importQueue = getProjectImportQueue(fastifyWithRedis.redis);
@@ -145,7 +164,7 @@ export default async function eventsRoutes(fastify: FastifyInstance) {
 
       reply.hijack();
       const res = reply.raw;
-      res.writeHead(200, SSE_HEADERS);
+      res.writeHead(200, buildSseHeaders(request));
       res.write(": ok\n\n");
 
       let lastPlan = access.workspace.plan;

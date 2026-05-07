@@ -35,7 +35,7 @@ export default async function ProjectInsightsPage({
     ]);
     if (project.workspaceId !== workspaceId) notFound();
 
-    if (!workspaceDetail.entitlements.cloudImportAccess) {
+    if (!workspaceDetail.entitlements.insightsAccess) {
       return (
         <CloudFeatureGate
           feature="Project Insights"

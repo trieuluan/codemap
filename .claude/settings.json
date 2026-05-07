@@ -12,15 +12,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "codemap-mcp pre-edit 2>/dev/null || true"
-          }
-        ]
-      },
-      {
         "matcher": "Read",
         "hooks": [
           {
@@ -35,6 +26,15 @@
           {
             "type": "command",
             "command": "codemap-mcp pre-bash 2>/dev/null || true"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codemap-mcp pre-edit 2>/dev/null || true"
           }
         ]
       }

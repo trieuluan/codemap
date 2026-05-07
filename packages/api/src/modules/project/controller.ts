@@ -18,6 +18,7 @@ import {
 } from "./map/tree-builder";
 import { createRepoParseGraphService } from "./parse/repo-parse-graph";
 import { createProjectService } from "./service";
+import { createWorkspaceService } from "../workspace/service";
 import { getProjectGitDiff } from "./map/git-diff";
 import { reparseFileIfStale } from "./parse/file-reparse.service";
 import {
@@ -58,6 +59,7 @@ function getAuthenticatedUserId(
 export function createProjectController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);
   const repoParseGraphService = createRepoParseGraphService(fastify.db);
+  const workspaceService = createWorkspaceService(fastify.db);
   const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
   async function getRepositoryAccessToken(
@@ -828,6 +830,14 @@ export function createProjectController(fastify: FastifyInstance) {
         throw fastify.httpErrors.notFound("Project import not found");
       }
 
+      if (latestMapWithSource.project.workspaceId) {
+        const access = await workspaceService.getWorkspaceAccess(userId, latestMapWithSource.project.workspaceId);
+        const entitlements = workspaceService.getWorkspaceEntitlements(access?.workspace ?? { plan: "basic" });
+        if (!entitlements.insightsAccess) {
+          return reply.code(403).send({ success: false, error: { code: "PLAN_UPGRADE_REQUIRED", feature: "insights" } });
+        }
+      }
+
       const importId = latestMapWithSource.importRecord.id;
       const query = projectMapInsightsQuerySchema.parse(request.query ?? {});
       const cacheKey = cacheKeys.projectInsights(importId);
@@ -872,6 +882,14 @@ export function createProjectController(fastify: FastifyInstance) {
 
       if (!latestMapWithSource.importRecord) {
         throw fastify.httpErrors.notFound("Project import not found");
+      }
+
+      if (latestMapWithSource.project.workspaceId) {
+        const access = await workspaceService.getWorkspaceAccess(userId, latestMapWithSource.project.workspaceId);
+        const entitlements = workspaceService.getWorkspaceEntitlements(access?.workspace ?? { plan: "basic" });
+        if (!entitlements.graphAccess) {
+          return reply.code(403).send({ success: false, error: { code: "PLAN_UPGRADE_REQUIRED", feature: "graph" } });
+        }
       }
 
       const graph = await repoParseGraphService.getProjectGraph(

@@ -45,13 +45,15 @@ export function getWorkspaceEntitlements(
   if (plan === "basic") {
     return {
       plan,
-      maxProjects: 5,
-      maxImportsPerMonth: 20,
-      maxIndexedFilesPerImport: null,
+      maxProjects: 3,
+      maxImportsPerMonth: 10,
+      maxIndexedFilesPerImport: 5_000,
       privateRepoImports: false,
       mcpAccess: true,
       teamMembers: false,
       cloudImportAccess: true,
+      graphAccess: false,
+      insightsAccess: false,
     };
   }
 
@@ -65,19 +67,23 @@ export function getWorkspaceEntitlements(
       mcpAccess: true,
       teamMembers: true,
       cloudImportAccess: true,
+      graphAccess: true,
+      insightsAccess: true,
     };
   }
 
   if (plan === "developer") {
     return {
       plan,
-      maxProjects: 20,
-      maxImportsPerMonth: 200,
-      maxIndexedFilesPerImport: 50_000,
+      maxProjects: null,
+      maxImportsPerMonth: null,
+      maxIndexedFilesPerImport: 100_000,
       privateRepoImports: true,
       mcpAccess: true,
       teamMembers: false,
       cloudImportAccess: true,
+      graphAccess: true,
+      insightsAccess: true,
     };
   }
 
@@ -91,6 +97,8 @@ export function getWorkspaceEntitlements(
     mcpAccess: true,
     teamMembers: false,
     cloudImportAccess: true,
+    graphAccess: true,
+    insightsAccess: true,
   };
 }
 

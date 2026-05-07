@@ -86,12 +86,15 @@ function createInviteDb(options: {
 
 test("workspace entitlements encode plan limits", () => {
   const basic = getWorkspaceEntitlements({ plan: "basic" });
-  assert.equal(basic.maxProjects, 5);
-  assert.equal(basic.maxImportsPerMonth, 20);
+  assert.equal(basic.maxProjects, 3);
+  assert.equal(basic.maxImportsPerMonth, 10);
+  assert.equal(basic.maxIndexedFilesPerImport, 5_000);
   assert.equal(basic.privateRepoImports, false);
   assert.equal(basic.teamMembers, false);
   assert.equal(basic.mcpAccess, true);
   assert.equal(basic.cloudImportAccess, true);
+  assert.equal(basic.graphAccess, false);
+  assert.equal(basic.insightsAccess, false);
 
   const beta = getWorkspaceEntitlements({ plan: "beta" });
   assert.equal(beta.maxProjects, null);
@@ -100,11 +103,14 @@ test("workspace entitlements encode plan limits", () => {
   assert.equal(beta.cloudImportAccess, true);
 
   const developer = getWorkspaceEntitlements({ plan: "developer" });
-  assert.equal(developer.maxProjects, 20);
-  assert.equal(developer.maxImportsPerMonth, 200);
+  assert.equal(developer.maxProjects, null);
+  assert.equal(developer.maxImportsPerMonth, null);
+  assert.equal(developer.maxIndexedFilesPerImport, 100_000);
   assert.equal(developer.privateRepoImports, true);
   assert.equal(developer.teamMembers, false);
   assert.equal(developer.cloudImportAccess, true);
+  assert.equal(developer.graphAccess, true);
+  assert.equal(developer.insightsAccess, true);
 
   const team = getWorkspaceEntitlements({ plan: "team" });
   assert.equal(team.maxProjects, null);
@@ -134,7 +140,7 @@ test("workspace limit assertions throw stable entitlement errors", () => {
     () =>
       assertCanTriggerImport(getWorkspaceEntitlements({ plan: "basic" }), {
         projectCount: 0,
-        importsThisMonth: 20,
+        importsThisMonth: 10,
         indexedFilesThisMonth: 0,
         indexedSymbolsThisMonth: 0,
         indexedEdgesThisMonth: 0,

@@ -14,9 +14,21 @@ export interface ImportSSEEvent {
   parseStage: string | null;
 }
 
-export function useImportSSE(projectId: string, enabled: boolean) {
+interface UseImportSSEOptions {
+  enabled: boolean;
+  // Called on every SSE event — use to mutate SWR caches in client components.
+  // If omitted, falls back to router.refresh() for server component pages.
+  onUpdate?: (event: ImportSSEEvent) => void;
+  onDone?: (event: ImportSSEEvent) => void;
+}
+
+export function useImportSSE(projectId: string, options: UseImportSSEOptions | boolean) {
   const router = useRouter();
   const esRef = useRef<EventSource | null>(null);
+
+  const enabled = typeof options === "boolean" ? options : options.enabled;
+  const onUpdate = typeof options === "object" ? options.onUpdate : undefined;
+  const onDone = typeof options === "object" ? options.onDone : undefined;
 
   useEffect(() => {
     if (!enabled) return;
@@ -29,8 +41,12 @@ export function useImportSSE(projectId: string, enabled: boolean) {
     es.onmessage = (e: MessageEvent<string>) => {
       try {
         const data = JSON.parse(e.data) as ImportSSEEvent;
-        // Refresh server component data on every status change
-        router.refresh();
+
+        if (onUpdate) {
+          onUpdate(data);
+        } else {
+          router.refresh();
+        }
 
         const done =
           data.status === "failed" ||
@@ -38,6 +54,7 @@ export function useImportSSE(projectId: string, enabled: boolean) {
             ["completed", "partial", "failed"].includes(data.parseStatus ?? ""));
 
         if (done) {
+          onDone?.(data);
           es.close();
           esRef.current = null;
         }
@@ -55,5 +72,5 @@ export function useImportSSE(projectId: string, enabled: boolean) {
       es.close();
       esRef.current = null;
     };
-  }, [projectId, enabled, router]);
+  }, [projectId, enabled, onUpdate, onDone, router]);
 }

@@ -49,6 +49,8 @@ export interface WorkspaceEntitlements {
   mcpAccess: boolean;
   teamMembers: boolean;
   cloudImportAccess: boolean;
+  graphAccess: boolean;
+  insightsAccess: boolean;
 }
 
 export interface WorkspaceUsageSummary {

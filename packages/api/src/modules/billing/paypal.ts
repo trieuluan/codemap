@@ -57,6 +57,11 @@ export function createPayPalClient(config: {
       throw new Error(`PayPal API ${res.status}: ${body}`);
     }
 
+    // 204 No Content or empty body — return undefined (void responses)
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return undefined as T;
+    }
+
     return res.json() as Promise<T>;
   }
 

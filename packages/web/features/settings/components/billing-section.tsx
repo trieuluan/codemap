@@ -7,6 +7,7 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  Clock,
   CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -104,11 +105,14 @@ function SubscriptionBadge({ status }: { status: SubscriptionStatus }) {
         ? "border-destructive/30 bg-destructive/10 text-destructive"
         : status === "trialing" || status === "paused"
           ? "border-amber-200 bg-amber-50 text-amber-700"
-          : "border-border bg-muted text-muted-foreground";
+          : status === "cancelling"
+            ? "border-orange-200 bg-orange-50 text-orange-700"
+            : "border-border bg-muted text-muted-foreground";
 
   return (
-    <Badge variant="outline" className={cn("capitalize", className)}>
-      {status.replace("_", " ")}
+    <Badge variant="outline" className={cn("capitalize flex items-center gap-1", className)}>
+      {status === "cancelling" && <Clock className="size-3" />}
+      {status === "cancelling" ? "Cancelling" : status.replace("_", " ")}
     </Badge>
   );
 }
@@ -240,7 +244,18 @@ function BillingLifecycleCard({
         </div>
       )}
 
-      {subscription ? (
+      {subscription?.status === "cancelling" && (
+        <div className="mt-4 flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-xs text-orange-800">
+          <Clock className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Cancellation scheduled — your plan stays active until{" "}
+            <strong>{formatDate(subscription.currentPeriodEnd)}</strong>.
+            No further charges will be made.
+          </span>
+        </div>
+      )}
+
+      {subscription && subscription.status !== "cancelling" ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -252,7 +267,8 @@ function BillingLifecycleCard({
                 try {
                   await cancelSubscription(workspaceId);
                   toast({
-                    title: "Subscription cancelled. Plan reset to Basic.",
+                    title: "Subscription cancelled",
+                    description: "Your plan stays active until the end of the current billing period.",
                   });
                   onChanged();
                 } catch {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useImportSSE } from "@/hooks/use-import-sse";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -86,6 +87,12 @@ export function ProjectOverview({
   const projectBase = `/w/${workspaceId}/projects`;
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // State-based polling for visibility check — avoids refreshInterval(fn) receiving
+  // undefined when revalidateOnMount:false is combined with fallbackData.
+  const [shouldPollVisibility, setShouldPollVisibility] = useState(
+    Boolean(initialProject.repositoryUrl && !initialProject.visibilityCheckedAt),
+  );
+
   const swrBase = {
     revalidateOnFocus: false,
     refreshWhenHidden: false,
@@ -102,13 +109,16 @@ export function ProjectOverview({
     {
       ...swrBase,
       fallbackData: initialProject,
-      refreshInterval: (p?: Project) => {
-        if (p?.status === "importing") return 3000;
-        if (p?.repositoryUrl && !p.visibilityCheckedAt) return 2000;
-        return 0;
-      },
+      refreshInterval: shouldPollVisibility ? 2000 : 0,
     },
   );
+
+  // Stop polling once visibility check completes
+  useEffect(() => {
+    if (project?.visibilityCheckedAt) {
+      setShouldPollVisibility(false);
+    }
+  }, [project?.visibilityCheckedAt]);
 
   type ImportPage = { data: ProjectImport[]; nextCursor: string | null };
 
@@ -139,10 +149,7 @@ export function ProjectOverview({
               : null,
         },
       ],
-      refreshInterval: (data: ImportPage[] | undefined): number => {
-        const s = data?.[0]?.data[0]?.status;
-        return s === "pending" || s === "queued" || s === "running" ? 3000 : 0;
-      },
+      refreshInterval: 0, // SSE handles real-time updates when importing
     },
   );
 
@@ -153,13 +160,25 @@ export function ProjectOverview({
   const canImport = canTriggerImport(project, entitlements);
   const hasImports = allImports.length > 0;
   const isImporting = project.status === "importing";
-  const latestImportFailed = latestImport?.status === "failed";
   const latestImportActive =
     latestImport?.status === "pending" ||
     latestImport?.status === "queued" ||
     latestImport?.status === "running" ||
     latestImport?.parseStatus === "queued" ||
     latestImport?.parseStatus === "running";
+
+  const handleSSEUpdate = useCallback(() => {
+    void mutateProject();
+    void mutateImports();
+  }, [mutateProject, mutateImports]);
+
+  useImportSSE(projectId, {
+    enabled: isImporting || latestImportActive,
+    onUpdate: handleSSEUpdate,
+    onDone: handleSSEUpdate,
+  });
+
+  const latestImportFailed = latestImport?.status === "failed";
 
   // Fix #2: stats từ latest completed import
   const latestCompletedImport =

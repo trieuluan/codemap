@@ -19,10 +19,10 @@ export function CloudFeatureGate({
             <LockKeyhole className="size-5 text-muted-foreground" />
           </div>
           <div className="space-y-1.5">
-            <p className="font-medium">{feature} requires cloud indexing</p>
+            <p className="font-medium">{feature} requires a paid plan</p>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Basic workspaces use the local MCP index only. Upgrade to Developer
-              or Team to enable cloud imports, graph views, and insights.
+              Upgrade to Developer ($9/mo) or Team ($29/mo) to unlock the
+              dependency graph, project insights, and private repository imports.
             </p>
           </div>
         </div>
