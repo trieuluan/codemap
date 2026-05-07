@@ -444,6 +444,79 @@ async function runPreEditCommand(args: string[]) {
   console.log(lines.join("\n"));
 }
 
+async function runPreReadCommand() {
+  if (process.stdin.isTTY) return;
+
+  let filePath: string | null = null;
+  try {
+    const raw = await readStdin();
+    if (raw.trim()) {
+      const parsed = JSON.parse(raw) as { tool_input?: { file_path?: string; path?: string } };
+      filePath = parsed.tool_input?.file_path ?? parsed.tool_input?.path ?? null;
+    }
+  } catch {
+    return;
+  }
+
+  if (!filePath) return;
+
+  const store = await readLocalIndex();
+  if (!store) return;
+
+  // Only gate on files that are actually indexed (source files)
+  const data = store.getFileParse(filePath);
+  if (!data) return;
+
+  const symbolCount = data.symbols.length;
+  const exportCount = data.exports.length;
+
+  const lines: string[] = [`[CodeMap] Read gate: ${filePath}`];
+
+  if (symbolCount > 0 || exportCount > 0) {
+    lines.push(`This file is indexed — ${symbolCount} symbols, ${exportCount} exports.`);
+    lines.push("→ REQUIRED: Use get_file(include=[\"symbols\"], symbol_names=[...]) to read specific symbols.");
+    lines.push("  Use get_file(include=[\"outline\"]) to survey the file structure.");
+    lines.push("  Only use Read for raw content not available in the index (e.g. config files, templates).");
+  }
+
+  console.log(lines.join("\n"));
+}
+
+async function runPreBashCommand() {
+  if (process.stdin.isTTY) return;
+
+  let command: string | null = null;
+  try {
+    const raw = await readStdin();
+    if (raw.trim()) {
+      const parsed = JSON.parse(raw) as { tool_input?: { command?: string } };
+      command = parsed.tool_input?.command ?? null;
+    }
+  } catch {
+    return;
+  }
+
+  if (!command) return;
+
+  // Detect code search patterns — grep/sed/awk/cat/head/tail on source files
+  const codeSearchPattern = /\b(grep|rg|awk|sed)\b.*\.(ts|tsx|js|jsx|py|go|rs|java|css|scss)/;
+  const rawReadPattern = /\b(cat|head|tail)\b.*\.(ts|tsx|js|jsx|py|go|rs|java)/;
+
+  if (codeSearchPattern.test(command)) {
+    console.log("[CodeMap] Bash gate: grep/awk/sed detected on source files.");
+    console.log("→ REQUIRED: Use search_codebase(query) for symbol/keyword lookup.");
+    console.log("  Use find_usages or find_callers for impact analysis.");
+    console.log("  Use Bash grep only for dynamic access patterns, string literals, or files not in the index.");
+    return;
+  }
+
+  if (rawReadPattern.test(command)) {
+    console.log("[CodeMap] Bash gate: cat/head/tail detected on source files.");
+    console.log("→ REQUIRED: Use get_file(include=[\"symbols\"]) or get_file(include=[\"outline\"]) instead.");
+    console.log("  Use Read tool only when MCP get_file is insufficient.");
+  }
+}
+
 async function main() {
   const command = process.argv[2];
 
@@ -471,6 +544,12 @@ async function main() {
       return;
     case "pre-edit":
       await runPreEditCommand(process.argv.slice(3));
+      return;
+    case "pre-read":
+      await runPreReadCommand();
+      return;
+    case "pre-bash":
+      await runPreBashCommand();
       return;
     case "onboarding":
       runOnboardingCommand(process.argv.slice(3));

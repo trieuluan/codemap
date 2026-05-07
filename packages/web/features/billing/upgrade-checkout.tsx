@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { BarChart2, Check, Cloud, Network, RefreshCcw } from "lucide-react";
 import {
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { useSubscriptionSSE } from "@/hooks/use-subscription-sse";
 import { browserWorkspacesApi } from "@/features/workspaces/api";
 import type { WorkspaceDetail, WorkspacePlan } from "@/features/workspaces/api";
 import { createSubscription } from "@/features/billing/api";
@@ -88,6 +90,27 @@ function UpgradePayPalButton({
   onSuccess: () => void;
 }) {
   const { toast } = useToast();
+  const [waitingForWebhook, setWaitingForWebhook] = useState(false);
+
+  useSubscriptionSSE(workspaceId, {
+    enabled: waitingForWebhook,
+    onPlanChanged: (newPlan) => {
+      setWaitingForWebhook(false);
+      toast({
+        title: "Plan activated",
+        description: `Your workspace is now on the ${newPlan} plan.`,
+      });
+      onSuccess();
+    },
+    onTimeout: () => {
+      setWaitingForWebhook(false);
+      toast({
+        title: "Plan pending",
+        description: "Your payment was received. The plan will activate shortly — refresh if needed.",
+      });
+      onSuccess();
+    },
+  });
 
   return (
     <div className="w-full [&_paypal-button]:block [&_paypal-button]:w-full">
@@ -100,17 +123,16 @@ function UpgradePayPalButton({
           });
           return { subscriptionId };
         }}
-        onApprove={async (data: OnApproveDataSubscriptions) => {
+        onApprove={async () => {
           toast({
-            title: "Subscription activated",
-            description: data.subscriptionId
-              ? `PayPal subscription ${data.subscriptionId} is now active.`
-              : "PayPal confirmed the subscription.",
+            title: "Payment approved",
+            description: "Activating your plan — just a moment...",
           });
-          onSuccess();
+          setWaitingForWebhook(true);
         }}
         onError={(err: unknown) => {
           console.error("PayPal error", err);
+          setWaitingForWebhook(false);
           toast({
             title: "Payment failed",
             description: "Please try again.",
@@ -118,6 +140,7 @@ function UpgradePayPalButton({
           });
         }}
         onCancel={() => {
+          setWaitingForWebhook(false);
           toast({ title: "Payment cancelled" });
         }}
       />

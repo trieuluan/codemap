@@ -993,6 +993,13 @@ export function createProjectService(database: Database) {
       return updatedImport ?? null;
     },
 
+    async getLatestImport(projectId: string) {
+      return database.query.projectImport.findFirst({
+        where: eq(projectImport.projectId, projectId),
+        orderBy: [desc(projectImport.startedAt), desc(projectImport.createdAt)],
+      });
+    },
+
     async listImports(
       projectId: string,
       ownerUserId: string,

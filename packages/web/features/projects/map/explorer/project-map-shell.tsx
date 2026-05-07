@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useImportSSE } from "@/hooks/use-import-sse";
 import useSWR from "swr";
 import {
   Empty,
@@ -93,6 +94,8 @@ export function ProjectMapShell({
     latestImport?.status === "pending" ||
     latestImport?.status === "queued" ||
     latestImport?.status === "running";
+
+  useImportSSE(project.id, isImportProcessing);
   const {
     query,
     setQuery,
