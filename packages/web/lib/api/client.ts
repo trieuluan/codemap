@@ -58,6 +58,7 @@ export class ApiClientError extends Error {
 
 export function getApiBaseUrl() {
   if (typeof window === "undefined") {
+    // Server-side: prefer internal URL for container networking
     return (
       process.env.API_INTERNAL_URL ??
       process.env.NEXT_PUBLIC_API_URL ??
@@ -65,6 +66,7 @@ export function getApiBaseUrl() {
     );
   }
 
+  // Client-side: use public URL
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 }
 

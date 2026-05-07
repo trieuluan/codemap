@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { UpgradeCheckout } from "@/features/billing/upgrade-checkout";
 import { createServerWorkspacesApi } from "@/features/workspaces/api";
+import { config } from "@/lib/config";
 
 export default async function WorkspaceUpgradePage({
   params,
@@ -17,7 +18,7 @@ export default async function WorkspaceUpgradePage({
     <UpgradeCheckout
       workspaceId={workspaceId}
       initialDetail={workspaceDetail}
-      paypalClientId={process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}
+      paypalClientId={config.paypalClientId}
     />
   );
 }

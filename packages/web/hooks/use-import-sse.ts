@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { config } from "@/lib/config";
 
 export interface ImportSSEEvent {
   importId: string;
@@ -20,7 +21,9 @@ export function useImportSSE(projectId: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
 
-    const es = new EventSource(`/api/events/projects/${projectId}/import`);
+    const es = new EventSource(`${config.apiUrl}/events/projects/${projectId}/import`, {
+      withCredentials: true,
+    });
     esRef.current = es;
 
     es.onmessage = (e: MessageEvent<string>) => {

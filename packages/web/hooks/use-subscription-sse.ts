@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { config } from "@/lib/config";
 
 interface SubscriptionSSEOptions {
   enabled: boolean;
@@ -17,7 +18,10 @@ export function useSubscriptionSSE(
   useEffect(() => {
     if (!enabled || !workspaceId) return;
 
-    const es = new EventSource(`/api/events/workspaces/${workspaceId}/subscription`);
+    const es = new EventSource(
+      `${config.apiUrl}/events/workspaces/${workspaceId}/subscription`,
+      { withCredentials: true },
+    );
     esRef.current = es;
 
     es.onmessage = (e: MessageEvent<string>) => {
