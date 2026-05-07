@@ -1,10 +1,12 @@
 import { startProjectImportWorker } from "./project-import.worker.js";
 import { startProjectParseWorker } from "./project-parse.worker.js";
+import { startSubscriptionExpiryWorker } from "./subscription-expiry.worker.js";
 
 async function startWorkers() {
-  const [importWorker, parseWorker] = await Promise.all([
+  const [importWorker, parseWorker, expiryWorker] = await Promise.all([
     startProjectImportWorker(),
     startProjectParseWorker(),
+    startSubscriptionExpiryWorker(),
   ]);
 
   let isShuttingDown = false;
@@ -21,6 +23,7 @@ async function startWorkers() {
     await Promise.allSettled([
       importWorker.shutdown(signal),
       parseWorker.shutdown(signal),
+      expiryWorker.shutdown(signal),
     ]);
   }
 

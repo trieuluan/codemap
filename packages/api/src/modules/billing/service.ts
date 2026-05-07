@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, lt } from "drizzle-orm";
 import type { db as dbType } from "../../db";
 import {
   workspace,
@@ -108,7 +108,18 @@ export function createBillingService(database: Database) {
       return updated ?? null;
     },
 
-    // Finalize cancellation — called by webhook BILLING.SUBSCRIPTION.CANCELLED.
+    // Mark as cancelled without downgrading plan — called by webhook BILLING.SUBSCRIPTION.CANCELLED.
+    // Plan downgrade happens via cron job when currentPeriodEnd passes.
+    async markCancelled(input: { subscriptionId: string }) {
+      const [updated] = await database
+        .update(workspaceSubscription)
+        .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+        .where(eq(workspaceSubscription.id, input.subscriptionId))
+        .returning();
+      return updated ?? null;
+    },
+
+    // Finalize cancellation — called by cron job when currentPeriodEnd has passed.
     // Downgrades workspace plan to basic.
     async cancelSubscription(input: {
       workspaceId: string;
@@ -125,6 +136,34 @@ export function createBillingService(database: Database) {
           .set({ plan: "basic", updatedAt: new Date() })
           .where(eq(workspace.id, input.workspaceId));
       });
+    },
+
+    // Called by daily cron — downgrades workspaces whose subscription period has ended.
+    async expireSubscriptions() {
+      const now = new Date();
+      const expired = await database.query.workspaceSubscription.findMany({
+        where: and(
+          inArray(workspaceSubscription.status, ["cancelling", "cancelled"]),
+          lt(workspaceSubscription.currentPeriodEnd, now),
+        ),
+      });
+
+      let count = 0;
+      for (const sub of expired) {
+        await database.transaction(async (tx) => {
+          await tx
+            .update(workspaceSubscription)
+            .set({ status: "cancelled", updatedAt: now })
+            .where(eq(workspaceSubscription.id, sub.id));
+          await tx
+            .update(workspace)
+            .set({ plan: "basic", updatedAt: now })
+            .where(eq(workspace.id, sub.workspaceId));
+        });
+        count++;
+      }
+
+      return count;
     },
 
     async recordPayment(input: {

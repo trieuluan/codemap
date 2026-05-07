@@ -7,6 +7,7 @@ import { getProjectImportQueue } from "../lib/project-import-queue";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { getProjectParseQueue } from "../lib/project-parse-queue";
+import { getSubscriptionExpiryQueue } from "../lib/subscription-expiry-queue";
 
 export default fp(async function authSessionPlugin(fastify: FastifyInstance) {
   const serverAdapter = new FastifyAdapter();
@@ -22,9 +23,14 @@ export default fp(async function authSessionPlugin(fastify: FastifyInstance) {
 
   const importQueue = getProjectImportQueue(fastifyWithRedis.redis);
   const parseQueue = getProjectParseQueue(fastifyWithRedis.redis);
+  const expiryQueue = getSubscriptionExpiryQueue(fastifyWithRedis.redis);
 
   createBullBoard({
-    queues: [new BullMQAdapter(importQueue), new BullMQAdapter(parseQueue)],
+    queues: [
+      new BullMQAdapter(importQueue),
+      new BullMQAdapter(parseQueue),
+      new BullMQAdapter(expiryQueue),
+    ],
     serverAdapter,
   });
 

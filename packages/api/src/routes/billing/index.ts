@@ -209,8 +209,14 @@ const billingRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
         break;
       }
 
-      case "BILLING.SUBSCRIPTION.CANCELLED":
+      case "BILLING.SUBSCRIPTION.CANCELLED": {
+        // Mark cancelled but keep plan — cron job downgrades when currentPeriodEnd passes
+        await billingService.markCancelled({ subscriptionId: sub.id });
+        break;
+      }
+
       case "BILLING.SUBSCRIPTION.EXPIRED": {
+        // Period actually ended — downgrade immediately
         await billingService.cancelSubscription({
           workspaceId: sub.workspaceId,
           subscriptionId: sub.id,
