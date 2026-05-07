@@ -33,6 +33,7 @@ export const billingProviderEnum = pgEnum("billing_provider", [
 
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "active",
+  "cancelling",
   "cancelled",
   "past_due",
   "paused",

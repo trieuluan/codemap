@@ -155,6 +155,13 @@
       "when": 1778093750842,
       "tag": "0021_classy_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1778174166800,
+      "tag": "0022_nebulous_kronos",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { db as dbType } from "../../db";
 import {
   workspace,
@@ -15,7 +15,8 @@ export function createBillingService(database: Database) {
       return database.query.workspaceSubscription.findFirst({
         where: and(
           eq(workspaceSubscription.workspaceId, workspaceId),
-          eq(workspaceSubscription.status, "active"),
+          // include cancelling — plan still valid until period ends
+          inArray(workspaceSubscription.status, ["active", "trialing", "cancelling"]),
         ),
         orderBy: (t, { desc }) => [desc(t.createdAt)],
       });
@@ -96,6 +97,19 @@ export function createBillingService(database: Database) {
       });
     },
 
+    // Mark subscription as cancelling — keeps plan until period ends.
+    // Call when user requests cancel; plan stays active until PayPal confirms via webhook.
+    async markCancelling(input: { subscriptionId: string }) {
+      const [updated] = await database
+        .update(workspaceSubscription)
+        .set({ status: "cancelling", cancelledAt: new Date(), updatedAt: new Date() })
+        .where(eq(workspaceSubscription.id, input.subscriptionId))
+        .returning();
+      return updated ?? null;
+    },
+
+    // Finalize cancellation — called by webhook BILLING.SUBSCRIPTION.CANCELLED.
+    // Downgrades workspace plan to basic.
     async cancelSubscription(input: {
       workspaceId: string;
       subscriptionId: string;

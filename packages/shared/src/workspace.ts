@@ -4,6 +4,7 @@ export type WorkspaceRole = "owner" | "admin" | "member";
 export type BillingProvider = "paypal" | "stripe" | "manual";
 export type SubscriptionStatus =
   | "active"
+  | "cancelling"
   | "cancelled"
   | "past_due"
   | "paused"

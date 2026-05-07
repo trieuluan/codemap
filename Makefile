@@ -1,11 +1,12 @@
 REGISTRY  ?= ghcr.io/trieuluan
 API_IMAGE  = $(REGISTRY)/codemap-api
 WEB_IMAGE  = $(REGISTRY)/codemap-web
-TAG       ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "0.0.1")
+TAG       ?= v$(shell node -p "require('./package.json').version")
 
 .PHONY: help \
         build build-api build-web \
         push push-api push-web release \
+        publish-mcp \
         dev dev-down dev-logs \
         prod-up prod-down prod-logs \
         db-generate db-migrate db-seed \
@@ -44,6 +45,13 @@ push-web: ## Push web image (versioned + latest)
 	docker push $(WEB_IMAGE):latest
 
 release: build push ## Build and push all images (usage: make release TAG=v1.2.0)
+
+# ── MCP Server ────────────────────────────────────────────────────────────────
+
+publish-mcp: ## Build and publish @codemap/mcp-server to npm
+	npm run build:shared
+	npm --workspace=@codemap/mcp-server run build
+	npm publish --workspace=@codemap/mcp-server --access public
 
 # ── Dev ───────────────────────────────────────────────────────────────────────
 

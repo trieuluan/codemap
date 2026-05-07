@@ -1,0 +1,1 @@
+ALTER TYPE "public"."subscription_status" ADD VALUE 'cancelling' BEFORE 'cancelled';

@@ -108,8 +108,20 @@ const billingRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
       throw fastify.httpErrors.notFound("No active subscription");
     }
 
-    await paypal.cancelSubscription(sub.providerSubscriptionId, "User requested cancellation");
-    await billingService.cancelSubscription({ workspaceId, subscriptionId: sub.id });
+    try {
+      await paypal.cancelSubscription(sub.providerSubscriptionId, "User requested cancellation");
+    } catch (err) {
+      // APPROVAL_PENDING subscriptions cannot be cancelled via API — remove from DB directly
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("SUBSCRIPTION_STATUS_INVALID")) {
+        await billingService.cancelSubscription({ workspaceId, subscriptionId: sub.id });
+        return reply.success({ cancelled: true });
+      }
+      throw err;
+    }
+
+    // PayPal cancel succeeded — mark as cancelling, keep plan until webhook confirms
+    await billingService.markCancelling({ subscriptionId: sub.id });
 
     return reply.success({ cancelled: true });
   });

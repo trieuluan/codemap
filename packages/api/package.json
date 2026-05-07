@@ -5,8 +5,8 @@
   "main": "dist/app.js",
   "scripts": {
     "test": "npm run build:ts && tsc -p test/tsconfig.json && c8 node --test -r ts-node/register \"test/**/*.ts\"",
-    "start": "npm run build:ts && fastify start -l info dist/server.js",
-    "build:ts": "tsc -p tsconfig.json",
+    "start": "npm run build:ts && node dist/src/server.js",
+    "build:ts": "rm -rf dist && tsc -p tsconfig.json",
     "watch:ts": "tsc -w -p tsconfig.json",
     "dev": "tsx watch --inspect=0.0.0.0:9229 --clear-screen=false src/server.ts",
     "dev:workers": "tsx watch --clear-screen=false src/workers/index.ts",
