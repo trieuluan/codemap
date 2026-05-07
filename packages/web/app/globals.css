@@ -284,3 +284,210 @@ pre {
   font-family: var(--font-mono);
   font-size: 0.85em;
 }
+
+/* =============================================================================
+ * CodeMap Landing — custom theme tokens + component classes
+ * Scoped to .landing-root so they don't bleed into the app shell.
+ * ============================================================================= */
+
+@theme inline {
+  --color-ink-900: #08090b;
+  --color-ink-850: #0b0c0f;
+  --color-ink-800: #0e1014;
+  --color-ink-700: #15171c;
+  --color-ink-600: #1a1d24;
+  --color-ink-500: #22262f;
+  --color-ink-400: #2c313b;
+  --color-ink-300: #3a4150;
+  --color-ink-200: #5b6478;
+  --color-ink-100: #9aa3b5;
+  --color-ink-50: #d6dae3;
+  --color-accent-cyan: #5dd6e0;
+  --color-accent-teal: #3eb8b8;
+  --color-accent-violet: #a78bfa;
+  --color-accent-indigo: #7c87ff;
+  --color-accent-amber: #f5c97c;
+  --color-accent-emerald: #5fd1a3;
+  --color-accent-rose: #ff7a8a;
+}
+
+.landing-root {
+  color-scheme: dark;
+  background:
+    radial-gradient(
+      1200px 600px at 80% -20%,
+      rgba(124, 135, 255, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at 10% 10%,
+      rgba(93, 214, 224, 0.07),
+      transparent 60%
+    ),
+    #08090b;
+  color: #d6dae3;
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing-root .gradient-text {
+  background: linear-gradient(180deg, #f4f5f8 0%, #aab1c0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.landing-root .accent-text {
+  background: linear-gradient(120deg, #5dd6e0 0%, #a78bfa 50%, #ff7a8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.landing-root .grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    #000 0%,
+    transparent 70%
+  );
+  mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
+}
+.landing-root .glass {
+  background: rgba(15, 17, 22, 0.6);
+  @apply backdrop-blur-xl backdrop-saturate-150;
+}
+.landing-root .ring-glow {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 60px -20px rgba(124, 135, 255, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+}
+.landing-root .btn-primary {
+  background: linear-gradient(180deg, #f5f6fa 0%, #d6dae3 100%);
+  color: #08090b;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.5) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 8px 30px -10px rgba(255, 255, 255, 0.3);
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
+}
+.landing-root .btn-primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.landing-root .btn-ghost {
+  background: rgba(255, 255, 255, 0.02);
+  color: #d6dae3;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+.landing-root .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+.landing-root .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-geist-mono, "Geist Mono", ui-monospace);
+  font-size: 11px;
+  color: #aab1c0;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.landing-root .chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #5dd6e0;
+  box-shadow: 0 0 10px #5dd6e0;
+}
+.landing-root .card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.025) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+.landing-root .hairline-b {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.landing-root .terminal-bg {
+  background: #0a0c10;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 30px 80px -20px rgba(0, 0, 0, 0.6);
+}
+
+/* animations */
+@keyframes nodePulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes dashAnim {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+@keyframes floatAnim {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes scrollX {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.node-pulse {
+  animation: nodePulse 3s ease-in-out infinite;
+}
+.edge-dash {
+  stroke-dasharray: 4 4;
+  animation: dashAnim 1.6s linear infinite;
+}
+.float-slow {
+  animation: floatAnim 6s ease-in-out infinite;
+}
+.float-mid {
+  animation: floatAnim 4.5s ease-in-out infinite;
+}
+.float-fast {
+  animation: floatAnim 3.5s ease-in-out infinite;
+}
+.marquee-track {
+  animation: scrollX 35s linear infinite;
+}
+
+.landing-root .term-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.landing-root .term-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
