@@ -87,11 +87,11 @@ function createInviteDb(options: {
 test("workspace entitlements encode plan limits", () => {
   const basic = getWorkspaceEntitlements({ plan: "basic" });
   assert.equal(basic.maxProjects, 5);
-  assert.equal(basic.maxImportsPerMonth, 0);
+  assert.equal(basic.maxImportsPerMonth, 20);
   assert.equal(basic.privateRepoImports, false);
   assert.equal(basic.teamMembers, false);
   assert.equal(basic.mcpAccess, true);
-  assert.equal(basic.cloudImportAccess, false);
+  assert.equal(basic.cloudImportAccess, true);
 
   const beta = getWorkspaceEntitlements({ plan: "beta" });
   assert.equal(beta.maxProjects, null);
@@ -134,13 +134,13 @@ test("workspace limit assertions throw stable entitlement errors", () => {
     () =>
       assertCanTriggerImport(getWorkspaceEntitlements({ plan: "basic" }), {
         projectCount: 0,
-        importsThisMonth: 0,
+        importsThisMonth: 20,
         indexedFilesThisMonth: 0,
         indexedSymbolsThisMonth: 0,
         indexedEdgesThisMonth: 0,
         mcpSessionsCreatedThisMonth: 0,
       }),
-    /WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE/,
+    /WORKSPACE_IMPORT_LIMIT_EXCEEDED/,
   );
 
   assert.throws(

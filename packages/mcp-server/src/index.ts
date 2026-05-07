@@ -77,6 +77,8 @@ import {
   ensureLocalIndex,
   readLocalIndex,
 } from "./lib/local-index.js";
+import { tryGetCurrentWorkspaceInfo } from "./lib/workspace-git.js";
+import { buildOnboardingGuide, isOnboardingTarget } from "./lib/onboarding.js";
 
 async function runMcpServer() {
   await ensureClaudeHooks(process.cwd());
@@ -170,6 +172,40 @@ async function runInitAgentPackCommand(args: string[]) {
   for (const item of result.installed) {
     console.log(`- ${item.action}: ${item.path}`);
   }
+
+  if (!result.dryRun) {
+    const target = result.target;
+    if (isOnboardingTarget(target) || target === "all") {
+      console.log("");
+      console.log(buildOnboardingGuide(target));
+    }
+  }
+}
+
+function parseOnboardingArgs(args: string[]) {
+  let target = "all";
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "--target" || args[i] === "-t") && args[i + 1]) {
+      target = args[i + 1] ?? "all";
+      break;
+    }
+    if (args[i]?.startsWith("--target=")) {
+      target = args[i]!.slice("--target=".length);
+      break;
+    }
+  }
+  return { target };
+}
+
+function runOnboardingCommand(args: string[]) {
+  const { target } = parseOnboardingArgs(args);
+  if (!isOnboardingTarget(target) && target !== "all") {
+    console.error(`Unknown target: ${target}`);
+    console.error("Valid targets: claude, cursor, codex, gemini, opencode, copilot, all");
+    process.exitCode = 1;
+    return;
+  }
+  console.log(buildOnboardingGuide(target));
 }
 
 function runAgentPackPathCommand() {
@@ -276,17 +312,61 @@ function formatAge(date: Date): string {
 }
 
 async function runSessionHintCommand() {
+  // UserPromptSubmit hook sends JSON { prompt: "..." } via stdin
+  let userPrompt = "";
+  if (!process.stdin.isTTY) {
+    try {
+      const raw = await readStdin();
+      if (raw.trim()) {
+        const parsed = JSON.parse(raw) as { prompt?: string };
+        userPrompt = parsed.prompt ?? "";
+      }
+    } catch { /* not JSON */ }
+  }
+
   const store = await readLocalIndex();
   if (!store) {
-    console.log("[CodeMap] No local index — run `codemap-mcp local-index` first.");
+    console.log("[CodeMap] No local index found.");
+    console.log("→ REQUIRED: Call refresh_local_index before reading or editing files.");
     return;
   }
+
+  const meta = store.getMeta();
   const summary = store.getSummary();
   const projectName = path.basename(summary.workspaceRootPath);
-  const indexedAgo = summary.indexedAt ? formatAge(new Date(summary.indexedAt)) : "never";
-  console.log(`[CodeMap] ${projectName} · ${summary.fileCount} files · indexed ${indexedAgo}`);
-  console.log(`→ For broad tasks, call recommend_agent_workflow(task) first.`);
+  const indexedAgo = meta?.indexedAt ? formatAge(new Date(meta.indexedAt)) : "never";
+
+  // Stale gate: compare index commit SHA with current HEAD
+  let isStale = false;
+  if (meta?.commitSha && meta.workspaceRootPath) {
+    const gitInfo = await tryGetCurrentWorkspaceInfo(meta.workspaceRootPath).catch(() => null);
+    if (gitInfo && gitInfo.commitSha !== meta.commitSha) isStale = true;
+  }
+
+  // Broad task detection from user prompt
+  const broadTaskPattern = /\b(implement|fix|debug|refactor|investigate|add|create|update|review|build|write|make|change|rename|move|delete|migrate|optimize|improve|deploy|integrate|sửa|thêm|tạo|xóa|làm|viết|đổi|cập nhật)\b/i;
+  const isBroadTask = userPrompt.length > 15 && broadTaskPattern.test(userPrompt);
+
+  const lines: string[] = [
+    `[CodeMap] ${projectName} · ${summary.fileCount} files · ${summary.symbolCount} symbols · indexed ${indexedAgo}`,
+  ];
+
+  if (isStale) {
+    lines.push(`⚠ Index is STALE (was at ${meta!.commitSha!.slice(0, 7)}, HEAD has moved). Blast radius data is outdated.`);
+    lines.push("→ REQUIRED: Call refresh_local_index before reading or editing files.");
+  }
+
+  if (isBroadTask) {
+    lines.push("→ REQUIRED: Call recommend_agent_workflow(task=<task description>) before reading files or editing.");
+    lines.push("  Hard gate: skip only for trivial single-symbol fixes where the file is already known.");
+  } else {
+    lines.push("→ For broad tasks, call recommend_agent_workflow(task) first.");
+  }
+
+  console.log(lines.join("\n"));
 }
+
+const HIGH_BLAST_THRESHOLD = 10;
 
 async function runPreEditCommand(args: string[]) {
   let filePath: string | null = null;
@@ -311,10 +391,22 @@ async function runPreEditCommand(args: string[]) {
   const store = await readLocalIndex();
   if (!store) return;
 
+  // Stale gate: compare index commit SHA with current HEAD
+  const meta = store.getMeta();
+  let isStale = false;
+  if (meta?.commitSha && meta.workspaceRootPath) {
+    const gitInfo = await tryGetCurrentWorkspaceInfo(meta.workspaceRootPath).catch(() => null);
+    if (gitInfo && gitInfo.commitSha !== meta.commitSha) isStale = true;
+  }
+
   const data = store.getFileParse(filePath);
   if (!data) return;
 
   const lines: string[] = [`[CodeMap] Pre-edit: ${filePath}`];
+
+  if (isStale) {
+    lines.push("⚠ INDEX STALE — blast radius below may be inaccurate. Call refresh_local_index first.");
+  }
 
   const resolvedImports = data.imports.filter((i) => i.targetPathText);
   if (resolvedImports.length > 0) {
@@ -324,7 +416,12 @@ async function runPreEditCommand(args: string[]) {
   }
 
   const blastCount = data.blastRadius.totalCount;
-  if (blastCount > 0) {
+  if (blastCount >= HIGH_BLAST_THRESHOLD) {
+    const shown = data.blastRadius.files.slice(0, 5).map((f) => path.basename(f.path));
+    const rest = blastCount - shown.length;
+    lines.push(`⚠ HIGH BLAST RADIUS (${blastCount} files): ${shown.join(", ")}${rest > 0 ? ` +${rest} more` : ""}`);
+    lines.push("→ REQUIRED: Call find_related_files or explore_task before editing this file.");
+  } else if (blastCount > 0) {
     const shown = data.blastRadius.files.slice(0, 5).map((f) => path.basename(f.path));
     const rest = blastCount - shown.length;
     lines.push(`Blast radius (${blastCount}): ${shown.join(", ")}${rest > 0 ? ` +${rest} more` : ""}`);
@@ -338,7 +435,11 @@ async function runPreEditCommand(args: string[]) {
   }
 
   const hasCycle = store.hasCycle(filePath);
-  lines.push(`Cycle risk: ${hasCycle ? "⚠ cycle detected" : "none detected"}`);
+  if (hasCycle) {
+    lines.push("⚠ CYCLE DETECTED — this file is in an import cycle. Verify with find_cycles after editing.");
+  } else {
+    lines.push("Cycle risk: none detected");
+  }
 
   console.log(lines.join("\n"));
 }
@@ -370,6 +471,9 @@ async function main() {
       return;
     case "pre-edit":
       await runPreEditCommand(process.argv.slice(3));
+      return;
+    case "onboarding":
+      runOnboardingCommand(process.argv.slice(3));
       return;
     default:
       await runMcpServer();

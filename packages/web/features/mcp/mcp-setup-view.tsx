@@ -144,7 +144,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   const vscodeConfig = JSON.stringify(
     {
-      "mcp.servers": {
+      servers: {
         codemap: {
           command: "npx",
           args: ["-y", "@codemap/mcp-server@latest"],
@@ -209,18 +209,9 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
     2,
   );
 
-  const codexConfig = JSON.stringify(
-    {
-      mcpServers: {
-        codemap: {
-          command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
-        },
-      },
-    },
-    null,
-    2,
-  );
+  const codexConfig = `[mcp_servers.codemap]
+command = "npx"
+args = ["-y", "@codemap/mcp-server@latest"]`;
 
   return (
     <div className="space-y-8">
@@ -281,7 +272,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
               <TabsTrigger value="claude">Claude</TabsTrigger>
               <TabsTrigger value="claudecode">Claude Code</TabsTrigger>
               <TabsTrigger value="cursor">Cursor</TabsTrigger>
-              <TabsTrigger value="vscode">VS Code</TabsTrigger>
+              <TabsTrigger value="vscode">VS Code / Copilot</TabsTrigger>
               <TabsTrigger value="gemini">Gemini CLI</TabsTrigger>
               <TabsTrigger value="windsurf">Windsurf</TabsTrigger>
               <TabsTrigger value="opencode">OpenCode</TabsTrigger>
@@ -327,10 +318,14 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
             <TabsContent value="vscode" className="space-y-2 mt-3">
               <p className="text-xs text-muted-foreground">
-                Add to your VS Code{" "}
-                <span className="font-medium text-foreground">settings.json</span> (or use the MCP panel):
+                Create or edit{" "}
+                <span className="font-medium text-foreground">.vscode/mcp.json</span>{" "}
+                in your project root:
               </p>
               <CodeBlock code={vscodeConfig} />
+              <p className="text-xs text-muted-foreground">
+                Works for both VS Code MCP and GitHub Copilot Chat. Reload the window after saving.
+              </p>
             </TabsContent>
 
             <TabsContent value="gemini" className="space-y-2 mt-3">
@@ -375,7 +370,8 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
             <TabsContent value="codex" className="space-y-2 mt-3">
               <p className="text-xs text-muted-foreground">
-                Add to your Codex MCP config:
+                Add to{" "}
+                <span className="font-medium text-foreground">~/.codex/config.toml</span>:
               </p>
               <CodeBlock code={codexConfig} />
               <p className="text-xs text-muted-foreground">

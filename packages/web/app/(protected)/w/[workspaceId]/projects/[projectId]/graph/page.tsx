@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Network } from "lucide-react";
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink,
   BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
@@ -45,38 +45,69 @@ export default async function ProjectGraphPage({
       );
     }
 
+    const latestImport = firstPage.data[0];
+    const isIndexed =
+      latestImport?.parseStatus === "completed" ||
+      latestImport?.parseStatus === "partial";
+
+    const pageHeader = (
+      <div className="space-y-4">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild><Link href={`/w/${workspaceId}/projects`}>Projects</Link></BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild><Link href={`/w/${workspaceId}/projects/${project.id}`}>{project.name}</Link></BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem><BreadcrumbPage>Graph</BreadcrumbPage></BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-semibold tracking-tight">{project.name} graph</h1>
+              <ProjectStatusBadge status={project.status} />
+            </div>
+            <p className="text-muted-foreground">Explore folder-level dependencies first, then drill into file-level graphs when needed.</p>
+            <ProjectMapHeader projectId={project.id} active="graph" importId={latestImport?.id} parseStatus={latestImport?.parseStatus} workspaceId={workspaceId} />
+          </div>
+          <Button variant="outline" asChild>
+            <Link href={`/w/${workspaceId}/projects/${project.id}`}><ArrowLeft className="size-4" />Back to project</Link>
+          </Button>
+        </div>
+      </div>
+    );
+
+    if (!isIndexed) {
+      return (
+        <div className="space-y-6">
+          {pageHeader}
+          <div className="flex flex-col items-center justify-center rounded-lg border border-border/70 bg-muted/20 py-20 text-center space-y-4">
+            <Network className="size-10 text-muted-foreground" />
+            <div className="space-y-1">
+              <p className="font-medium">Graph not available yet</p>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                {!latestImport
+                  ? "This project hasn't been imported yet. Start an import from the project page."
+                  : "The semantic index isn't ready yet. Check back once the import completes."}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/w/${workspaceId}/projects/${project.id}`}><ArrowLeft className="size-3.5" />Back to project</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     const graphData = await api.getProjectGraph(projectId);
 
     return (
       <div className="space-y-6">
-        <div className="space-y-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild><Link href={`/w/${workspaceId}/projects`}>Projects</Link></BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild><Link href={`/w/${workspaceId}/projects/${project.id}`}>{project.name}</Link></BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem><BreadcrumbPage>Graph</BreadcrumbPage></BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-semibold tracking-tight">{project.name} graph</h1>
-                <ProjectStatusBadge status={project.status} />
-              </div>
-              <p className="text-muted-foreground">Explore folder-level dependencies first, then drill into file-level graphs when needed.</p>
-              <ProjectMapHeader projectId={project.id} active="graph" importId={firstPage.data[0]?.id} parseStatus={firstPage.data[0]?.parseStatus} workspaceId={workspaceId} />
-            </div>
-            <Button variant="outline" asChild>
-              <Link href={`/w/${workspaceId}/projects/${project.id}`}><ArrowLeft className="size-4" />Back to project</Link>
-            </Button>
-          </div>
-        </div>
+        {pageHeader}
         <ProjectMapGraphView projectId={project.id} graphData={graphData} initialFocusFile={initialFocusFile} initialFocusSymbol={initialFocusSymbol} workspaceId={workspaceId} />
       </div>
     );

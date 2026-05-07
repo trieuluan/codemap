@@ -112,9 +112,13 @@ export function ProjectMapStatusBanner({
   const hasCompletedImport = imports.some(
     (item) => item.status === "completed",
   );
-  const hasPreviewableSource = imports.some(
-    (item) => item.status === "completed" && item.sourceAvailable,
-  );
+  // Remote providers (github/gitlab) fall back to API-based file fetch after parse,
+  // so the local clone being absent is not a blocker for file preview.
+  const isRemoteProvider =
+    project.provider === "github" || project.provider === "gitlab";
+  const hasPreviewableSource =
+    isRemoteProvider ||
+    imports.some((item) => item.status === "completed" && item.sourceAvailable);
 
   if (
     project.status === "importing" ||
