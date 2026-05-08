@@ -24,7 +24,8 @@
     "preview:web": "npm --workspace=@codemap/web run start",
     "dev:mcp": "npm --workspace=@codemap/mcp-server run dev",
     "build:mcp": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/mcp-server run build",
-    "start:mcp": "npm --workspace=@codemap/mcp-server run start"
+    "start:mcp": "npm --workspace=@codemap/mcp-server run start",
+    "version:patch": "npm version patch && npm version patch -w @codemap/mcp-server -w @codemap/api -w @codemap/web -w @codemap/shared"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

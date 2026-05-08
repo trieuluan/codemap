@@ -103,3 +103,6 @@ approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.refresh_local_index]
 approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.recommend_agent_workflow]
+approval_mode = "approve"

@@ -70,12 +70,18 @@ import { registerLogoutTool } from "./tools/logout.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
 import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
 import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
+import { registerDoctorAgentPackTool } from "./tools/doctor-agent-pack.js";
 import {
   ensureClaudeHooks,
   installAgentPack,
   parseAgentPackInstallArgs,
 } from "./lib/agent-pack-installer.js";
 import { getPluginRoot } from "./lib/agent-pack.js";
+import {
+  buildAgentPackDoctorMarkdown,
+  doctorAgentPack,
+  parseAgentPackDoctorArgs,
+} from "./lib/agent-pack-doctor.js";
 import {
   buildLocalIndex,
   ensureLocalIndex,
@@ -102,6 +108,7 @@ async function runMcpServer() {
   registerPingTool(server, config);
   registerGetAgentWorkflowTool(server);
   registerRecommendAgentWorkflowTool(server);
+  registerDoctorAgentPackTool(server);
   registerCheckAuthStatusTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);
@@ -186,6 +193,9 @@ async function runInitAgentPackCommand(args: string[]) {
   for (const item of result.installed) {
     console.log(`- ${item.action}: ${item.path}`);
   }
+  console.log("");
+  const doctorTarget = result.target === "marketplace" ? "auto" : result.target;
+  console.log(`Verify with: codemap-mcp doctor-agent-pack --target ${doctorTarget} --root ${result.root}`);
 
   if (!result.dryRun) {
     const target = result.target;
@@ -193,6 +203,18 @@ async function runInitAgentPackCommand(args: string[]) {
       console.log("");
       console.log(buildOnboardingGuide(target));
     }
+  }
+}
+
+async function runDoctorAgentPackCommand(args: string[]) {
+  const options = parseAgentPackDoctorArgs(args);
+  const result = await doctorAgentPack({
+    root: options.cwd,
+    target: options.target,
+  });
+  console.log(buildAgentPackDoctorMarkdown(result));
+  if (result.status === "fail") {
+    process.exitCode = 1;
   }
 }
 
@@ -546,6 +568,9 @@ async function main() {
       return;
     case "init-agent-pack":
       await runInitAgentPackCommand(process.argv.slice(3));
+      return;
+    case "doctor-agent-pack":
+      await runDoctorAgentPackCommand(process.argv.slice(3));
       return;
     case "agent-pack-path":
       runAgentPackPathCommand();

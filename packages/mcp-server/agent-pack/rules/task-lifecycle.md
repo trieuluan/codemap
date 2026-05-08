@@ -6,5 +6,6 @@
 4. Edit only the files needed for the task.
 5. Verify with the smallest sufficient build/test.
 6. Inspect the diff.
-7. Reimport after meaningful code/index/rule changes.
-8. Summarize changes, verification, blockers, and remaining risks.
+7. Call `refresh_local_index` after local edits.
+8. Call `trigger_reimport` only when cloud graph/insights should refresh.
+9. Summarize changes, verification, blockers, and remaining risks.
