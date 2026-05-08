@@ -1,6 +1,7 @@
 import { hasFlag, parseModeFlag } from "../args.js";
 import type { GatewayCommandContext } from "../command-context.js";
 import { runChatCompletion } from "../chat/completion.js";
+import { hydrateMentionContext } from "../chat/mention-context.js";
 import { resolveMention } from "../chat/mentions.js";
 import { selectChatProfile } from "../chat/profiles.js";
 import { startRealtimeInput } from "../chat/realtime-input.js";
@@ -36,8 +37,16 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
         return result !== "exit";
       }
 
-      const userMessage: ChatMessage = { role: "user", content: message };
       try {
+        const mentionContext = await hydrateMentionContext(message);
+        for (const warning of mentionContext.warnings) {
+          console.warn(`Mention warning: ${warning}`);
+        }
+
+        const userMessage: ChatMessage = {
+          role: "user",
+          content: mentionContext.content,
+        };
         const assistantMessage = await runChatCompletion(
           provider,
           {
