@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { DashboardSidebar } from "@/features/dashboard/sidebar";
-import { DashboardHeader } from "@/features/dashboard/header";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppTopbar } from "@/components/app-topbar";
 import { createServerWorkspacesApi } from "@/features/workspaces/api";
 
 export default async function WorkspaceLayout({
@@ -20,10 +20,10 @@ export default async function WorkspaceLayout({
   if (!valid) notFound();
 
   return (
-    <div className="min-h-screen dark-page-bg">
-      <DashboardSidebar workspaceId={workspaceId} />
+    <div className="min-h-screen aurora-bg">
+      <AppSidebar workspaceId={workspaceId} />
       <div className="lg:pl-64">
-        <DashboardHeader />
+        <AppTopbar />
         <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>

@@ -161,7 +161,7 @@ export default async function McpAuthorizePage({
 
   if (!sessionId) {
     return (
-      <main className="dark-page-bg flex min-h-screen items-center justify-center px-4">
+      <main className="aurora-bg flex min-h-screen items-center justify-center px-4">
         <div className="card ring-glow w-full max-w-xl p-8 space-y-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="size-5 text-destructive" />
@@ -185,7 +185,7 @@ export default async function McpAuthorizePage({
 
   if (!authStatus) {
     return (
-      <main className="dark-page-bg flex min-h-screen items-center justify-center px-4">
+      <main className="aurora-bg flex min-h-screen items-center justify-center px-4">
         <div className="card ring-glow w-full max-w-xl p-8 space-y-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="size-5 text-destructive" />
@@ -226,7 +226,7 @@ export default async function McpAuthorizePage({
           : "Authorize CodeMap MCP";
 
   return (
-    <main className="dark-page-bg flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="aurora-bg flex min-h-screen items-center justify-center px-4 py-10">
       <div className="card ring-glow w-full max-w-2xl p-8 space-y-6">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">

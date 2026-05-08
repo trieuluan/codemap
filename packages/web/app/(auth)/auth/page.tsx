@@ -20,33 +20,36 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
     : "/auth/signup";
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="card ring-glow p-8 space-y-6">
-          <div className="flex flex-col items-center space-y-2 text-center">
-            <Link href="/" className="mb-2">
-              <Logo />
-            </Link>
-            <h1 className="text-xl font-semibold">Welcome back</h1>
-            <p className="text-sm text-muted-foreground">
+    <div className="relative min-h-screen flex items-center justify-center px-6">
+      {/* Subtle grid overlay */}
+      <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" aria-hidden />
+
+      <div className="relative w-full max-w-md">
+        <div className="glass-card p-8">
+          {/* Logo + brand */}
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="relative mb-3">
+              <Logo showText={false} size={28} />
+              <div className="absolute inset-0 -z-10 blur-xl bg-accent-violet/40" />
+            </div>
+            <p className="text-sm text-muted-foreground">CodeMap</p>
+            <h1 className="text-2xl font-semibold mt-2">Welcome back</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               Sign in to your account to continue
             </p>
           </div>
 
           <Suspense
             fallback={
-              <div className="h-9 rounded-md border border-border bg-secondary/40" />
+              <div className="h-9 rounded-lg border border-border bg-white/[0.03] animate-pulse" />
             }
           >
             <LoginForm />
           </Suspense>
 
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="mt-6 text-center text-sm text-muted-foreground">
             {"Don't have an account? "}
-            <Link
-              href={signupHref}
-              className="text-foreground underline-offset-4 hover:underline"
-            >
+            <Link href={signupHref} className="text-foreground hover:underline">
               Sign up
             </Link>
           </p>

@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { Loader2, MailCheck } from "lucide-react";
 
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -14,11 +11,7 @@ export function ForgotPasswordForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
-
-    // Placeholder for password reset API implementation
-    // In production, this would call your auth API to send reset email
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
     setIsSubmitted(true);
     setIsLoading(false);
   }
@@ -26,38 +19,38 @@ export function ForgotPasswordForm() {
   if (isSubmitted) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg bg-success/10 p-4 text-center">
-          <p className="text-sm font-medium text-foreground">
-            Check your email
+        <div className="glass-card p-6 text-center space-y-3">
+          <div className="flex justify-center">
+            <div className="size-10 rounded-full glass flex items-center justify-center">
+              <MailCheck className="size-5 text-accent-emerald" />
+            </div>
+          </div>
+          <p className="font-medium">Check your email</p>
+          <p className="text-sm text-muted-foreground">
+            We&apos;ve sent a reset link to <strong className="text-foreground">{email}</strong>
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            We&apos;ve sent a password reset link to <strong>{email}</strong>
-          </p>
-          <p className="mt-4 text-sm text-muted-foreground">
-            The link will expire in 24 hours. If you don&apos;t see the email,
-            check your spam folder.
+          <p className="text-xs text-muted-foreground/70">
+            Link expires in 24 hours. Check your spam folder if you don&apos;t see it.
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setIsSubmitted(false);
-            setEmail("");
-          }}
-          variant="outline"
-          className="w-full"
+        <button
+          onClick={() => { setIsSubmitted(false); setEmail(""); }}
+          className="w-full glass rounded-lg px-4 py-2.5 text-sm hover:bg-white/[0.06] transition"
         >
           Try another email
-        </Button>
+        </button>
       </div>
     );
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email address</Label>
-        <Input
+      <div>
+        <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+          Email address
+        </label>
+        <input
           id="email"
           type="email"
           placeholder="name@example.com"
@@ -65,23 +58,24 @@ export function ForgotPasswordForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={isLoading}
-          className="bg-secondary border-border"
+          className="mt-1.5 w-full glass rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent-violet/40 disabled:opacity-50 placeholder:text-muted-foreground/60"
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground/70">
           Enter the email associated with your account
         </p>
       </div>
 
-      <Button type="submit" className="w-full" disabled={isLoading}>
+      <button
+        type="submit"
+        disabled={isLoading}
+        className="w-full flex items-center justify-center gap-2 rounded-lg bg-foreground text-background px-4 py-2.5 text-sm font-medium hover:bg-foreground/90 transition disabled:opacity-50 disabled:pointer-events-none"
+      >
         {isLoading ? (
-          <>
-            <Spinner size="sm" />
-            Sending reset link...
-          </>
+          <><Loader2 className="size-4 animate-spin" /> Sending…</>
         ) : (
           "Send reset link"
         )}
-      </Button>
+      </button>
     </form>
   );
 }

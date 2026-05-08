@@ -1,13 +1,13 @@
-import { DashboardSidebar } from "@/features/dashboard/sidebar";
-import { DashboardHeader } from "@/features/dashboard/header";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppTopbar } from "@/components/app-topbar";
 import { AccountSettingsNav } from "@/features/settings/account-settings-nav";
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
+    <div className="min-h-screen aurora-bg">
+      <AppSidebar />
       <div className="lg:pl-64">
-        <DashboardHeader />
+        <AppTopbar />
         <main className="p-4 lg:p-6">
           <div className="space-y-6">
             <div className="space-y-1">

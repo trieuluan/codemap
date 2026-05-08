@@ -12,27 +12,28 @@ export const metadata: Metadata = {
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="card ring-glow p-8 space-y-6">
-          <div className="flex flex-col items-center space-y-2 text-center">
-            <Link href="/" className="mb-2">
-              <Logo />
-            </Link>
-            <h1 className="text-xl font-semibold">Reset password</h1>
-            <p className="text-sm text-muted-foreground">
+    <div className="relative min-h-screen flex items-center justify-center px-6">
+      <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" aria-hidden />
+
+      <div className="relative w-full max-w-md">
+        <div className="glass-card p-8">
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="relative mb-3">
+              <Logo showText={false} size={28} />
+              <div className="absolute inset-0 -z-10 blur-xl bg-accent-violet/40" />
+            </div>
+            <p className="text-sm text-muted-foreground">CodeMap</p>
+            <h1 className="text-2xl font-semibold mt-2">Reset password</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               Enter your email and we&apos;ll send you a reset link
             </p>
           </div>
 
           <ForgotPasswordForm />
 
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="mt-6 text-center text-sm text-muted-foreground">
             Remember your password?{" "}
-            <Link
-              href="/auth"
-              className="text-foreground underline-offset-4 hover:underline"
-            >
+            <Link href="/auth" className="text-foreground hover:underline">
               Sign in
             </Link>
           </p>

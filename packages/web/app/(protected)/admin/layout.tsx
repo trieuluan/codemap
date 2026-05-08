@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { requestApi } from "@/lib/api/client";
-import { DashboardHeader } from "@/features/dashboard/header";
-import { DashboardSidebar } from "@/features/dashboard/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppTopbar } from "@/components/app-topbar";
 
 interface MeResponse {
   roles: string[];
@@ -25,10 +25,10 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
+    <div className="min-h-screen aurora-bg">
+      <AppSidebar />
       <div className="lg:pl-64">
-        <DashboardHeader />
+        <AppTopbar />
         <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>
