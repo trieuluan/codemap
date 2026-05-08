@@ -1,4 +1,6 @@
 import type {
+  ChatMessage,
+  ChatToolCall,
   CompletionRequest,
   CompletionResponse,
   CompletionStreamChunk,
@@ -12,6 +14,8 @@ interface ChatCompletionResponse {
   choices?: Array<{
     message?: {
       content?: string;
+      tool_calls?: ChatToolCall[];
+      toolCalls?: ChatToolCall[];
     };
     text?: string;
   }>;
@@ -93,6 +97,8 @@ export class NineRouterProvider implements GatewayProvider {
         messages: buildMessages(request),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens,
+        tools: request.tools,
+        tool_choice: request.toolChoice,
       }),
     });
 
@@ -102,12 +108,13 @@ export class NineRouterProvider implements GatewayProvider {
     }
 
     const body = (await response.json()) as ChatCompletionResponse;
-    const text =
-      body.choices?.[0]?.message?.content ?? body.choices?.[0]?.text ?? "";
+    const message = body.choices?.[0]?.message;
+    const text = message?.content ?? body.choices?.[0]?.text ?? "";
     return {
       text,
       model: body.model ?? request.model,
       provider: this.name,
+      toolCalls: normalizeToolCalls(message?.tool_calls ?? message?.toolCalls),
     };
   }
 
@@ -175,9 +182,29 @@ export class NineRouterProvider implements GatewayProvider {
   }
 }
 
-function buildMessages(request: CompletionRequest): CompletionRequest["messages"] {
-  if (!request.system) return request.messages;
-  return [{ role: "system", content: request.system }, ...request.messages];
+function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
+  const messages: ChatMessage[] = request.system
+    ? [{ role: "system", content: request.system }, ...request.messages]
+    : request.messages;
+
+  return messages.map((message) => {
+    if (message.role === "tool") {
+      return {
+        role: "tool",
+        content: message.content,
+        tool_call_id: message.toolCallId,
+        name: message.name,
+      };
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+      ...(message.toolCalls && message.toolCalls.length > 0
+        ? { tool_calls: message.toolCalls }
+        : {}),
+    };
+  });
 }
 
 function parseStreamLine(
@@ -203,4 +230,27 @@ function parseStreamLine(
 
 function isString(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function normalizeToolCalls(
+  toolCalls: ChatToolCall[] | undefined,
+): ChatToolCall[] | undefined {
+  if (!toolCalls || toolCalls.length === 0) return undefined;
+  return toolCalls.flatMap((toolCall, index) => {
+    const name = toolCall.function?.name;
+    if (!name) return [];
+    return [
+      {
+        id: toolCall.id || `call_${index}`,
+        type: "function" as const,
+        function: {
+          name,
+          arguments:
+            typeof toolCall.function.arguments === "string"
+              ? toolCall.function.arguments
+              : JSON.stringify(toolCall.function.arguments ?? {}),
+        },
+      },
+    ];
+  });
 }

@@ -37,8 +37,29 @@ export interface GatewayConfig {
 }
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  name?: string;
+  toolCallId?: string;
+  toolCalls?: ChatToolCall[];
+}
+
+export interface ChatToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export interface ChatToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
 export interface CompletionRequest {
@@ -47,12 +68,18 @@ export interface CompletionRequest {
   temperature?: number;
   maxTokens?: number;
   system?: string;
+  tools?: ChatToolDefinition[];
+  toolChoice?:
+    | "auto"
+    | "none"
+    | { type: "function"; function: { name: string } };
 }
 
 export interface CompletionResponse {
   text: string;
   model?: string;
   provider: string;
+  toolCalls?: ChatToolCall[];
 }
 
 export interface CompletionStreamChunk {

@@ -74,6 +74,7 @@ export function startRealtimeInput(options: RealtimeInputOptions): () => void {
 
       buffer = "";
       newline();
+      pauseRawMode();
       busy = true;
       try {
         const shouldContinue = await options.onSubmit(input);
@@ -83,6 +84,7 @@ export function startRealtimeInput(options: RealtimeInputOptions): () => void {
         }
       } finally {
         busy = false;
+        restoreRawMode();
       }
       if (active) stdout.write(prompt);
       return;

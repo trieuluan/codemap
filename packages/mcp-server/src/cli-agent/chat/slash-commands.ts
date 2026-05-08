@@ -44,6 +44,10 @@ export function handleChatCommand(
 function printChatHelp(): void {
   console.log(`Chat commands:
   /help       Show chat commands.
+  /agent on   Enable MCP agent tool mode.
+  /agent off  Disable MCP agent tool mode.
+  /tools      Show available agent tools.
+  /diff       Show current workspace diff.
   /models     Show configured model profiles.
   /route ...  Recommend a model profile for a task.
   /clear      Clear conversation history.

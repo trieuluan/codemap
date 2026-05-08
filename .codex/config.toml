@@ -1,70 +1,68 @@
-# .codex/config.toml
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
-[sandbox_workspace_write]
-# bật khi thật sự cần command có network
-network_access = false
-# nếu Codex cần sửa thêm ngoài cwd hiện tại, khai báo rõ
-writable_roots = ["/workspace"]
-
-[mcp_servers.openai_docs]
-transport = "streamable_http"
-url = "https://developers.openai.com/mcp"
-
-# Placeholder examples below.
-# Replace these with the actual command/config for the MCP servers you install.
-
-[mcp_servers.postgres]
-transport = "stdio"
-command = "your-postgres-mcp-server"
-args = ["--connection-string", "postgresql://app:123456@codemap_pg:5432/codemap_mvp"]
-
 [mcp_servers.api]
-transport = "stdio"
+args = [
+    "--base-url",
+    "http://localhost:3001",
+]
 command = "your-http-mcp-server"
-args = ["--base-url", "http://localhost:3001"]
+transport = "stdio"
+
+[mcp_servers.codemap-mcp-dev]
+args = [
+    "tsx",
+    "--watch",
+    "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts",
+]
+command = "npx"
 
 [mcp_servers.codemap_mcp_dev]
-command = "npx"
 args = [
-  "tsx",
-  "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts",
+    "tsx",
+    "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts",
 ]
+command = "npx"
 cwd = "/Users/louis/Development/codemap"
 enabled = true
-
-[mcp_servers.codemap_mcp_dev.tools.get_current_workspace_info]
-approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.check_auth_status]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.get_project]
+[mcp_servers.codemap_mcp_dev.tools.explore_task]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.get_project_map]
+[mcp_servers.codemap_mcp_dev.tools.find_related_files]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.get_project_insights]
+[mcp_servers.codemap_mcp_dev.tools.find_usages]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.get_file]
+[mcp_servers.codemap_mcp_dev.tools.get_agent_workflow]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.search_codebase]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.trigger_reimport]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.wait_for_import]
+[mcp_servers.codemap_mcp_dev.tools.get_current_workspace_info]
 approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.get_diff]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.ping]
+[mcp_servers.codemap_mcp_dev.tools.get_file]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project_insights]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_project_map]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_symbol_context]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.get_working_diff]
 approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.list_projects]
@@ -73,35 +71,45 @@ approval_mode = "approve"
 [mcp_servers.codemap_mcp_dev.tools.logout]
 approval_mode = "approve"
 
+[mcp_servers.codemap_mcp_dev.tools.ping]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.recommend_agent_workflow]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.refresh_local_index]
+approval_mode = "approve"
+
+[mcp_servers.codemap_mcp_dev.tools.search_codebase]
+approval_mode = "approve"
+
 [mcp_servers.codemap_mcp_dev.tools.start_auth_flow]
 approval_mode = "approve"
 
 [mcp_servers.codemap_mcp_dev.tools.suggest_edit_locations]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.find_usages]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.get_working_diff]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.find_related_files]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.explore_task]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.get_agent_workflow]
-approval_mode = "approve"
-
-[mcp_servers.codemap_mcp_dev.tools.get_symbol_context]
-approval_mode = "approve"
-
 [mcp_servers.codemap_mcp_dev.tools.summarize_feature_area]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.refresh_local_index]
+[mcp_servers.codemap_mcp_dev.tools.trigger_reimport]
 approval_mode = "approve"
 
-[mcp_servers.codemap_mcp_dev.tools.recommend_agent_workflow]
+[mcp_servers.codemap_mcp_dev.tools.wait_for_import]
 approval_mode = "approve"
+
+[mcp_servers.openai_docs]
+transport = "streamable_http"
+url = "https://developers.openai.com/mcp"
+
+[mcp_servers.postgres]
+args = [
+    "--connection-string",
+    "postgresql://app:123456@codemap_pg:5432/codemap_mvp",
+]
+command = "your-postgres-mcp-server"
+transport = "stdio"
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = ["/workspace"]

@@ -21,3 +21,5 @@ Installed CodeMap skills live under `.codex/skills/codemap-*`:
 - `codemap-executing-plans` — execute approved plans in scoped steps
 - `codemap-test-driven-development` — RED → GREEN → REFACTOR using CodeMap tools
 - `codemap-verification-before-completion` — final diff/build/index/reimport gate
+
+## Imported Claude Cowork project instructions
