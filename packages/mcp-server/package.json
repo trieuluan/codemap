@@ -25,9 +25,12 @@
     "dev:gateway:watch": "tsx watch src/cli-agent.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
+    "@clack/prompts": "^1.3.0",
     "@codemap/code-index": "file:../code-index",
     "@codemap/shared": "file:../shared",
     "@modelcontextprotocol/sdk": "^1.21.0",
+    "ai": "^6.0.176",
     "execa": "^9.6.1",
     "jszip": "^3.10.1"
   },

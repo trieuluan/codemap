@@ -46,6 +46,7 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  system?: string;
 }
 
 export interface CompletionResponse {
@@ -65,10 +66,16 @@ export interface ProviderHealth {
   message: string;
 }
 
+export interface GatewayModel {
+  id: string;
+  ownedBy?: string;
+}
+
 export interface GatewayProvider {
   name: string;
   healthCheck(): Promise<ProviderHealth>;
   listModels(): Promise<string[]>;
+  listModelDetails(): Promise<GatewayModel[]>;
   complete(request: CompletionRequest): Promise<CompletionResponse>;
   stream(request: CompletionRequest): AsyncGenerator<CompletionStreamChunk>;
 }

@@ -21,13 +21,15 @@ async function printGatewayModels(ctx: GatewayCommandContext): Promise<void> {
   console.log("");
   console.log("Available gateway models:");
   try {
-    const models = await provider.listModels();
+    const models = (await provider.listModelDetails()).filter(
+      (model) => model.ownedBy !== "combo",
+    );
     if (models.length === 0) {
       console.log("- none returned by gateway");
       return;
     }
     for (const model of models) {
-      console.log(`- ${model}`);
+      console.log(`- ${model.id}`);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

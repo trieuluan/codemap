@@ -114,7 +114,7 @@ export function buildDefaultProfiles(): ModelProfile[] {
       model:
         process.env.CODEMAP_LLM_GATEWAY_FAST_MODEL ??
         process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "auto:fast",
+        "auto.fast",
       tier: "fast",
       local: false,
     },
@@ -125,7 +125,7 @@ export function buildDefaultProfiles(): ModelProfile[] {
       model:
         process.env.CODEMAP_LLM_GATEWAY_STRONG_MODEL ??
         process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "auto:strong",
+        "auto.strong",
       tier: "strong",
       local: false,
     },
