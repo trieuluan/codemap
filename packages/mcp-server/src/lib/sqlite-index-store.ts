@@ -342,6 +342,24 @@ export class SQLiteIndexStore {
     };
   }
 
+  listFiles(limit = 100): Array<{
+    path: string;
+    language: string | null;
+    lineCount: number | null;
+    parseStatus: string;
+  }> {
+    return this.db
+      .prepare(
+        "SELECT path, language, lineCount, parseStatus FROM files ORDER BY path LIMIT ?",
+      )
+      .all(limit) as Array<{
+        path: string;
+        language: string | null;
+        lineCount: number | null;
+        parseStatus: string;
+      }>;
+  }
+
   write(
     files: LocalIndexedFile[],
     meta: {

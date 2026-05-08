@@ -3,13 +3,15 @@ import { stdin, stdout } from "node:process";
 
 type RealtimeInputOptions = {
   prompt?: string;
-  onSubmit: (input: string) => Promise<void>;
-  onMention: (input: string) => Promise<string | undefined>;
+  onSubmit: (input: string) => Promise<boolean | void>;
+  onMention: () => Promise<string | undefined>;
 };
 
-export function startRealtimeInput(options: RealtimeInputOptions) {
+export function startRealtimeInput(options: RealtimeInputOptions): () => void {
   const prompt = options.prompt ?? "codemap> ";
   let buffer = "";
+  let active = true;
+  let busy = false;
 
   readline.emitKeypressEvents(stdin);
 
@@ -18,36 +20,71 @@ export function startRealtimeInput(options: RealtimeInputOptions) {
   }
 
   function render() {
-    stdout.clearLine(0);
-    stdout.cursorTo(0);
+    if (!active) return;
+    if (stdout.isTTY) {
+      stdout.clearLine(0);
+      stdout.cursorTo(0);
+    }
     stdout.write(`${prompt}${buffer}`);
   }
 
-  function resetPrompt() {
-    buffer = "";
+  function newline() {
+    if (!active) return;
     stdout.write("\n");
-    stdout.write(prompt);
+  }
+
+  function restoreRawMode() {
+    if (active) stdin.resume();
+    if (active && stdin.isTTY) stdin.setRawMode(true);
+    if (active) stdin.on("keypress", handleKeypress);
+  }
+
+  function pauseRawMode() {
+    stdin.off("keypress", handleKeypress);
+    if (stdin.isTTY) stdin.setRawMode(false);
+  }
+
+  function stop() {
+    if (!active) return;
+    active = false;
+    pauseRawMode();
+    stdin.off("keypress", handleKeypress);
+    stdin.pause();
   }
 
   stdout.write(prompt);
+  stdin.resume();
 
-  stdin.on("keypress", async (str, key) => {
+  async function handleKeypress(str: string | undefined, key: readline.Key) {
+    if (!active || busy) return;
     if (key.ctrl && key.name === "c") {
       stdout.write("\n");
-      process.exit(0);
+      stop();
+      return;
     }
 
     if (key.name === "return") {
       const input = buffer.trim();
 
       if (!input) {
-        resetPrompt();
+        newline();
+        stdout.write(prompt);
         return;
       }
 
-      resetPrompt();
-      await options.onSubmit(input);
-      stdout.write(prompt);
+      buffer = "";
+      newline();
+      busy = true;
+      try {
+        const shouldContinue = await options.onSubmit(input);
+        if (shouldContinue === false) {
+          stop();
+          return;
+        }
+      } finally {
+        busy = false;
+      }
+      if (active) stdout.write(prompt);
       return;
     }
 
@@ -58,15 +95,17 @@ export function startRealtimeInput(options: RealtimeInputOptions) {
     }
 
     if (str === "@") {
-      if (stdin.isTTY) stdin.setRawMode(false);
-
-      stdout.write("\n");
-      const selected = await options.onMention(str);
-
-      if (stdin.isTTY) stdin.setRawMode(true);
-
-      if (selected) {
-        buffer += `@${selected}`;
+      newline();
+      pauseRawMode();
+      busy = true;
+      try {
+        const selected = await options.onMention();
+        if (selected) {
+          buffer += `@${selected}`;
+        }
+      } finally {
+        busy = false;
+        restoreRawMode();
       }
 
       render();
@@ -77,5 +116,8 @@ export function startRealtimeInput(options: RealtimeInputOptions) {
       buffer += str;
       stdout.write(str);
     }
-  });
+  }
+
+  stdin.on("keypress", handleKeypress);
+  return stop;
 }

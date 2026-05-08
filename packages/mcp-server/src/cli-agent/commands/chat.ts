@@ -1,26 +1,13 @@
-import { stdin as input, stdout as output } from "node:process";
-import { createInterface } from "node:readline/promises";
-
 import { hasFlag, parseModeFlag } from "../args.js";
 import type { GatewayCommandContext } from "../command-context.js";
-import { findProfile } from "../policy.js";
-import { NineRouterProvider } from "../provider.js";
-import type {
-  ChatMessage,
-  GatewayConfig,
-  GatewayMode,
-  ModelProfile,
-} from "../types.js";
-import { printGatewayHint } from "./gateway-hint.js";
-import { printModels } from "./models.js";
-import { runRoute } from "./route.js";
-import {
-  extractLastFileMention,
-  replaceMentionWithPath,
-} from "../input/mentions.js";
-import { searchIndexedFiles } from "../context/files.js";
-import { pickFile } from "../ui/file-picker.js";
+import { runChatCompletion } from "../chat/completion.js";
+import { resolveMention } from "../chat/mentions.js";
+import { selectChatProfile } from "../chat/profiles.js";
 import { startRealtimeInput } from "../chat/realtime-input.js";
+import { handleChatCommand } from "../chat/slash-commands.js";
+import { NineRouterProvider } from "../provider.js";
+import type { ChatMessage, GatewayConfig } from "../types.js";
+import { printGatewayHint } from "./gateway-hint.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const mode = parseModeFlag(ctx.flags.mode);
@@ -41,8 +28,14 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   console.log(`Type /help for commands, /exit to quit.`);
 
   startRealtimeInput({
-    onMention: resolveMentions,
+    onMention: resolveMention,
     onSubmit: async (message) => {
+      if (message.startsWith("/")) {
+        const result = handleChatCommand(message, ctx.config, mode);
+        if (result === "clear") history.length = 0;
+        return result !== "exit";
+      }
+
       const userMessage: ChatMessage = { role: "user", content: message };
       try {
         const assistantMessage = await runChatCompletion(
@@ -68,24 +61,6 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   });
 }
 
-function selectChatProfile(
-  config: GatewayConfig,
-  profileId: string | undefined,
-  mode: GatewayMode | undefined,
-): ModelProfile {
-  const requestedProfile =
-    findProfile(config.profiles, profileId ?? "") ??
-    (profileId ? buildExplicitModelProfile(profileId) : undefined) ??
-    (mode === "local-only"
-      ? findProfile(config.profiles, "local")
-      : undefined) ??
-    findProfile(config.profiles, config.defaultProfile) ??
-    config.profiles[0];
-  if (!requestedProfile)
-    throw new Error("No model profiles configured for LLM Gateway.");
-  return requestedProfile;
-}
-
 async function loadGatewayModels(
   config: GatewayConfig,
   provider: NineRouterProvider,
@@ -99,135 +74,4 @@ async function loadGatewayModels(
     console.error("Using configured model profiles instead.");
     return [];
   }
-}
-
-function buildExplicitModelProfile(model: string): ModelProfile {
-  const tier = inferTier(model);
-  return {
-    id: model,
-    label: model,
-    provider: "9router",
-    model,
-    tier,
-    local: tier === "local",
-  };
-}
-
-function inferTier(model: string): ModelProfile["tier"] {
-  if (isLocalModel(model)) return "local";
-  if (isStrongModel(model)) return "strong";
-  return "fast";
-}
-
-function isLocalModel(model: string): boolean {
-  return /\b(local|ollama|lmstudio|llama\.cpp)\b/i.test(model);
-}
-
-function isStrongModel(model: string): boolean {
-  return /\b(strong|opus|sonnet|gpt-5|gpt-4|o3|o4|deepseek-r1|qwen3-coder)\b/i.test(
-    model,
-  );
-}
-
-function handleChatCommand(
-  rawCommand: string,
-  config: GatewayConfig,
-  mode: GatewayMode | undefined,
-): boolean {
-  const [command, ...args] = rawCommand.split(/\s+/);
-  const rest = args.join(" ").trim();
-
-  if (command === "/exit" || command === "/quit") return false;
-  if (command === "/help") {
-    printChatHelp();
-    return true;
-  }
-  if (command === "/models") {
-    printModels(config);
-    return true;
-  }
-  if (command === "/route") {
-    if (!rest) {
-      console.log('Usage: /route "describe the task"');
-      return true;
-    }
-    runRoute(config, rest, mode);
-    return true;
-  }
-  if (command === "/clear") {
-    clearVisibleChat();
-    console.log("Conversation cleared.");
-    return true;
-  }
-
-  console.log(`Unknown command "${command}". Type /help for commands.`);
-  return true;
-}
-
-function printChatHelp(): void {
-  console.log(`Chat commands:
-  /help       Show chat commands.
-  /models     Show configured model profiles.
-  /route ...  Recommend a model profile for a task.
-  /clear      Clear conversation history.
-  /exit       Quit chat.`);
-}
-
-function getCommandName(rawCommand: string): string {
-  return rawCommand.split(/\s+/, 1)[0] ?? "";
-}
-
-function clearVisibleChat(): void {
-  if (!output.isTTY) return;
-  output.write("\x1B[2J\x1B[3J\x1B[H");
-}
-
-async function runChatCompletion(
-  provider: NineRouterProvider,
-  request: Parameters<NineRouterProvider["complete"]>[0],
-  stream: boolean,
-): Promise<string> {
-  if (!stream) {
-    const response = await provider.complete(request);
-    return response.text;
-  }
-
-  let text = "";
-  for await (const chunk of provider.stream(request)) {
-    text += chunk.text;
-    output.write(chunk.text);
-  }
-  output.write("\n");
-  return text;
-}
-
-function promptSafely(rl: ReturnType<typeof createInterface>): void {
-  try {
-    rl.prompt();
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("readline was closed")
-    ) {
-      return;
-    }
-    throw error;
-  }
-}
-
-async function resolveMentions(input: string) {
-  const mention = extractLastFileMention(input);
-
-  if (!mention) {
-    return input;
-  }
-
-  const files = await searchIndexedFiles(mention.query);
-  const selected = await pickFile(files);
-
-  if (!selected) {
-    return input;
-  }
-
-  return replaceMentionWithPath(input, mention, selected);
 }

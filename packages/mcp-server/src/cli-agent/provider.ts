@@ -6,8 +6,6 @@ import type {
   GatewayProvider,
   ProviderHealth,
 } from "./types.js";
-import { generateText, streamText } from "ai";
-import { createOpenAI, OpenAIProvider } from "@ai-sdk/openai";
 
 interface ChatCompletionResponse {
   model?: string;
@@ -31,17 +29,11 @@ interface ChatCompletionStreamResponse {
 
 export class NineRouterProvider implements GatewayProvider {
   readonly name = "9router";
-  private provider: OpenAIProvider;
 
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string | undefined,
-  ) {
-    this.provider = createOpenAI({
-      baseURL: baseUrl,
-      apiKey: apiKey,
-    });
-  }
+  ) {}
 
   async healthCheck(): Promise<ProviderHealth> {
     try {
@@ -90,16 +82,31 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
-    const result = await generateText({
-      model: this.provider(request.model as any),
-      messages: request.messages,
-      temperature: request.temperature ?? 0.2,
-      maxOutputTokens: request.maxTokens,
-      system: request.system,
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...this.buildHeaders(),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: request.model,
+        messages: buildMessages(request),
+        temperature: request.temperature ?? 0.2,
+        max_tokens: request.maxTokens,
+      }),
     });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Completion failed: HTTP ${response.status} ${text}`);
+    }
+
+    const body = (await response.json()) as ChatCompletionResponse;
+    const text =
+      body.choices?.[0]?.message?.content ?? body.choices?.[0]?.text ?? "";
     return {
-      text: result.text,
-      model: request.model,
+      text,
+      model: body.model ?? request.model,
       provider: this.name,
     };
   }
@@ -107,19 +114,58 @@ export class NineRouterProvider implements GatewayProvider {
   async *stream(
     request: CompletionRequest,
   ): AsyncGenerator<CompletionStreamChunk> {
-    const result = streamText({
-      model: this.provider(request.model as any),
-      messages: request.messages,
-      temperature: request.temperature ?? 0.2,
-      maxOutputTokens: request.maxTokens,
-      system: request.system,
-    });
-    for await (const chunk of result.textStream) {
-      yield {
-        text: chunk,
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...this.buildHeaders(),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
         model: request.model,
-        provider: this.name,
-      };
+        messages: buildMessages(request),
+        temperature: request.temperature ?? 0.2,
+        max_tokens: request.maxTokens,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Completion failed: HTTP ${response.status} ${text}`);
+    }
+    if (!response.body) {
+      throw new Error("Completion stream failed: response body is empty.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const chunk = parseStreamLine(line);
+          if (chunk === "done") return;
+          if (!chunk) continue;
+          yield chunk;
+        }
+      }
+
+      buffer += decoder.decode();
+      for (const line of buffer.split(/\r?\n/)) {
+        const chunk = parseStreamLine(line);
+        if (chunk === "done") return;
+        if (!chunk) continue;
+        yield chunk;
+      }
+    } finally {
+      reader.releaseLock();
     }
   }
 
@@ -127,6 +173,11 @@ export class NineRouterProvider implements GatewayProvider {
     if (!this.apiKey) return {};
     return { authorization: `Bearer ${this.apiKey}` };
   }
+}
+
+function buildMessages(request: CompletionRequest): CompletionRequest["messages"] {
+  if (!request.system) return request.messages;
+  return [{ role: "system", content: request.system }, ...request.messages];
 }
 
 function parseStreamLine(

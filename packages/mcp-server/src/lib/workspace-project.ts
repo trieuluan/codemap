@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
 
 const WORKSPACE_CONFIG_FILE = ".codemap/mcp.json";
@@ -24,6 +24,16 @@ async function readWorkspaceProjectConfigAt(configPath: string) {
         ? parsed.workspaceRootPath.trim()
         : null,
   };
+}
+
+async function pathExists(filePath: string | null | undefined) {
+  if (!filePath) return false;
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function readWorkspaceProjectConfig(
@@ -52,9 +62,14 @@ export async function readWorkspaceProjectConfig(
       const config = await readWorkspaceProjectConfigAt(
         path.join(root, WORKSPACE_CONFIG_FILE),
       );
+      const savedWorkspaceRoot =
+        config.workspaceRootPath && (await pathExists(config.workspaceRootPath))
+          ? config.workspaceRootPath
+          : null;
+
       return {
         ...config,
-        workspaceRootPath: config.workspaceRootPath ?? root,
+        workspaceRootPath: savedWorkspaceRoot ?? root,
       };
     } catch {
       // Try the next candidate root.

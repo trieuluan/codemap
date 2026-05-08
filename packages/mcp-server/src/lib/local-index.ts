@@ -139,8 +139,22 @@ export async function readLocalIndex(workspaceRootPath?: string): Promise<SQLite
 export async function isLocalIndexStale(store: SQLiteIndexStore): Promise<boolean> {
   const meta = store.getMeta();
   if (!meta) return true;
-  const files = await collectWorkspaceFiles(meta.workspaceRootPath);
-  return store.isStale(files);
+  try {
+    const files = await collectWorkspaceFiles(meta.workspaceRootPath);
+    return store.isStale(files);
+  } catch {
+    return true;
+  }
+}
+
+async function collectFilesForStore(store: SQLiteIndexStore) {
+  const meta = store.getMeta();
+  if (!meta) return [];
+  try {
+    return await collectWorkspaceFiles(meta.workspaceRootPath);
+  } catch {
+    return [];
+  }
 }
 
 export async function ensureLocalIndex(input?: {
@@ -153,16 +167,14 @@ export async function ensureLocalIndex(input?: {
   }
 
   if (_cachedStore) {
-    const meta = _cachedStore.getMeta();
-    const files = meta ? await collectWorkspaceFiles(meta.workspaceRootPath) : [];
+    const files = await collectFilesForStore(_cachedStore);
     if (files.length > 0 && !_cachedStore.isStale(files)) return _cachedStore;
     _cachedStore = null;
   }
 
   const existing = await readLocalIndex(input?.workspaceRootPath);
   if (existing) {
-    const meta = existing.getMeta();
-    const files = meta ? await collectWorkspaceFiles(meta.workspaceRootPath) : [];
+    const files = await collectFilesForStore(existing);
     if (files.length > 0 && !existing.isStale(files)) {
       _cachedStore = existing;
       return existing;
@@ -173,8 +185,7 @@ export async function ensureLocalIndex(input?: {
 }
 
 export async function getLocalIndexSummary(store: SQLiteIndexStore): Promise<LocalIndexSummary> {
-  const meta = store.getMeta();
-  const files = meta ? await collectWorkspaceFiles(meta.workspaceRootPath) : [];
+  const files = await collectFilesForStore(store);
   return store.getSummary(files.length > 0 ? store.isStale(files) : false);
 }
 
