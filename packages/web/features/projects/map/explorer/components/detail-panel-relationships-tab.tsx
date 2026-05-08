@@ -30,6 +30,7 @@ import {
   RelationshipList,
   RelationshipLoadingSkeleton,
 } from "./detail-panel-shared";
+import { Button } from "@/components/ui/button";
 
 interface DetailPanelRelationshipsTabProps {
   file: RepositoryTreeNode;
@@ -213,7 +214,7 @@ export function DetailPanelRelationshipsTab({
           ) : (
             <div className="space-y-2">
               {parseData.symbols.map((symbol) => (
-                <button
+                <Button variant="ghost"
                   key={symbol.id}
                   type="button"
                   onClick={() => onNavigateToSymbol(symbol)}
@@ -254,7 +255,7 @@ export function DetailPanelRelationshipsTab({
                     {symbol.startLine ? `L${symbol.startLine}` : "No range"}
                     <ClickHintIcon />
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
           )}

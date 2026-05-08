@@ -19,6 +19,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import type { SymbolDiffEntry, EdgeDiffEntry } from "../types";
+import { Button } from "@/components/ui/button";
 
 // ---- SymbolDiffList --------------------------------------------------------
 
@@ -106,7 +107,7 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
 
           return (
             <li key={group.filePath}>
-              <button
+              <Button variant="ghost"
                 type="button"
                 onClick={() => toggle(group.filePath)}
                 className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
@@ -132,7 +133,7 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
                 <span className="w-20 text-right font-mono text-sm tabular-nums text-rose-500">
                   {group.removed.length > 0 ? `-${group.removed.length}` : "—"}
                 </span>
-              </button>
+              </Button>
 
               {isOpen ? (
                 <ul className="divide-y border-t bg-muted/20">
@@ -250,7 +251,7 @@ export function EdgeDiffList({ edges }: { edges: EdgeDiffEntry[] }) {
 
           return (
             <li key={group.sourceFile}>
-              <button
+              <Button variant="ghost"
                 type="button"
                 onClick={() => toggle(group.sourceFile)}
                 className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
@@ -276,7 +277,7 @@ export function EdgeDiffList({ edges }: { edges: EdgeDiffEntry[] }) {
                 <span className="w-20 text-right font-mono text-sm tabular-nums text-rose-500">
                   {group.removed.length > 0 ? `-${group.removed.length}` : "—"}
                 </span>
-              </button>
+              </Button>
 
               {isOpen ? (
                 <ul className="divide-y border-t bg-muted/20">

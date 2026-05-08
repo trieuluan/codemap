@@ -18,6 +18,7 @@ import {
   getResolutionClassName,
   getResolutionLabel,
 } from "./graph-node-drawer-utils";
+import { Button } from "@/components/ui/button";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
@@ -202,7 +203,7 @@ export function DepsTab({
           ) : (
             <div className="space-y-1.5">
               {imports.map((item, i) => (
-                <button
+                <Button variant="ghost"
                   key={`${item.moduleSpecifier}-${i}`}
                   type="button"
                   disabled={!item.targetPathText}
@@ -235,7 +236,7 @@ export function DepsTab({
                       {item.targetPathText}
                     </p>
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -254,7 +255,7 @@ export function DepsTab({
           ) : (
             <div className="space-y-1.5">
               {incomingImports.map((item, i) => (
-                <button
+                <Button variant="ghost"
                   key={`${item.sourceFilePath}-${i}`}
                   type="button"
                   onClick={() => onSelectNode?.(item.sourceFilePath)}
@@ -277,7 +278,7 @@ export function DepsTab({
                   <p className="mt-0.5 truncate font-mono text-muted-foreground">
                     {item.sourceFilePath}
                   </p>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -362,7 +363,7 @@ export function CyclesTab({
                         key={`${step.sourcePath}->${step.targetPath}-${stepIndex}`}
                         className="rounded-md border border-border/70 bg-card/70 p-2 text-xs"
                       >
-                        <button
+                        <Button variant="ghost"
                           type="button"
                           onClick={() => onSelectNode?.(step.sourcePath)}
                           className={cn(
@@ -373,7 +374,7 @@ export function CyclesTab({
                           )}
                         >
                           {step.sourcePath}
-                        </button>
+                        </Button>
                         <div className="my-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
                           <ArrowRight className="size-3.5" />
                           <span>imports</span>
@@ -388,7 +389,7 @@ export function CyclesTab({
                           </Badge>
                           <span>{step.importKind.replace(/_/g, " ")}</span>
                         </div>
-                        <button
+                        <Button variant="ghost"
                           type="button"
                           onClick={() => onSelectNode?.(step.targetPath)}
                           className={cn(
@@ -399,7 +400,7 @@ export function CyclesTab({
                           )}
                         >
                           {step.targetPath}
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -417,7 +418,7 @@ export function CyclesTab({
                   Files in this cycle
                 </p>
                 {cycle.paths.map((path, pathIndex) => (
-                  <button
+                  <Button variant="ghost"
                     key={`${path}-${pathIndex}`}
                     type="button"
                     onClick={() => onSelectNode?.(path)}
@@ -432,7 +433,7 @@ export function CyclesTab({
                       {pathIndex + 1}
                     </span>
                     <span className="break-all font-mono">{path}</span>
-                  </button>
+                  </Button>
                 ))}
               </div>
             </section>

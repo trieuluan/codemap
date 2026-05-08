@@ -30,8 +30,9 @@ function getProjectSortTime(project: ProjectListItem) {
 
 export function pickActiveProject(projects: ProjectListItem[]) {
   return (
-    [...projects].sort((a, b) => getProjectSortTime(b) - getProjectSortTime(a))[0] ??
-    null
+    [...projects].sort(
+      (a, b) => getProjectSortTime(b) - getProjectSortTime(a),
+    )[0] ?? null
   );
 }
 
@@ -203,7 +204,7 @@ export function WorkspaceIndexCard({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+          <div className="rounded-md border border-border/70 glass p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Latest import
             </p>
@@ -217,7 +218,7 @@ export function WorkspaceIndexCard({
               )}
             </p>
           </div>
-          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+          <div className="rounded-md border border-border/70 glass p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Commit
             </p>
@@ -225,7 +226,7 @@ export function WorkspaceIndexCard({
               {shortSha(latestImport?.commitSha)}
             </p>
           </div>
-          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+          <div className="rounded-md border border-border/70 glass p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Indexed
             </p>
@@ -234,7 +235,7 @@ export function WorkspaceIndexCard({
               {(latestImport?.indexedSymbolCount ?? 0).toLocaleString()} symbols
             </p>
           </div>
-          <div className="rounded-md border border-border/70 bg-background/70 p-3">
+          <div className="rounded-md border border-border/70 glass p-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Status
             </p>

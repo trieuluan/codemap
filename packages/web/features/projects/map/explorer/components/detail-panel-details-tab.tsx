@@ -28,6 +28,7 @@ import {
   getMimeTypeFallback,
   EmptyTabState,
 } from "./detail-panel-shared";
+import { Button } from "@/components/ui/button";
 
 interface DetailPanelDetailsTabProps {
   projectId: string;
@@ -230,7 +231,7 @@ export function DetailPanelDetailsTab({
               {parseData.blastRadius.files.length > 0 ? (
                 <div className="space-y-2">
                   {parseData.blastRadius.files.map((item) => (
-                    <button
+                    <Button variant="ghost"
                       key={`${item.path}:${item.depth}`}
                       type="button"
                       onClick={() => onNavigateToFile(item.path, "relationships")}
@@ -249,7 +250,7 @@ export function DetailPanelDetailsTab({
                         <p>↓{item.incomingCount}</p>
                         <p>↑{item.outgoingCount}</p>
                       </div>
-                    </button>
+                    </Button>
                   ))}
                   {parseData.blastRadius.totalCount >
                   parseData.blastRadius.files.length ? (

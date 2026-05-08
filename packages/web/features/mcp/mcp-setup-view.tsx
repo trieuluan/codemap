@@ -38,14 +38,14 @@ function CopyButton({ text }: { text: string }) {
     });
   }
   return (
-    <button
+    <Button variant="ghost"
       type="button"
       onClick={handleCopy}
       className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
       title="Copy"
     >
       {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-    </button>
+    </Button>
   );
 }
 

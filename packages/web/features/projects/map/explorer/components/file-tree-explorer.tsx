@@ -25,6 +25,7 @@ import {
   collectFolderNodeIds,
   type RepositoryTreeNode,
 } from "../utils/file-tree-model";
+import { Button } from "@/components/ui/button";
 
 interface FileTreeProps {
   tree: RepositoryTreeNode[];
@@ -123,7 +124,7 @@ function FileTreeNode({ node, style }: NodeRendererProps<RepositoryTreeNode>) {
       )}
     >
       {isFolder ? (
-        <button
+        <Button variant="ghost"
           type="button"
           tabIndex={-1}
           aria-label={node.isOpen ? "Collapse folder" : "Expand folder"}
@@ -138,7 +139,7 @@ function FileTreeNode({ node, style }: NodeRendererProps<RepositoryTreeNode>) {
           ) : (
             <ChevronRight className={iconClassName} />
           )}
-        </button>
+        </Button>
       ) : (
         <span className="w-5 flex-shrink-0" aria-hidden="true" />
       )}

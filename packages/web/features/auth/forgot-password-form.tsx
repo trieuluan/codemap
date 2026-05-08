@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, MailCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -34,12 +35,12 @@ export function ForgotPasswordForm() {
           </p>
         </div>
 
-        <button
+        <Button variant="ghost"
           onClick={() => { setIsSubmitted(false); setEmail(""); }}
           className="w-full glass rounded-lg px-4 py-2.5 text-sm hover:bg-white/[0.06] transition"
         >
           Try another email
-        </button>
+        </Button>
       </div>
     );
   }
@@ -65,7 +66,7 @@ export function ForgotPasswordForm() {
         </p>
       </div>
 
-      <button
+      <Button variant="ghost"
         type="submit"
         disabled={isLoading}
         className="w-full flex items-center justify-center gap-2 rounded-lg bg-foreground text-background px-4 py-2.5 text-sm font-medium hover:bg-foreground/90 transition disabled:opacity-50 disabled:pointer-events-none"
@@ -75,7 +76,7 @@ export function ForgotPasswordForm() {
         ) : (
           "Send reset link"
         )}
-      </button>
+      </Button>
     </form>
   );
 }

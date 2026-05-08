@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Button } from "@/components/ui/button";
 import { Icon } from "./icon";
 import {
   pipelineSteps,
@@ -181,7 +182,7 @@ export function Pipeline() {
 
 function ToolCard({ t, active, onPick }: { t: McpTool; active: boolean; onPick: () => void }) {
   return (
-    <button
+    <Button variant="ghost"
       onClick={onPick}
       className={`card text-left p-4 transition relative ${active ? "ring-glow" : "hover:bg-white/[0.02]"}`}
     >
@@ -194,7 +195,7 @@ function ToolCard({ t, active, onPick }: { t: McpTool; active: boolean; onPick: 
         <span className={`size-1.5 rounded-full ${active ? "bg-accent-cyan shadow-[0_0_10px_#5dd6e0]" : "bg-ink-300"}`} />
       </div>
       <div className="mt-2 text-sm text-ink-100 leading-snug">{t.sub}</div>
-    </button>
+    </Button>
   );
 }
 

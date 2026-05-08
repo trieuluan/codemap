@@ -136,7 +136,7 @@ export function ImportFromGithubDialog({
               </div>
             ) : (
               repos.map((repo) => (
-                <button
+                <Button variant="ghost"
                   key={repo.id}
                   type="button"
                   onClick={() => setSelected(repo)}
@@ -171,7 +171,7 @@ export function ImportFromGithubDialog({
                   {selected?.id === repo.id && (
                     <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
                   )}
-                </button>
+                </Button>
               ))
             )}
           </div>

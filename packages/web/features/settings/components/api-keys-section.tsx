@@ -248,7 +248,7 @@ export function ApiKeysSection() {
 
               {revokedMcpKeys.length > 0 ? (
                 <div className="border-t border-border/50 pt-3">
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={() => setShowRevokedMcp((v) => !v)}
                     className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
@@ -257,7 +257,7 @@ export function ApiKeysSection() {
                     {showRevokedMcp
                       ? "Hide revoked sessions"
                       : `Show ${revokedMcpKeys.length} revoked session${revokedMcpKeys.length === 1 ? "" : "s"}`}
-                  </button>
+                  </Button>
                   {showRevokedMcp ? (
                     <div className="mt-3 overflow-x-auto opacity-60">
                       <Table>
@@ -382,7 +382,7 @@ export function ApiKeysSection() {
 
               {revokedManualKeys.length > 0 ? (
                 <div className="border-t border-border/50 pt-3">
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={() => setShowRevokedManual((v) => !v)}
                     className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
@@ -391,7 +391,7 @@ export function ApiKeysSection() {
                     {showRevokedManual
                       ? "Hide revoked keys"
                       : `Show ${revokedManualKeys.length} revoked key${revokedManualKeys.length === 1 ? "" : "s"}`}
-                  </button>
+                  </Button>
                   {showRevokedManual ? (
                     <div className="mt-3 overflow-x-auto opacity-60">
                       <Table>

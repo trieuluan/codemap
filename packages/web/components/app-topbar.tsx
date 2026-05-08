@@ -123,7 +123,7 @@ function GlobalSearch() {
             <ul>
               {results.map((project) => (
                 <li key={project.id}>
-                  <button
+                  <Button variant="ghost"
                     type="button"
                     onClick={() => {
                       setQuery(""); setOpen(false);
@@ -145,7 +145,7 @@ function GlobalSearch() {
                     )}>
                       {project.status}
                     </span>
-                  </button>
+                  </Button>
                 </li>
               ))}
               <li className="border-t border-border/60">
@@ -219,7 +219,7 @@ function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="relative size-9 rounded-lg glass hover:bg-white/[0.06] transition flex items-center justify-center">
+        <Button variant="ghost" className="relative size-9 rounded-lg glass hover:bg-white/[0.06] transition flex items-center justify-center">
           <Bell className="size-4 text-muted-foreground" />
           {activeCount > 0 ? (
             <span className="absolute top-2 right-2 size-1.5 rounded-full bg-accent-cyan shadow-[0_0_6px_#5dd6e0]" />
@@ -227,7 +227,7 @@ function NotificationBell() {
             <span className="absolute top-2 right-2 size-1.5 rounded-full bg-muted-foreground/40" />
           ) : null}
           <span className="sr-only">Notifications</span>
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -315,7 +315,7 @@ export function AppTopbar() {
       <GlobalSearch />
 
       {/* Theme toggle */}
-      <button
+      <Button variant="ghost"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         className="size-9 rounded-lg glass hover:bg-white/[0.06] transition flex items-center justify-center"
         title={mounted ? (theme === "dark" ? "Switch to light" : "Switch to dark") : "Toggle theme"}
@@ -324,21 +324,21 @@ export function AppTopbar() {
           ? <Sun  className="size-4 text-muted-foreground" />
           : <Moon className="size-4 text-muted-foreground" />}
         <span className="sr-only">Toggle theme</span>
-      </button>
+      </Button>
 
       <NotificationBell />
 
       {/* User avatar */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="size-9 rounded-lg overflow-hidden ring-1 ring-border/60 hover:ring-accent-violet/40 transition">
+          <Button variant="ghost" className="size-9 rounded-lg overflow-hidden ring-1 ring-border/60 hover:ring-accent-violet/40 transition">
             <Avatar className="size-9">
               <AvatarImage src={userImage} alt={userName} />
               <AvatarFallback className="bg-gradient-to-br from-accent-violet/40 to-accent-cyan/20 text-xs font-medium">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>

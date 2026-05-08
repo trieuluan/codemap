@@ -16,6 +16,7 @@ import type {
 } from "@/features/projects/api";
 import { cn } from "@/lib/utils";
 import type { RepositoryTreeNode } from "../utils/file-tree-model";
+import { Button } from "@/components/ui/button";
 
 export function getDisplayExtension(file: RepositoryTreeNode) {
   if (file.type === "folder") {
@@ -273,7 +274,7 @@ export function ClickableCard({
   }
 
   return (
-    <button
+    <Button variant="ghost"
       type="button"
       onClick={onClick}
       className={cn(
@@ -282,7 +283,7 @@ export function ClickableCard({
       )}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

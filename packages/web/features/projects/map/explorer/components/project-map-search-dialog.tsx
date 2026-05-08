@@ -27,6 +27,7 @@ import type {
   ProjectMapSearchResponse,
 } from "@/features/projects/api";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface ProjectMapSearchDialogProps {
   open: boolean;
@@ -256,7 +257,7 @@ export function ProjectMapSearchDialog({
       />
       <div className="flex gap-1 border-b border-border/70 p-2">
         {FILTERS.map((item) => (
-          <button
+          <Button variant="ghost"
             key={item.key}
             type="button"
             onClick={() => setFilter(item.key)}
@@ -268,7 +269,7 @@ export function ProjectMapSearchDialog({
             )}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
       <CommandList className="max-h-[440px]">
