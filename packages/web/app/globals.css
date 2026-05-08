@@ -4,26 +4,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Base palette — light (shadcn defaults, kept for parity) */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Light glassmorphism palette */
+  --background: #f4f6fb;
+  --foreground: #0e1014;           /* ink-800 */
+  --card: #ffffff;
+  --card-foreground: #0e1014;
+  --popover: #ffffff;
+  --popover-foreground: #0e1014;
+  --primary: #0e1014;              /* dark button on light bg */
+  --primary-foreground: #f4f6fb;
+  --secondary: #eef0f6;
+  --secondary-foreground: #0e1014;
+  --muted: #eef0f6;
+  --muted-foreground: #5b6478;     /* ink-200 */
+  --accent: #eef0f6;
+  --accent-foreground: #0e1014;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: rgba(0, 0, 0, 0.07);
+  --input: rgba(0, 0, 0, 0.04);
+  --ring: rgba(0, 0, 0, 0.2);
   --success: oklch(0.72 0.16 145);
   --success-foreground: oklch(0.985 0 0);
 
@@ -33,14 +33,14 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: rgba(255, 255, 255, 0.7);
+  --sidebar-foreground: #0e1014;
+  --sidebar-primary: #0e1014;
+  --sidebar-primary-foreground: #f4f6fb;
+  --sidebar-accent: rgba(0, 0, 0, 0.05);
+  --sidebar-accent-foreground: #0e1014;
+  --sidebar-border: rgba(0, 0, 0, 0.07);
+  --sidebar-ring: rgba(0, 0, 0, 0.2);
 
   /* Radii */
   --radius: 0.625rem; /* base = 10px */
@@ -101,26 +101,25 @@
 
 .dark,
 [data-theme="dark"] {
-  /* This is the canonical CodeMap experience. */
-  --background: oklch(0.07 0 0); /* near-black app bg */
-  --foreground: oklch(0.95 0 0); /* near-white text */
-  --card: oklch(0.11 0 0); /* surface above background */
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.11 0 0);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.98 0 0); /* primary buttons are LIGHT on dark */
+  --background: #08090b;           /* ink-900 */
+  --foreground: #d6dae3;           /* ink-50 */
+  --card: #0e1014;                 /* ink-800 */
+  --card-foreground: #d6dae3;
+  --popover: #0e1014;
+  --popover-foreground: #d6dae3;
+  --primary: oklch(0.98 0 0);      /* light button on dark */
   --primary-foreground: oklch(0.07 0 0);
-  --secondary: oklch(0.18 0 0); /* secondary buttons / chips */
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.18 0 0);
-  --muted-foreground: oklch(0.55 0 0); /* fg2 — descriptions, metadata */
-  --accent: oklch(0.18 0 0);
-  --accent-foreground: oklch(0.95 0 0);
+  --secondary: #1a1d24;            /* ink-600 */
+  --secondary-foreground: #d6dae3;
+  --muted: #15171c;                /* ink-700 */
+  --muted-foreground: #9aa3b5;     /* ink-100 */
+  --accent: #15171c;
+  --accent-foreground: #d6dae3;
   --destructive: oklch(0.55 0.2 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.22 0 0); /* divider lines */
-  --input: oklch(0.22 0 0);
-  --ring: oklch(0.4 0 0); /* focus ring */
+  --border: rgba(255, 255, 255, 0.06);
+  --input: #15171c;                /* ink-700 */
+  --ring: rgba(255, 255, 255, 0.15);
   --success: oklch(0.7 0.15 145);
   --success-foreground: oklch(0.98 0 0);
 
@@ -130,14 +129,14 @@
   --chart-4: oklch(0.6 0.15 300);
   --chart-5: oklch(0.7 0.2 30);
 
-  --sidebar: oklch(0.09 0 0); /* slightly darker than card */
-  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar: #0b0c0f;              /* ink-850 */
+  --sidebar-foreground: #d6dae3;
   --sidebar-primary: oklch(0.98 0 0);
   --sidebar-primary-foreground: oklch(0.07 0 0);
-  --sidebar-accent: oklch(0.15 0 0); /* nav active state */
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.2 0 0);
-  --sidebar-ring: oklch(0.4 0 0);
+  --sidebar-accent: #1a1d24;       /* ink-600 active item */
+  --sidebar-accent-foreground: #d6dae3;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: rgba(255, 255, 255, 0.15);
 
   color-scheme: dark;
 }
@@ -286,8 +285,11 @@ pre {
 }
 
 /* =============================================================================
- * CodeMap Landing — custom theme tokens + component classes
- * Scoped to .landing-root so they don't bleed into the app shell.
+ * CodeMap design system — dark-first tokens + component classes
+ * All classes below are GLOBAL and usable anywhere in the project:
+ *   - @theme inline tokens: text-ink-50, bg-accent-cyan, etc.
+ *   - Component classes: .glass, .card, .chip, .btn-primary, etc.
+ * .landing-root is only for the landing page's always-dark gradient background.
  * ============================================================================= */
 
 @theme inline {
@@ -311,58 +313,106 @@ pre {
   --color-accent-rose: #ff7a8a;
 }
 
+/* ─── Page background gradient ───────────────────────────────────────────
+ * Light: subtle violet/cyan tint on near-white.
+ * Dark: vivid gradient on ink-900.
+ * .landing-root always dark regardless of user theme.
+ * ─────────────────────────────────────────────────────────────────────── */
+.dark-page-bg {
+  background:
+    radial-gradient(1200px 600px at 80% -20%, rgba(124, 135, 255, 0.05), transparent 60%),
+    radial-gradient(900px 500px at 10% 10%, rgba(93, 214, 224, 0.04), transparent 60%),
+    #f4f6fb;
+}
+.dark .dark-page-bg {
+  background:
+    radial-gradient(1200px 600px at 80% -20%, rgba(124, 135, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 10% 10%, rgba(93, 214, 224, 0.07), transparent 60%),
+    #08090b;
+}
+
+/* Landing page: always dark, not affected by user theme toggle */
 .landing-root {
   color-scheme: dark;
   background:
-    radial-gradient(
-      1200px 600px at 80% -20%,
-      rgba(124, 135, 255, 0.08),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 500px at 10% 10%,
-      rgba(93, 214, 224, 0.07),
-      transparent 60%
-    ),
+    radial-gradient(1200px 600px at 80% -20%, rgba(124, 135, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 10% 10%, rgba(93, 214, 224, 0.07), transparent 60%),
     #08090b;
-  color: #d6dae3;
-  -webkit-font-smoothing: antialiased;
+  @apply text-ink-50 antialiased;
 }
 
+/* ─── Gradient text ──────────────────────────────────────────────────── */
+.gradient-text {
+  background-image: linear-gradient(180deg, #1a1d24 0%, #5b6478 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.dark .gradient-text,
 .landing-root .gradient-text {
-  background: linear-gradient(180deg, #f4f5f8 0%, #aab1c0 100%);
+  background-image: linear-gradient(180deg, #f4f5f8 0%, #aab1c0 100%);
+}
+
+.accent-text {
+  background-image: linear-gradient(120deg, #5dd6e0 0%, #a78bfa 50%, #ff7a8a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-.landing-root .accent-text {
-  background: linear-gradient(120deg, #5dd6e0 0%, #a78bfa 50%, #ff7a8a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+
+/* ─── Grid background ────────────────────────────────────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
+  mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
 }
+.dark .grid-bg,
 .landing-root .grid-bg {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 40px 40px;
-  -webkit-mask-image: radial-gradient(
-    ellipse at center,
-    #000 0%,
-    transparent 70%
-  );
-  mask-image: radial-gradient(ellipse at center, #000 0%, transparent 70%);
 }
-.landing-root .glass {
-  background: rgba(15, 17, 22, 0.6);
+
+/* ─── Glass surface ──────────────────────────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
   @apply backdrop-blur-xl backdrop-saturate-150;
 }
+.dark .glass,
+.landing-root .glass {
+  background: rgba(15, 17, 22, 0.6);
+}
+
+/* ─── Ring glow ──────────────────────────────────────────────────────── */
+.ring-glow {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 0 40px -15px rgba(124, 135, 255, 0.12),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+}
+.dark .ring-glow,
 .landing-root .ring-glow {
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.06),
     0 0 60px -20px rgba(124, 135, 255, 0.4),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
 }
+
+/* ─── Buttons ────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: linear-gradient(180deg, #1a1d24 0%, #0e1014 100%);
+  color: #f4f6fb;
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.1) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 8px 30px -10px rgba(0, 0, 0, 0.2);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.dark .btn-primary,
 .landing-root .btn-primary {
   background: linear-gradient(180deg, #f5f6fa 0%, #d6dae3 100%);
   color: #08090b;
@@ -370,64 +420,109 @@ pre {
     0 1px 0 0 rgba(255, 255, 255, 0.5) inset,
     0 0 0 1px rgba(255, 255, 255, 0.15),
     0 8px 30px -10px rgba(255, 255, 255, 0.3);
-  transition:
-    transform 120ms ease,
-    filter 120ms ease;
 }
-.landing-root .btn-primary:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
+.dark .btn-primary:hover,
+.landing-root .btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); }
+
+.btn-ghost {
+  background: rgba(0, 0, 0, 0.03);
+  color: #0e1014;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  transition: background 120ms ease, transform 120ms ease;
 }
+.btn-ghost:hover { background: rgba(0, 0, 0, 0.06); transform: translateY(-1px); }
+.dark .btn-ghost,
 .landing-root .btn-ghost {
   background: rgba(255, 255, 255, 0.02);
   color: #d6dae3;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.08),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
-  transition:
-    background 120ms ease,
-    transform 120ms ease;
 }
-.landing-root .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-1px);
+.dark .btn-ghost:hover,
+.landing-root .btn-ghost:hover { background: rgba(255, 255, 255, 0.05); transform: translateY(-1px); }
+
+/* ─── Chip ───────────────────────────────────────────────────────────── */
+.chip {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[11px];
+  color: #5b6478;
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07);
 }
+.dark .chip,
 .landing-root .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-family: var(--font-geist-mono, "Geist Mono", ui-monospace);
-  font-size: 11px;
-  color: #aab1c0;
+  color: #9aa3b5;
   background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-.landing-root .chip .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #5dd6e0;
+.chip .dot {
+  @apply size-1.5 rounded-full bg-accent-cyan;
   box-shadow: 0 0 10px #5dd6e0;
 }
+
+/* ─── Glass card (.card custom class) ───────────────────────────────── */
+.card {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 2px 12px -4px rgba(0, 0, 0, 0.08);
+  @apply rounded-2xl backdrop-blur-xl;
+}
+.dark .card,
 .landing-root .card {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.025) 0%,
-    rgba(255, 255, 255, 0.01) 100%
-  );
+  background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
-.landing-root .hairline-b {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+/* ─── Hairlines ──────────────────────────────────────────────────────── */
+.hairline-b { border-bottom: 1px solid rgba(0, 0, 0, 0.07); }
+.dark .hairline-b,
+.landing-root .hairline-b { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+
+.hairline-r { border-right: 1px solid rgba(0, 0, 0, 0.07); }
+.dark .hairline-r,
+.landing-root .hairline-r { border-right: 1px solid rgba(255, 255, 255, 0.06); }
+
+/* ─── Terminal bg ────────────────────────────────────────────────────── */
+.terminal-bg {
+  background: #f0f2f8;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 8px 30px -10px rgba(0, 0, 0, 0.08);
 }
+.dark .terminal-bg,
 .landing-root .terminal-bg {
   background: #0a0c10;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
     0 30px 80px -20px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── shadcn Card data-slot override ────────────────────────────────── */
+/* Light: frosted white glass card */
+[data-slot="card"] {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.07);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95),
+    0 2px 8px -2px rgba(0, 0, 0, 0.06);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  @apply rounded-2xl;
+}
+/* Dark: dark glass card */
+.dark [data-slot="card"] {
+  background: linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* animations */
@@ -483,11 +578,15 @@ pre {
   animation: scrollX 35s linear infinite;
 }
 
-.landing-root .term-scroll::-webkit-scrollbar {
+.term-scroll::-webkit-scrollbar {
   height: 6px;
   width: 6px;
 }
+.term-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+}
+.dark .term-scroll::-webkit-scrollbar-thumb,
 .landing-root .term-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
 }

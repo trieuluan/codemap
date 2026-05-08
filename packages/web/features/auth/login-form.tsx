@@ -75,7 +75,7 @@ export function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={isLoading}
-          className="bg-secondary border-border"
+          className=""
         />
       </div>
       <div className="space-y-2">
@@ -96,7 +96,7 @@ export function LoginForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           disabled={isLoading}
-          className="bg-secondary border-border"
+          className=""
         />
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>
@@ -115,7 +115,7 @@ export function LoginForm() {
           <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
+          <span className="bg-transparent px-2 text-muted-foreground">
             Or continue with
           </span>
         </div>

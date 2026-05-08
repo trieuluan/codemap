@@ -45,7 +45,7 @@ export function StatsSummary({
       {stats.map((stat) => (
         <Card key={stat.id}>
           <CardContent className="flex items-center gap-4 p-5">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-secondary">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-secondary/60 ring-1 ring-border">
               <stat.icon className="size-5 text-muted-foreground" />
             </div>
             <div>

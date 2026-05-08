@@ -8,7 +8,7 @@ export function StatCard({
   value: string;
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-card p-4 space-y-2">
+    <div className="rounded-xl border border-border bg-secondary/40 p-4 space-y-2">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Icon className="size-3.5" />
         {label}

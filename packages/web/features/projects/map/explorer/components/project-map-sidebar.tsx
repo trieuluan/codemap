@@ -57,8 +57,8 @@ export function ProjectMapSidebar({
   onResetFilters,
 }: ProjectMapSidebarProps) {
   return (
-    <div className="flex min-h-0 flex-col border-r border-border/70 bg-sidebar">
-      <div className="space-y-3 border-b border-sidebar-border px-4 py-4">
+    <div className="flex min-h-0 flex-col glass hairline-r">
+      <div className="space-y-3 hairline-b px-4 py-4">
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">Filter tree</p>
           <p className="text-xs text-muted-foreground">

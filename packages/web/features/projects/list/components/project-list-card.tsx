@@ -44,7 +44,7 @@ export function ProjectListCard({
   const projectBase = `/w/${workspaceId}/projects`;
 
   return (
-    <Card className="border-border/80 bg-card">
+    <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -94,20 +94,20 @@ export function ProjectListCard({
       </CardHeader>
 
       <CardContent className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-md border border-border/70 bg-background/70 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-xl border border-border bg-secondary/40 p-3">
+          <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
             Repository
           </p>
           <p className="mt-1 text-sm">{getProjectRepositoryLabel(project)}</p>
         </div>
-        <div className="rounded-md border border-border/70 bg-background/70 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-xl border border-border bg-secondary/40 p-3">
+          <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
             Default branch
           </p>
           <p className="mt-1 text-sm">{project.defaultBranch || "Not set"}</p>
         </div>
-        <div className="rounded-md border border-border/70 bg-background/70 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-xl border border-border bg-secondary/40 p-3">
+          <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
             Last imported
           </p>
           <div className="mt-2">

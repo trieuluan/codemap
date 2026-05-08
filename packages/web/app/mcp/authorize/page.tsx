@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getApiBaseUrl, requestApi } from "@/lib/api/client";
 import { AuthorizeButton } from "./authorize-button";
 import { GithubConnectButton } from "./github-connect-button";
@@ -162,19 +161,17 @@ export default async function McpAuthorizePage({
 
   if (!sessionId) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-xl">
-          <CardHeader className="space-y-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="size-5 text-destructive" />
-              <CardTitle>Missing MCP session</CardTitle>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              This authorization link is incomplete. Restart the MCP login flow
-              from your AI tool.
-            </p>
-          </CardHeader>
-        </Card>
+      <main className="dark-page-bg flex min-h-screen items-center justify-center px-4">
+        <div className="card ring-glow w-full max-w-xl p-8 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-5 text-destructive" />
+            <h2 className="font-semibold">Missing MCP session</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This authorization link is incomplete. Restart the MCP login flow
+            from your AI tool.
+          </p>
+        </div>
       </main>
     );
   }
@@ -188,19 +185,17 @@ export default async function McpAuthorizePage({
 
   if (!authStatus) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-xl">
-          <CardHeader className="space-y-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="size-5 text-destructive" />
-              <CardTitle>Invalid MCP session</CardTitle>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              This authorization session could not be loaded. Start a new MCP
-              login flow from your AI tool.
-            </p>
-          </CardHeader>
-        </Card>
+      <main className="dark-page-bg flex min-h-screen items-center justify-center px-4">
+        <div className="card ring-glow w-full max-w-xl p-8 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-5 text-destructive" />
+            <h2 className="font-semibold">Invalid MCP session</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This authorization session could not be loaded. Start a new MCP
+            login flow from your AI tool.
+          </p>
+        </div>
       </main>
     );
   }
@@ -231,15 +226,15 @@ export default async function McpAuthorizePage({
           : "Authorize CodeMap MCP";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="space-y-3">
+    <main className="dark-page-bg flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="card ring-glow w-full max-w-2xl p-8 space-y-6">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <StatusIcon status={authStatus.status} />
-              <CardTitle>{title}</CardTitle>
+              <h2 className="font-semibold text-lg">{title}</h2>
             </div>
-            <Badge variant={isComplete ? "default" : "secondary"}>
+            <Badge variant={isComplete ? "emerald" : "secondary"}>
               {authStatus.status}
             </Badge>
           </div>
@@ -254,10 +249,10 @@ export default async function McpAuthorizePage({
                     : "Authorization complete. Return to your AI tool so it can claim the MCP API key."
                   : "Approve this device so CodeMap MCP can access your projects using a dedicated API key."}
           </p>
-        </CardHeader>
+        </div>
 
-        <CardContent className="space-y-5">
-          <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4 text-sm sm:grid-cols-2">
+        <div className="space-y-5">
+          <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm sm:grid-cols-2">
             <div className="flex items-start gap-2">
               <ShieldCheck className="mt-0.5 size-4 text-muted-foreground" />
               <div>
@@ -302,10 +297,10 @@ export default async function McpAuthorizePage({
             <AuthorizeButton sessionId={sessionId} />
           ) : isComplete ? (
             <div className="space-y-4">
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
                 Authorization complete. Return to your AI tool.
               </div>
-              <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
+              <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm">
                 <div className="font-medium">Project setup continues in your AI tool</div>
                 <p className="mt-1 text-muted-foreground">
                   CodeMap MCP can now check this workspace, link or create a
@@ -326,8 +321,8 @@ export default async function McpAuthorizePage({
               <a href="/auth">Back to sign in</a>
             </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </main>
   );
 }

@@ -20,7 +20,7 @@ export default async function WorkspaceLayout({
   if (!valid) notFound();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen dark-page-bg">
       <DashboardSidebar workspaceId={workspaceId} />
       <div className="lg:pl-64">
         <DashboardHeader />

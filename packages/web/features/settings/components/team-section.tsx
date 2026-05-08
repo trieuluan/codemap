@@ -101,7 +101,7 @@ export function TeamSection({ workspaceId }: { workspaceId: string }) {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-5">
-            <div className="grid size-10 place-items-center rounded-lg bg-secondary">
+            <div className="grid size-10 place-items-center rounded-lg bg-secondary/60 ring-1 ring-border">
               <Users className="size-5 text-muted-foreground" />
             </div>
             <div>
@@ -114,7 +114,7 @@ export function TeamSection({ workspaceId }: { workspaceId: string }) {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-5">
-            <div className="grid size-10 place-items-center rounded-lg bg-secondary">
+            <div className="grid size-10 place-items-center rounded-lg bg-secondary/60 ring-1 ring-border">
               <ShieldCheck className="size-5 text-muted-foreground" />
             </div>
             <div>
@@ -127,7 +127,7 @@ export function TeamSection({ workspaceId }: { workspaceId: string }) {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-5">
-            <div className="grid size-10 place-items-center rounded-lg bg-secondary">
+            <div className="grid size-10 place-items-center rounded-lg bg-secondary/60 ring-1 ring-border">
               <Lock className="size-5 text-muted-foreground" />
             </div>
             <div>

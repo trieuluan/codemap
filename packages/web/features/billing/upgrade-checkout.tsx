@@ -173,14 +173,14 @@ function PlanCard({
   return (
     <div
       className={cn(
-        "relative flex min-h-[360px] flex-col rounded-lg border p-5",
-        config.highlight ? "border-primary/50 bg-primary/5" : "border-border bg-card",
-        isCurrent && "ring-2 ring-primary",
+        "relative flex min-h-[360px] flex-col rounded-2xl border p-5 transition-shadow",
+        config.highlight ? "border-accent-violet/40 bg-accent-violet/5" : "border-border bg-card",
+        isCurrent && "ring-2 ring-accent-cyan/50",
       )}
     >
       {config.highlight ? (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge className="bg-primary text-primary-foreground">Most popular</Badge>
+          <Badge variant="violet">Most popular</Badge>
         </div>
       ) : null}
 
@@ -188,9 +188,7 @@ function PlanCard({
         <div className="flex items-center justify-between gap-2">
           <p className="font-semibold">{config.label}</p>
           {isCurrent ? (
-            <Badge variant="outline" className="border-primary text-primary">
-              Current
-            </Badge>
+            <Badge variant="cyan">Current</Badge>
           ) : null}
         </div>
         <p className="text-3xl font-semibold tracking-tight">{config.price}</p>
@@ -206,7 +204,7 @@ function PlanCard({
             <li key={feature} className="flex items-start gap-2 text-sm">
               {isLimitation
                 ? <Minus className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/50" />
-                : <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />}
+                : <Check className="mt-0.5 size-3.5 shrink-0 text-accent-emerald" />}
               <span className={isLimitation ? "text-muted-foreground" : ""}>{feature}</span>
             </li>
           );

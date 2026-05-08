@@ -25,23 +25,28 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
         <div className="card ring-glow p-8 space-y-6">
           <div className="flex flex-col items-center space-y-2 text-center">
             <Link href="/" className="mb-2">
-              <Logo className="text-white" />
+              <Logo />
             </Link>
-            <h1 className="text-xl font-semibold text-white">Welcome back</h1>
-            <p className="text-sm text-ink-100">Sign in to your account to continue</p>
+            <h1 className="text-xl font-semibold">Welcome back</h1>
+            <p className="text-sm text-muted-foreground">
+              Sign in to your account to continue
+            </p>
           </div>
 
           <Suspense
             fallback={
-              <div className="h-9 rounded-md border border-white/10 bg-white/5" />
+              <div className="h-9 rounded-md border border-border bg-secondary/40" />
             }
           >
             <LoginForm />
           </Suspense>
 
-          <p className="text-center text-sm text-ink-200">
+          <p className="text-center text-sm text-muted-foreground">
             {"Don't have an account? "}
-            <Link href={signupHref} className="text-ink-50 underline-offset-4 hover:text-white hover:underline">
+            <Link
+              href={signupHref}
+              className="text-foreground underline-offset-4 hover:underline"
+            >
               Sign up
             </Link>
           </p>

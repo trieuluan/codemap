@@ -100,8 +100,8 @@ export function OnboardingCards({
               <div className="flex items-start justify-between">
                 <div
                   className={cn(
-                    "flex size-10 items-center justify-center rounded-lg bg-secondary",
-                    step.completed && "bg-success/20",
+                    "flex size-10 items-center justify-center rounded-lg bg-secondary/60 ring-1 ring-border",
+                    step.completed && "bg-accent-emerald/15 ring-accent-emerald/30",
                   )}
                 >
                   {step.completed ? (

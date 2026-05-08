@@ -17,19 +17,22 @@ export default function ForgotPasswordPage() {
         <div className="card ring-glow p-8 space-y-6">
           <div className="flex flex-col items-center space-y-2 text-center">
             <Link href="/" className="mb-2">
-              <Logo className="text-white" />
+              <Logo />
             </Link>
-            <h1 className="text-xl font-semibold text-white">Reset password</h1>
-            <p className="text-sm text-ink-100">
+            <h1 className="text-xl font-semibold">Reset password</h1>
+            <p className="text-sm text-muted-foreground">
               Enter your email and we&apos;ll send you a reset link
             </p>
           </div>
 
           <ForgotPasswordForm />
 
-          <p className="text-center text-sm text-ink-200">
+          <p className="text-center text-sm text-muted-foreground">
             Remember your password?{" "}
-            <Link href="/auth" className="text-ink-50 underline-offset-4 hover:text-white hover:underline">
+            <Link
+              href="/auth"
+              className="text-foreground underline-offset-4 hover:underline"
+            >
               Sign in
             </Link>
           </p>

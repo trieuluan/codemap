@@ -27,23 +27,28 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         <div className="card ring-glow p-8 space-y-6">
           <div className="flex flex-col items-center space-y-2 text-center">
             <Link href="/" className="mb-2">
-              <Logo className="text-white" />
+              <Logo />
             </Link>
-            <h1 className="text-xl font-semibold text-white">Get started</h1>
-            <p className="text-sm text-ink-100">Create your account and start mapping your codebase</p>
+            <h1 className="text-xl font-semibold">Get started</h1>
+            <p className="text-sm text-muted-foreground">
+              Create your account and start mapping your codebase
+            </p>
           </div>
 
           <Suspense
             fallback={
-              <div className="h-9 rounded-md border border-white/10 bg-white/5" />
+              <div className="h-9 rounded-md border border-border bg-secondary/40" />
             }
           >
             <SignupForm />
           </Suspense>
 
-          <p className="text-center text-sm text-ink-200">
+          <p className="text-center text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href={signinHref} className="text-ink-50 underline-offset-4 hover:text-white hover:underline">
+            <Link
+              href={signinHref}
+              className="text-foreground underline-offset-4 hover:underline"
+            >
               Sign in
             </Link>
           </p>

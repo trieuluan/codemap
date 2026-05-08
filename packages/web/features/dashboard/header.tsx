@@ -116,7 +116,7 @@ function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         placeholder="Search projects…"
-        className="w-64 bg-secondary border-border pl-8 pr-12"
+        className="w-64 bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] pl-8 pr-12 placeholder:text-muted-foreground"
       />
       <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] text-muted-foreground/60 select-none">
         ⌘/
@@ -340,7 +340,7 @@ export function DashboardHeader({ title = "Overview" }: DashboardHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-background px-4 lg:px-6">
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 glass hairline-b px-4 lg:px-6">
       <MobileSidebar />
       <WorkspaceSwitcher />
 
