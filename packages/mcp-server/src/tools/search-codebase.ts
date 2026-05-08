@@ -206,8 +206,10 @@ export function registerSearchCodebaseTool(
     {
       title: "Search Codebase",
       description:
-        "Use this for narrow lookup when you know a keyword, filename, symbol, or export. " +
-        "Search files, symbols, and exports by keyword to locate where things are defined or exported. " +
+        "Search for symbols, functions, classes, exports, or keywords in the indexed codebase. " +
+        "Use this INSTEAD OF grep/rg/awk for any source file lookup — faster and more accurate. " +
+        "Returns ranked results with file paths and line numbers. " +
+        "Use for narrow lookup when you know a keyword, filename, symbol, or export name. " +
         "For broad implementation tasks use explore_task first; for related-file questions use find_related_files. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {

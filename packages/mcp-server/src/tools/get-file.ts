@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import { success, withToolError } from "../lib/tool-response.js";
+import { success, withToolError, prependContextWarnings } from "../lib/tool-response.js";
+import { sessionTracker } from "../lib/session-tracker.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { FileContent, BlastRadius } from "../lib/api-types.js";
 import {
@@ -310,9 +311,10 @@ export function registerGetFileTool(
       title: "Get File",
       description:
         "Read a specific file after explore_task, find_related_files, search_codebase, or get_files has identified it. " +
-        "Reads source code and/or outline (imports, exports, symbols). " +
-        "Default include=[content,outline]. Use include=[outline] to skip content and save tokens. " +
-        "Use include=[symbols] + symbol_names to read only specific function bodies. " +
+        "ALWAYS prefer include=['symbols'] with symbol_names over full file reads — reduces token usage by 80-90%. " +
+        "Use include=['outline'] to survey imports/exports/symbols without reading code. " +
+        "Use include=['content'] ONLY for non-indexed files (config, markdown, templates) or when symbol-level read is insufficient. " +
+        "Do NOT call get_file(include=['content']) on indexed source files without first checking outline or symbols. " +
         "Add blast_radius only when assessing change risk — adds 1-2s latency, skip for routine reads. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
@@ -379,6 +381,15 @@ export function registerGetFileTool(
         const sections = include ?? ["content", "outline"];
         const wantSymbols = sections.includes("symbols") && (symbol_names?.length ?? 0) > 0;
         const wantContent = sections.includes("content") || wantSymbols;
+
+        // Soft enforcement: warn if reading full content without prior CodeMap orientation
+        const contextWarnings: string[] = [];
+        if (wantContent && !wantSymbols && sessionTracker.getContextScore() < 30) {
+          contextWarnings.push(
+            `Reading full file content (contextScore=${sessionTracker.getContextScore()}/100). ` +
+            "Consider calling explore_task or get_agent_workflow first to orient with the codebase.",
+          );
+        }
         const wantParse =
           sections.includes("outline") || sections.includes("blast_radius") || wantSymbols;
         const wantBlastRadius = sections.includes("blast_radius");
@@ -452,7 +463,7 @@ export function registerGetFileTool(
             output.push("");
           }
 
-          return success(output.join("\n").trimEnd(), {
+          return success(prependContextWarnings(output.join("\n").trimEnd(), contextWarnings), {
             projectId,
             source: "local",
             localIndex,
@@ -612,7 +623,7 @@ export function registerGetFileTool(
           output.push("");
         }
 
-        return success(output.join("\n").trimEnd(), {
+        return success(prependContextWarnings(output.join("\n").trimEnd(), contextWarnings), {
           projectId: resolvedProjectId,
           source: "remote",
           path: filePath,

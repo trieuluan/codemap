@@ -88,9 +88,9 @@ export function registerSuggestEditLocationsTool(
     {
       title: "Suggest Edit Locations",
       description:
-        "Suggests files and symbols to read/edit for a natural-language task. " +
-        "Use for broad tasks when you don't know which files are relevant. " +
-        "For known keywords/filenames, use search_codebase instead — it's faster. " +
+        "DEPRECATED: Prefer explore_task instead — it returns richer context " +
+        "(entrypoints, risks, recommended reads, suggested next tools) for the same query. " +
+        "suggest_edit_locations still works but provides less context than explore_task. " +
         "Each suggestion has a readPlan — follow it when calling get_file instead of defaulting to include=[content]. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {

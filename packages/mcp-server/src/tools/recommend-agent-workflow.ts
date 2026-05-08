@@ -6,6 +6,7 @@ import {
   recommendAgentWorkflow,
 } from "../lib/agent-workflow.js";
 import { success, withToolError } from "../lib/tool-response.js";
+import { sessionTracker } from "../lib/session-tracker.js";
 
 export function registerRecommendAgentWorkflowTool(server: McpServer) {
   server.registerTool(
@@ -13,9 +14,11 @@ export function registerRecommendAgentWorkflowTool(server: McpServer) {
     {
       title: "Recommend Agent Workflow",
       description:
-        "Recommend the required CodeMap Agent Pack skills, hard gates, first tools, artifact templates, " +
-        "and verification checklist for a task. Call this before broad implementation, debugging, review, " +
-        "refactor, test, or research work.",
+        "CALL THIS BEFORE starting any implementation, debugging, review, refactor, test, or research task. " +
+        "Returns the required skill sequence, hard gates, first tool to call, artifact templates, " +
+        "and verification checklist tailored to the specific task type. " +
+        "Prevents common mistakes like editing without context, missing verification steps, or skipping design gates. " +
+        "Use explore_task for file/symbol lookup; use this for task-level workflow planning.",
       inputSchema: {
         task: z
           .string()
@@ -34,6 +37,8 @@ export function registerRecommendAgentWorkflowTool(server: McpServer) {
       },
     },
     withToolError(async ({ task, taskType, risk }) => {
+      sessionTracker.markCalled("recommend_agent_workflow");
+      sessionTracker.incrementTask();
       const recommendation = recommendAgentWorkflow({ task, taskType, risk });
       return success(buildWorkflowRecommendationMarkdown(recommendation), recommendation);
     }),

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
 import path from "node:path";
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+const require = createRequire(import.meta.url);
+const { version: SERVER_VERSION } = require("../package.json") as { version: string };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { clearGlobalAuthConfig, loadConfig } from "./config.js";
@@ -79,15 +83,18 @@ import {
 } from "./lib/local-index.js";
 import { tryGetCurrentWorkspaceInfo } from "./lib/workspace-git.js";
 import { buildOnboardingGuide, isOnboardingTarget } from "./lib/onboarding.js";
+import { buildServerInstructions } from "./lib/server-instructions.js";
+import { buildSessionContext } from "./lib/session-context.js";
+import { autoInjectRules } from "./lib/auto-inject.js";
 
 async function runMcpServer() {
   await ensureClaudeHooks(process.cwd());
 
   const config = await loadConfig();
-  const server = new McpServer({
-    name: "codemap-mcp-server",
-    version: "1.0.0",
-  });
+  const server = new McpServer(
+    { name: "codemap-mcp-server", version: SERVER_VERSION },
+    { instructions: buildServerInstructions() },
+  );
 
   const { toolMode } = config;
 
@@ -157,6 +164,13 @@ async function runMcpServer() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Auto-inject after connect — clientInfo is available now from MCP initialize handshake
+  await autoInjectRules(server, process.cwd());
+
+  // Push session context to stderr — Claude Code hooks and other agents read this
+  const sessionCtx = await buildSessionContext(process.cwd()).catch(() => null);
+  if (sessionCtx) process.stderr.write(sessionCtx + "\n");
 }
 
 async function runInitAgentPackCommand(args: string[]) {

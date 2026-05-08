@@ -98,6 +98,16 @@ export function errorContent(error: unknown): ToolResult {
 }
 
 /**
+ * Prepends context score warnings to a summary when the agent has skipped
+ * mandatory orientation steps. Non-blocking — data is still returned.
+ */
+export function prependContextWarnings(summary: string, warnings: string[]): string {
+  if (warnings.length === 0) return summary;
+  const block = warnings.map((w) => `⚠ ${w}`).join("\n");
+  return `${block}\n\n${summary}`;
+}
+
+/**
  * Wraps a tool handler so any thrown error is caught and returned as
  * an MCP error response instead of crashing the server.
  */

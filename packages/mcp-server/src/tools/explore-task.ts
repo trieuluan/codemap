@@ -8,6 +8,7 @@ import {
 } from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import { sessionTracker } from "../lib/session-tracker.js";
 import type {
   CodebaseSearchResponse,
   EditLocationsResponse,
@@ -293,12 +294,12 @@ export function registerExploreTaskTool(
     {
       title: "Explore Task",
       description:
-        "Use this first for broad coding tasks such as fixing bugs, implementing features, or investigating issues. " +
-        "Full context pack for any coding task. Returns: likelyFiles (what to edit), " +
-        "entrypoints (flow entry points), symbols (relevant functions/classes), " +
-        "risks (high blast-radius or dangerous files), recommendedReads (ordered reading list), " +
-        "and suggestedNextTools (exact tool calls to make next). " +
-        "Replaces calling search_codebase + suggest_edit_locations separately. " +
+        "REQUIRED FIRST STEP for any broad coding task — fixing bugs, implementing features, investigating issues, debugging, refactoring. " +
+        "Returns a full context pack: likelyFiles (what to edit), entrypoints (flow entry points), " +
+        "symbols (relevant functions/classes), risks (high blast-radius or dangerous files), " +
+        "recommendedReads (ordered reading list), and suggestedNextTools (exact tool calls to make next). " +
+        "Call this BEFORE reading any file or running any command. " +
+        "Replaces grep + manual file search. Replaces search_codebase + suggest_edit_locations combined. " +
         "If the user asks only which files are related or which files to read, use find_related_files instead.",
       inputSchema: {
         task: z
@@ -314,6 +315,7 @@ export function registerExploreTaskTool(
       },
     },
     withToolError(async ({ task, project_id }) => {
+      sessionTracker.markCalled("explore_task");
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
