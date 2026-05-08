@@ -60,6 +60,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
         };
 
         if (agentMode) {
+          console.log("agent run");
           const result = await runAgentLoop({
             provider,
             model: profile.model,
@@ -67,7 +68,6 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
             userMessage,
             toolClient,
           });
-          console.log(result.text);
           if (result.unsupportedToolCalling) {
             console.log(
               "Agent tools were enabled, but this model/provider did not return native tool calls. Chat and @file context still work.",
@@ -108,7 +108,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
     if (command === "/agent") {
       if (rest === "on") {
         agentMode = true;
-        console.log("Agent mode enabled. Read tools may run automatically; patches require confirmation.");
+        console.log(
+          "Agent mode enabled. Read tools may run automatically; patches require confirmation.",
+        );
         return "continue";
       }
       if (rest === "off") {
@@ -116,7 +118,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
         console.log("Agent mode disabled.");
         return "continue";
       }
-      console.log(`Agent mode is ${agentMode ? "on" : "off"}. Usage: /agent on|off`);
+      console.log(
+        `Agent mode is ${agentMode ? "on" : "off"}. Usage: /agent on|off`,
+      );
       return "continue";
     }
 
@@ -124,7 +128,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       const tools = await toolClient.listAllowedTools();
       console.log("Agent tools:");
       for (const tool of tools) {
-        console.log(`- ${tool.name}${tool.description ? ` — ${tool.description}` : ""}`);
+        console.log(
+          `- ${tool.name}${tool.description ? ` — ${tool.description}` : ""}`,
+        );
       }
       return "continue";
     }

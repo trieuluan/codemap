@@ -164,7 +164,7 @@ function resolveServerCommand(runtime: {
     return {
       command: process.execPath,
       args: [
-        require.resolve("tsx/dist/cli.mjs"),
+        require.resolve("tsx/cli"),
         path.join(packageRoot, "src", "index.ts"),
       ],
     };
@@ -178,7 +178,7 @@ function resolveServerCommand(runtime: {
   return {
     command: process.execPath,
     args: [
-      require.resolve("tsx/dist/cli.mjs"),
+      require.resolve("tsx/cli"),
       path.join(packageRoot, "src", "index.ts"),
     ],
   };

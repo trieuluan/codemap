@@ -214,10 +214,21 @@ function parseStreamLine(
   if (!trimmed || trimmed.startsWith(":")) return undefined;
   if (!trimmed.startsWith("data:")) return undefined;
 
-  const data = trimmed.slice("data:".length).trim();
+  let data = trimmed.slice("data:".length).trim();
   if (data === "[DONE]") return "done";
 
-  const body = JSON.parse(data) as ChatCompletionStreamResponse;
+  // Handle double 'data:' prefix from some SSE implementations
+  if (data.startsWith("data:")) {
+    data = data.slice("data:".length).trim();
+  }
+
+  let body: ChatCompletionStreamResponse;
+  try {
+    body = JSON.parse(data) as ChatCompletionStreamResponse;
+  } catch {
+    // Skip malformed SSE lines
+    return undefined;
+  }
   const text =
     body.choices?.[0]?.delta?.content ?? body.choices?.[0]?.text ?? "";
   if (!text) return undefined;
