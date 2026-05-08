@@ -16,7 +16,7 @@ export default function ProjectMapGraphLoading() {
       </div>
 
       <div className="flex gap-4" style={{ height: "calc(100vh - 280px)" }}>
-        <div className="w-56 shrink-0 space-y-4 rounded-lg border border-border/70 bg-card p-4">
+        <div className="w-56 shrink-0 space-y-4 rounded-lg border border-border/70 glass-card p-4">
           <Skeleton className="h-4 w-20" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-4 w-20" />

@@ -76,7 +76,7 @@ export function ProjectMapGraphSidebar({
 }: ProjectMapGraphSidebarProps) {
   const projectBase = `/w/${workspaceId}/projects`;
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border border-border/70 bg-card p-4">
+    <aside className="flex w-72 shrink-0 flex-col gap-3 rounded-lg border border-border/70 glass-card p-4">
       {mode === "overview" ? (
         <>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

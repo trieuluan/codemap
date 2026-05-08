@@ -102,7 +102,7 @@ export const FileNode = memo(function FileNode({
               ? "border-primary bg-primary/10"
               : isInCycle
                 ? "border-destructive/50 bg-destructive/10"
-                : "border-border/50 bg-card",
+                : "border-border/50 glass-card",
           )}
           style={{ width: 160, height: 28 }}
         >
@@ -153,7 +153,7 @@ export const FileNode = memo(function FileNode({
     <>
       <div
         className={cn(
-          "relative flex overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm",
+          "relative flex overflow-hidden rounded-lg border glass-card text-card-foreground shadow-sm",
           "w-[240px] cursor-pointer transition-all",
           selected
             ? "border-primary shadow-md ring-1 ring-primary"
@@ -256,7 +256,7 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-lg border bg-card px-3 py-2 shadow-sm",
+          "flex items-center gap-2 rounded-lg border glass-card px-3 py-2 shadow-sm",
           selected ? "border-primary ring-1 ring-primary" : "border-border/70",
         )}
         style={{ width: 180, height: 42 }}
@@ -287,7 +287,7 @@ export const FolderOverviewNode = memo(function FolderOverviewNode({
   return (
     <div
       className={cn(
-        "w-[260px] cursor-pointer rounded-xl border bg-card p-4 text-card-foreground shadow-sm transition-all",
+        "w-[260px] cursor-pointer rounded-xl border glass-card p-4 text-card-foreground shadow-sm transition-all",
         selected
           ? "border-primary shadow-md ring-1 ring-primary"
           : "border-border/70 hover:border-border hover:shadow-md",

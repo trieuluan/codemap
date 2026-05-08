@@ -12,7 +12,7 @@ import {
 export default function ProjectDetailError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   return (
-    <Empty className="border border-dashed border-border bg-card">
+    <Empty className="border border-dashed border-border glass-card">
       <EmptyHeader>
         <EmptyMedia variant="icon"><AlertTriangle className="size-5" /></EmptyMedia>
         <EmptyTitle>Unable to load this project</EmptyTitle>

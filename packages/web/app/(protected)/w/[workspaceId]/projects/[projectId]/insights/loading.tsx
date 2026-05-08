@@ -17,7 +17,7 @@ export default function ProjectMapInsightsLoading() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="rounded-lg border border-border/70 bg-card p-4 space-y-2">
+          <div key={i} className="rounded-lg border border-border/70 glass-card p-4 space-y-2">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-8 w-16" />
           </div>
@@ -26,7 +26,7 @@ export default function ProjectMapInsightsLoading() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border border-border/70 bg-card p-4 space-y-4">
+          <div key={i} className="rounded-lg border border-border/70 glass-card p-4 space-y-4">
             <div className="flex items-start gap-3">
               <Skeleton className="size-10 rounded-lg" />
               <div className="space-y-2 flex-1">

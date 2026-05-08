@@ -13,7 +13,7 @@ export default function GlobalError({
     <html lang="en">
       <body>
         <main className="flex min-h-screen items-center justify-center bg-background px-6 py-16 text-foreground">
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 shadow-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-border glass-card p-8 shadow-sm">
             <div className="space-y-3">
               <p className="text-sm font-medium text-destructive">
                 Application error

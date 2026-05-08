@@ -90,7 +90,7 @@ export function SymbolDiffList({ symbols }: { symbols: SymbolDiffEntry[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
+    <div className="overflow-hidden rounded-lg border glass-card">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] border-b px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <span>File</span>
         <span className="w-20 text-right text-emerald-500">Added</span>
@@ -233,7 +233,7 @@ export function EdgeDiffList({ edges }: { edges: EdgeDiffEntry[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
+    <div className="overflow-hidden rounded-lg border glass-card">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] border-b px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <span>Source file</span>
         <span className="w-20 text-right text-emerald-500">Added</span>

@@ -80,7 +80,7 @@ function InsightCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-card p-4">
+    <section className="rounded-lg border border-border/70 glass-card p-4">
       <div className="mb-4 flex items-start gap-3">
         <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
           {icon}

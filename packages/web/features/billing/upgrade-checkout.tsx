@@ -174,7 +174,7 @@ function PlanCard({
     <div
       className={cn(
         "relative flex min-h-[360px] flex-col rounded-2xl border p-5 transition-shadow",
-        config.highlight ? "border-accent-violet/40 bg-accent-violet/5" : "border-border bg-card",
+        config.highlight ? "border-accent-violet/40 bg-accent-violet/5" : "border-border glass-card",
         isCurrent && "ring-2 ring-accent-cyan/50",
       )}
     >

@@ -129,7 +129,7 @@ export function SymbolGraphCanvas({
 }) {
   if (!graph?.target) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border border-border/70 bg-card p-6 text-center">
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border border-border/70 glass-card p-6 text-center">
         <p className="text-sm font-medium text-foreground">
           Symbol graph unavailable
         </p>
@@ -143,7 +143,7 @@ export function SymbolGraphCanvas({
   const flow = buildSymbolFlow(graph);
 
   return (
-    <div className="relative flex-1 overflow-hidden rounded-lg border border-border/70 bg-card">
+    <div className="relative flex-1 overflow-hidden rounded-lg border border-border/70 glass-card">
       <ReactFlow
         nodes={flow.nodes}
         edges={flow.edges}

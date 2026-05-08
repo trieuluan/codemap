@@ -190,7 +190,7 @@ export function ProjectList({
       </div>
 
       {!hasProjects ? (
-        <Empty className="border border-dashed border-border bg-card">
+        <Empty className="border border-dashed border-border glass-card">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <FolderKanban className="size-5" />
@@ -214,7 +214,7 @@ export function ProjectList({
           </EmptyContent>
         </Empty>
       ) : filteredProjects.length === 0 ? (
-        <Empty className="border border-dashed border-border bg-card">
+        <Empty className="border border-dashed border-border glass-card">
           <EmptyHeader>
             <EmptyTitle>No projects match your filters</EmptyTitle>
             <EmptyDescription>

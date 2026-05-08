@@ -76,7 +76,7 @@ function SymbolGraphSidebar({
   const outgoingNodes = graph?.nodes.filter((n) => n.role === "outgoing") ?? [];
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-border/70 bg-card p-4">
+    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-lg border border-border/70 glass-card p-4">
       {/* Navigation */}
       <Button
         variant="outline"
@@ -320,7 +320,7 @@ export function ProjectMapGraphView({
 
         {showSymbolGraph && activeFile && activeSymbol ? (
           isSymbolGraphLoading ? (
-            <div className="flex flex-1 items-center justify-center rounded-lg border border-border/70 bg-card">
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-border/70 glass-card">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
                 Loading symbol graph...

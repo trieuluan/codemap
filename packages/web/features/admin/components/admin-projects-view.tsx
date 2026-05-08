@@ -269,7 +269,7 @@ export function AdminProjectsView({
       </div>
 
       {projects.length === 0 ? (
-        <Empty className="border border-dashed border-border bg-card">
+        <Empty className="border border-dashed border-border glass-card">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Search className="size-5" />
@@ -295,7 +295,7 @@ export function AdminProjectsView({
           </EmptyContent>
         </Empty>
       ) : filteredProjects.length === 0 ? (
-        <Empty className="border border-dashed border-border bg-card">
+        <Empty className="border border-dashed border-border glass-card">
           <EmptyHeader>
             <EmptyTitle>No projects match your filters</EmptyTitle>
             <EmptyDescription>

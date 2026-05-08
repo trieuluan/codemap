@@ -94,7 +94,7 @@ export const ClusterNode = memo(function ClusterNode({
     <div
       onClick={handleClick}
       className={cn(
-        "relative flex w-[220px] cursor-pointer flex-col gap-1.5 rounded-lg border border-dashed bg-card/80 px-3 py-2.5 text-card-foreground shadow-sm transition-all",
+        "glass-card relative flex w-[220px] cursor-pointer flex-col gap-1.5 border-dashed px-3 py-2.5 text-card-foreground shadow-sm transition-all",
         selected
           ? "border-primary ring-1 ring-primary"
           : "border-muted-foreground/40 hover:border-muted-foreground/70 hover:shadow-md",

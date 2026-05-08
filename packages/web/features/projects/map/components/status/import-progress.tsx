@@ -150,7 +150,7 @@ export function ImportProgress({
   ] as const;
 
   return (
-    <Card className="border-border/70 bg-card p-6">
+    <Card className="border-border/70 glass-card p-6">
       <div className="space-y-4">
         <div>
           <h3 className="text-base font-semibold text-foreground">

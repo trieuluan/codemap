@@ -490,7 +490,7 @@ export function ProjectOverview({
       ) : null}
 
       {isReadyToExplore ? (
-        <div className="rounded-lg border border-border/70 bg-card p-5">
+        <div className="rounded-lg border border-border/70 glass-card p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <p className="font-medium">Index ready</p>
@@ -551,7 +551,7 @@ export function ProjectOverview({
       {/* Body */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Import list */}
-        <div className="rounded-lg border border-border/70 bg-card">
+        <div className="rounded-lg border border-border/70 glass-card">
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-3">
             <p className="text-sm font-medium">Imports</p>
             {allImports.length > 0 ? (
@@ -593,7 +593,7 @@ export function ProjectOverview({
         <div className="space-y-4">
           {/* Latest import summary */}
           {latestImport ? (
-            <div className="rounded-lg border border-border/70 bg-card p-5 space-y-3">
+            <div className="rounded-lg border border-border/70 glass-card p-5 space-y-3">
               <p className="text-sm font-medium">Latest import</p>
               <div className="flex flex-wrap items-center gap-2">
                 <ProjectImportStatusBadge status={latestImport.status} />
@@ -644,7 +644,7 @@ export function ProjectOverview({
           ) : null}
 
           {/* Repository */}
-          <div className="rounded-lg border border-border/70 bg-card p-5 space-y-4">
+          <div className="rounded-lg border border-border/70 glass-card p-5 space-y-4">
             <p className="text-sm font-medium">Repository</p>
             <dl className="space-y-2.5 text-sm">
               <div>

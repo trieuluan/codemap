@@ -72,7 +72,6 @@ import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
 import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
 import { registerDoctorAgentPackTool } from "./tools/doctor-agent-pack.js";
 import {
-  ensureClaudeHooks,
   installAgentPack,
   parseAgentPackInstallArgs,
 } from "./lib/agent-pack-installer.js";
@@ -94,8 +93,6 @@ import { buildSessionContext } from "./lib/session-context.js";
 import { autoInjectRules } from "./lib/auto-inject.js";
 
 async function runMcpServer() {
-  await ensureClaudeHooks(process.cwd());
-
   const config = await loadConfig();
   const server = new McpServer(
     { name: "codemap-mcp-server", version: SERVER_VERSION },

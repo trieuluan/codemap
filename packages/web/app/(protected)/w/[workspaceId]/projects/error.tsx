@@ -18,7 +18,7 @@ export default function ProjectsError({
   reset: () => void;
 }) {
   return (
-    <Empty className="border border-dashed border-border bg-card">
+    <Empty className="border border-dashed border-border glass-card">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <AlertTriangle className="size-5" />

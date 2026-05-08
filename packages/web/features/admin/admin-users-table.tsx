@@ -204,7 +204,7 @@ export function AdminUsersTable({
   }
 
   return (
-    <div className="rounded-lg border border-border/70 bg-card overflow-hidden">
+    <div className="rounded-lg border border-border/70 glass-card overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-medium">Users</p>

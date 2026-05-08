@@ -28,7 +28,7 @@ export function MetricsDeltaGrid({ metrics }: { metrics: MetricDelta[] }) {
         return (
           <div
             key={metric.label}
-            className="rounded-lg border bg-card p-4"
+            className="rounded-lg border glass-card p-4"
           >
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {metric.label}

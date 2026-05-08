@@ -12,7 +12,7 @@ function shortSha(sha: string | null) {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="rounded-lg border glass-card p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </p>

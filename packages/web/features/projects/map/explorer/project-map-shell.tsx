@@ -336,7 +336,7 @@ export function ProjectMapShell({
       />
 
       {hasMapSnapshot ? (
-        <div className="rounded-lg border border-border/70 bg-card">
+        <div className="rounded-lg border border-border/70 glass-card">
           {/* <div className="border-b border-border/70 px-4 py-4">
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-foreground">
@@ -511,7 +511,7 @@ export function ProjectMapShell({
           </div>
         </div>
       ) : (
-        <Empty className="min-h-[420px] rounded-lg border border-dashed border-border bg-card p-10">
+        <Empty className="min-h-[420px] rounded-lg border border-dashed border-border glass-card p-10">
           <EmptyHeader>
             <EmptyTitle>
               {isImportProcessing

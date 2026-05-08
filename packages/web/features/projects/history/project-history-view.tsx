@@ -124,7 +124,7 @@ export function ProjectHistoryView({ projectId, initialImports }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border glass-card p-3 shadow-sm">
         <ToggleGroup
           type="single"
           variant="outline"

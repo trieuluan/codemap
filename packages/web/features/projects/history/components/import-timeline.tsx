@@ -81,7 +81,7 @@ export function ImportTimeline({
                 }
               }}
               className={cn(
-                "group block w-full rounded-lg border bg-card p-4 text-left shadow-sm transition",
+                "group block w-full rounded-lg border glass-card p-4 text-left shadow-sm transition",
                 "hover:border-primary/40 hover:bg-accent/30",
                 isSelected && !compareMode && "border-primary/55 bg-primary/5",
                 isHead && compareMode && "border-primary/55 bg-primary/5",
