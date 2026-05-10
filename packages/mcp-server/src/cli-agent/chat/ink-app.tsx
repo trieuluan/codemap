@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { render, Box, Text, useApp, useStdin } from "ink";
+import { render, Box, Text, useApp } from "ink";
 import { Spinner } from "@inkjs/ui";
 import type { NineRouterProvider } from "../provider.js";
 import type { ChatMessage, ChatToolCall } from "../types.js";
 import { runAgentLoop } from "./agent-loop.js";
+import { hydrateMentionContext } from "./mention-context.js";
 import type { CodeMapMcpToolClient } from "./mcp-tool-client.js";
+import { MentionInput } from "./mention-input.js";
 
 interface ChatEntry {
   role: "user" | "assistant" | "tool" | "system";
@@ -19,77 +21,32 @@ interface InkChatAppProps {
   toolClient: CodeMapMcpToolClient;
   profileId: string;
   mode: string;
+  availableModels?: string[];
 }
 
-function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatAppProps) {
+function InkChatApp({ provider, model, toolClient, profileId, mode, availableModels }: InkChatAppProps) {
   const { exit } = useApp();
   const [messages, setMessages] = useState<ChatEntry[]>([]);
-  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
-  const inputRef = useRef(input);
-  inputRef.current = input;
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
-  const { stdin, setRawMode } = useStdin();
-
   useEffect(() => {
-    setMessages([
-      {
-        role: "system",
-        content: `CodeMap chat (${profileId} -> ${model}, ${mode})\nType your message and press Enter. Ctrl+C to exit.`,
-      },
-    ]);
+    const lines = [
+      `CodeMap chat (${profileId} -> ${model}, ${mode})`,
+    ];
+    if (availableModels && availableModels.length > 0) {
+      lines.push(`Gateway models: ${availableModels.length} available`);
+    }
+    lines.push("Type your message and press Enter. @ to mention files. /help for commands.");
+    setMessages([{ role: "system", content: lines.join("\n") }]);
   }, []);
-
-  // Keypress handling
-  useEffect(() => {
-    if (!stdin || !setRawMode) return;
-    setRawMode(true);
-
-    const onData = (data: Buffer) => {
-      const str = data.toString();
-
-      // Ctrl+C
-      if (str === "\x03") {
-        exit();
-        return;
-      }
-
-      // Enter
-      if (str === "\r" || str === "\n") {
-        const trimmed = inputRef.current.trim();
-        if (trimmed && !busyRef.current) {
-          handleUserSubmit(trimmed);
-        }
-        return;
-      }
-
-      // Backspace
-      if (str === "\x7f" || str === "\b") {
-        setInput((prev) => prev.slice(0, -1));
-        return;
-      }
-
-      // Skip control sequences (arrow keys, etc.)
-      if (str.startsWith("\x1b")) return;
-
-      // Printable character
-      if (str.length === 1 && str.charCodeAt(0) >= 32) {
-        setInput((prev) => prev + str);
-      }
-    };
-
-    stdin.on("data", onData);
-    return () => {
-      stdin.off("data", onData);
-    };
-  }, [stdin, setRawMode, exit]);
 
   const handleUserSubmit = useCallback(
     async (text: string) => {
-      // Handle slash commands
+      if (busyRef.current) return;
+
       if (text.startsWith("/")) {
         const [cmd] = text.split(/\s+/);
 
@@ -101,7 +58,6 @@ function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatApp
         if (cmd === "/clear") {
           setMessages([]);
           setHistory([]);
-          setInput("");
           return;
         }
 
@@ -109,13 +65,14 @@ function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatApp
           setBusy(true);
           try {
             const tools = await toolClient.listAllowedTools();
-            const toolList = tools.map((t) => `- ${t.name}${t.description ? ` — ${t.description}` : ""}`).join("\n");
+            const toolList = tools
+              .map((t) => `- ${t.name}${t.description ? ` — ${t.description}` : ""}`)
+              .join("\n");
             setMessages((prev) => [...prev, { role: "system", content: `Available tools:\n${toolList}` }]);
           } catch (err) {
             setMessages((prev) => [...prev, { role: "system", content: `Error listing tools: ${err}` }]);
           }
           setBusy(false);
-          setInput("");
           return;
         }
 
@@ -131,32 +88,26 @@ function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatApp
             setMessages((prev) => [...prev, { role: "system", content: `Error: ${err}` }]);
           }
           setBusy(false);
-          setInput("");
           return;
         }
 
         setMessages((prev) => [...prev, { role: "system", content: `Unknown command: ${cmd}. Try /tools, /diff, /clear, /exit` }]);
-        setInput("");
         return;
       }
 
-      // Normal message — run agent loop
+      // Normal message — hydrate @mentions then run agent loop
       setMessages((prev) => [...prev, { role: "user", content: text }]);
-      setInput("");
       setBusy(true);
 
       try {
-        const userMessage: ChatMessage = { role: "user", content: text };
+        const mentionContext = await hydrateMentionContext(text);
+        for (const warning of mentionContext.warnings) {
+          setMessages((prev) => [...prev, { role: "system", content: `⚠ ${warning}` }]);
+        }
 
-        const result = await runAgentLoop({
-          provider,
-          model,
-          history,
-          userMessage,
-          toolClient,
-        });
+        const userMessage: ChatMessage = { role: "user", content: mentionContext.content };
+        const result = await runAgentLoop({ provider, model, history, userMessage, toolClient });
 
-        // Show tool calls from the conversation
         const toolEntries: ChatEntry[] = [];
         for (const msg of result.messages) {
           if (msg.role === "assistant" && msg.toolCalls) {
@@ -171,7 +122,7 @@ function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatApp
           if (msg.role === "tool") {
             toolEntries.push({
               role: "tool",
-              content: msg.content.slice(0, 500) + (msg.content.length > 500 ? "\n..." : ""),
+              content: msg.content.length > 500 ? msg.content.slice(0, 500) + "\n..." : msg.content,
               toolName: msg.name,
             });
           }
@@ -210,13 +161,10 @@ function InkChatApp({ provider, model, toolClient, profileId, mode }: InkChatApp
         </Box>
       )}
 
-      {/* Input line */}
-      <Box>
-        <Text color="cyan" bold>
-          codemap{"> "}
-        </Text>
-        <Text>{input}</Text>
-      </Box>
+      {/* Input with inline @mention autocomplete */}
+      {!busy && (
+        <MentionInput onSubmit={handleUserSubmit} busy={busy} />
+      )}
     </Box>
   );
 }
@@ -237,7 +185,7 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
 
   return (
     <Box flexDirection="column" marginBottom={0}>
-      <Text color={colorMap[entry.role]} bold>
+      <Text color={colorMap[entry.role] as "green" | "white" | "yellow" | "gray"} bold>
         {labelMap[entry.role]}:
       </Text>
       <Box paddingLeft={2}>
@@ -247,13 +195,13 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
   );
 }
 
-// Export the render function
 export function startInkChat(options: {
   provider: NineRouterProvider;
   model: string;
   toolClient: CodeMapMcpToolClient;
   profileId: string;
   mode: string;
+  availableModels?: string[];
 }) {
   const { waitUntilExit } = render(
     <InkChatApp
@@ -262,6 +210,7 @@ export function startInkChat(options: {
       toolClient={options.toolClient}
       profileId={options.profileId}
       mode={options.mode}
+      availableModels={options.availableModels}
     />
   );
 
