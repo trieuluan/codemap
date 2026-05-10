@@ -2,13 +2,8 @@ import path from "node:path";
 
 import { collectWorkspaceFiles } from "@codemap/code-index";
 
-import { loadConfig } from "../../config.js";
-import { createCodeMapClient } from "../../lib/codemap-api.js";
 import { ensureLocalIndexWithSummary } from "../../lib/local-index.js";
-import {
-  readWorkspacePath,
-  readWorkspaceProjectId,
-} from "../../lib/workspace-project.js";
+import { readWorkspacePath } from "../../lib/workspace-project.js";
 
 export interface IndexedFileOption {
   path: string;
@@ -16,34 +11,39 @@ export interface IndexedFileOption {
   hint?: string;
 }
 
+// Cache: file list from workspace scan (persists across searches in same session)
+type WorkspaceFiles = Awaited<ReturnType<typeof collectWorkspaceFiles>>;
+let cachedWorkspaceFiles: WorkspaceFiles | null = null;
+let workspaceFilesPromise: Promise<WorkspaceFiles> | null = null;
+
 export async function searchIndexedFiles(
   query: string,
 ): Promise<IndexedFileOption[]> {
   const normalized = query.trim();
-  debugFileSearch("start", { query: normalized, cwd: process.cwd() });
+  debugFileSearch("start", { query: normalized });
 
+  // Local index is fast (SQLite query), try first
   const localResults = await searchLocalIndex(normalized);
   debugFileSearch("local results", { count: localResults.length });
   if (localResults.length > 0) return localResults;
 
+  // Workspace scan is cached after first call
   const workspaceResults = await searchWorkspaceFiles(normalized);
   debugFileSearch("workspace results", { count: workspaceResults.length });
-  if (workspaceResults.length > 0) return workspaceResults;
-
-  const remoteResults = normalized ? await searchRemoteIndex(normalized) : [];
-  debugFileSearch("remote results", { count: remoteResults.length });
-  return remoteResults;
+  return workspaceResults;
 }
+
+// Cache the local store so we don't reopen SQLite every keystroke
+let cachedLocalStore: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["store"] | null = null;
 
 async function searchLocalIndex(query: string): Promise<IndexedFileOption[]> {
   try {
-    const { store } = await ensureLocalIndexWithSummary();
-    const meta = store.getMeta();
-    debugFileSearch("local index opened", {
-      dbPath: store.dbPath,
-      workspaceRootPath: meta?.workspaceRootPath,
-      indexedAt: meta?.indexedAt,
-    });
+    if (!cachedLocalStore) {
+      const { store } = await ensureLocalIndexWithSummary();
+      cachedLocalStore = store;
+      debugFileSearch("local index opened", { dbPath: store.dbPath });
+    }
+    const store = cachedLocalStore;
 
     const pathMatches = rankFiles(
       store.listFiles(5000).filter((file) => isSelectablePath(file.path)),
@@ -71,55 +71,28 @@ async function searchLocalIndex(query: string): Promise<IndexedFileOption[]> {
     return searchMatches;
   } catch (error) {
     debugFileSearch("local failed", error);
+    cachedLocalStore = null;
     return [];
   }
 }
 
-async function searchRemoteIndex(query: string): Promise<IndexedFileOption[]> {
-  try {
-    const [config, projectId] = await Promise.all([
-      loadConfig(),
-      readWorkspaceProjectId(),
-    ]);
-    if (!projectId || !config.apiToken) {
-      debugFileSearch("remote skipped", {
-        hasProjectId: Boolean(projectId),
-        hasApiToken: Boolean(config.apiToken),
-      });
-      return [];
-    }
-
-    const client = createCodeMapClient(config);
-    const results = await client.request<{
-      files?: Array<{ path: string; language?: string | null }>;
-    }>(`/projects/${encodeURIComponent(projectId)}/map/search`, {
-      authRequired: true,
-      query: { q: query },
-    });
-
-    return (results.files ?? [])
-      .filter((file) => isSelectablePath(file.path))
-      .slice(0, 50)
-      .map((file) => ({
-        path: file.path,
-        label: file.path,
-        hint: formatHint(file.language ?? null, undefined, "cloud index"),
-      }));
-  } catch (error) {
-    debugFileSearch("remote failed", error);
-    return [];
-  }
-}
 
 async function searchWorkspaceFiles(
   query: string,
 ): Promise<IndexedFileOption[]> {
   try {
-    const workspacePath = await readWorkspacePath();
-    debugFileSearch("workspace scan", { workspacePath });
-    const files = await collectWorkspaceFiles(workspacePath);
+    if (!cachedWorkspaceFiles) {
+      if (!workspaceFilesPromise) {
+        workspaceFilesPromise = (async () => {
+          const workspacePath = await readWorkspacePath();
+          debugFileSearch("workspace scan", { workspacePath });
+          return collectWorkspaceFiles(workspacePath);
+        })();
+      }
+      cachedWorkspaceFiles = await workspaceFilesPromise;
+    }
     return rankFiles(
-      files.filter((file) => file.isText && isSelectablePath(file.path)),
+      cachedWorkspaceFiles!.filter((file) => file.isText && isSelectablePath(file.path)),
       query,
     ).map((file) => ({
       path: file.path,
@@ -128,6 +101,8 @@ async function searchWorkspaceFiles(
     }));
   } catch (error) {
     debugFileSearch("workspace failed", error);
+    cachedWorkspaceFiles = null;
+    workspaceFilesPromise = null;
     return [];
   }
 }

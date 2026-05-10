@@ -4,15 +4,13 @@ import { NineRouterProvider } from "../provider.js";
 import type {
   ChatMessage,
   ChatToolCall,
-  CompletionResponse,
 } from "../types.js";
 import {
-  AUTO_TOOL_NAMES,
   CodeMapMcpToolClient,
-  CONFIRM_TOOL_NAMES,
+  isConfirmTool,
 } from "./mcp-tool-client.js";
 
-const MAX_AGENT_TOOL_ITERATIONS = 8;
+const MAX_AGENT_TOOL_ITERATIONS = 50;
 
 const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistant.
 
@@ -37,71 +35,98 @@ export async function runAgentLoop(input: {
   toolClient: CodeMapMcpToolClient;
   onToken?: (text: string) => void;
 }): Promise<AgentLoopResult> {
-  const tools = await input.toolClient.listChatTools();
-  const messages: ChatMessage[] = [...input.history, input.userMessage];
+  let tools = await input.toolClient.listChatTools();
+  const allMessages: ChatMessage[] = [...input.history, input.userMessage];
+  const resultMessages: ChatMessage[] = [input.userMessage];
   let usedTools = false;
+  let finalText = "";
+  let toolSupportFailed = false;
 
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
-    const response = await input.provider.complete({
+    const streamRequest = {
       model: input.model,
       system: AGENT_SYSTEM_PROMPT,
-      messages,
-      tools,
-      toolChoice: "auto",
-    });
+      messages: allMessages,
+      ...(tools.length > 0 && !toolSupportFailed ? { tools } : {}),
+    };
 
-    if (!response.toolCalls || response.toolCalls.length === 0) {
-      // No tool calls — stream the final text response
-      if (input.onToken) {
-        let streamed = "";
-        for await (const chunk of input.provider.stream({
-          model: input.model,
-          system: AGENT_SYSTEM_PROMPT,
-          messages,
-        })) {
-          streamed += chunk.text;
-          input.onToken(chunk.text);
+    let accumulated = "";
+    let streamToolCalls: ChatToolCall[] | undefined;
+
+    try {
+      for await (const chunk of input.provider.stream(streamRequest)) {
+        if (chunk.text) {
+          accumulated += chunk.text;
+          input.onToken?.(chunk.text);
         }
-        // Replace the non-streamed text with streamed text
-        response.text = streamed;
+        if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+          streamToolCalls = chunk.toolCalls;
+        }
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (tools.length > 0 && !toolSupportFailed && isToolSupportError(msg)) {
+        console.warn("Model does not support tool calling — falling back to text-only mode.");
+        tools = [];
+        toolSupportFailed = true;
+        continue; // retry loop without tools
+      }
+      throw err;
+    }
 
+    finalText = accumulated;
+
+    if (!streamToolCalls || streamToolCalls.length === 0) {
+      // No tool calls — final text response, done streaming
+      resultMessages.push({ role: "assistant", content: finalText });
       return {
-        text: response.text,
-        messages: [
-          input.userMessage,
-          { role: "assistant", content: response.text },
-        ],
+        text: finalText,
+        messages: resultMessages,
         usedTools,
-        unsupportedToolCalling: !usedTools && looksLikeNoToolSupport(response),
+        unsupportedToolCalling: !usedTools && looksLikeNoToolSupportText(finalText),
       };
     }
 
+    // Model wants to call tools
     usedTools = true;
-    messages.push({
+    allMessages.push({
       role: "assistant",
-      content: response.text,
-      toolCalls: response.toolCalls,
+      content: accumulated,
+      toolCalls: streamToolCalls,
+    });
+    resultMessages.push({
+      role: "assistant",
+      content: accumulated,
+      toolCalls: streamToolCalls,
     });
 
-    for (const toolCall of response.toolCalls) {
+    for (const toolCall of streamToolCalls) {
       const result = await executeToolCall(input.toolClient, toolCall);
-      messages.push({
+      allMessages.push({
+        role: "tool",
+        name: toolCall.function.name,
+        toolCallId: toolCall.id,
+        content: result,
+      });
+      resultMessages.push({
         role: "tool",
         name: toolCall.function.name,
         toolCallId: toolCall.id,
         content: result,
       });
     }
+
+    // Reset streaming text for next iteration
+    if (input.onToken) input.onToken("\n");
   }
 
   return {
-    text: `Stopped after ${MAX_AGENT_TOOL_ITERATIONS} tool iterations. Ask me to continue with a narrower task if needed.`,
+    text: `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`,
     messages: [
-      input.userMessage,
+      ...resultMessages,
       {
         role: "assistant",
-        content: `Stopped after ${MAX_AGENT_TOOL_ITERATIONS} tool iterations.`,
+        content: `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`,
       },
     ],
     usedTools,
@@ -116,41 +141,38 @@ async function executeToolCall(
   const name = toolCall.function.name;
   const args = parseToolArguments(toolCall.function.arguments);
 
-  if (AUTO_TOOL_NAMES.has(name)) {
-    console.log(`→ ${name}`);
-    const result = await toolClient.callTool(name, args);
-    return formatToolResult(result);
+  if (isConfirmTool(name)) {
+    return runConfirmedPatchTool(toolClient, name, args);
   }
 
-  if (CONFIRM_TOOL_NAMES.has(name)) {
-    return runConfirmedPatchTool(toolClient, args);
-  }
-
-  return `Tool "${name}" is not allowed.`;
+  console.log(`→ ${name}`);
+  const result = await toolClient.callTool(name, args);
+  return formatToolResult(result);
 }
 
 async function runConfirmedPatchTool(
   toolClient: CodeMapMcpToolClient,
+  name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  console.log("→ apply_patch --dry-run");
+  console.log(`→ ${name} (dry-run)`);
   const dryRunArgs = { ...args, dry_run: true };
-  const dryRun = await toolClient.callTool("apply_patch", dryRunArgs);
+  const dryRun = await toolClient.callTool(name, dryRunArgs);
   const dryRunText = formatToolResult(dryRun);
   console.log(dryRunText);
 
   if (dryRun.isError) return dryRunText;
 
   const approved = await confirm({
-    message: "Apply this patch to the workspace?",
+    message: `Apply ${name} to the workspace?`,
     initialValue: false,
   });
   if (approved !== true) {
-    return `${dryRunText}\n\nUser declined to apply the patch. No files were changed.`;
+    return `${dryRunText}\n\nUser declined. No files were changed.`;
   }
 
-  console.log("→ apply_patch");
-  const applied = await toolClient.callTool("apply_patch", {
+  console.log(`→ ${name}`);
+  const applied = await toolClient.callTool(name, {
     ...args,
     dry_run: false,
   });
@@ -196,12 +218,22 @@ function formatToolResult(result: {
   return parts.filter(Boolean).join("\n");
 }
 
-function looksLikeNoToolSupport(response: CompletionResponse) {
-  const text = response.text.toLowerCase();
+function looksLikeNoToolSupportText(text: string) {
+  const lower = text.toLowerCase();
   return (
-    text.includes("tool") &&
-    (text.includes("not support") ||
-      text.includes("unsupported") ||
-      text.includes("cannot call"))
+    lower.includes("tool") &&
+    (lower.includes("not support") ||
+      lower.includes("unsupported") ||
+      lower.includes("cannot call"))
+  );
+}
+
+function isToolSupportError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("zero-length") ||
+    lower.includes("empty document") ||
+    (lower.includes("tool") && (lower.includes("not support") || lower.includes("unsupported"))) ||
+    (lower.includes("invalid_request") && lower.includes("tool"))
   );
 }

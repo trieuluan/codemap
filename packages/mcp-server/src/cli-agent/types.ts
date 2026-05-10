@@ -49,7 +49,7 @@ export interface ChatToolDefinition {
   function: {
     name: string;
     description?: string;
-    parameters: Record<string, unknown>;
+    parameters?: Record<string, unknown>;
   };
 }
 
@@ -86,6 +86,8 @@ export interface CompletionStreamChunk {
   text: string;
   model?: string;
   provider: string;
+  toolCalls?: ChatToolCall[];
+  done?: boolean;
 }
 
 export interface ProviderHealth {

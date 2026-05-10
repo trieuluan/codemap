@@ -11,25 +11,14 @@ import type { ChatToolDefinition } from "../types.js";
 
 const require = createRequire(import.meta.url);
 
-export const AUTO_TOOL_NAMES = new Set([
-  "get_agent_workflow",
-  "recommend_agent_workflow",
-  "get_project",
-  "search_codebase",
-  "get_file",
-  "get_files",
-  "find_related_files",
-  "find_usages",
-  "find_callers",
-  "get_working_diff",
-  "refresh_local_index",
-]);
+const CONFIRM_PATTERNS = /\b(patch|edit|write|delete|remove|rename|move|create|update|insert|drop|truncate)\b/i;
 
-export const CONFIRM_TOOL_NAMES = new Set(["apply_patch"]);
-
-export type AgentToolName =
-  | (typeof AUTO_TOOL_NAMES extends Set<infer T> ? T : never)
-  | "apply_patch";
+/**
+ * Heuristic: tool names containing mutating keywords require user confirmation.
+ */
+export function isConfirmTool(name: string): boolean {
+  return CONFIRM_PATTERNS.test(name);
+}
 
 export interface AgentTool {
   name: string;
@@ -53,16 +42,11 @@ export class CodeMapMcpToolClient {
     if (this.tools) return this.tools;
 
     const response = await this.client!.listTools();
-    this.tools = response.tools
-      .filter(
-        (tool) =>
-          AUTO_TOOL_NAMES.has(tool.name) || CONFIRM_TOOL_NAMES.has(tool.name),
-      )
-      .map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-      }));
+    this.tools = response.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
     return this.tools;
   }
 
@@ -82,13 +66,6 @@ export class CodeMapMcpToolClient {
     name: string,
     args: Record<string, unknown>,
   ): Promise<AgentToolCallResult> {
-    if (!AUTO_TOOL_NAMES.has(name) && !CONFIRM_TOOL_NAMES.has(name)) {
-      return {
-        content: `Tool "${name}" is not allowed in CodeMap chat agent mode.`,
-        isError: true,
-      };
-    }
-
     await this.ensureConnected();
     const result = await this.client!.callTool({
       name,

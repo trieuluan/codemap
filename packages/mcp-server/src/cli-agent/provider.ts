@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   ChatToolCall,
+  ChatToolDefinition,
   CompletionRequest,
   CompletionResponse,
   CompletionStreamChunk,
@@ -102,7 +103,7 @@ export class NineRouterProvider implements GatewayProvider {
         messages: buildMessages(request),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens,
-        tools: request.tools,
+        tools: sanitizeTools(request.tools),
         tool_choice: request.toolChoice,
       }),
     });
@@ -145,6 +146,7 @@ export class NineRouterProvider implements GatewayProvider {
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens,
         stream: true,
+        tools: sanitizeTools(request.tools),
       }),
     });
 
@@ -159,8 +161,32 @@ export class NineRouterProvider implements GatewayProvider {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const toolCallsByIdx = new Map<
+      number,
+      { id: string; name: string; arguments: string }
+    >();
+    let model: string | undefined;
 
     try {
+      const emitLine = (line: string): CompletionStreamChunk | "done" | undefined => {
+        const parsed = parseStreamLine(line);
+        if (parsed === "done" || !parsed) return parsed;
+        if (parsed.model) model = parsed.model;
+        if (parsed.toolCallDelta) {
+          const tc = parsed.toolCallDelta;
+          const idx = tc.index ?? 0;
+          if (!toolCallsByIdx.has(idx)) {
+            toolCallsByIdx.set(idx, { id: "", name: "", arguments: "" });
+          }
+          const entry = toolCallsByIdx.get(idx)!;
+          if (tc.id) entry.id = tc.id;
+          if (tc.name) entry.name = tc.name;
+          if (tc.arguments) entry.arguments += tc.arguments;
+          return undefined; // don't yield yet
+        }
+        return parsed;
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -169,20 +195,26 @@ export class NineRouterProvider implements GatewayProvider {
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          const chunk = parseStreamLine(line);
-          if (chunk === "done") return;
-          if (!chunk) continue;
-          yield chunk;
+          const result = emitLine(line);
+          if (result === "done") {
+            yield* finalizeToolCalls(toolCallsByIdx, model);
+            return;
+          }
+          if (result) yield result;
         }
       }
 
       buffer += decoder.decode();
       for (const line of buffer.split(/\r?\n/)) {
-        const chunk = parseStreamLine(line);
-        if (chunk === "done") return;
-        if (!chunk) continue;
-        yield chunk;
+        const result = emitLine(line);
+        if (result === "done") {
+          yield* finalizeToolCalls(toolCallsByIdx, model);
+          return;
+        }
+        if (result) yield result;
       }
+
+      yield* finalizeToolCalls(toolCallsByIdx, model);
     } finally {
       reader.releaseLock();
     }
@@ -220,7 +252,7 @@ function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
 
 function parseStreamLine(
   line: string,
-): CompletionStreamChunk | "done" | undefined {
+): (CompletionStreamChunk & { toolCallDelta?: { index?: number; id?: string; name?: string; arguments?: string } }) | "done" | undefined {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith(":")) return undefined;
   if (!trimmed.startsWith("data:")) return undefined;
@@ -240,13 +272,52 @@ function parseStreamLine(
     // Skip malformed SSE lines
     return undefined;
   }
-  const text =
-    body.choices?.[0]?.delta?.content ?? body.choices?.[0]?.text ?? "";
+
+  const delta = body.choices?.[0]?.delta;
+  const toolCallDeltas = delta?.tool_calls;
+  if (toolCallDeltas && toolCallDeltas.length > 0) {
+    const tc = toolCallDeltas[0];
+    return {
+      text: "",
+      model: body.model,
+      provider: "9router",
+      toolCallDelta: {
+        index: tc?.index,
+        id: tc?.id,
+        name: tc?.function?.name,
+        arguments: tc?.function?.arguments,
+      },
+    };
+  }
+
+  const text = delta?.content ?? body.choices?.[0]?.text ?? "";
   if (!text) return undefined;
   return {
     text,
     model: body.model,
     provider: "9router",
+  };
+}
+
+function* finalizeToolCalls(
+  toolCallsByIdx: Map<number, { id: string; name: string; arguments: string }>,
+  model: string | undefined,
+): Generator<CompletionStreamChunk> {
+  if (toolCallsByIdx.size === 0) return;
+  const toolCalls: ChatToolCall[] = Array.from(toolCallsByIdx.values())
+    .filter((tc) => tc.name)
+    .map((tc, index) => ({
+      id: tc.id || `call_${index}`,
+      type: "function" as const,
+      function: { name: tc.name, arguments: tc.arguments },
+    }));
+  if (toolCalls.length === 0) return;
+  yield {
+    text: "",
+    model,
+    provider: "9router",
+    toolCalls,
+    done: true,
   };
 }
 
@@ -333,6 +404,22 @@ function parseCompletionBody(raw: string): ChatCompletionResponse {
   return result as unknown as ChatCompletionResponse;
 }
 
+
+function sanitizeTools(
+  tools: ChatToolDefinition[] | undefined,
+): ChatToolDefinition[] | undefined {
+  if (!tools || tools.length === 0) return undefined;
+  return tools.map((tool) => ({
+    type: "function" as const,
+    function: {
+      name: tool.function.name,
+      ...(tool.function.description ? { description: tool.function.description } : {}),
+      ...(tool.function.parameters && typeof tool.function.parameters === "object"
+        ? { parameters: tool.function.parameters }
+        : {}),
+    },
+  }));
+}
 
 function normalizeToolCalls(
   toolCalls: ChatToolCall[] | undefined,

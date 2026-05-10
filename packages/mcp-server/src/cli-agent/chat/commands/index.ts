@@ -1,0 +1,64 @@
+import type { GatewayMode, ChatMessage } from "../../types.js";
+import type { ChatEntry } from "../ink-app.js";
+import type { CodeMapMcpToolClient } from "../mcp-tool-client.js";
+
+import { helpCommand } from "./help.js";
+import { clearCommand } from "./clear.js";
+import { exitCommand } from "./exit.js";
+import { statusCommand } from "./status.js";
+import { modelsCommand } from "./models.js";
+import { modelCommand } from "./model.js";
+import { modeCommand } from "./mode.js";
+import { toolsCommand } from "./tools.js";
+import { diffCommand } from "./diff.js";
+import { historyCommand } from "./history.js";
+
+export interface CommandContext {
+  currentModel: string;
+  currentMode: GatewayMode;
+  profileId: string;
+  history: ChatMessage[];
+  availableModels?: string[];
+  toolClient: CodeMapMcpToolClient;
+  setMessages: React.Dispatch<React.SetStateAction<ChatEntry[]>>;
+  setHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  setInputHistory: React.Dispatch<React.SetStateAction<string[]>>;
+  setCurrentModel: (model: string) => void;
+  setCurrentMode: (mode: GatewayMode) => void;
+  setBusy: (busy: boolean) => void;
+  exit: () => void;
+}
+
+export interface Command {
+  name: string;
+  description: string;
+  execute: (args: string, ctx: CommandContext) => void | Promise<void>;
+}
+
+const commands: Command[] = [
+  helpCommand,
+  statusCommand,
+  modelsCommand,
+  modelCommand,
+  modeCommand,
+  toolsCommand,
+  diffCommand,
+  clearCommand,
+  historyCommand,
+  exitCommand,
+];
+
+export function getCommandList(): Command[] {
+  return commands;
+}
+
+export function executeCommand(
+  text: string,
+  ctx: CommandContext,
+): boolean {
+  const [cmd] = text.split(/\s+/);
+  const command = commands.find((c) => `/${c.name}` === cmd);
+  if (!command) return false;
+  command.execute(text.slice(cmd.length).trim(), ctx);
+  return true;
+}

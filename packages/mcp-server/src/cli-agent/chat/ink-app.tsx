@@ -1,18 +1,35 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { render, Box, Text, useApp } from "ink";
-import { Spinner } from "@inkjs/ui";
+import {
+  Spinner,
+  Alert,
+  Badge,
+  StatusMessage,
+} from "@inkjs/ui";
+import cfonts from "cfonts";
 import type { NineRouterProvider } from "../provider.js";
-import type { ChatMessage, ChatToolCall } from "../types.js";
+import type { ChatMessage, ChatToolCall, GatewayMode } from "../types.js";
 import { runAgentLoop } from "./agent-loop.js";
 import { hydrateMentionContext } from "./mention-context.js";
 import type { CodeMapMcpToolClient } from "./mcp-tool-client.js";
 import { MentionInput } from "./mention-input.js";
+import { getModeDisplay } from "./route-policy.js";
+import { executeCommand } from "./commands/index.js";
 
-interface ChatEntry {
-  role: "user" | "assistant" | "tool" | "system";
+interface WelcomeData {
+  model: string;
+  mode: GatewayMode;
+  profile: string;
+  modelCount?: number;
+}
+
+export interface ChatEntry {
+  role: "user" | "assistant" | "tool" | "system" | "welcome";
   content: string;
   toolName?: string;
   toolCalls?: ChatToolCall[];
+  welcomeData?: WelcomeData;
+  systemComponent?: React.ReactNode;
 }
 
 interface InkChatAppProps {
@@ -20,28 +37,41 @@ interface InkChatAppProps {
   model: string;
   toolClient: CodeMapMcpToolClient;
   profileId: string;
-  mode: string;
+  mode: GatewayMode;
   availableModels?: string[];
 }
 
-function InkChatApp({ provider, model, toolClient, profileId, mode, availableModels }: InkChatAppProps) {
+function InkChatApp({
+  provider,
+  model: initialModel,
+  toolClient,
+  profileId,
+  mode: initialMode,
+  availableModels,
+}: InkChatAppProps) {
   const { exit } = useApp();
+  const [currentModel, setCurrentModel] = useState(initialModel);
+  const [currentMode, setCurrentMode] = useState(initialMode);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [streamingText, setStreamingText] = useState("");
+  const [inputHistory, setInputHistory] = useState<string[]>([]);
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
   useEffect(() => {
-    const lines = [
-      `CodeMap chat (${profileId} -> ${model}, ${mode})`,
-    ];
-    if (availableModels && availableModels.length > 0) {
-      lines.push(`Gateway models: ${availableModels.length} available`);
-    }
-    lines.push("Type your message and press Enter. @ to mention files. /help for commands.");
-    setMessages([{ role: "system", content: lines.join("\n") }]);
+    const welcome: ChatEntry = {
+      role: "welcome",
+      content: "",
+      welcomeData: {
+        model: initialModel,
+        mode: initialMode,
+        profile: profileId,
+        modelCount: availableModels?.length,
+      },
+    };
+    setMessages([welcome]);
   }, []);
 
   const handleUserSubmit = useCallback(
@@ -49,99 +79,56 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
       if (busyRef.current) return;
 
       if (text.startsWith("/")) {
-        const [cmd] = text.split(/\s+/);
-
-        if (cmd === "/exit") {
-          exit();
-          return;
-        }
-
-        if (cmd === "/clear") {
-          setMessages([]);
-          setHistory([]);
-          return;
-        }
-
-        if (cmd === "/help") {
+        const handled = await executeCommand(text, {
+          currentModel,
+          currentMode,
+          profileId,
+          history,
+          availableModels,
+          toolClient,
+          setMessages,
+          setHistory,
+          setInputHistory,
+          setCurrentModel,
+          setCurrentMode,
+          setBusy,
+          exit,
+        });
+        if (!handled) {
           setMessages((prev) => [
             ...prev,
             {
               role: "system",
-              content: [
-                "/help    — Show this help",
-                "/models  — List available gateway models",
-                "/tools   — List available MCP tools",
-                "/diff    — Show working diff",
-                "/clear   — Clear chat history",
-                "/exit    — Exit chat",
-                "",
-                "@mention — Type @ to autocomplete file paths",
-              ].join("\n"),
+              content: `Unknown command. Type /help for available commands.`,
             },
           ]);
-          return;
         }
-
-        if (cmd === "/models") {
-          if (availableModels && availableModels.length > 0) {
-            const list = availableModels.map((m) => `- ${m}`).join("\n");
-            setMessages((prev) => [...prev, { role: "system", content: `Gateway models (${availableModels.length}):\n${list}` }]);
-          } else {
-            setMessages((prev) => [...prev, { role: "system", content: "No gateway models available. Using configured profile models." }]);
-          }
-          return;
-        }
-
-        if (cmd === "/tools") {
-          setBusy(true);
-          try {
-            const tools = await toolClient.listAllowedTools();
-            const toolList = tools
-              .map((t) => `- ${t.name}${t.description ? ` — ${t.description}` : ""}`)
-              .join("\n");
-            setMessages((prev) => [...prev, { role: "system", content: `Available tools:\n${toolList}` }]);
-          } catch (err) {
-            setMessages((prev) => [...prev, { role: "system", content: `Error listing tools: ${err}` }]);
-          }
-          setBusy(false);
-          return;
-        }
-
-        if (cmd === "/diff") {
-          setBusy(true);
-          try {
-            const result = await toolClient.callTool("get_working_diff", {
-              include_patch: false,
-              include_untracked: true,
-            });
-            setMessages((prev) => [...prev, { role: "system", content: result.content }]);
-          } catch (err) {
-            setMessages((prev) => [...prev, { role: "system", content: `Error: ${err}` }]);
-          }
-          setBusy(false);
-          return;
-        }
-
-        setMessages((prev) => [...prev, { role: "system", content: `Unknown command: ${cmd}. Try /models, /tools, /diff, /clear, /exit` }]);
         return;
       }
 
       // Normal message — hydrate @mentions then run agent loop
       setMessages((prev) => [...prev, { role: "user", content: text }]);
+      setInputHistory((prev) => [...prev, text]);
       setBusy(true);
 
       try {
         const mentionContext = await hydrateMentionContext(text);
         for (const warning of mentionContext.warnings) {
-          setMessages((prev) => [...prev, { role: "system", content: `⚠ ${warning}` }]);
+          setMessages((prev) => [
+            ...prev,
+            { role: "system", content: `⚠ ${warning}` },
+          ]);
         }
 
-        const userMessage: ChatMessage = { role: "user", content: mentionContext.content };
+        const userMessage: ChatMessage = {
+          role: "user",
+          content: mentionContext.content,
+        };
         setStreamingText("");
 
         const result = await runAgentLoop({
           provider,
-          model,
+          model: currentModel,
           history,
           userMessage,
           toolClient,
@@ -166,7 +153,10 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
           if (msg.role === "tool") {
             toolEntries.push({
               role: "tool",
-              content: msg.content.length > 500 ? msg.content.slice(0, 500) + "\n..." : msg.content,
+              content:
+                msg.content.length > 500
+                  ? msg.content.slice(0, 500) + "\n..."
+                  : msg.content,
               toolName: msg.name,
             });
           }
@@ -181,69 +171,224 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
         setHistory((prev) => [...prev, ...result.messages]);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        setMessages((prev) => [...prev, { role: "system", content: `Error: ${errMsg}` }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Error: ${errMsg}` },
+        ]);
       }
 
       setBusy(false);
     },
-    [provider, model, history, toolClient, exit]
+    [provider, currentModel, currentMode, history, toolClient, exit],
   );
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column">
       {/* Chat messages */}
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         {messages.map((msg, i) => (
           <ChatBubble key={i} entry={msg} />
         ))}
       </Box>
 
-      {/* Streaming response or busy indicator */}
+      {/* Streaming response */}
       {streamingText ? (
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color="white" bold>Agent:</Text>
-          <Box paddingLeft={2}>
+        <Box flexDirection="column" marginTop={1}>
+          <StatusMessage variant="info">streaming...</StatusMessage>
+          <Box paddingLeft={2} marginTop={0}>
             <Text wrap="wrap">{streamingText}</Text>
           </Box>
         </Box>
       ) : busy ? (
-        <Box marginBottom={1}>
+        <Box marginTop={1} paddingLeft={1}>
           <Spinner label="Thinking..." />
         </Box>
       ) : null}
 
-      {/* Input with inline @mention autocomplete */}
-      {!busy && (
-        <MentionInput onSubmit={handleUserSubmit} busy={busy} />
+      {/* Input area */}
+      <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
+        <MentionInput
+          onSubmit={handleUserSubmit}
+          busy={busy}
+          inputHistory={inputHistory}
+        />
+      </Box>
+
+      {/* Status bar */}
+      <Box justifyContent="space-between" paddingX={1} marginTop={0}>
+        <Box gap={1}>
+          <Badge color="cyan">{currentModel}</Badge>
+          <Badge color={getModeDisplay(currentMode).color}>{getModeDisplay(currentMode).label}</Badge>
+        </Box>
+        <Box>
+          <Text color="gray">{history.length} msgs | /help</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function WelcomeBanner({ data }: { data: WelcomeData }) {
+  const modeInfo = getModeDisplay(data.mode);
+
+  // Render CODEMAP with cfonts, strip ANSI (Ink handles colors)
+  const bannerLines = useMemo(() => {
+    const result = cfonts.render("CODEMAP", {
+      font: "block",
+      colors: ["white"],
+      align: "center",
+      letterSpacing: 1,
+      lineHeight: 1,
+      env: "node",
+    });
+    if (!result) return ["CODEMAP"];
+    return result.array
+      .filter((line: string) => line.trim())
+      .map((line: string) => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+  }, []);
+
+  return (
+    <Box
+      flexDirection="column"
+      marginBottom={1}
+      borderStyle="double"
+      borderColor="cyan"
+      paddingX={1}
+    >
+      {bannerLines.map((line: string, i: number) => (
+        <Box key={i}>
+          <Text color="cyan" bold>
+            {line}
+          </Text>
+        </Box>
+      ))}
+      <Box justifyContent="center" marginTop={1}>
+        <Text color="gray" dimColor>
+          {"Chat Agent"}
+        </Text>
+      </Box>
+      <Box justifyContent="center" marginTop={1} gap={1}>
+        <Badge color="cyan">{data.model}</Badge>
+        <Badge color={modeInfo.color}>{modeInfo.label}</Badge>
+        <Badge color="white">{data.profile}</Badge>
+      </Box>
+      {data.modelCount && (
+        <Box justifyContent="center">
+          <Text color="gray">Gateway: </Text>
+          <Text color="green">{data.modelCount}</Text>
+          <Text color="gray"> models available</Text>
+        </Box>
       )}
+      <Box justifyContent="center" marginTop={1}>
+        <Text color="gray">Type </Text>
+        <Text color="cyan">/help</Text>
+        <Text color="gray"> for commands | </Text>
+        <Text color="cyan">@</Text>
+        <Text color="gray"> to mention files</Text>
+      </Box>
     </Box>
   );
 }
 
 function ChatBubble({ entry }: { entry: ChatEntry }) {
-  const colorMap: Record<string, string> = {
-    user: "green",
-    assistant: "white",
-    tool: "yellow",
-    system: "gray",
-  };
-  const labelMap: Record<string, string> = {
-    user: "You",
-    assistant: "Agent",
-    tool: entry.toolName ? `🔧 ${entry.toolName}` : "Tool",
-    system: "⚙",
-  };
+  if (entry.role === "welcome" && entry.welcomeData) {
+    return <WelcomeBanner data={entry.welcomeData} />;
+  }
 
-  return (
-    <Box flexDirection="column" marginBottom={0}>
-      <Text color={colorMap[entry.role] as "green" | "white" | "yellow" | "gray"} bold>
-        {labelMap[entry.role]}:
-      </Text>
-      <Box paddingLeft={2}>
-        <Text wrap="wrap">{entry.content}</Text>
+  if (entry.role === "tool") {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box gap={1}>
+          <Badge color="yellow">{entry.toolName || "tool"}</Badge>
+        </Box>
+        <Box
+          paddingLeft={2}
+          borderStyle="single"
+          borderColor="yellow"
+          borderLeft
+          borderRight={false}
+          borderTop={false}
+          borderBottom={false}
+        >
+          <Text color="gray" dimColor>
+            {truncate(entry.content, 300)}
+          </Text>
+        </Box>
       </Box>
-    </Box>
-  );
+    );
+  }
+
+  if (entry.role === "system") {
+    if (entry.systemComponent) {
+      return (
+        <Box flexDirection="column" paddingX={1}>
+          {entry.systemComponent}
+        </Box>
+      );
+    }
+    const lower = entry.content.toLowerCase();
+    if (lower.startsWith("error") || lower.startsWith("blocked:")) {
+      return (
+        <Box paddingX={1}>
+          <Alert variant="error">{entry.content}</Alert>
+        </Box>
+      );
+    }
+    if (lower.startsWith("warning") || lower.startsWith("⚠")) {
+      return (
+        <Box paddingX={1}>
+          <Alert variant="warning">{entry.content}</Alert>
+        </Box>
+      );
+    }
+    if (lower.startsWith("switched") || lower.startsWith("connected") || lower.startsWith("done")) {
+      return (
+        <Box paddingX={1}>
+          <Alert variant="success">{entry.content}</Alert>
+        </Box>
+      );
+    }
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Alert variant="info">{entry.content}</Alert>
+      </Box>
+    );
+  }
+
+  if (entry.role === "user") {
+    return (
+      <Box flexDirection="column" paddingX={1} marginTop={1}>
+        <Box>
+          <Badge color="green">You</Badge>
+        </Box>
+        <Box paddingLeft={2}>
+          <Text color="white" wrap="wrap">
+            {entry.content}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (entry.role === "assistant") {
+    return (
+      <Box flexDirection="column" paddingX={1} marginTop={1}>
+        <Box>
+          <Badge color="cyan">Agent</Badge>
+        </Box>
+        <Box paddingLeft={2}>
+          <Text wrap="wrap">{entry.content}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  return null;
+}
+
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen) + "...";
 }
 
 export function startInkChat(options: {
@@ -251,7 +396,7 @@ export function startInkChat(options: {
   model: string;
   toolClient: CodeMapMcpToolClient;
   profileId: string;
-  mode: string;
+  mode: GatewayMode;
   availableModels?: string[];
 }) {
   const { waitUntilExit } = render(
@@ -262,7 +407,7 @@ export function startInkChat(options: {
       profileId={options.profileId}
       mode={options.mode}
       availableModels={options.availableModels}
-    />
+    />,
   );
 
   return waitUntilExit();
