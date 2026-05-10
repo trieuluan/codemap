@@ -35,6 +35,7 @@ export async function runAgentLoop(input: {
   history: ChatMessage[];
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
+  onToken?: (text: string) => void;
 }): Promise<AgentLoopResult> {
   const tools = await input.toolClient.listChatTools();
   const messages: ChatMessage[] = [...input.history, input.userMessage];
@@ -50,6 +51,21 @@ export async function runAgentLoop(input: {
     });
 
     if (!response.toolCalls || response.toolCalls.length === 0) {
+      // No tool calls — stream the final text response
+      if (input.onToken) {
+        let streamed = "";
+        for await (const chunk of input.provider.stream({
+          model: input.model,
+          system: AGENT_SYSTEM_PROMPT,
+          messages,
+        })) {
+          streamed += chunk.text;
+          input.onToken(chunk.text);
+        }
+        // Replace the non-streamed text with streamed text
+        response.text = streamed;
+      }
+
       return {
         text: response.text,
         messages: [

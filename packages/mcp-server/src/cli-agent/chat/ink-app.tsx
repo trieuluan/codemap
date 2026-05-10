@@ -29,6 +29,7 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
+  const [streamingText, setStreamingText] = useState("");
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
@@ -58,6 +59,36 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
         if (cmd === "/clear") {
           setMessages([]);
           setHistory([]);
+          return;
+        }
+
+        if (cmd === "/help") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "system",
+              content: [
+                "/help    — Show this help",
+                "/models  — List available gateway models",
+                "/tools   — List available MCP tools",
+                "/diff    — Show working diff",
+                "/clear   — Clear chat history",
+                "/exit    — Exit chat",
+                "",
+                "@mention — Type @ to autocomplete file paths",
+              ].join("\n"),
+            },
+          ]);
+          return;
+        }
+
+        if (cmd === "/models") {
+          if (availableModels && availableModels.length > 0) {
+            const list = availableModels.map((m) => `- ${m}`).join("\n");
+            setMessages((prev) => [...prev, { role: "system", content: `Gateway models (${availableModels.length}):\n${list}` }]);
+          } else {
+            setMessages((prev) => [...prev, { role: "system", content: "No gateway models available. Using configured profile models." }]);
+          }
           return;
         }
 
@@ -91,7 +122,7 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
           return;
         }
 
-        setMessages((prev) => [...prev, { role: "system", content: `Unknown command: ${cmd}. Try /tools, /diff, /clear, /exit` }]);
+        setMessages((prev) => [...prev, { role: "system", content: `Unknown command: ${cmd}. Try /models, /tools, /diff, /clear, /exit` }]);
         return;
       }
 
@@ -106,7 +137,20 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
         }
 
         const userMessage: ChatMessage = { role: "user", content: mentionContext.content };
-        const result = await runAgentLoop({ provider, model, history, userMessage, toolClient });
+        setStreamingText("");
+
+        const result = await runAgentLoop({
+          provider,
+          model,
+          history,
+          userMessage,
+          toolClient,
+          onToken: (token) => {
+            setStreamingText((prev) => prev + token);
+          },
+        });
+
+        setStreamingText("");
 
         const toolEntries: ChatEntry[] = [];
         for (const msg of result.messages) {
@@ -154,12 +198,19 @@ function InkChatApp({ provider, model, toolClient, profileId, mode, availableMod
         ))}
       </Box>
 
-      {/* Busy indicator */}
-      {busy && (
+      {/* Streaming response or busy indicator */}
+      {streamingText ? (
+        <Box flexDirection="column" marginBottom={1}>
+          <Text color="white" bold>Agent:</Text>
+          <Box paddingLeft={2}>
+            <Text wrap="wrap">{streamingText}</Text>
+          </Box>
+        </Box>
+      ) : busy ? (
         <Box marginBottom={1}>
           <Spinner label="Thinking..." />
         </Box>
-      )}
+      ) : null}
 
       {/* Input with inline @mention autocomplete */}
       {!busy && (

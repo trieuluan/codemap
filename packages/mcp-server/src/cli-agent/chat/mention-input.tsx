@@ -241,7 +241,7 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> " }: MentionIn
             <Text color="gray" dimColor>{ghostPart}</Text>
           </>
         )}
-        <Text inverse>{" "}</Text>
+        <Text inverse>{"█"}</Text>
         <Text>{afterCursor}</Text>
       </Box>
     </Box>
