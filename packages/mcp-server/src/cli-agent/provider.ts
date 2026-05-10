@@ -26,6 +26,11 @@ interface ChatCompletionStreamResponse {
   choices?: Array<{
     delta?: {
       content?: string;
+      tool_calls?: Array<{
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
     };
     text?: string;
   }>;
@@ -107,8 +112,15 @@ export class NineRouterProvider implements GatewayProvider {
       throw new Error(`Completion failed: HTTP ${response.status} ${text}`);
     }
 
-    const body = (await response.json()) as ChatCompletionResponse;
+    const raw = await response.text();
+    if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
+      process.stderr.write("[DEBUG] raw SSE response:\n" + raw.slice(0, 2000) + "\n");
+    }
+    const body = parseCompletionBody(raw) as ChatCompletionResponse;
     const message = body.choices?.[0]?.message;
+    if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
+      process.stderr.write("[DEBUG] parsed message:\n" + JSON.stringify(message, null, 2).slice(0, 2000) + "\n");
+    }
     const text = message?.content ?? body.choices?.[0]?.text ?? "";
     return {
       text,
@@ -186,7 +198,6 @@ function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
   const messages: ChatMessage[] = request.system
     ? [{ role: "system", content: request.system }, ...request.messages]
     : request.messages;
-
   return messages.map((message) => {
     if (message.role === "tool") {
       return {
@@ -242,6 +253,86 @@ function parseStreamLine(
 function isString(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
+
+function parseCompletionBody(raw: string): ChatCompletionResponse {
+  const trimmed = raw.trim();
+
+  // Normal JSON response
+  if (trimmed.startsWith("{")) {
+    return JSON.parse(trimmed) as ChatCompletionResponse;
+  }
+
+  // SSE response — extract JSON from "data:" lines
+  let mergedText = "";
+  const toolCallsByIdx = new Map<
+    number,
+    { id: string; name: string; arguments: string }
+  >();
+  let model: string | undefined;
+
+  for (const line of trimmed.split(/\r?\n/)) {
+    const l = line.trim();
+    if (!l.startsWith("data:")) continue;
+
+    let data = l.slice("data:".length).trim();
+    if (data === "[DONE]") continue;
+    if (data.startsWith("data:")) {
+      data = data.slice("data:".length).trim();
+    }
+
+    let chunk: Record<string, unknown>;
+    try {
+      chunk = JSON.parse(data);
+    } catch {
+      continue;
+    }
+
+    if (!model && chunk.model) model = chunk.model as string;
+
+    const choices = chunk.choices as Array<Record<string, unknown>> | undefined;
+    const choice = choices?.[0];
+
+    // Non-streaming SSE: message field with content/tool_calls directly
+    if (choice?.message) {
+      return chunk as unknown as ChatCompletionResponse;
+    }
+
+    // Streaming format: accumulate delta
+    const delta = choice?.delta as Record<string, unknown> | undefined;
+    if (delta?.content) mergedText += delta.content as string;
+
+    if (delta?.tool_calls) {
+      for (const tc of delta.tool_calls as Array<Record<string, unknown>>) {
+        const idx = (tc.index as number) ?? 0;
+        if (!toolCallsByIdx.has(idx)) {
+          toolCallsByIdx.set(idx, { id: "", name: "", arguments: "" });
+        }
+        const entry = toolCallsByIdx.get(idx)!;
+        if (tc.id) entry.id = tc.id as string;
+        const fn = tc.function as Record<string, unknown> | undefined;
+        if (fn?.name) entry.name = fn.name as string;
+        if (fn?.arguments) entry.arguments += fn.arguments as string;
+      }
+    }
+  }
+
+  // Build the merged streaming response
+  const toolCalls = Array.from(toolCallsByIdx.values()).map((tc) => ({
+    id: tc.id,
+    type: "function" as const,
+    function: { name: tc.name, arguments: tc.arguments },
+  }));
+
+  const result: Record<string, unknown> = {
+    model,
+    choices: [{ message: { content: mergedText } }],
+  };
+  if (toolCalls.length > 0) {
+    ((result.choices as Array<Record<string, unknown>>)[0].message as Record<string, unknown>).tool_calls = toolCalls;
+  }
+  return result as unknown as ChatCompletionResponse;
+}
+
 
 function normalizeToolCalls(
   toolCalls: ChatToolCall[] | undefined,

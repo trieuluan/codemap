@@ -24,6 +24,25 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const toolClient = new CodeMapMcpToolClient();
   let agentMode = false;
 
+  // Try Ink TUI first, fallback to realtime-input
+  try {
+    const { startInkChat } = await import("../chat/ink-app.js");
+    await startInkChat({
+      provider,
+      model: profile.model,
+      toolClient,
+      profileId: profile.id,
+      mode: mode ?? ctx.config.mode,
+    });
+    await toolClient.close();
+    return;
+  } catch (err) {
+    // Ink not available or failed, fallback to realtime-input
+    if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
+      console.error("[DEBUG] Ink TUI failed, falling back:", err);
+    }
+  }
+
   console.log(
     `CodeMap chat (${profile.id} -> ${profile.model}, ${mode ?? ctx.config.mode})`,
   );
@@ -60,7 +79,6 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
         };
 
         if (agentMode) {
-          console.log("agent run");
           const result = await runAgentLoop({
             provider,
             model: profile.model,
