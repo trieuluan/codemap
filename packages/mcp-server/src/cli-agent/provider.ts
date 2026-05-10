@@ -114,14 +114,8 @@ export class NineRouterProvider implements GatewayProvider {
     }
 
     const raw = await response.text();
-    if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
-      process.stderr.write("[DEBUG] raw SSE response:\n" + raw.slice(0, 2000) + "\n");
-    }
     const body = parseCompletionBody(raw) as ChatCompletionResponse;
     const message = body.choices?.[0]?.message;
-    if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
-      process.stderr.write("[DEBUG] parsed message:\n" + JSON.stringify(message, null, 2).slice(0, 2000) + "\n");
-    }
     const text = message?.content ?? body.choices?.[0]?.text ?? "";
     return {
       text,
@@ -133,6 +127,7 @@ export class NineRouterProvider implements GatewayProvider {
 
   async *stream(
     request: CompletionRequest,
+    _debug?: boolean,
   ): AsyncGenerator<CompletionStreamChunk> {
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
@@ -157,6 +152,7 @@ export class NineRouterProvider implements GatewayProvider {
     if (!response.body) {
       throw new Error("Completion stream failed: response body is empty.");
     }
+
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

@@ -67,6 +67,7 @@ import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
 import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
 import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
+import { registerWebSearchTool } from "./tools/web-search.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
 import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
 import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
@@ -120,6 +121,7 @@ async function runMcpServer() {
   registerGetProjectMapTool(server, config);
   registerGetWorkingDiffTool(server);
   registerRefreshLocalIndexTool(server);
+  registerWebSearchTool(server);
   registerTriggerReimportTool(server, config);
   registerWaitForImportTool(server, config);
 

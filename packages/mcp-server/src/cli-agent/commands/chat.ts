@@ -13,6 +13,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const profile = selectChatProfile(ctx.config, ctx.flags.model, mode);
   const toolClient = new CodeMapMcpToolClient();
 
+  // Connect external MCP servers from .codemap/mcp.json (best-effort)
+  await toolClient.connectExtras();
+
   try {
     const { startInkChat } = await import("../chat/ink-app.js");
     await startInkChat({

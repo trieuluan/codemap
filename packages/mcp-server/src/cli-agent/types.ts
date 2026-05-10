@@ -106,7 +106,7 @@ export interface GatewayProvider {
   listModels(): Promise<string[]>;
   listModelDetails(): Promise<GatewayModel[]>;
   complete(request: CompletionRequest): Promise<CompletionResponse>;
-  stream(request: CompletionRequest): AsyncGenerator<CompletionStreamChunk>;
+  stream(request: CompletionRequest, debug?: boolean): AsyncGenerator<CompletionStreamChunk>;
 }
 
 export interface RouteRequest {

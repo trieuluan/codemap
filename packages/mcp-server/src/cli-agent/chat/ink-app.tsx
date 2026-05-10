@@ -1,11 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { render, Box, Text, useApp } from "ink";
-import {
-  Spinner,
-  Alert,
-  Badge,
-  StatusMessage,
-} from "@inkjs/ui";
+import { Alert, Badge } from "@inkjs/ui";
 import cfonts from "cfonts";
 import type { NineRouterProvider } from "../provider.js";
 import type { ChatMessage, ChatToolCall, GatewayMode } from "../types.js";
@@ -13,8 +8,14 @@ import { runAgentLoop } from "./agent-loop.js";
 import { hydrateMentionContext } from "./mention-context.js";
 import type { CodeMapMcpToolClient } from "./mcp-tool-client.js";
 import { MentionInput } from "./mention-input.js";
-import { getModeDisplay } from "./route-policy.js";
+import {
+  getModeDisplay,
+  selectModelForMode,
+  getRecommendedMode,
+} from "./route-policy.js";
 import { executeCommand } from "./commands/index.js";
+import { createDebugLogger, type DebugLogger } from "./debug-logger.js";
+import { TaskStatusBar, type TaskStatus } from "./task-status-bar.js";
 
 interface WelcomeData {
   model: string;
@@ -55,8 +56,19 @@ function InkChatApp({
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [streamingText, setStreamingText] = useState("");
+  const [taskStatus, setTaskStatus] = useState<TaskStatus>({ phase: "idle", toolsCalled: 0 });
   const [inputHistory, setInputHistory] = useState<string[]>([]);
+  const [debug, setDebug] = useState(
+    process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1",
+  );
+  const [debugLogFile, setDebugLogFile] = useState<string | null>(null);
+  const loggerRef = useRef<DebugLogger | null>(null);
+  const debugRef = useRef(debug);
+  debugRef.current = debug;
+  const lastUserTextRef = useRef<string | null>(null);
+  const streamAbortedRef = useRef(false);
+  const taskStatusRef = useRef(taskStatus);
+  taskStatusRef.current = taskStatus;
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
@@ -73,6 +85,19 @@ function InkChatApp({
     };
     setMessages([welcome]);
   }, []);
+
+  // Init/destroy debug logger when debug toggles
+  useEffect(() => {
+    if (debug && !loggerRef.current) {
+      const logger = createDebugLogger();
+      loggerRef.current = logger;
+      setDebugLogFile(logger.logFile);
+    }
+    if (!debug) {
+      loggerRef.current = null;
+      setDebugLogFile(null);
+    }
+  }, [debug]);
 
   const handleUserSubmit = useCallback(
     async (text: string) => {
@@ -92,6 +117,11 @@ function InkChatApp({
           setCurrentModel,
           setCurrentMode,
           setBusy,
+          debug,
+          setDebug,
+          debugLogFile,
+          lastUserText: lastUserTextRef.current,
+          resend,
           exit,
         });
         if (!handled) {
@@ -107,6 +137,9 @@ function InkChatApp({
       }
 
       // Normal message — hydrate @mentions then run agent loop
+      lastUserTextRef.current = text;
+      streamAbortedRef.current = false;
+      setTaskStatus({ phase: "thinking", startTime: Date.now(), toolsCalled: 0 });
       setMessages((prev) => [...prev, { role: "user", content: text }]);
       setInputHistory((prev) => [...prev, text]);
       setBusy(true);
@@ -124,7 +157,6 @@ function InkChatApp({
           role: "user",
           content: mentionContext.content,
         };
-        setStreamingText("");
 
         const result = await runAgentLoop({
           provider,
@@ -132,55 +164,199 @@ function InkChatApp({
           history,
           userMessage,
           toolClient,
+          debug,
           onToken: (token) => {
-            setStreamingText((prev) => prev + token);
+            if (!streamAbortedRef.current) {
+              setTaskStatus((prev) => ({
+                ...prev,
+                phase: "streaming",
+                text: (prev.text ?? "") + token,
+              }));
+            }
+          },
+          onToolStart: (name, args, id) => {
+            if (debugRef.current) {
+              loggerRef.current?.logToolStart(name, args, id);
+            }
+            setTaskStatus((prev) => ({
+              ...prev,
+              phase: "tool",
+              toolName: name,
+              toolArgs: args,
+              toolsCalled: prev.toolsCalled + 1,
+              text: undefined,
+            }));
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "tool",
+                content: `Calling: ${name}(${args.length > 200 ? args.slice(0, 200) + "..." : args})`,
+                toolName: name,
+              },
+            ]);
+          },
+          onToolResult: (name, resultText) => {
+            if (debugRef.current) {
+              loggerRef.current?.logToolResult(name, resultText);
+            }
+            setTaskStatus((prev) => ({
+              ...prev,
+              phase: "thinking",
+              toolName: undefined,
+              toolArgs: undefined,
+            }));
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "tool",
+                content: resultText,
+                toolName: `${name} result`,
+              },
+            ]);
+          },
+          onDebug: (info) => {
+            if (!debugRef.current) return;
+            if (info.event === "stream_request") {
+              loggerRef.current?.logStreamRequest({
+                model: String(info.model ?? ""),
+                messageCount: Number(info.messageCount ?? 0),
+                toolCount: Number(info.toolCount ?? 0),
+                hasSystem: Boolean(info.hasSystem),
+                toolsCalled: taskStatusRef.current.toolsCalled,
+              });
+            } else if (info.event === "tool_fallback") {
+              loggerRef.current?.logToolFallback(String(info.reason ?? ""));
+            } else if (info.toolCalls) {
+              // Tool call debug info — already logged via onToolStart
+            } else {
+              loggerRef.current?.logChunk(0, info);
+            }
           },
         });
 
-        setStreamingText("");
+        setTaskStatus((prev) => ({
+          ...prev,
+          phase: "done",
+          endTime: Date.now(),
+          text: undefined,
+        }));
+        setTimeout(() => setTaskStatus({ phase: "idle", toolsCalled: 0 }), 5000);
 
-        const toolEntries: ChatEntry[] = [];
-        for (const msg of result.messages) {
-          if (msg.role === "assistant" && msg.toolCalls) {
-            for (const tc of msg.toolCalls) {
-              toolEntries.push({
-                role: "tool",
-                content: `Called: ${tc.function.name}(${tc.function.arguments})`,
-                toolName: tc.function.name,
-              });
-            }
-          }
-          if (msg.role === "tool") {
-            toolEntries.push({
-              role: "tool",
-              content:
-                msg.content.length > 500
-                  ? msg.content.slice(0, 500) + "\n..."
-                  : msg.content,
-              toolName: msg.name,
-            });
-          }
+        // Write summary to debug log
+        if (loggerRef.current) {
+          const toolCallsList = result.messages
+            .filter((m) => m.role === "assistant" && m.toolCalls)
+            .flatMap((m) => m.toolCalls ?? [])
+            .map((tc) => tc.function.name);
+          loggerRef.current.logSummary({
+            totalChunks: 0,
+            textChunks: 0,
+            toolCallChunks: toolCallsList.length,
+            finalToolCalls: toolCallsList,
+            model: currentModel,
+          });
         }
 
-        setMessages((prev) => [
-          ...prev,
-          ...toolEntries,
+        // Only add final assistant response and any remaining entries
+        const newEntries: ChatEntry[] = [
           { role: "assistant", content: result.text || "(no response)" },
-        ]);
+        ];
+
+        if (result.unsupportedToolCalling) {
+          newEntries.push({
+            role: "system",
+            content: `Model "${currentModel}" does not support tool calling. Response was generated without tools.\nUse /model <name> to switch to a tool-capable model, or /mode to change gateway mode.`,
+          });
+        }
+
+        setMessages((prev) => [...prev, ...newEntries]);
 
         setHistory((prev) => [...prev, ...result.messages]);
       } catch (err) {
+        streamAbortedRef.current = true;
+        setTaskStatus({ phase: "idle", toolsCalled: 0 });
+        loggerRef.current?.logError(err);
         const errMsg = err instanceof Error ? err.message : String(err);
-        setMessages((prev) => [
-          ...prev,
-          { role: "system", content: `Error: ${errMsg}` },
-        ]);
+        const isModelBroken =
+          errMsg.includes("zero-length") ||
+          errMsg.includes("empty document") ||
+          errMsg.includes("429");
+
+        if (isModelBroken && availableModels && availableModels.length > 1) {
+          // Auto-select next model from a different mode
+          const recommendedModes = getRecommendedMode(
+            currentModel,
+            currentModel,
+          );
+          let newModel: string | null = null;
+          let newMode = currentMode;
+          for (const m of recommendedModes) {
+            const candidate = selectModelForMode(
+              availableModels,
+              m,
+              currentModel,
+            );
+            if (candidate) {
+              newModel = candidate;
+              newMode = m;
+              break;
+            }
+          }
+          // Fallback: any different model
+          if (!newModel) {
+            newModel = availableModels.find((m) => m !== currentModel) ?? null;
+          }
+
+          if (newModel) {
+            setCurrentModel(newModel);
+            if (newMode !== currentMode) setCurrentMode(newMode);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content: `Model "${currentModel}" failed. Auto-switched to "${newModel}"${newMode !== currentMode ? ` (mode: ${newMode})` : ""}.\nType /retry to resend your message.`,
+              },
+            ]);
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content: `Model "${currentModel}" failed and no alternative model found.\nCheck gateway configuration.`,
+              },
+            ]);
+          }
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { role: "system", content: `Error: ${errMsg}` },
+          ]);
+        }
       }
 
       setBusy(false);
     },
-    [provider, currentModel, currentMode, history, toolClient, exit],
+    [
+      provider,
+      currentModel,
+      currentMode,
+      history,
+      toolClient,
+      debug,
+      debugLogFile,
+      exit,
+    ],
   );
+
+  const handleUserSubmitRef = useRef(handleUserSubmit);
+  handleUserSubmitRef.current = handleUserSubmit;
+
+  const resend = useCallback(() => {
+    const text = lastUserTextRef.current;
+    if (text && !busyRef.current) {
+      handleUserSubmitRef.current(text);
+    }
+  }, []);
 
   return (
     <Box flexDirection="column">
@@ -191,19 +367,8 @@ function InkChatApp({
         ))}
       </Box>
 
-      {/* Streaming response */}
-      {streamingText ? (
-        <Box flexDirection="column" marginTop={1}>
-          <StatusMessage variant="info">streaming...</StatusMessage>
-          <Box paddingLeft={2} marginTop={0}>
-            <Text wrap="wrap">{streamingText}</Text>
-          </Box>
-        </Box>
-      ) : busy ? (
-        <Box marginTop={1} paddingLeft={1}>
-          <Spinner label="Thinking..." />
-        </Box>
-      ) : null}
+      {/* Task status bar */}
+      {taskStatus.phase !== "idle" && <TaskStatusBar status={taskStatus} />}
 
       {/* Input area */}
       <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
@@ -218,9 +383,12 @@ function InkChatApp({
       <Box justifyContent="space-between" paddingX={1} marginTop={0}>
         <Box gap={1}>
           <Badge color="cyan">{currentModel}</Badge>
-          <Badge color={getModeDisplay(currentMode).color}>{getModeDisplay(currentMode).label}</Badge>
+          <Badge color={getModeDisplay(currentMode).color}>
+            {getModeDisplay(currentMode).label}
+          </Badge>
         </Box>
-        <Box>
+        <Box gap={1}>
+          {debug && <Badge color="red">DEBUG</Badge>}
           <Text color="gray">{history.length} msgs | /help</Text>
         </Box>
       </Box>
@@ -341,7 +509,11 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
         </Box>
       );
     }
-    if (lower.startsWith("switched") || lower.startsWith("connected") || lower.startsWith("done")) {
+    if (
+      lower.startsWith("switched") ||
+      lower.startsWith("connected") ||
+      lower.startsWith("done")
+    ) {
       return (
         <Box paddingX={1}>
           <Alert variant="success">{entry.content}</Alert>

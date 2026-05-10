@@ -12,7 +12,12 @@ interface MentionInputProps {
 
 const MAX_SUGGESTIONS = 6;
 
-export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistory = [] }: MentionInputProps) {
+export function MentionInput({
+  onSubmit,
+  busy,
+  prompt = "> ",
+  inputHistory = [],
+}: MentionInputProps) {
   const [buffer, setBuffer] = useState("");
   const [cursorPos, setCursorPos] = useState(0);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -61,7 +66,9 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistor
     searchTimerRef.current = setTimeout(async () => {
       try {
         const results = await searchIndexedFiles(currentMention);
-        const filtered = results.filter((f) => isSelectablePath(f.path)).slice(0, MAX_SUGGESTIONS);
+        const filtered = results
+          .filter((f) => isSelectablePath(f.path))
+          .slice(0, MAX_SUGGESTIONS);
         setSuggestions(filtered);
 
         if (filtered.length > 0) {
@@ -108,120 +115,135 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistor
     acceptSuggestion(value);
   };
 
-  // Main input — disabled when dropdown is open
-  useInput((input, key) => {
-    if (busy) return;
+  // Unified input handler — works whether dropdown is open or closed
+  useInput(
+    (input, key) => {
+      if (busy) return;
 
-    if (key.ctrl && input === "c") {
-      exit();
-      return;
-    }
-
-    if (key.tab && ghostText && suggestions.length > 0) {
-      acceptSuggestion(suggestions[0].path);
-      return;
-    }
-
-    if (key.escape) {
-      if (historyIdx !== -1) {
-        setHistoryIdx(-1);
-        setBuffer(savedBuffer);
-        setCursorPos(savedBuffer.length);
+      if (key.ctrl && input === "c") {
+        exit();
+        return;
       }
-      return;
-    }
 
-    if (key.downArrow) {
-      if (inputHistory.length > 0) {
-        if (historyIdx === -1) return;
-        const nextIdx = historyIdx + 1;
-        if (nextIdx >= inputHistory.length) {
+      // When dropdown is open, Escape dismisses it, Tab/Enter accepts first suggestion
+      if (dropdownOpen) {
+        if (key.escape) {
+          dismissSuggestions();
+          return;
+        }
+        if (key.tab && ghostText) {
+          acceptSuggestion(suggestions[0].path);
+          return;
+        }
+        // Arrow keys and Enter are handled by Select — let them pass through
+        if (key.upArrow || key.downArrow || key.return) {
+          return;
+        }
+      }
+
+      // Tab to accept ghost text (when no dropdown)
+      if (key.tab && ghostText && suggestions.length > 0) {
+        acceptSuggestion(suggestions[0].path);
+        return;
+      }
+
+      if (key.escape) {
+        if (historyIdx !== -1) {
           setHistoryIdx(-1);
           setBuffer(savedBuffer);
           setCursorPos(savedBuffer.length);
-        } else {
-          setHistoryIdx(nextIdx);
-          setBuffer(inputHistory[nextIdx]);
-          setCursorPos(inputHistory[nextIdx].length);
         }
+        return;
       }
-      return;
-    }
 
-    if (key.upArrow) {
-      if (inputHistory.length > 0) {
-        if (historyIdx === -1) {
-          setSavedBuffer(buffer);
+      if (key.downArrow) {
+        if (inputHistory.length > 0) {
+          if (historyIdx === -1) return;
+          const nextIdx = historyIdx + 1;
+          if (nextIdx >= inputHistory.length) {
+            setHistoryIdx(-1);
+            setBuffer(savedBuffer);
+            setCursorPos(savedBuffer.length);
+          } else {
+            setHistoryIdx(nextIdx);
+            setBuffer(inputHistory[nextIdx]);
+            setCursorPos(inputHistory[nextIdx].length);
+          }
         }
-        const newIdx = historyIdx === -1
-          ? inputHistory.length - 1
-          : Math.max(0, historyIdx - 1);
-        setHistoryIdx(newIdx);
-        setBuffer(inputHistory[newIdx]);
-        setCursorPos(inputHistory[newIdx].length);
+        return;
       }
-      return;
-    }
 
-    if (key.return) {
-      const trimmed = buffer.trim();
-      if (trimmed) {
-        onSubmit(trimmed);
-        setBuffer("");
+      if (key.upArrow) {
+        if (inputHistory.length > 0) {
+          if (historyIdx === -1) {
+            setSavedBuffer(buffer);
+          }
+          const newIdx =
+            historyIdx === -1
+              ? inputHistory.length - 1
+              : Math.max(0, historyIdx - 1);
+          setHistoryIdx(newIdx);
+          setBuffer(inputHistory[newIdx]);
+          setCursorPos(inputHistory[newIdx].length);
+        }
+        return;
+      }
+
+      if (key.return) {
+        const trimmed = buffer.trim();
+        if (trimmed) {
+          onSubmit(trimmed);
+          setBuffer("");
+          setCursorPos(0);
+          setHistoryIdx(-1);
+        }
+        setSuggestions([]);
+        setGhostText("");
+        return;
+      }
+
+      if (key.backspace || key.delete) {
+        if (cursorPos > 0) {
+          setBuffer(
+            (prev) => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos),
+          );
+          setCursorPos((prev) => prev - 1);
+        }
+        return;
+      }
+
+      if (key.leftArrow) {
+        setCursorPos((prev) => Math.max(0, prev - 1));
+        return;
+      }
+
+      if (key.rightArrow) {
+        setCursorPos((prev) => Math.min(buffer.length, prev + 1));
+        return;
+      }
+
+      if (key.home) {
         setCursorPos(0);
-        setHistoryIdx(-1);
+        return;
       }
-      setSuggestions([]);
-      setGhostText("");
-      return;
-    }
 
-    if (key.backspace || key.delete) {
-      if (cursorPos > 0) {
-        setBuffer((prev) => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos));
-        setCursorPos((prev) => prev - 1);
+      if (key.end) {
+        setCursorPos(buffer.length);
+        return;
       }
-      return;
-    }
 
-    if (key.leftArrow) {
-      setCursorPos((prev) => Math.max(0, prev - 1));
-      return;
-    }
-
-    if (key.rightArrow) {
-      setCursorPos((prev) => Math.min(buffer.length, prev + 1));
-      return;
-    }
-
-    if (key.home) {
-      setCursorPos(0);
-      return;
-    }
-
-    if (key.end) {
-      setCursorPos(buffer.length);
-      return;
-    }
-
-    if (input && !key.ctrl && !key.meta) {
-      if (historyIdx !== -1) {
-        setHistoryIdx(-1);
+      if (input && !key.ctrl && !key.meta) {
+        if (historyIdx !== -1) {
+          setHistoryIdx(-1);
+        }
+        setBuffer(
+          (prev) => prev.slice(0, cursorPos) + input + prev.slice(cursorPos),
+        );
+        setCursorPos((prev) => prev + input.length);
       }
-      setBuffer((prev) => prev.slice(0, cursorPos) + input + prev.slice(cursorPos));
-      setCursorPos((prev) => prev + input.length);
-    }
-  }, { isActive: !busy && !dropdownOpen });
-
-  // Escape/Tab when dropdown is open
-  useInput((_input, key) => {
-    if (key.escape) {
-      dismissSuggestions();
-    }
-    if (key.tab && ghostText) {
-      acceptSuggestion(suggestions[0].path);
-    }
-  }, { isActive: !busy && dropdownOpen });
+    },
+    { isActive: !busy },
+  );
 
   // Render the input line
   const beforeCursor = buffer.slice(0, cursorPos);
@@ -238,10 +260,11 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistor
   }
 
   const selectOptions = useMemo(
-    () => suggestions.map((s) => ({
-      label: s.hint ? `${s.path}  ${s.hint}` : s.path,
-      value: s.path,
-    })),
+    () =>
+      suggestions.map((s) => ({
+        label: s.hint ? `${s.path}  ${s.hint}` : s.path,
+        value: s.path,
+      })),
     [suggestions],
   );
 
@@ -261,12 +284,16 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistor
 
       {/* Input line */}
       <Box>
-        <Text color="cyan" bold>{prompt}</Text>
+        <Text color="cyan" bold>
+          {prompt}
+        </Text>
         <Text>{beforeMention}</Text>
         {mentionQuery !== null && (
           <>
             <Text color="yellow">{mentionText}</Text>
-            <Text color="gray" dimColor>{ghostPart}</Text>
+            <Text color="gray" dimColor>
+              {ghostPart}
+            </Text>
           </>
         )}
         <Text color="cyan">│</Text>
@@ -279,7 +306,13 @@ export function MentionInput({ onSubmit, busy, prompt = "codemap> ", inputHistor
 function isSelectablePath(filePath: string): boolean {
   const lower = filePath.toLowerCase();
   if (lower.endsWith(".ds_store")) return false;
-  if (lower.includes("/node_modules/") || lower.includes("/.git/")) return false;
-  if (lower.includes("/dist/") || lower.includes("/build/") || lower.includes("/coverage/")) return false;
+  if (lower.includes("/node_modules/") || lower.includes("/.git/"))
+    return false;
+  if (
+    lower.includes("/dist/") ||
+    lower.includes("/build/") ||
+    lower.includes("/coverage/")
+  )
+    return false;
   return true;
 }

@@ -1,14 +1,8 @@
 import { confirm } from "@clack/prompts";
 
 import { NineRouterProvider } from "../provider.js";
-import type {
-  ChatMessage,
-  ChatToolCall,
-} from "../types.js";
-import {
-  CodeMapMcpToolClient,
-  isConfirmTool,
-} from "./mcp-tool-client.js";
+import type { ChatMessage, ChatToolCall } from "../types.js";
+import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "./mcp-tool-client.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
 
@@ -34,8 +28,25 @@ export async function runAgentLoop(input: {
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
   onToken?: (text: string) => void;
+  onToolStart?: (name: string, args: string, id: string) => void;
+  onToolResult?: (name: string, result: string) => void;
+  onDebug?: (info: Record<string, unknown>) => void;
+  debug?: boolean;
 }): Promise<AgentLoopResult> {
   let tools = await input.toolClient.listChatTools();
+
+  // Fetch MCP resources once and prepend to system prompt
+  let resourceContext: string | null = null;
+  try {
+    resourceContext = await fetchResourceContext(input.toolClient);
+  } catch {
+    /* non-blocking — agent runs fine without resource context */
+  }
+
+  const systemPrompt = resourceContext
+    ? AGENT_SYSTEM_PROMPT + "\n\n" + resourceContext
+    : AGENT_SYSTEM_PROMPT;
+
   const allMessages: ChatMessage[] = [...input.history, input.userMessage];
   const resultMessages: ChatMessage[] = [input.userMessage];
   let usedTools = false;
@@ -45,16 +56,39 @@ export async function runAgentLoop(input: {
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
     const streamRequest = {
       model: input.model,
-      system: AGENT_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: allMessages,
       ...(tools.length > 0 && !toolSupportFailed ? { tools } : {}),
     };
 
     let accumulated = "";
     let streamToolCalls: ChatToolCall[] | undefined;
-
     try {
-      for await (const chunk of input.provider.stream(streamRequest)) {
+      input.onDebug?.({
+        event: "stream_request",
+        model: streamRequest.model,
+        messageCount: streamRequest.messages.length,
+        toolCount: streamRequest.tools?.length ?? 0,
+        hasSystem: !!streamRequest.system,
+      });
+      let chunkIdx = 0;
+      for await (const chunk of input.provider.stream(
+        streamRequest,
+        input.debug,
+      )) {
+        const debugInfo: Record<string, unknown> = {
+          chunk: chunkIdx++,
+          text: chunk.text || "",
+          model: chunk.model,
+          done: chunk.done ?? false,
+        };
+        if (chunk.toolCalls) {
+          debugInfo.toolCalls = chunk.toolCalls.map((tc) => ({
+            name: tc.function.name,
+            args: tc.function.arguments.slice(0, 200),
+          }));
+        }
+        input.onDebug?.(debugInfo);
         if (chunk.text) {
           accumulated += chunk.text;
           input.onToken?.(chunk.text);
@@ -66,11 +100,12 @@ export async function runAgentLoop(input: {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (tools.length > 0 && !toolSupportFailed && isToolSupportError(msg)) {
-        console.warn("Model does not support tool calling — falling back to text-only mode.");
+        input.onDebug?.({ event: "tool_fallback", reason: msg.slice(0, 200) });
         tools = [];
         toolSupportFailed = true;
         continue; // retry loop without tools
       }
+      // Model-level error (broken, rate-limited, empty response) — no retry
       throw err;
     }
 
@@ -83,7 +118,7 @@ export async function runAgentLoop(input: {
         text: finalText,
         messages: resultMessages,
         usedTools,
-        unsupportedToolCalling: !usedTools && looksLikeNoToolSupportText(finalText),
+        unsupportedToolCalling: toolSupportFailed,
       };
     }
 
@@ -101,7 +136,15 @@ export async function runAgentLoop(input: {
     });
 
     for (const toolCall of streamToolCalls) {
+      input.onToolStart?.(
+        toolCall.function.name,
+        toolCall.function.arguments,
+        toolCall.id,
+      );
       const result = await executeToolCall(input.toolClient, toolCall);
+      const truncatedResult =
+        result.length > 500 ? result.slice(0, 500) + "\n..." : result;
+      input.onToolResult?.(toolCall.function.name, truncatedResult);
       allMessages.push({
         role: "tool",
         name: toolCall.function.name,
@@ -145,7 +188,6 @@ async function executeToolCall(
     return runConfirmedPatchTool(toolClient, name, args);
   }
 
-  console.log(`→ ${name}`);
   const result = await toolClient.callTool(name, args);
   return formatToolResult(result);
 }
@@ -155,11 +197,9 @@ async function runConfirmedPatchTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  console.log(`→ ${name} (dry-run)`);
   const dryRunArgs = { ...args, dry_run: true };
   const dryRun = await toolClient.callTool(name, dryRunArgs);
   const dryRunText = formatToolResult(dryRun);
-  console.log(dryRunText);
 
   if (dryRun.isError) return dryRunText;
 
@@ -218,22 +258,13 @@ function formatToolResult(result: {
   return parts.filter(Boolean).join("\n");
 }
 
-function looksLikeNoToolSupportText(text: string) {
-  const lower = text.toLowerCase();
-  return (
-    lower.includes("tool") &&
-    (lower.includes("not support") ||
-      lower.includes("unsupported") ||
-      lower.includes("cannot call"))
-  );
-}
-
 function isToolSupportError(message: string): boolean {
   const lower = message.toLowerCase();
+  // "zero-length" / "empty document" is a model-level issue (broken model, rate limit),
+  // NOT a tool-support problem — do NOT fall back to text-only for these.
   return (
-    lower.includes("zero-length") ||
-    lower.includes("empty document") ||
-    (lower.includes("tool") && (lower.includes("not support") || lower.includes("unsupported"))) ||
+    (lower.includes("tool") &&
+      (lower.includes("not support") || lower.includes("unsupported"))) ||
     (lower.includes("invalid_request") && lower.includes("tool"))
   );
 }

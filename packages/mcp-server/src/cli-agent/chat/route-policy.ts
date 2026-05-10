@@ -1,5 +1,5 @@
 import type { GatewayMode } from "../types.js";
-import { isLocalModel } from "./profiles.js";
+import { isLocalModel, isStrongModel } from "./profiles.js";
 
 export interface ModeCheckResult {
   allowed: boolean;
@@ -107,6 +107,32 @@ export function getModeDisplay(mode: string): {
 /**
  * Get a warning message when switching mode while current model may conflict.
  */
+export function selectModelForMode(
+  models: string[],
+  mode: GatewayMode,
+  excludeModel?: string,
+): string | null {
+  const { models: allowed } = filterModelsByMode(models, mode);
+  // Prefer non-excluded models
+  const candidates = excludeModel
+    ? allowed.filter((m) => m !== excludeModel)
+    : allowed;
+  if (candidates.length === 0) return null;
+  // Prefer strong models first, then fast
+  const strong = candidates.filter((m) => isStrongModel(m));
+  if (strong.length > 0) return strong[0];
+  return candidates[0];
+}
+
+export function getRecommendedMode(
+  currentModel: string,
+  failedModel: string,
+): GatewayMode[] {
+  const failedLocal = isLocalModel(failedModel);
+  if (failedLocal) return ["cloud-ok", "hybrid"];
+  return ["hybrid", "cloud-ok", "ask-before-cloud"];
+}
+
 export function getModeSwitchWarning(
   currentModel: string,
   newMode: GatewayMode,

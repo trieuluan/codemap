@@ -12,6 +12,9 @@ import { modeCommand } from "./mode.js";
 import { toolsCommand } from "./tools.js";
 import { diffCommand } from "./diff.js";
 import { historyCommand } from "./history.js";
+import { debugCommand } from "./debug.js";
+import { retryCommand } from "./retry.js";
+import { mcpCommand } from "./mcp.js";
 
 export interface CommandContext {
   currentModel: string;
@@ -26,6 +29,11 @@ export interface CommandContext {
   setCurrentModel: (model: string) => void;
   setCurrentMode: (mode: GatewayMode) => void;
   setBusy: (busy: boolean) => void;
+  debug: boolean;
+  setDebug: (debug: boolean) => void;
+  debugLogFile: string | null;
+  lastUserText: string | null;
+  resend: () => void;
   exit: () => void;
 }
 
@@ -45,6 +53,9 @@ const commands: Command[] = [
   diffCommand,
   clearCommand,
   historyCommand,
+  debugCommand,
+  retryCommand,
+  mcpCommand,
   exitCommand,
 ];
 
