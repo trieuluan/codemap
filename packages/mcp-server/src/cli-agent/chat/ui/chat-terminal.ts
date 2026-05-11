@@ -1,7 +1,6 @@
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const terminalKit = require("terminal-kit") as typeof import("terminal-kit");
-const term = terminalKit.terminal;
+import { createTerminal, terminalClear } from "terminui";
+import { createInterface } from "node:readline";
+import { createNodeBackendState, createNodeBackend } from "./node-backend.js";
 
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, GatewayMode } from "../../types.js";
@@ -17,8 +16,7 @@ import {
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
-import { render } from "./renderer.js";
-import { readLine } from "./input/input-handler.js";
+import { render, type Terminal as TerminalType } from "./renderer.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -40,7 +38,9 @@ export class ChatTerminal {
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
-  private inputActive = false; // suppress redraws while inputField() owns cursor
+  private inputActive = false;
+  private terminal: TerminalType;
+  private nodeBackendState: ReturnType<typeof createNodeBackendState>;
 
   constructor(options: ChatTerminalOptions) {
     this.options = options;
@@ -64,13 +64,20 @@ export class ChatTerminal {
       this.logger = createDebugLogger();
     }
 
+    // Set up terminui terminal
+    this.nodeBackendState = createNodeBackendState();
+    const backend = createNodeBackend(this.nodeBackendState);
+    this.terminal = createTerminal(backend);
+
     // Listen for screen refresh
     this.bus.on("screen:refresh", () => {
       this.redraw();
     });
 
     // Listen for resize
-    term.on("resize", (w: number, h: number) => {
+    process.stdout.on("resize", () => {
+      const w = process.stdout.columns || 80;
+      const h = process.stdout.rows || 24;
       this.store.dispatch({
         viewport: { width: w, height: h },
       });
@@ -78,12 +85,10 @@ export class ChatTerminal {
   }
 
   async start(): Promise<void> {
-    term.clear();
-    term.grabInput(true);
+    terminalClear(this.terminal);
 
     // Add welcome message
     const state = this.store.getState();
-    console.log(state);
     this.store.dispatch({
       messages: [
         {
@@ -105,12 +110,7 @@ export class ChatTerminal {
     while (true) {
       const state = this.store.getState();
       this.inputActive = true;
-      const input = await readLine({
-        term,
-        width: state.viewport.width,
-        inputHistory: state.input.history,
-        onAbort: () => this.handleAbort(),
-      });
+      const input = await this.readLine();
       this.inputActive = false;
 
       if (input === null && !state.input.lastUserText) {
@@ -133,8 +133,60 @@ export class ChatTerminal {
     }
 
     this.stopSpinner();
-    term("\n");
-    term.processExit(0);
+    process.exit(0);
+  }
+
+  private async readLine(): Promise<string | null> {
+    const state = this.store.getState();
+
+    // Print input box top border
+    const boxW = Math.min(state.viewport.width - 4, 76);
+    const innerW = boxW - 2;
+    const hLine = "─".repeat(innerW - 8);
+
+    process.stdout.write("\n  ");
+    process.stdout.write(`\x1b[90m┌─ Input ─${hLine}┐\x1b[0m`);
+    process.stdout.write("\n  ");
+    process.stdout.write("\x1b[90m│ \x1b[0m");
+    process.stdout.write("\x1b[1;36m> \x1b[0m");
+
+    return new Promise<string | null>((resolve) => {
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        history: [...state.input.history],
+        removeHistoryDuplicates: true,
+      });
+
+      rl.on("line", (line) => {
+        const trimmed = line.trim();
+
+        // Print bottom border
+        const hLineBottom = "─".repeat(innerW);
+        process.stdout.write(`\n  \x1b[90m└${hLineBottom}┘\x1b[0m\n`);
+
+        rl.close();
+        if (!trimmed) {
+          resolve(null);
+          return;
+        }
+        resolve(trimmed);
+      });
+
+      rl.on("close", () => {
+        resolve(null);
+      });
+
+      // Handle Ctrl+C
+      process.stdin.once("data", (data) => {
+        if (data[0] === 0x03) { // Ctrl+C
+          const hLineBottom = "─".repeat(innerW);
+          process.stdout.write(`\n  \x1b[90m└${hLineBottom}┘\x1b[0m\n`);
+          rl.close();
+          resolve(null);
+        }
+      });
+    });
   }
 
   private async handleSubmit(text: string): Promise<void> {
@@ -382,58 +434,50 @@ export class ChatTerminal {
   }
 
   private makeConfirmEdit(): ConfirmEditFn {
-    return (name, args, preview) => {
+    return async (name, args, preview) => {
       const state = this.store.getState();
-      if (state.input.autoAccept) return Promise.resolve(true);
+      if (state.input.autoAccept) return true;
 
       this.stopSpinner();
       this.store.dispatch({
         confirm: { active: true, toolName: name, preview },
       });
-      // Suppress redraws while yesOrNo() owns the cursor
       this.inputActive = true;
+      this.redraw();
 
-      return new Promise<boolean>((resolve) => {
-        term.yesOrNo(
-          { yes: ["y", "Y"], no: ["n", "N"] },
-          (err: unknown, result: boolean) => {
-            this.store.dispatch({
-              confirm: { active: false, toolName: "", preview: null },
-            });
-            this.inputActive = false;
-            if (err || !result) {
-              resolve(false);
-              return;
-            }
-            resolve(true);
-          },
-        );
-
-        const onKey = (key: string) => {
-          if (key === "a" || key === "A") {
-            this.store.dispatch({
-              input: { ...this.store.getState().input, autoAccept: true },
-            });
-            this.store.dispatch({
-              confirm: { active: false, toolName: "", preview: null },
-            });
-            this.inputActive = false;
-            term.removeListener("key", onKey);
-            resolve(true);
-          }
-        };
-        term.on("key", onKey);
+      const result = await this.promptYesNo(name);
+      this.store.dispatch({
+        confirm: { active: false, toolName: "", preview: null },
       });
+      this.inputActive = false;
+
+      return result;
     };
   }
 
-  private handleAbort(): void {
-    this.store.dispatch({
-      task: { phase: "idle", toolsCalled: 0 },
-      input: { ...this.store.getState().input, busy: false },
+  private async promptYesNo(toolName: string): Promise<boolean> {
+    process.stdout.write(`\n  \x1b[33m${toolName}\x1b[0m wants to edit files. Proceed? [y/n/a(ll)] `);
+
+    return new Promise<boolean>((resolve) => {
+      const onData = (data: Buffer) => {
+        const key = data.toString().toLowerCase();
+        process.stdin.removeListener("data", onData);
+        if (key === "y") {
+          process.stdout.write("yes\n");
+          resolve(true);
+        } else if (key === "a") {
+          process.stdout.write("accept all\n");
+          this.store.dispatch({
+            input: { ...this.store.getState().input, autoAccept: true },
+          });
+          resolve(true);
+        } else {
+          process.stdout.write("no\n");
+          resolve(false);
+        }
+      };
+      process.stdin.on("data", onData);
     });
-    this.stopSpinner();
-    this.appendMessage({ role: "system", content: "Aborted." });
   }
 
   // ─── Message helpers ─────────────────────────────────
@@ -448,8 +492,8 @@ export class ChatTerminal {
     this.store.dispatch((prev) => {
       const msgs = [...prev.messages];
       for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === "assistant" && !msgs[i].toolName) {
-          msgs[i] = { ...msgs[i], content };
+        if (msgs[i]!.role === "assistant" && !msgs[i]!.toolName) {
+          msgs[i] = { ...msgs[i]!, content };
           break;
         }
       }
@@ -532,7 +576,7 @@ export class ChatTerminal {
       },
       exit: () => {
         this.stopSpinner();
-        term.processExit(0);
+        process.exit(0);
       },
     };
   }
@@ -542,7 +586,7 @@ export class ChatTerminal {
   private redraw(): void {
     if (this.inputActive) return;
     const state = this.store.getState();
-    render(state, this.spinnerFrame);
+    render(this.terminal, state, this.spinnerFrame);
   }
 
   private startSpinner(): void {
