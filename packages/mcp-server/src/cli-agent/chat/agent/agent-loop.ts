@@ -1,5 +1,3 @@
-import { confirm } from "@clack/prompts";
-
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
 import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
@@ -23,6 +21,12 @@ export interface AgentLoopResult {
   usage?: TokenUsage;
 }
 
+export type ConfirmEditFn = (
+  name: string,
+  args: Record<string, unknown>,
+  preview: string | null,
+) => Promise<boolean>;
+
 export async function runAgentLoop(input: {
   provider: NineRouterProvider;
   model: string;
@@ -37,6 +41,7 @@ export async function runAgentLoop(input: {
   onDebug?: (info: Record<string, unknown>) => void;
   debug?: boolean;
   compactor?: ContextCompactor;
+  confirmEdit?: ConfirmEditFn;
 }): Promise<AgentLoopResult> {
   let tools = await input.toolClient.listChatTools();
 
@@ -184,15 +189,14 @@ export async function runAgentLoop(input: {
         toolCall.function.arguments,
         toolCall.id,
       );
-      const result = await executeToolCall(input.toolClient, toolCall);
+      const result = await executeToolCall(input.toolClient, toolCall, input.confirmEdit);
       const truncatedResult =
         result.length > 500 ? result.slice(0, 500) + "\n..." : result;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
-      // Track failures for apply_patch conflict detection
+      // Track consecutive tool failures
       const isConflict =
-        toolCall.function.name === "apply_patch" &&
-        (result.includes("conflict") || result.includes("FAILED") || result.includes("Hunk"));
+        (result.includes("conflict") || result.includes("FAILED") || result.includes("not_found"));
       if (isConflict) {
         lastFailedTool = {
           name: toolCall.function.name,
@@ -243,12 +247,13 @@ export async function runAgentLoop(input: {
 async function executeToolCall(
   toolClient: CodeMapMcpToolClient,
   toolCall: ChatToolCall,
+  confirmEdit?: ConfirmEditFn,
 ): Promise<string> {
   const name = toolCall.function.name;
   const args = parseToolArguments(toolCall.function.arguments);
 
   if (isConfirmTool(name)) {
-    return runConfirmedEditTool(toolClient, name, args);
+    return runConfirmedEditTool(toolClient, name, args, confirmEdit);
   }
 
   const result = await toolClient.callTool(name, args);
@@ -259,6 +264,7 @@ async function runConfirmedEditTool(
   toolClient: CodeMapMcpToolClient,
   name: string,
   args: Record<string, unknown>,
+  confirmEdit?: ConfirmEditFn,
 ): Promise<string> {
   const dryRunArgs = { ...args, dry_run: true };
   const dryRun = await toolClient.callTool(name, dryRunArgs);
@@ -266,22 +272,17 @@ async function runConfirmedEditTool(
 
   if (dryRun.isError) return dryRunText;
 
-  // Show diff preview based on tool type
   const preview = renderEditDiffPreview(name, args);
-  if (preview) {
-    console.log("\n" + preview);
-    console.log("");
-  }
 
-  const approved = await confirm({
-    message: `Apply ${name} to the workspace?`,
-    initialValue: false,
-  });
-  if (approved !== true) {
+  // Use Ink-native confirm callback, or auto-approve if no callback (non-TUI mode)
+  const approved = confirmEdit
+    ? await confirmEdit(name, args, preview)
+    : true;
+
+  if (!approved) {
     return `${dryRunText}\n\nUser declined. No files were changed.`;
   }
 
-  console.log(`→ ${name}`);
   const applied = await toolClient.callTool(name, {
     ...args,
     dry_run: false,

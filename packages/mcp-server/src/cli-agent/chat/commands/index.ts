@@ -1,5 +1,5 @@
 import type { GatewayMode, ChatMessage } from "../../types.js";
-import type { ChatEntry } from "../ui/ink-app.js";
+import type { ChatEntry } from "../ui/chat-terminal.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 
 import { helpCommand } from "./help.js";
@@ -23,9 +23,9 @@ export interface CommandContext {
   history: ChatMessage[];
   availableModels?: string[];
   toolClient: CodeMapMcpToolClient;
-  setMessages: React.Dispatch<React.SetStateAction<ChatEntry[]>>;
-  setHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  setInputHistory: React.Dispatch<React.SetStateAction<string[]>>;
+  setMessages: (updater: ChatEntry[] | ((prev: ChatEntry[]) => ChatEntry[])) => void;
+  setHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
+  setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => void;
   setCurrentModel: (model: string) => void;
   setCurrentMode: (mode: GatewayMode) => void;
   setBusy: (busy: boolean) => void;

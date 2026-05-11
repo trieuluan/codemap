@@ -17,8 +17,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   await toolClient.connectExtras();
 
   try {
-    const { startInkChat } = await import("../chat/ui/ink-app.js");
-    await startInkChat({
+    const { ChatTerminal } = await import("../chat/ui/chat-terminal.js");
+    const terminal = new ChatTerminal({
       provider,
       model: profile.model,
       toolClient,
@@ -26,6 +26,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       mode: mode ?? ctx.config.mode,
       availableModels,
     });
+    await terminal.start();
   } catch (err) {
     if (err instanceof Error && err.message !== "App exited") {
       throw err;

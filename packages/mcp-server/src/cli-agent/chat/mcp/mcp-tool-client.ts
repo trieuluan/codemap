@@ -13,7 +13,7 @@ import { McpServerConnection } from "./mcp-server-connection.js";
 const require = createRequire(import.meta.url);
 
 const CONFIRM_PATTERNS =
-  /\b(patch|edit|write|delete|remove|rename|move|create|update|insert|drop|truncate)\b/i;
+  /(^|_)(patch|edit|write|delete|remove|rename|move|create|update|insert|drop|truncate)/i;
 
 export function isConfirmTool(name: string): boolean {
   return CONFIRM_PATTERNS.test(name);

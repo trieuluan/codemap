@@ -16,7 +16,7 @@ export function registerPingTool(
     },
     async () => {
       const data = {
-        message: "pong from CodeMap MCP server",
+        message: "pong from CodeMap MCP server 🏓",
         apiConfigured: Boolean(config.apiUrl),
         tokenConfigured: Boolean(config.apiToken),
       };
