@@ -1,5 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -9,8 +8,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspacePath } from "../lib/workspace-project.js";
-
-const execFileAsync = promisify(execFile);
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +31,50 @@ async function createTempPatchFile(content: string): Promise<string> {
   const filename = join(tmpdir(), `codemap-patch-${randomUUID()}.patch`);
   await writeFile(filename, content, "utf-8");
   return filename;
+}
+
+/** Spawn `patch` with stdin ignored (prevents interactive prompt on BSD/macOS). */
+function runPatch(
+  args: string[],
+  cwd: string,
+  timeout: number,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("patch", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d: Buffer) => (stdout += d));
+    child.stderr.on("data", (d: Buffer) => (stderr += d));
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`patch timed out after ${timeout}ms`));
+    }, timeout);
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        const err = new Error(
+          `patch exited with code ${code}\nstdout: ${stdout}\nstderr: ${stderr}`,
+        );
+        (err as any).stdout = stdout;
+        (err as any).stderr = stderr;
+        (err as any).code = code;
+        reject(err);
+      }
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 function parsePatchOutput(output: string): {
@@ -80,6 +121,17 @@ function parsePatchOutput(output: string): {
   }
 
   return { filesModified, filesCreated, filesDeleted, conflicts };
+}
+
+function extractPatchError(error: unknown): string {
+  if (error instanceof Error) {
+    const parts = [error.message];
+    const e = error as any;
+    if (e.stdout) parts.push(`stdout: ${e.stdout}`);
+    if (e.stderr) parts.push(`stderr: ${e.stderr}`);
+    return parts.join("\n");
+  }
+  return String(error);
 }
 
 function detectPatchFormat(patchContent: string): "unified" | "base64" | "unknown" {
@@ -165,7 +217,9 @@ export function registerApplyPatchTool(
 
         if (base64_patch && !patchContent) {
           try {
-            patchContent = Buffer.from(base64_patch, "base64").toString("utf-8");
+            // Sanitize base64: remove line endings that corrupt decode
+            const sanitized = base64_patch.replace(/[\r\n\s]/g, "");
+            patchContent = Buffer.from(sanitized, "base64").toString("utf-8");
           } catch (error) {
             return success("Failed to decode base64 patch.", {
               projectId: project_id,
@@ -204,14 +258,10 @@ export function registerApplyPatchTool(
         if (dry_run) {
           try {
             const patchFile = await createTempPatchFile(patchContent);
-            const args = ["-p1", "--dry-run", "--fuzz", String(fuzz ?? 2)];
+            const args = ["-p1", "--dry-run", "--fuzz", String(fuzz ?? 2), "-i", patchFile];
             if (reverse) args.push("-R");
-            args.push(patchFile);
 
-            const { stdout, stderr } = await execFileAsync("patch", args, {
-              cwd: workspacePath,
-              timeout: 10_000,
-            });
+            const { stdout, stderr } = await runPatch(args, workspacePath, 10_000);
 
             result.output = stdout + stderr;
             const parsed = parsePatchOutput(result.output);
@@ -220,10 +270,9 @@ export function registerApplyPatchTool(
             result.filesDeleted = parsed.filesDeleted;
             result.conflicts = parsed.conflicts;
           } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            result.conflicts.push(errorMessage);
-            result.output = errorMessage;
+            const errOutput = extractPatchError(error);
+            result.conflicts.push(errOutput);
+            result.output = errOutput;
           }
 
           return success(
@@ -237,13 +286,10 @@ export function registerApplyPatchTool(
         // Real apply mode
         try {
           const patchFile = await createTempPatchFile(patchContent);
-          const args = ["-p1", "--fuzz", String(fuzz ?? 2)];
+          const args = ["-p1", "--fuzz", String(fuzz ?? 2), "-i", patchFile];
           if (reverse) args.push("-R");
-          args.push(patchFile);
 
-          const { stdout, stderr } = await execFileAsync("patch", args, {
-            cwd: workspacePath,
-          });
+          const { stdout, stderr } = await runPatch(args, workspacePath, 10_000);
 
           result.output = stdout + stderr;
           result.applied = true;
@@ -254,13 +300,16 @@ export function registerApplyPatchTool(
           result.filesDeleted = parsed.filesDeleted;
           result.conflicts = parsed.conflicts;
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          const errOutput = extractPatchError(error);
 
           // Check if it's a conflict vs other error
-          if (errorMessage.includes("FAILED") || errorMessage.includes("reject")) {
-            result.conflicts.push(errorMessage);
-            result.output = errorMessage;
+          if (
+            errOutput.includes("FAILED") ||
+            errOutput.includes("reject") ||
+            errOutput.includes("Hunk")
+          ) {
+            result.conflicts.push(errOutput);
+            result.output = errOutput;
             result.applied = false;
           } else {
             throw error; // Re-throw unexpected errors

@@ -117,7 +117,8 @@ export function MentionInput({
     acceptSuggestion(value);
   };
 
-  // Unified input handler — Ctrl+C works even when busy
+  // Unified input handler — must always be active so Ctrl+C works even when busy.
+  // Individual keys are gated by `busy` inside the callback.
   useInput(
     (input, key) => {
       // Ctrl+C: Claude-style behavior

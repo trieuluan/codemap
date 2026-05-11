@@ -601,7 +601,7 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
         <Box>
           <Badge color="green">You</Badge>
         </Box>
-        <Box paddingLeft={2}>
+        <Box paddingLeft={2} flexDirection="column">
           <Text color="white" wrap="wrap">
             {entry.content}
           </Text>
@@ -616,7 +616,7 @@ function ChatBubble({ entry }: { entry: ChatEntry }) {
         <Box>
           <Badge color="cyan">Agent</Badge>
         </Box>
-        <Box paddingLeft={2}>
+        <Box paddingLeft={2} flexDirection="column">
           <Text wrap="wrap">{entry.content}</Text>
         </Box>
       </Box>

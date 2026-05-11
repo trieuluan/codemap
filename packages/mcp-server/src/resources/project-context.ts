@@ -65,7 +65,9 @@ const TOOLS_FULL_EXTRA = [
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call trigger_reimport after",
   "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
   "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
-  "- suggest_patch / apply_patch — propose and apply code changes; always review patch diffs before applying",
+  "- edit_file — replace a unique string in a file; use for targeted edits (preferred over apply_patch)",
+  "- write_file — write full content to a file, creating it if needed; use for new files or full rewrites",
+  "- suggest_patch — analyze workspace changes and generate unified diffs with blast radius",
   "- deploy_preview — deploy a preview build of the project",
   "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
   "- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage GitLab OAuth for repository imports",
@@ -116,7 +118,7 @@ const MAINTENANCE_SECTION = [
   "- Dead functions: use find_usages or find_callers. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
   "- find_usages occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
   "- After cleanup edits, run package builds and get_working_diff. Call refresh_local_index to refresh MCP local data; call trigger_reimport and wait_for_import only when cloud/web data should refresh.",
-  "- Before applying patches (apply_patch), use find_cycles to ensure no new circular dependencies are introduced.",
+  "- Before editing files, use find_cycles to ensure no new circular dependencies are introduced.",
 ];
 
 // ── Main builder ──────────────────────────────────────────────────────────────

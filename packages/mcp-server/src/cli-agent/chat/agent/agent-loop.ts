@@ -3,7 +3,6 @@ import { confirm } from "@clack/prompts";
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
 import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
-import { renderDiffPreview } from "./diff-preview.js";
 import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
@@ -12,7 +11,7 @@ const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistan
 
 Use MCP tools for codebase work. Start broad implementation/debug/refactor tasks with get_agent_workflow and recommend_agent_workflow. Use search_codebase, get_file, get_files, find_related_files, find_usages, and find_callers before proposing edits.
 
-For edits, create unified diffs and call apply_patch. The CLI will force dry_run first and ask the user before applying real file changes. Never claim a file was changed until apply_patch reports it was applied. After edits, inspect get_working_diff and refresh_local_index.
+For edits, use edit_file(path, old_string, new_string) for targeted string replacements. Use write_file(path, content) for new files or full rewrites. Include enough surrounding context in old_string to make it unique. The CLI will ask the user before applying real file changes. Never claim a file was changed until the tool reports it was applied. After edits, call get_working_diff and refresh_local_index.
 
 Keep final answers concise and include verification or remaining risk.`;
 
@@ -59,12 +58,15 @@ export async function runAgentLoop(input: {
   let finalText = "";
   let toolSupportFailed = false;
   let accumulatedUsage: TokenUsage | undefined;
+  let lastFailedTool: { name: string; args: string } | null = null;
+  let consecutiveFailures = 0;
 
   // Truncate large tool results in history before first API call
   if (input.compactor) {
     allMessages = input.compactor.truncateToolResults(allMessages);
   }
 
+  let shouldBreak = false;
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
     // Compact history if it's growing too large
     if (input.compactor && i > 0) {
@@ -162,6 +164,21 @@ export async function runAgentLoop(input: {
     });
 
     for (const toolCall of streamToolCalls) {
+      // Detect consecutive identical failed tool calls
+      if (
+        lastFailedTool &&
+        toolCall.function.name === lastFailedTool.name &&
+        toolCall.function.arguments === lastFailedTool.args
+      ) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 2) {
+          const msg = `Tool "${toolCall.function.name}" failed ${consecutiveFailures} times with identical arguments. Stopping — please use a different approach or read the file first.`;
+          resultMessages.push({ role: "assistant", content: msg });
+          shouldBreak = true;
+          break;
+        }
+      }
+
       input.onToolStart?.(
         toolCall.function.name,
         toolCall.function.arguments,
@@ -171,6 +188,21 @@ export async function runAgentLoop(input: {
       const truncatedResult =
         result.length > 500 ? result.slice(0, 500) + "\n..." : result;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
+
+      // Track failures for apply_patch conflict detection
+      const isConflict =
+        toolCall.function.name === "apply_patch" &&
+        (result.includes("conflict") || result.includes("FAILED") || result.includes("Hunk"));
+      if (isConflict) {
+        lastFailedTool = {
+          name: toolCall.function.name,
+          args: toolCall.function.arguments,
+        };
+      } else {
+        lastFailedTool = null;
+        consecutiveFailures = 0;
+      }
+
       allMessages.push({
         role: "tool",
         name: toolCall.function.name,
@@ -184,19 +216,23 @@ export async function runAgentLoop(input: {
         content: result,
       });
     }
+    if (shouldBreak) break;
 
     // Reset streaming text for next iteration
     if (input.onToken) input.onToken("\n");
   }
 
+  const limitMsg = shouldBreak
+    ? resultMessages[resultMessages.length - 1]?.content ?? "Stopped."
+    : `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`;
+
   return {
-    text: `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`,
+    text: limitMsg,
     messages: [
       ...resultMessages,
-      {
-        role: "assistant",
-        content: `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`,
-      },
+      ...(!shouldBreak
+        ? [{ role: "assistant" as const, content: limitMsg }]
+        : []),
     ],
     usedTools,
     unsupportedToolCalling: false,
@@ -212,14 +248,14 @@ async function executeToolCall(
   const args = parseToolArguments(toolCall.function.arguments);
 
   if (isConfirmTool(name)) {
-    return runConfirmedPatchTool(toolClient, name, args);
+    return runConfirmedEditTool(toolClient, name, args);
   }
 
   const result = await toolClient.callTool(name, args);
   return formatToolResult(result);
 }
 
-async function runConfirmedPatchTool(
+async function runConfirmedEditTool(
   toolClient: CodeMapMcpToolClient,
   name: string,
   args: Record<string, unknown>,
@@ -230,10 +266,10 @@ async function runConfirmedPatchTool(
 
   if (dryRun.isError) return dryRunText;
 
-  // Show diff preview before confirm
-  const patch = args.patch as string | undefined;
-  if (patch) {
-    console.log("\n" + renderDiffPreview(patch));
+  // Show diff preview based on tool type
+  const preview = renderEditDiffPreview(name, args);
+  if (preview) {
+    console.log("\n" + preview);
     console.log("");
   }
 
@@ -265,6 +301,31 @@ async function runConfirmedPatchTool(
     "\nAfter apply: refresh_local_index",
     formatToolResult(refreshed),
   ].join("\n");
+}
+
+function renderEditDiffPreview(
+  toolName: string,
+  args: Record<string, unknown>,
+): string | null {
+  if (toolName === "edit_file") {
+    const filePath = (args.file_path as string) ?? "";
+    const oldStr = (args.old_string as string) ?? "";
+    const newStr = (args.new_string as string) ?? "";
+    const lines = [`--- a/${filePath}`, `+++ b/${filePath}`];
+    for (const l of oldStr.split("\n")) lines.push(`-${l}`);
+    for (const l of newStr.split("\n")) lines.push(`+${l}`);
+    return lines.join("\n");
+  }
+
+  if (toolName === "write_file") {
+    const filePath = (args.file_path as string) ?? "";
+    const content = (args.content as string) ?? "";
+    const lines = [`--- /dev/null`, `+++ b/${filePath}`];
+    for (const l of content.split("\n")) lines.push(`+${l}`);
+    return lines.join("\n");
+  }
+
+  return null;
 }
 
 function parseToolArguments(raw: string): Record<string, unknown> {
