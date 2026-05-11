@@ -1,4 +1,4 @@
-import { getModeDisplay } from "../route-policy.js";
+import { getModeDisplay } from "./route-policy.js";
 import type { Command } from "./index.js";
 
 export const statusCommand: Command = {

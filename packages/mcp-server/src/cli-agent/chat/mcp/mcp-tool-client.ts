@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   readMcpServerConfigs,
   readPriorityResources,
-} from "../../lib/workspace-project.js";
-import type { ChatToolDefinition } from "../types.js";
+} from "../../../lib/workspace-project.js";
+import type { ChatToolDefinition } from "../../types.js";
 import { McpServerConnection } from "./mcp-server-connection.js";
 
 const require = createRequire(import.meta.url);

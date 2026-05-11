@@ -2,19 +2,20 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { render, Box, Text, useApp } from "ink";
 import { Alert, Badge } from "@inkjs/ui";
 import cfonts from "cfonts";
-import type { NineRouterProvider } from "../provider.js";
-import type { ChatMessage, ChatToolCall, GatewayMode } from "../types.js";
-import { runAgentLoop } from "./agent-loop.js";
-import { hydrateMentionContext } from "./mention-context.js";
-import type { CodeMapMcpToolClient } from "./mcp-tool-client.js";
+import type { NineRouterProvider } from "../../provider.js";
+import type { ChatMessage, ChatToolCall, GatewayMode } from "../../types.js";
+import { runAgentLoop } from "../agent/agent-loop.js";
+import { ContextCompactor } from "../agent/context-compactor.js";
+import { hydrateMentionContext } from "../agent/mention-context.js";
+import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { MentionInput } from "./mention-input.js";
 import {
   getModeDisplay,
   selectModelForMode,
   getRecommendedMode,
-} from "./route-policy.js";
-import { executeCommand } from "./commands/index.js";
-import { createDebugLogger, type DebugLogger } from "./debug-logger.js";
+} from "../commands/route-policy.js";
+import { executeCommand } from "../commands/index.js";
+import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { TaskStatusBar, type TaskStatus } from "./task-status-bar.js";
 
 interface WelcomeData {
@@ -71,6 +72,7 @@ function InkChatApp({
   taskStatusRef.current = taskStatus;
   const busyRef = useRef(busy);
   busyRef.current = busy;
+  const compactorRef = useRef(new ContextCompactor(provider));
 
   useEffect(() => {
     const welcome: ChatEntry = {
@@ -139,10 +141,12 @@ function InkChatApp({
       // Normal message — hydrate @mentions then run agent loop
       lastUserTextRef.current = text;
       streamAbortedRef.current = false;
-      setTaskStatus({ phase: "thinking", startTime: Date.now(), toolsCalled: 0 });
+      setTaskStatus({ phase: "thinking", startTime: Date.now(), toolsCalled: 0, model: currentModel });
       setMessages((prev) => [...prev, { role: "user", content: text }]);
       setInputHistory((prev) => [...prev, text]);
       setBusy(true);
+      let streamingContent = "";
+      let hasStreamingEntry = false;
 
       try {
         const mentionContext = await hydrateMentionContext(text);
@@ -165,19 +169,43 @@ function InkChatApp({
           userMessage,
           toolClient,
           debug,
+          compactor: compactorRef.current,
           onToken: (token) => {
-            if (!streamAbortedRef.current) {
-              setTaskStatus((prev) => ({
+            if (streamAbortedRef.current) return;
+            streamingContent += token;
+            if (!hasStreamingEntry) {
+              hasStreamingEntry = true;
+              setMessages((prev) => [
                 ...prev,
-                phase: "streaming",
-                text: (prev.text ?? "") + token,
-              }));
+                { role: "assistant", content: streamingContent },
+              ]);
+            } else {
+              setMessages((prev) => {
+                const updated = [...prev];
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].role === "assistant" && !updated[i].toolName) {
+                    updated[i] = { ...updated[i], content: streamingContent };
+                    break;
+                  }
+                }
+                return updated;
+              });
             }
+            setTaskStatus((prev) => ({
+              ...prev,
+              phase: "streaming",
+              text: undefined,
+            }));
+          },
+          onUsage: (usage) => {
+            setTaskStatus((prev) => ({ ...prev, usage }));
           },
           onToolStart: (name, args, id) => {
             if (debugRef.current) {
               loggerRef.current?.logToolStart(name, args, id);
             }
+            streamingContent = "";
+            hasStreamingEntry = false;
             setTaskStatus((prev) => ({
               ...prev,
               phase: "tool",
@@ -199,6 +227,8 @@ function InkChatApp({
             if (debugRef.current) {
               loggerRef.current?.logToolResult(name, resultText);
             }
+            streamingContent = "";
+            hasStreamingEntry = false;
             setTaskStatus((prev) => ({
               ...prev,
               phase: "thinking",
@@ -257,19 +287,34 @@ function InkChatApp({
           });
         }
 
-        // Only add final assistant response and any remaining entries
-        const newEntries: ChatEntry[] = [
-          { role: "assistant", content: result.text || "(no response)" },
-        ];
-
         if (result.unsupportedToolCalling) {
-          newEntries.push({
-            role: "system",
-            content: `Model "${currentModel}" does not support tool calling. Response was generated without tools.\nUse /model <name> to switch to a tool-capable model, or /mode to change gateway mode.`,
-          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "system",
+              content: `Model "${currentModel}" does not support tool calling. Response was generated without tools.\nUse /model <name> to switch to a tool-capable model, or /mode to change gateway mode.`,
+            },
+          ]);
         }
 
-        setMessages((prev) => [...prev, ...newEntries]);
+        // Finalize: update streaming entry to final text if different
+        if (hasStreamingEntry && result.text) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].role === "assistant" && !updated[i].toolName) {
+                updated[i] = { ...updated[i], content: result.text || "(no response)" };
+                break;
+              }
+            }
+            return updated;
+          });
+        } else if (!hasStreamingEntry) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: result.text || "(no response)" },
+          ]);
+        }
 
         setHistory((prev) => [...prev, ...result.messages]);
       } catch (err) {

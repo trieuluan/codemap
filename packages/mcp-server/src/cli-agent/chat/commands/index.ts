@@ -1,6 +1,6 @@
 import type { GatewayMode, ChatMessage } from "../../types.js";
-import type { ChatEntry } from "../ink-app.js";
-import type { CodeMapMcpToolClient } from "../mcp-tool-client.js";
+import type { ChatEntry } from "../ui/ink-app.js";
+import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 
 import { helpCommand } from "./help.js";
 import { clearCommand } from "./clear.js";

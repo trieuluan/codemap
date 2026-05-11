@@ -1,4 +1,4 @@
-import type { GatewayMode } from "../types.js";
+import type { GatewayMode } from "../../types.js";
 import { isLocalModel, isStrongModel } from "./profiles.js";
 
 export interface ModeCheckResult {

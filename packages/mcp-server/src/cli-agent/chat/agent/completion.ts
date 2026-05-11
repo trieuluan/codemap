@@ -1,6 +1,6 @@
 import { stdout as output } from "node:process";
 
-import { NineRouterProvider } from "../provider.js";
+import { NineRouterProvider } from "../../provider.js";
 
 export async function runChatCompletion(
   provider: NineRouterProvider,

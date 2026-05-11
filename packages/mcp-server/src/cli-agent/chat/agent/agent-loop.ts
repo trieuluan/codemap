@@ -1,8 +1,9 @@
 import { confirm } from "@clack/prompts";
 
-import { NineRouterProvider } from "../provider.js";
-import type { ChatMessage, ChatToolCall } from "../types.js";
-import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "./mcp-tool-client.js";
+import { NineRouterProvider } from "../../provider.js";
+import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
+import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
+import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
 
@@ -19,6 +20,7 @@ export interface AgentLoopResult {
   messages: ChatMessage[];
   usedTools: boolean;
   unsupportedToolCalling: boolean;
+  usage?: TokenUsage;
 }
 
 export async function runAgentLoop(input: {
@@ -30,8 +32,10 @@ export async function runAgentLoop(input: {
   onToken?: (text: string) => void;
   onToolStart?: (name: string, args: string, id: string) => void;
   onToolResult?: (name: string, result: string) => void;
+  onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   debug?: boolean;
+  compactor?: ContextCompactor;
 }): Promise<AgentLoopResult> {
   let tools = await input.toolClient.listChatTools();
 
@@ -47,13 +51,25 @@ export async function runAgentLoop(input: {
     ? AGENT_SYSTEM_PROMPT + "\n\n" + resourceContext
     : AGENT_SYSTEM_PROMPT;
 
-  const allMessages: ChatMessage[] = [...input.history, input.userMessage];
+  let allMessages: ChatMessage[] = [...input.history, input.userMessage];
   const resultMessages: ChatMessage[] = [input.userMessage];
   let usedTools = false;
   let finalText = "";
   let toolSupportFailed = false;
+  let accumulatedUsage: TokenUsage | undefined;
+
+  // Truncate large tool results in history before first API call
+  if (input.compactor) {
+    allMessages = input.compactor.truncateToolResults(allMessages);
+  }
 
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
+    // Compact history if it's growing too large
+    if (input.compactor && i > 0) {
+      const compacted = await input.compactor.compactIfNeeded(allMessages, input.model);
+      if (compacted) allMessages = compacted;
+    }
+
     const streamRequest = {
       model: input.model,
       system: systemPrompt,
@@ -96,6 +112,10 @@ export async function runAgentLoop(input: {
         if (chunk.toolCalls && chunk.toolCalls.length > 0) {
           streamToolCalls = chunk.toolCalls;
         }
+        if (chunk.usage) {
+          accumulatedUsage = chunk.usage;
+          input.onUsage?.(chunk.usage);
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -119,6 +139,7 @@ export async function runAgentLoop(input: {
         messages: resultMessages,
         usedTools,
         unsupportedToolCalling: toolSupportFailed,
+        usage: accumulatedUsage,
       };
     }
 
@@ -174,6 +195,7 @@ export async function runAgentLoop(input: {
     ],
     usedTools,
     unsupportedToolCalling: false,
+    usage: accumulatedUsage,
   };
 }
 

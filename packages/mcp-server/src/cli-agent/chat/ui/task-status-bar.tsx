@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { Spinner, Badge } from "@inkjs/ui";
+import type { TokenUsage } from "../../types.js";
 
 export type TaskPhase = "idle" | "thinking" | "tool" | "streaming" | "done";
 
@@ -12,6 +13,8 @@ export interface TaskStatus {
   endTime?: number;
   text?: string;
   toolsCalled: number;
+  model?: string;
+  usage?: TokenUsage;
 }
 
 function useElapsed(startTime?: number, endTime?: number): number {
@@ -71,6 +74,7 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
         {status.phase === "thinking" && (
           <>
             <Spinner label={`Thinking...  ${elapsedStr}`} />
+            {status.model && <Badge color="cyan">{status.model}</Badge>}
           </>
         )}
 
@@ -90,9 +94,15 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
             <Text color="cyan" bold>
               Streaming
             </Text>
+            {status.model && <Badge color="cyan">{status.model}</Badge>}
             <Text color="gray" dimColor>
               {elapsedStr}
             </Text>
+            {status.usage && (
+              <Text color="gray" dimColor>
+                {formatTokenCount(status.usage.promptTokens)} in / {formatTokenCount(status.usage.completionTokens)} out
+              </Text>
+            )}
           </>
         )}
 
@@ -105,7 +115,11 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
               Completed in {elapsedStr}
             </Text>
             {status.toolsCalled > 0 && (
-              <Text color="gray">· {status.toolsCalled} tool{status.toolsCalled > 1 ? "s" : ""} called</Text>
+              <Text color="gray">· {status.toolsCalled} tool{status.toolsCalled > 1 ? "s" : ""}</Text>
+            )}
+            {status.model && <Text color="gray">· {status.model}</Text>}
+            {status.usage && (
+              <Text color="gray">· {formatTokenCount(status.usage.totalTokens)} tokens</Text>
             )}
           </>
         )}
@@ -135,4 +149,9 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
 function truncatePreview(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(text.length - max);
+}
+
+function formatTokenCount(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
 }

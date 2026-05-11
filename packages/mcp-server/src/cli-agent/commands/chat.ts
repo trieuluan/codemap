@@ -1,7 +1,7 @@
 import { parseModeFlag } from "../args.js";
 import type { GatewayCommandContext } from "../command-context.js";
-import { CodeMapMcpToolClient } from "../chat/mcp-tool-client.js";
-import { selectChatProfile } from "../chat/profiles.js";
+import { CodeMapMcpToolClient } from "../chat/mcp/mcp-tool-client.js";
+import { selectChatProfile } from "../chat/commands/profiles.js";
 import { NineRouterProvider } from "../provider.js";
 import type { GatewayConfig } from "../types.js";
 import { printGatewayHint } from "./gateway-hint.js";
@@ -17,7 +17,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   await toolClient.connectExtras();
 
   try {
-    const { startInkChat } = await import("../chat/ink-app.js");
+    const { startInkChat } = await import("../chat/ui/ink-app.js");
     await startInkChat({
       provider,
       model: profile.model,

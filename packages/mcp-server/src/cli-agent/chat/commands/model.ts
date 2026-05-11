@@ -1,4 +1,4 @@
-import { checkModelPolicy } from "../route-policy.js";
+import { checkModelPolicy } from "./route-policy.js";
 import type { Command } from "./index.js";
 
 export const modelCommand: Command = {

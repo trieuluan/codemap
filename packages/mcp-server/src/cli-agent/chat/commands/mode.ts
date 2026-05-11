@@ -1,5 +1,5 @@
 import type { GatewayMode } from "../../types.js";
-import { getModeDisplay, getModeSwitchWarning } from "../route-policy.js";
+import { getModeDisplay, getModeSwitchWarning } from "./route-policy.js";
 import type { Command } from "./index.js";
 
 const VALID_MODES: GatewayMode[] = [

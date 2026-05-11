@@ -8,6 +8,7 @@ import type {
   GatewayModel,
   GatewayProvider,
   ProviderHealth,
+  TokenUsage,
 } from "./types.js";
 
 interface ChatCompletionResponse {
@@ -35,6 +36,11 @@ interface ChatCompletionStreamResponse {
     };
     text?: string;
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
 export class NineRouterProvider implements GatewayProvider {
@@ -142,6 +148,7 @@ export class NineRouterProvider implements GatewayProvider {
         max_tokens: request.maxTokens,
         stream: true,
         tools: sanitizeTools(request.tools),
+        stream_options: { include_usage: true },
       }),
     });
 
@@ -269,6 +276,16 @@ function parseStreamLine(
     return undefined;
   }
 
+  // Extract usage if present (sent in final chunk when stream_options.include_usage = true)
+  let usage: TokenUsage | undefined;
+  if (body.usage) {
+    usage = {
+      promptTokens: body.usage.prompt_tokens ?? 0,
+      completionTokens: body.usage.completion_tokens ?? 0,
+      totalTokens: body.usage.total_tokens ?? 0,
+    };
+  }
+
   const delta = body.choices?.[0]?.delta;
   const toolCallDeltas = delta?.tool_calls;
   if (toolCallDeltas && toolCallDeltas.length > 0) {
@@ -277,6 +294,7 @@ function parseStreamLine(
       text: "",
       model: body.model,
       provider: "9router",
+      ...(usage ? { usage } : {}),
       toolCallDelta: {
         index: tc?.index,
         id: tc?.id,
@@ -287,11 +305,16 @@ function parseStreamLine(
   }
 
   const text = delta?.content ?? body.choices?.[0]?.text ?? "";
+  // Usage-only chunk (no text, no tool calls) — still emit it so caller can collect
+  if (!text && usage) {
+    return { text: "", model: body.model, provider: "9router", usage };
+  }
   if (!text) return undefined;
   return {
     text,
     model: body.model,
     provider: "9router",
+    ...(usage ? { usage } : {}),
   };
 }
 

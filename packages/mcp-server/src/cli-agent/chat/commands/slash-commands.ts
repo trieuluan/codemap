@@ -1,8 +1,8 @@
 import { stdout as output } from "node:process";
 
-import type { GatewayConfig, GatewayMode } from "../types.js";
-import { printModels } from "../commands/models.js";
-import { runRoute } from "../commands/route.js";
+import type { GatewayConfig, GatewayMode } from "../../types.js";
+import { printModels } from "../../commands/models.js";
+import { runRoute } from "../../commands/route.js";
 
 export type SlashCommandResult = "continue" | "clear" | "exit";
 

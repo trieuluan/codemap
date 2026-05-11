@@ -82,11 +82,18 @@ export interface CompletionResponse {
   toolCalls?: ChatToolCall[];
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface CompletionStreamChunk {
   text: string;
   model?: string;
   provider: string;
   toolCalls?: ChatToolCall[];
+  usage?: TokenUsage;
   done?: boolean;
 }
 

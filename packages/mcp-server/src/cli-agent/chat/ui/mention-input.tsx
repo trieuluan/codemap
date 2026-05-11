@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Box, Text, useInput, useStdin, useApp } from "ink";
 import { Select } from "@inkjs/ui";
-import { searchIndexedFiles, type IndexedFileOption } from "./file-search.js";
+import { searchIndexedFiles, type IndexedFileOption } from "../file-search.js";
 
 interface MentionInputProps {
   onSubmit: (text: string) => void;

@@ -4,7 +4,7 @@ import {
   saveMcpServerEntry,
   removeMcpServerEntry,
 } from "../../../lib/workspace-project.js";
-import type { McpServerStatus } from "../mcp-tool-client.js";
+import type { McpServerStatus } from "../mcp/mcp-tool-client.js";
 
 export const mcpCommand: Command = {
   name: "mcp",

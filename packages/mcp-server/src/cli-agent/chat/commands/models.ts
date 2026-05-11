@@ -1,4 +1,4 @@
-import { filterModelsByMode } from "../route-policy.js";
+import { filterModelsByMode } from "./route-policy.js";
 import type { Command } from "./index.js";
 
 export const modelsCommand: Command = {
