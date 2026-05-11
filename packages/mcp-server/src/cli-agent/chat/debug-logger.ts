@@ -42,6 +42,7 @@ export function createDebugLogger() {
       toolCount: number;
       hasSystem: boolean;
       toolsCalled?: number;
+      baseUrl?: string;
     }) {
       write({ type: "stream_request", req: requestIdx++, ...info });
     },
@@ -58,10 +59,17 @@ export function createDebugLogger() {
       write({ type: "tool_fallback", reason });
     },
     logError(err: unknown) {
-      write({
+      const entry: Record<string, unknown> = {
         type: "error",
         message: err instanceof Error ? err.message : String(err),
-      });
+      };
+      if (err instanceof Error && err.stack) {
+        entry.stack = err.stack.split("\n").slice(0, 5).join("\n");
+      }
+      if (err instanceof Error && "cause" in err && err.cause) {
+        entry.cause = String(err.cause);
+      }
+      write(entry);
     },
     logSummary(info: {
       totalChunks: number;

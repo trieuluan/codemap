@@ -5,6 +5,7 @@ import { searchIndexedFiles, type IndexedFileOption } from "../file-search.js";
 
 interface MentionInputProps {
   onSubmit: (text: string) => void;
+  onAbort?: () => void;
   busy: boolean;
   prompt?: string;
   inputHistory?: string[];
@@ -14,6 +15,7 @@ const MAX_SUGGESTIONS = 6;
 
 export function MentionInput({
   onSubmit,
+  onAbort,
   busy,
   prompt = "> ",
   inputHistory = [],
@@ -115,15 +117,30 @@ export function MentionInput({
     acceptSuggestion(value);
   };
 
-  // Unified input handler — works whether dropdown is open or closed
+  // Unified input handler — Ctrl+C works even when busy
   useInput(
     (input, key) => {
-      if (busy) return;
-
+      // Ctrl+C: Claude-style behavior
+      // 1. If busy (task running) → abort task
+      // 2. If not busy and buffer has text → clear buffer
+      // 3. If not busy and buffer empty → exit session
       if (key.ctrl && input === "c") {
+        if (busy) {
+          onAbort?.();
+          return;
+        }
+        if (buffer.length > 0) {
+          setBuffer("");
+          setCursorPos(0);
+          setHistoryIdx(-1);
+          dismissSuggestions();
+          return;
+        }
         exit();
         return;
       }
+
+      if (busy) return;
 
       // When dropdown is open, Escape dismisses it, Tab/Enter accepts first suggestion
       if (dropdownOpen) {

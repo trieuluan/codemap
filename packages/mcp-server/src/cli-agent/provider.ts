@@ -98,21 +98,31 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...this.buildHeaders(),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: request.model,
-        messages: buildMessages(request),
-        temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens,
-        tools: sanitizeTools(request.tools),
-        tool_choice: request.toolChoice,
-      }),
+    const url = `${this.baseUrl}/chat/completions`;
+    const headers = {
+      ...this.buildHeaders(),
+      "content-type": "application/json",
+    };
+    const requestBody = JSON.stringify({
+      model: request.model,
+      messages: buildMessages(request),
+      temperature: request.temperature ?? 0.2,
+      max_tokens: request.maxTokens,
+      tools: sanitizeTools(request.tools),
+      tool_choice: request.toolChoice,
     });
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "POST", headers, body: requestBody });
+    } catch (err) {
+      const cause = err instanceof Error && "cause" in err
+        ? ` (cause: ${JSON.stringify(err.cause)})`
+        : "";
+      throw new Error(
+        `Complete fetch failed: ${url} — ${err instanceof Error ? err.message : String(err)}${cause}`,
+      );
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -135,22 +145,32 @@ export class NineRouterProvider implements GatewayProvider {
     request: CompletionRequest,
     _debug?: boolean,
   ): AsyncGenerator<CompletionStreamChunk> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...this.buildHeaders(),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: request.model,
-        messages: buildMessages(request),
-        temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens,
-        stream: true,
-        tools: sanitizeTools(request.tools),
-        stream_options: { include_usage: true },
-      }),
+    const url = `${this.baseUrl}/chat/completions`;
+    const headers = {
+      ...this.buildHeaders(),
+      "content-type": "application/json",
+    };
+    const body = JSON.stringify({
+      model: request.model,
+      messages: buildMessages(request),
+      temperature: request.temperature ?? 0.2,
+      max_tokens: request.maxTokens,
+      stream: true,
+      tools: sanitizeTools(request.tools),
+      stream_options: { include_usage: true },
     });
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "POST", headers, body });
+    } catch (err) {
+      const cause = err instanceof Error && "cause" in err
+        ? ` (cause: ${JSON.stringify(err.cause)})`
+        : "";
+      throw new Error(
+        `Stream fetch failed: ${url} — ${err instanceof Error ? err.message : String(err)}${cause}`,
+      );
+    }
 
     if (!response.ok) {
       const text = await response.text();

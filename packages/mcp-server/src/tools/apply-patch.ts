@@ -210,6 +210,7 @@ export function registerApplyPatchTool(
 
             const { stdout, stderr } = await execFileAsync("patch", args, {
               cwd: workspacePath,
+              timeout: 10_000,
             });
 
             result.output = stdout + stderr;

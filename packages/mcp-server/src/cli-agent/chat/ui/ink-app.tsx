@@ -57,7 +57,10 @@ function InkChatApp({
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [taskStatus, setTaskStatus] = useState<TaskStatus>({ phase: "idle", toolsCalled: 0 });
+  const [taskStatus, setTaskStatus] = useState<TaskStatus>({
+    phase: "idle",
+    toolsCalled: 0,
+  });
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [debug, setDebug] = useState(
     process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1",
@@ -141,7 +144,12 @@ function InkChatApp({
       // Normal message — hydrate @mentions then run agent loop
       lastUserTextRef.current = text;
       streamAbortedRef.current = false;
-      setTaskStatus({ phase: "thinking", startTime: Date.now(), toolsCalled: 0, model: currentModel });
+      setTaskStatus({
+        phase: "thinking",
+        startTime: Date.now(),
+        toolsCalled: 0,
+        model: currentModel,
+      });
       setMessages((prev) => [...prev, { role: "user", content: text }]);
       setInputHistory((prev) => [...prev, text]);
       setBusy(true);
@@ -196,6 +204,9 @@ function InkChatApp({
               phase: "streaming",
               text: undefined,
             }));
+          },
+          onModel: (model) => {
+            setTaskStatus((prev) => ({ ...prev, model }));
           },
           onUsage: (usage) => {
             setTaskStatus((prev) => ({ ...prev, usage }));
@@ -270,7 +281,7 @@ function InkChatApp({
           endTime: Date.now(),
           text: undefined,
         }));
-        setTimeout(() => setTaskStatus({ phase: "idle", toolsCalled: 0 }), 5000);
+        // Keep done status visible — cleared when next task starts
 
         // Write summary to debug log
         if (loggerRef.current) {
@@ -303,7 +314,10 @@ function InkChatApp({
             const updated = [...prev];
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].role === "assistant" && !updated[i].toolName) {
-                updated[i] = { ...updated[i], content: result.text || "(no response)" };
+                updated[i] = {
+                  ...updated[i],
+                  content: result.text || "(no response)",
+                };
                 break;
               }
             }
@@ -419,6 +433,15 @@ function InkChatApp({
       <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
         <MentionInput
           onSubmit={handleUserSubmit}
+          onAbort={() => {
+            streamAbortedRef.current = true;
+            setBusy(false);
+            setTaskStatus({ phase: "idle", toolsCalled: 0 });
+            setMessages((prev) => [
+              ...prev,
+              { role: "system", content: "Aborted." },
+            ]);
+          }}
           busy={busy}
           inputHistory={inputHistory}
         />
@@ -485,7 +508,7 @@ function WelcomeBanner({ data }: { data: WelcomeData }) {
         <Badge color={modeInfo.color}>{modeInfo.label}</Badge>
         <Badge color="white">{data.profile}</Badge>
       </Box>
-      {data.modelCount && (
+      {data.modelCount != null && data.modelCount > 0 && (
         <Box justifyContent="center">
           <Text color="gray">Gateway: </Text>
           <Text color="green">{data.modelCount}</Text>

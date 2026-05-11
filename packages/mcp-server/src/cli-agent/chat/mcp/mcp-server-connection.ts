@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -9,6 +11,37 @@ export interface McpServerEntryConfig {
   args?: string[];
   env?: Record<string, string>;
 }
+
+// ── MCP debug logger ──────────────────────────────────────────────
+
+function findGitRoot(): string {
+  let dir = process.cwd();
+  while (true) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return process.cwd();
+}
+
+const MCP_LOG_FILE = join(
+  findGitRoot(),
+  ".codemap",
+  "debug-logs",
+  "mcp-connections.jsonl",
+);
+
+function mcpLog(entry: Record<string, unknown>) {
+  const logDir = dirname(MCP_LOG_FILE);
+  if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+  appendFileSync(
+    MCP_LOG_FILE,
+    JSON.stringify({ ...entry, ts: new Date().toISOString() }) + "\n",
+  );
+}
+
+// ── McpServerConnection ───────────────────────────────────────────
 
 export class McpServerConnection {
   private client: Client | null = null;
@@ -34,7 +67,7 @@ export class McpServerConnection {
     await this.ensureConnected();
     if (this._tools) return this._tools;
 
-    const response = await this.client!.listTools();
+    const response = await this.client!.listTools(undefined, { timeout: 120_000 });
     this._tools = response.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -47,27 +80,37 @@ export class McpServerConnection {
     name: string,
     args: Record<string, unknown>,
   ): Promise<AgentToolCallResult> {
-    await this.ensureConnected();
-    const result = await this.client!.callTool({
-      name,
-      arguments: args,
-    });
-
-    if ("toolResult" in result) {
-      return { content: stringifyToolResult(result.toolResult) };
-    }
-
-    return {
-      content: formatMcpContent(result.content),
-      structuredContent: result.structuredContent,
-      isError: result.isError,
-    };
+    const start = Date.now();
+    return this.withReconnect(() => this.callToolRaw(name, args))
+      .then((result) => {
+        mcpLog({
+          event: "callTool",
+          server: this.name,
+          tool: name,
+          durationMs: Date.now() - start,
+          ok: true,
+          isError: result.isError ?? false,
+          resultLen: result.content.length,
+        });
+        return result;
+      })
+      .catch((err) => {
+        mcpLog({
+          event: "callTool",
+          server: this.name,
+          tool: name,
+          durationMs: Date.now() - start,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      });
   }
 
   async listResources(): Promise<{ uri: string; name: string }[]> {
     await this.ensureConnected();
     if (this._resources) return this._resources;
-    const response = await this.client!.listResources();
+    const response = await this.client!.listResources(undefined, { timeout: 120_000 });
     this._resources = response.resources.map((r) => ({ uri: r.uri, name: r.name }));
     return this._resources;
   }
@@ -85,7 +128,55 @@ export class McpServerConnection {
   }
 
   async close(): Promise<void> {
+    mcpLog({ event: "close", server: this.name });
     await this.transport?.close();
+    this.transport = null;
+    this.client = null;
+    this._tools = null;
+    this._resources = null;
+  }
+
+  private async callToolRaw(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<AgentToolCallResult> {
+    const result = await this.client!.callTool(
+      { name, arguments: args },
+      undefined,
+      { timeout: 300_000 }, // 5 min — apply_patch and large file reads can be slow
+    );
+
+    if ("toolResult" in result) {
+      return { content: stringifyToolResult(result.toolResult) };
+    }
+
+    return {
+      content: formatMcpContent(result.content),
+      structuredContent: result.structuredContent,
+      isError: result.isError,
+    };
+  }
+
+  private async withReconnect<T>(fn: () => Promise<T>): Promise<T> {
+    await this.ensureConnected();
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isConnectionClosed(err)) throw err;
+      mcpLog({
+        event: "connection_closed",
+        server: this.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      this.resetConnection();
+      await this.ensureConnected();
+      mcpLog({ event: "reconnected", server: this.name });
+      return await fn();
+    }
+  }
+
+  private resetConnection(): void {
+    this.transport?.close().catch(() => {});
     this.transport = null;
     this.client = null;
     this._tools = null;
@@ -101,6 +192,14 @@ export class McpServerConnection {
       ...this.config.env,
     } as Record<string, string>;
 
+    mcpLog({
+      event: "connect",
+      server: this.name,
+      command: this.config.command,
+      args: this.config.args,
+      cwd: workspacePath,
+    });
+
     this.client = new Client(
       { name: `codemap-chat-${this.name}`, version: "1.0.0" },
       { capabilities: {} },
@@ -113,12 +212,28 @@ export class McpServerConnection {
       stderr: "pipe",
     });
     this.transport.stderr?.on("data", (chunk) => {
+      const text = String(chunk).trim();
+      if (text) {
+        mcpLog({ event: "stderr", server: this.name, text });
+      }
       if (process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1") {
         process.stderr.write(String(chunk));
       }
     });
     await this.client.connect(this.transport);
+
+    mcpLog({ event: "connected", server: this.name });
   }
+}
+
+function isConnectionClosed(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("connection closed") ||
+    msg.includes("connection lost") ||
+    msg.includes("not connected")
+  );
 }
 
 function formatMcpContent(

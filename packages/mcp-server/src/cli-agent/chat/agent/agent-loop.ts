@@ -3,6 +3,7 @@ import { confirm } from "@clack/prompts";
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
 import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
+import { renderDiffPreview } from "./diff-preview.js";
 import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
@@ -30,6 +31,7 @@ export async function runAgentLoop(input: {
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
   onToken?: (text: string) => void;
+  onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string) => void;
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
@@ -105,6 +107,9 @@ export async function runAgentLoop(input: {
           }));
         }
         input.onDebug?.(debugInfo);
+        if (chunk.model) {
+          input.onModel?.(chunk.model);
+        }
         if (chunk.text) {
           accumulated += chunk.text;
           input.onToken?.(chunk.text);
@@ -224,6 +229,13 @@ async function runConfirmedPatchTool(
   const dryRunText = formatToolResult(dryRun);
 
   if (dryRun.isError) return dryRunText;
+
+  // Show diff preview before confirm
+  const patch = args.patch as string | undefined;
+  if (patch) {
+    console.log("\n" + renderDiffPreview(patch));
+    console.log("");
+  }
 
   const approved = await confirm({
     message: `Apply ${name} to the workspace?`,

@@ -100,7 +100,8 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
             </Text>
             {status.usage && (
               <Text color="gray" dimColor>
-                {formatTokenCount(status.usage.promptTokens)} in / {formatTokenCount(status.usage.completionTokens)} out
+                {formatTokenCount(status.usage.promptTokens)} in /{" "}
+                {formatTokenCount(status.usage.completionTokens)} out
               </Text>
             )}
           </>
@@ -111,15 +112,17 @@ export function TaskStatusBar({ status }: { status: TaskStatus }) {
             <Text color="green" bold>
               ✓
             </Text>
-            <Text color="green">
-              Completed in {elapsedStr}
-            </Text>
+            <Text color="green">Completed in {elapsedStr}</Text>
             {status.toolsCalled > 0 && (
-              <Text color="gray">· {status.toolsCalled} tool{status.toolsCalled > 1 ? "s" : ""}</Text>
+              <Text color="gray">
+                · {status.toolsCalled} tool{status.toolsCalled > 1 ? "s" : ""}
+              </Text>
             )}
             {status.model && <Text color="gray">· {status.model}</Text>}
             {status.usage && (
-              <Text color="gray">· {formatTokenCount(status.usage.totalTokens)} tokens</Text>
+              <Text color="gray">
+                · {formatTokenCount(status.usage.totalTokens)} tokens
+              </Text>
             )}
           </>
         )}

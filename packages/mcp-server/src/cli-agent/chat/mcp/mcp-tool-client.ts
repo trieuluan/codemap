@@ -234,10 +234,22 @@ export async function fetchResourceContext(
   return parts.length > 0 ? parts.join("\n\n---\n\n") : null;
 }
 
+function findPackageRoot(startDir: string): string {
+  let dir = startDir;
+  while (true) {
+    if (existsSync(path.join(dir, "package.json"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return startDir;
+}
+
 function resolvePackageRuntime() {
   const currentFile = fileURLToPath(import.meta.url);
+  const packageRoot = findPackageRoot(path.dirname(currentFile));
   return {
-    packageRoot: path.resolve(path.dirname(currentFile), "../../.."),
+    packageRoot,
     isSourceRuntime: currentFile.includes(`${path.sep}src${path.sep}`),
   };
 }
