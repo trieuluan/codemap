@@ -1,35 +1,23 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource terminui */
-import { Color, createStyle, styleFg } from "terminui";
-import { Panel, Column, Label } from "terminui/jsx";
+
 import type { UIState } from "../store.js";
+import { Label, VStack, Panel } from "terminui/jsx";
+import { dimStyle } from "./helpers.js";
 
-const dimGray = styleFg(createStyle(), Color.DarkGray);
-const cyanStyle = styleFg(createStyle(), Color.Cyan);
-
-const MAX_VISIBLE_LINES = 30;
-
-export function SubprocessLogBlock({ state }: { state: UIState }) {
+export function SubprocessLog({ state }: { state: UIState }) {
   const { subprocess } = state;
-  if (!subprocess.active && subprocess.logLines.length === 0) return null;
+  if (!subprocess.active) return null;
 
-  const cmdLabel = subprocess.command;
-  const visibleLines = subprocess.logLines.slice(-MAX_VISIBLE_LINES);
-  const overflow = subprocess.logLines.length - MAX_VISIBLE_LINES;
+  const lastLines = subprocess.logLines.slice(-10);
 
   return (
-    <Panel title={cmdLabel} border p={1} fg={Color.Yellow}>
-      <Column>
-        {visibleLines.map((line, i) => (
-          <Label key={i} text={line.slice(0, 74)} style={dimGray} />
+    <Panel title={subprocess.command} border>
+      <VStack>
+        {lastLines.map((line) => (
+          <Label style={dimStyle()} text={`  ${line.slice(0, 70)}`} />
         ))}
-        {overflow > 0 && (
-          <Label text={`... ${overflow} more lines`} style={dimGray} />
-        )}
-        {subprocess.active && (
-          <Label text="⟳ running..." style={cyanStyle} />
-        )}
-      </Column>
+      </VStack>
     </Panel>
   );
 }

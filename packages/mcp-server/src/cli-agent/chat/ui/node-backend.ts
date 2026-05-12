@@ -1,131 +1,145 @@
-/**
- * Node.js terminal backend for terminui.
- * Implements the Backend interface using ANSI escape sequences on process.stdout.
- */
 import type { Backend, Cell, Position } from "terminui";
 
-interface NodeBackendState {
-  prevBuffer: (Cell | null)[][];
-  width: number;
-  height: number;
-}
+export function createNodeBackend(): Backend {
+  let prevBuffer: Cell[] = [];
+  let prevW = 0;
+  let prevH = 0;
 
-const ESC = "\x1b";
-const CSI = `${ESC}[`;
-
-function createEmptyBuffer(w: number, h: number): (Cell | null)[][] {
-  return Array.from({ length: h }, () => Array.from({ length: w }, () => null));
-}
-
-export function createNodeBackendState(): NodeBackendState {
-  const w = process.stdout.columns || 80;
-  const h = process.stdout.rows || 24;
-  return { prevBuffer: createEmptyBuffer(w, h), width: w, height: h };
-}
-
-function cellToAnsi(cell: Cell): string {
-  const codes: number[] = [];
-
-  // Foreground
-  if (cell.fg) {
-    if (cell.fg.type === "rgb") {
-      codes.push(38, 2, cell.fg.r, cell.fg.g, cell.fg.b);
-    } else if (cell.fg.type === "indexed") {
-      codes.push(38, 5, cell.fg.index);
-    } else {
-      const map: Record<string, number> = {
-        black: 30, red: 31, green: 32, yellow: 33,
-        blue: 34, magenta: 35, cyan: 36, gray: 37,
-        "dark-gray": 90, "light-red": 91, "light-green": 92,
-        "light-yellow": 93, "light-blue": 94, "light-magenta": 95,
-        "light-cyan": 96, white: 97,
-      };
-      const c = map[cell.fg.type];
-      if (c !== undefined) codes.push(c);
-    }
+  function clear(): void {
+    process.stdout.write("\x1b[2J\x1b[H");
+    prevBuffer = [];
   }
 
-  // Background
-  if (cell.bg) {
-    if (cell.bg.type === "rgb") {
-      codes.push(48, 2, cell.bg.r, cell.bg.g, cell.bg.b);
-    } else if (cell.bg.type === "indexed") {
-      codes.push(48, 5, cell.bg.index);
-    } else {
-      const map: Record<string, number> = {
-        black: 40, red: 41, green: 42, yellow: 43,
-        blue: 44, magenta: 45, cyan: 46, gray: 47,
-        "dark-gray": 100, "light-red": 101, "light-green": 102,
-        "light-yellow": 103, "light-blue": 104, "light-magenta": 105,
-        "light-cyan": 106, white: 107,
-      };
-      const c = map[cell.bg.type];
-      if (c !== undefined) codes.push(c);
-    }
-  }
-
-  // Modifiers
-  if (cell.modifier) {
-    const modMap: Record<number, number> = {
-      1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7, 128: 8, 256: 9, 1024: 53,
+  function size(): { width: number; height: number } {
+    return {
+      width: process.stdout.columns || 80,
+      height: process.stdout.rows || 24,
     };
-    for (const [flag, code] of Object.entries(modMap)) {
-      if (cell.modifier & Number(flag)) codes.push(code);
-    }
   }
 
-  const prefix = codes.length > 0 ? `${CSI}${codes.join("m")}` : "";
-  const reset = codes.length > 0 ? `${CSI}0m` : "";
-  return `${prefix}${cell.symbol}${reset}`;
-}
+  function cellToAnsi(cell: Cell): string {
+    const parts: string[] = [];
 
-export function createNodeBackend(state: NodeBackendState): Backend {
-  let cursorVisible = true;
-  let cursorPos: Position = { x: 0, y: 0 };
+    if (cell.fg) {
+      const fg = cell.fg;
+      if (fg.type === "rgb") {
+        parts.push(`38;2;${fg.r};${fg.g};${fg.b}`);
+      } else if (fg.type === "indexed") {
+        parts.push(`38;5;${fg.index}`);
+      } else {
+        const map: Record<string, string> = {
+          black: "30", red: "31", green: "32", yellow: "33",
+          blue: "34", magenta: "35", cyan: "36", white: "37",
+          gray: "90", "dark-gray": "90",
+          "light-red": "91", "light-green": "92", "light-yellow": "93",
+          "light-blue": "94", "light-magenta": "95", "light-cyan": "96",
+          reset: "0",
+        };
+        if (map[fg.type]) parts.push(map[fg.type]);
+      }
+    }
+
+    if (cell.bg) {
+      const bg = cell.bg;
+      if (bg.type === "rgb") {
+        parts.push(`48;2;${bg.r};${bg.g};${bg.b}`);
+      } else if (bg.type === "indexed") {
+        parts.push(`48;5;${bg.index}`);
+      } else {
+        const map: Record<string, string> = {
+          black: "40", red: "41", green: "42", yellow: "43",
+          blue: "44", magenta: "45", cyan: "46", white: "47",
+          gray: "100", "dark-gray": "100",
+          "light-red": "101", "light-green": "102", "light-yellow": "103",
+          "light-blue": "104", "light-magenta": "105", "light-cyan": "106",
+        };
+        if (map[bg.type]) parts.push(map[bg.type]);
+      }
+    }
+
+    if (cell.modifier) {
+      const mod = cell.modifier;
+      if (mod & 1) parts.push("1");   // BOLD
+      if (mod & 2) parts.push("2");   // DIM
+      if (mod & 4) parts.push("3");   // ITALIC
+      if (mod & 8) parts.push("4");   // UNDERLINED
+      if (mod & 16) parts.push("5");  // SLOW_BLINK
+      if (mod & 64) parts.push("7");  // REVERSED
+      if (mod & 128) parts.push("8"); // HIDDEN
+      if (mod & 256) parts.push("9"); // CROSSED_OUT
+    }
+
+    return parts.length > 0 ? `\x1b[${parts.join(";")}m` : "";
+  }
+
+  function cellsEqual(a: Cell, b: Cell): boolean {
+    return (
+      a.symbol === b.symbol &&
+      JSON.stringify(a.fg) === JSON.stringify(b.fg) &&
+      JSON.stringify(a.bg) === JSON.stringify(b.bg) &&
+      a.modifier === b.modifier
+    );
+  }
+
+  function draw(content: readonly { readonly x: number; readonly y: number; readonly cell: Cell }[]): void {
+    const { width, height } = size();
+    if (width !== prevW || height !== prevH) {
+      prevBuffer = [];
+      prevW = width;
+      prevH = height;
+    }
+
+    let out = "";
+    let lastX = -1;
+    let lastY = -1;
+
+    for (const { x, y, cell } of content) {
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+      const idx = y * width + x;
+      const prev = prevBuffer[idx];
+      if (prev && cellsEqual(prev, cell)) continue;
+
+      prevBuffer[idx] = { ...cell };
+
+      if (y !== lastY || x !== lastX + 1) {
+        out += `\x1b[${y + 1};${x + 1}H`;
+      }
+      out += cellToAnsi(cell) + cell.symbol + "\x1b[0m";
+
+      lastX = x;
+      lastY = y;
+    }
+
+    if (out) process.stdout.write(out);
+  }
+
+  function flush(): void {
+    // ANSI backend flushes in draw() — nothing extra needed
+  }
+
+  function getCursorPosition(): Position {
+    return { x: 0, y: 0 };
+  }
+
+  function setCursorPosition(_pos: Position): void {}
+
+  function hideCursor(): void {
+    process.stdout.write("\x1b[?25l");
+  }
+
+  function showCursor(): void {
+    process.stdout.write("\x1b[?25h");
+  }
 
   return {
-    clear() {
-      process.stdout.write(`${CSI}2J${CSI}H`);
-      state.prevBuffer = createEmptyBuffer(state.width, state.height);
-    },
-    size() {
-      return { width: state.width, height: state.height };
-    },
-    draw(content: readonly { x: number; y: number; cell: Cell }[]) {
-      if (content.length === 0) return;
-      const parts: string[] = [];
-      for (const { x, y, cell } of content) {
-        parts.push(`${CSI}${y + 1};${x + 1}H`);
-        parts.push(cellToAnsi(cell));
-        if (y < state.height && x < state.width) {
-          state.prevBuffer[y]![x] = cell;
-        }
-      }
-      // Reset style at end
-      parts.push(`${CSI}0m`);
-      process.stdout.write(parts.join(""));
-    },
-    flush() {
-      // No-op: draw() writes directly
-    },
-    showCursor() {
-      if (!cursorVisible) {
-        process.stdout.write(`${CSI}?25h`);
-        cursorVisible = true;
-      }
-    },
-    hideCursor() {
-      if (cursorVisible) {
-        process.stdout.write(`${CSI}?25l`);
-        cursorVisible = false;
-      }
-    },
-    setCursorPosition(pos: Position) {
-      cursorPos = pos;
-      process.stdout.write(`${CSI}${pos.y + 1};${pos.x + 1}H`);
-    },
-    getCursorPosition() {
-      return cursorPos;
-    },
+    clear,
+    size,
+    draw,
+    flush,
+    getCursorPosition,
+    setCursorPosition,
+    hideCursor,
+    showCursor,
   };
 }

@@ -20,7 +20,12 @@ export interface WelcomeData {
 
 // ─── UI State ────────────────────────────────────────────
 
+export type Screen = "main" | "help";
+
 export interface UIState {
+  // Current screen
+  screen: Screen;
+
   // Messages
   messages: Message[];
 
@@ -57,6 +62,11 @@ export interface UIState {
     lastUserText: string | null;
     autoAccept: boolean;
   };
+
+  // Input rendering state (managed by ChatTerminal readKey loop)
+  inputText: string;
+  inputCursor: number;
+  inputActive: boolean;
 
   // Subprocess
   subprocess: {
@@ -98,6 +108,7 @@ export function createInitialState(opts: {
   debug?: boolean;
 }): UIState {
   return {
+    screen: "main",
     messages: [],
     task: {
       phase: "idle",
@@ -138,6 +149,9 @@ export function createInitialState(opts: {
     agentHistory: [],
     debug: opts.debug ?? false,
     debugLogFile: null,
+    inputText: "",
+    inputCursor: 0,
+    inputActive: false,
   };
 }
 

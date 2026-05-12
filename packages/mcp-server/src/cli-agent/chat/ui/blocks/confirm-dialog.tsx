@@ -1,54 +1,41 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource terminui */
-import { Color, Modifier, createStyle, styleFg, styleAddModifier } from "terminui";
-import type { Style } from "terminui";
-import { Panel, Column, Label } from "terminui/jsx";
+
 import type { UIState } from "../store.js";
+import { Color, type Style } from "terminui";
+import { Label, VStack, Panel } from "terminui/jsx";
+import { fgStyle } from "./helpers.js";
 
-const dimGray = styleFg(createStyle(), Color.DarkGray);
-const whiteStyle = styleFg(createStyle(), Color.White);
-const greenStyle = styleAddModifier(styleFg(createStyle(), Color.Green), Modifier.BOLD);
-const redBold = styleAddModifier(styleFg(createStyle(), Color.Red), Modifier.BOLD);
-const cyanBold = styleAddModifier(styleFg(createStyle(), Color.Cyan), Modifier.BOLD);
-const grayStyle = styleFg(createStyle(), Color.Gray);
-const greenLineStyle = styleFg(createStyle(), Color.Green);
-const redLineStyle = styleFg(createStyle(), Color.Red);
-
-export function ConfirmDialogBlock({ state }: { state: UIState }) {
+export function ConfirmDialog({ state }: { state: UIState }) {
   const { confirm } = state;
   if (!confirm.active) return null;
 
   return (
-    <Panel title={confirm.toolName} border p={1} fg={Color.Yellow}>
-      <Column>
-        <Label text="wants to edit files" style={whiteStyle} />
+    <Panel title={confirm.toolName} border>
+      <VStack>
+        <Label style={fgStyle(Color.White)} text="  wants to edit files" />
         {confirm.preview && (
           <PreviewLines preview={confirm.preview} />
         )}
-        <Label>
-          <Label text="y" style={greenStyle} />
-          <Label text="es  " style={grayStyle} />
-          <Label text="n" style={redBold} />
-          <Label text="o  " style={grayStyle} />
-          <Label text="a" style={cyanBold} />
-          <Label text="ll (accept all)" style={grayStyle} />
-        </Label>
-      </Column>
+        <Label
+          style={fgStyle(Color.Green)}
+          text="  [y]es  [n]o  [a]ll (accept all)"
+        />
+      </VStack>
     </Panel>
   );
 }
 
 function PreviewLines({ preview }: { preview: string }) {
-  const lines = preview.split("\n").slice(0, 15);
+  const lines = preview.split("\n").slice(0, 8);
   return (
-    <Column>
-      {lines.map((line, i) => {
-        const trimmed = line.slice(0, 60);
-        let lineStyle: Style = dimGray;
-        if (trimmed.startsWith("+")) lineStyle = greenLineStyle;
-        else if (trimmed.startsWith("-")) lineStyle = redLineStyle;
-        return <Label key={i} text={trimmed} style={lineStyle} />;
+    <VStack>
+      {lines.map((line) => {
+        let color: Style["fg"] = Color.DarkGray;
+        if (line.startsWith("+")) color = Color.Green;
+        else if (line.startsWith("-")) color = Color.Red;
+        return <Label style={fgStyle(color)} text={`  ${line.slice(0, 60)}`} />;
       })}
-    </Column>
+    </VStack>
   );
 }

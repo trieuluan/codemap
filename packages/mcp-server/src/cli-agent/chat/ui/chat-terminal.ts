@@ -1,6 +1,5 @@
-import { createTerminal, terminalClear } from "terminui";
-import { createInterface } from "node:readline";
-import { createNodeBackendState, createNodeBackend } from "./node-backend.js";
+import { createTerminal, terminalClear, terminalShowCursor } from "terminui";
+import type { Terminal } from "terminui";
 
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, GatewayMode } from "../../types.js";
@@ -16,7 +15,8 @@ import {
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
-import { render, type Terminal as TerminalType } from "./renderer.js";
+import { render } from "./renderer.js";
+import { createNodeBackend } from "./node-backend.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -33,19 +33,18 @@ interface ChatTerminalOptions {
 export class ChatTerminal {
   private bus: EventBus;
   private store: Store;
+  private terminal: Terminal;
   private spinnerInterval: ReturnType<typeof setInterval> | null = null;
   private spinnerFrame = 0;
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
-  private inputActive = false;
-  private terminal: TerminalType;
-  private nodeBackendState: ReturnType<typeof createNodeBackendState>;
 
   constructor(options: ChatTerminalOptions) {
     this.options = options;
     this.bus = new EventBus();
     this.compactor = new ContextCompactor(options.provider);
+    this.terminal = createTerminal(createNodeBackend(), { viewport: "fullscreen" });
 
     const debug = process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1";
 
@@ -63,11 +62,6 @@ export class ChatTerminal {
     if (debug) {
       this.logger = createDebugLogger();
     }
-
-    // Set up terminui terminal
-    this.nodeBackendState = createNodeBackendState();
-    const backend = createNodeBackend(this.nodeBackendState);
-    this.terminal = createTerminal(backend);
 
     // Listen for screen refresh
     this.bus.on("screen:refresh", () => {
@@ -87,33 +81,26 @@ export class ChatTerminal {
   async start(): Promise<void> {
     terminalClear(this.terminal);
 
-    // Add welcome message
-    const state = this.store.getState();
-    this.store.dispatch({
-      messages: [
-        {
-          role: "welcome",
-          content: "",
-          welcomeData: {
-            model: state.config.model,
-            mode: state.config.mode,
-            profile: state.config.profile,
-            modelCount: state.config.availableModels.length,
-          },
-        },
-      ],
-    });
-
-    this.redraw();
-
-    // Main input loop
+    // Main input loop — key-by-key stdin, input rendered by terminui
     while (true) {
-      const state = this.store.getState();
-      this.inputActive = true;
-      const input = await this.readLine();
-      this.inputActive = false;
+      const currentScreen = this.store.getState().screen;
 
-      if (input === null && !state.input.lastUserText) {
+      if (currentScreen === "help") {
+        // Full-screen screens: any key transitions to main
+        await this.readAnyKey();
+        this.store.dispatch({ screen: "main" });
+        this.redraw();
+        continue;
+      }
+
+      // Main chat screen: read typed input
+      this.store.dispatch({ inputActive: true, inputText: "", inputCursor: 0 });
+      this.redraw();
+
+      const input = await this.readKey();
+      this.store.dispatch({ inputActive: false, inputText: "", inputCursor: 0 });
+
+      if (input === null && !this.store.getState().input.lastUserText) {
         break;
       }
 
@@ -125,67 +112,169 @@ export class ChatTerminal {
         break;
       }
 
-      this.store.dispatch({
-        input: { ...state.input, history: [...state.input.history, input] },
-      });
+      this.store.dispatch((prev) => ({
+        input: { ...prev.input, history: [...prev.input.history, input] },
+      }));
 
       await this.handleSubmit(input);
     }
 
     this.stopSpinner();
+    terminalShowCursor(this.terminal);
     process.exit(0);
   }
 
-  private async readLine(): Promise<string | null> {
-    const state = this.store.getState();
+  /** Wait for a single keypress — used by startup/help screens to dismiss */
+  private async readAnyKey(): Promise<void> {
+    if (!process.stdin.isTTY) return;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
 
-    // Print input box top border
-    const boxW = Math.min(state.viewport.width - 4, 76);
-    const innerW = boxW - 2;
-    const hLine = "─".repeat(innerW - 8);
+    return new Promise<void>((resolve) => {
+      const onData = () => {
+        process.stdin.removeListener("data", onData);
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
+        process.stdin.pause();
+        resolve();
+      };
+      process.stdin.on("data", onData);
+    });
+  }
 
-    process.stdout.write("\n  ");
-    process.stdout.write(`\x1b[90m┌─ Input ─${hLine}┐\x1b[0m`);
-    process.stdout.write("\n  ");
-    process.stdout.write("\x1b[90m│ \x1b[0m");
-    process.stdout.write("\x1b[1;36m> \x1b[0m");
+  private async readKey(): Promise<string | null> {
+    if (!process.stdin.isTTY) return null;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+
+    let text = "";
+    let cursor = 0;
+    const historyIdx = { current: -1 };
+    const history = this.store.getState().input.history;
 
     return new Promise<string | null>((resolve) => {
-      const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history: [...state.input.history],
-        removeHistoryDuplicates: true,
-      });
+      const onData = (data: Buffer) => {
+        const s = data.toString();
 
-      rl.on("line", (line) => {
-        const trimmed = line.trim();
+        // Enter — submit
+        if (s === "\r" || s === "\n") {
+          cleanup();
+          const trimmed = text.trim();
+          resolve(trimmed || null);
+          return;
+        }
 
-        // Print bottom border
-        const hLineBottom = "─".repeat(innerW);
-        process.stdout.write(`\n  \x1b[90m└${hLineBottom}┘\x1b[0m\n`);
-
-        rl.close();
-        if (!trimmed) {
+        // Ctrl+C — cancel
+        if (s === "\x03") {
+          cleanup();
           resolve(null);
           return;
         }
-        resolve(trimmed);
-      });
 
-      rl.on("close", () => {
-        resolve(null);
-      });
-
-      // Handle Ctrl+C
-      process.stdin.once("data", (data) => {
-        if (data[0] === 0x03) { // Ctrl+C
-          const hLineBottom = "─".repeat(innerW);
-          process.stdout.write(`\n  \x1b[90m└${hLineBottom}┘\x1b[0m\n`);
-          rl.close();
+        // Ctrl+D — EOF (empty only)
+        if (s === "\x04" && text.length === 0) {
+          cleanup();
           resolve(null);
+          return;
         }
-      });
+
+        // Backspace / DEL
+        if (s === "\x7f" || s === "\b") {
+          if (cursor > 0) {
+            text = text.slice(0, cursor - 1) + text.slice(cursor);
+            cursor--;
+          }
+          sync();
+          return;
+        }
+
+        // Escape sequences
+        if (s === "\x1b") return; // bare ESC, skip
+        if (s.startsWith("\x1b[")) {
+          const seq = s.slice(2);
+          if (seq === "D") {
+            // Left arrow
+            if (cursor > 0) cursor--;
+            sync();
+            return;
+          }
+          if (seq === "C") {
+            // Right arrow
+            if (cursor < text.length) cursor++;
+            sync();
+            return;
+          }
+          if (seq === "A") {
+            // Up arrow — history prev
+            if (history.length > 0) {
+              historyIdx.current = Math.min(historyIdx.current + 1, history.length - 1);
+              text = history[history.length - 1 - historyIdx.current] || "";
+              cursor = text.length;
+              sync();
+            }
+            return;
+          }
+          if (seq === "B") {
+            // Down arrow — history next
+            if (historyIdx.current > 0) {
+              historyIdx.current--;
+              text = history[history.length - 1 - historyIdx.current] || "";
+              cursor = text.length;
+            } else {
+              historyIdx.current = -1;
+              text = "";
+              cursor = 0;
+            }
+            sync();
+            return;
+          }
+          if (seq === "3~") {
+            // Delete key
+            if (cursor < text.length) {
+              text = text.slice(0, cursor) + text.slice(cursor + 1);
+            }
+            sync();
+            return;
+          }
+          // Ignore other escape sequences
+          return;
+        }
+
+        // Ctrl+A — home
+        if (s === "\x01") { cursor = 0; sync(); return; }
+        // Ctrl+E — end
+        if (s === "\x05") { cursor = text.length; sync(); return; }
+        // Ctrl+K — kill to end
+        if (s === "\x0b") { text = text.slice(0, cursor); sync(); return; }
+        // Ctrl+U — kill to start
+        if (s === "\x15") { text = text.slice(cursor); cursor = 0; sync(); return; }
+
+        // Printable character(s)
+        for (const ch of s) {
+          const code = ch.charCodeAt(0);
+          if (code >= 0x20 && code !== 0x7f) {
+            text = text.slice(0, cursor) + ch + text.slice(cursor);
+            cursor++;
+          }
+        }
+        sync();
+      };
+
+      const cleanup = () => {
+        process.stdin.removeListener("data", onData);
+        if (process.stdin.isTTY) {
+          process.stdin.setRawMode(false);
+        }
+        process.stdin.pause();
+      };
+
+      const sync = () => {
+        this.store.dispatchImmediate({
+          inputText: text,
+          inputCursor: cursor,
+        });
+      };
+
+      process.stdin.on("data", onData);
     });
   }
 
@@ -195,6 +284,12 @@ export class ChatTerminal {
 
     // Command dispatch
     if (text.startsWith("/")) {
+      // Screen-transitioning commands
+      if (text === "/help") {
+        this.store.dispatch({ screen: "help" });
+        return;
+      }
+
       const handled = executeCommand(text, this.buildCommandContext());
       if (!handled) {
         this.appendMessage({
@@ -442,37 +537,37 @@ export class ChatTerminal {
       this.store.dispatch({
         confirm: { active: true, toolName: name, preview },
       });
-      this.inputActive = true;
       this.redraw();
 
       const result = await this.promptYesNo(name);
       this.store.dispatch({
         confirm: { active: false, toolName: "", preview: null },
       });
-      this.inputActive = false;
 
       return result;
     };
   }
 
-  private async promptYesNo(toolName: string): Promise<boolean> {
-    process.stdout.write(`\n  \x1b[33m${toolName}\x1b[0m wants to edit files. Proceed? [y/n/a(ll)] `);
+  private async promptYesNo(_toolName: string): Promise<boolean> {
+    if (!process.stdin.isTTY) return false;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
 
     return new Promise<boolean>((resolve) => {
       const onData = (data: Buffer) => {
         const key = data.toString().toLowerCase();
         process.stdin.removeListener("data", onData);
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
+        process.stdin.pause();
+
         if (key === "y") {
-          process.stdout.write("yes\n");
           resolve(true);
         } else if (key === "a") {
-          process.stdout.write("accept all\n");
           this.store.dispatch({
             input: { ...this.store.getState().input, autoAccept: true },
           });
           resolve(true);
         } else {
-          process.stdout.write("no\n");
           resolve(false);
         }
       };
@@ -576,6 +671,7 @@ export class ChatTerminal {
       },
       exit: () => {
         this.stopSpinner();
+        terminalShowCursor(this.terminal);
         process.exit(0);
       },
     };
@@ -584,9 +680,7 @@ export class ChatTerminal {
   // ─── Rendering ───────────────────────────────────────
 
   private redraw(): void {
-    if (this.inputActive) return;
-    const state = this.store.getState();
-    render(this.terminal, state, this.spinnerFrame);
+    render(this.terminal, this.store.getState(), this.spinnerFrame);
   }
 
   private startSpinner(): void {

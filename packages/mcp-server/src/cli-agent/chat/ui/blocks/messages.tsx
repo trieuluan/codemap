@@ -1,99 +1,61 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource terminui */
-import { Color, Modifier, createStyle, styleFg, styleAddModifier } from "terminui";
-import type { Style } from "terminui";
-import { Panel, Column, Label } from "terminui/jsx";
+
 import type { Message, UIState } from "../store.js";
-import { truncate } from "./helpers.js";
+import { Color } from "terminui";
+import { Label, Box } from "terminui/jsx";
+import { fgStyle, dimStyle, truncate } from "./helpers.js";
+import type { Style } from "terminui";
 
-const dimGray = styleFg(createStyle(), Color.Gray);
-const yellowBold = styleAddModifier(styleFg(createStyle(), Color.Yellow), Modifier.BOLD);
-const redBold = styleAddModifier(styleFg(createStyle(), Color.Red), Modifier.BOLD);
-const greenStyle = styleFg(createStyle(), Color.Green);
+export function Messages({ state, maxHeight }: { state: UIState; maxHeight: number }) {
+  const { messages } = state;
+  const items: ReturnType<typeof renderMessage>[] = [];
 
-export function MessagesBlock({ state }: { state: UIState }) {
+  for (const msg of messages) {
+    items.push(renderMessage(msg));
+  }
+
   return (
-    <Column>
-      {state.messages.map((msg, i) => (
-        <MessageItem key={i} msg={msg} />
-      ))}
-    </Column>
+    <Box>
+      {items.slice(-maxHeight)}
+    </Box>
   );
 }
 
-function MessageItem({ msg }: { msg: Message }) {
+function renderMessage(msg: Message) {
   switch (msg.role) {
     case "welcome":
       return null;
     case "user":
-      return <UserMessage content={msg.content} />;
+      return <Label style={fgStyle(Color.Green)} text={`  You: ${msg.content}`} />;
     case "assistant":
-      return <AssistantMessage content={msg.content} />;
+      return <Label text={`  ${msg.content}`} />;
     case "tool":
-      return <ToolMessage msg={msg} />;
+      return renderTool(msg);
     case "system":
-      return <SystemMessage content={msg.content} />;
+      return renderSystem(msg.content);
   }
 }
 
-function UserMessage({ content }: { content: string }) {
-  return (
-    <Panel title="You" border p={1} fg={Color.Green}>
-      <Label text={content} fg={Color.White} />
-    </Panel>
-  );
-}
-
-function AssistantMessage({ content }: { content: string }) {
-  return (
-    <Panel title="CodeMap" border p={1} fg={Color.Cyan}>
-      <Label text={content} />
-    </Panel>
-  );
-}
-
-function ToolMessage({ msg }: { msg: Message }) {
-  // Tool result — compact inline
-  if (msg.toolName?.endsWith(" result")) {
-    const resultText = truncate(msg.content, 200);
-    return (
-      <Label>
-        <Label text="↳ " style={dimGray} />
-        <Label text={`${msg.toolName}: `} style={dimGray} />
-        <Label text={resultText} style={dimGray} />
-      </Label>
-    );
-  }
-
-  // Tool call — bordered block with yellow accent
+function renderTool(msg: Message) {
   const toolLabel = msg.toolName || "tool";
-  return (
-    <Panel title={toolLabel} border p={1} fg={Color.Yellow}>
-      <Label text={truncate(msg.content, 200)} style={dimGray} />
-    </Panel>
-  );
+  if (toolLabel.endsWith(" result")) {
+    const text = truncate(msg.content, 200);
+    return <Label style={dimStyle()} text={`    ${toolLabel}: ${text}`} />;
+  }
+  const args = truncate(msg.content, 150);
+  return <Label style={fgStyle(Color.Yellow)} text={`  ${toolLabel}(${args})`} />;
 }
 
-function SystemMessage({ content }: { content: string }) {
+function renderSystem(content: string) {
   const lower = content.toLowerCase();
-  let style: Style = dimGray;
-
+  let color: Style["fg"] = Color.DarkGray;
   if (lower.startsWith("error") || lower.startsWith("blocked:")) {
-    style = redBold;
+    color = Color.Red;
   } else if (lower.startsWith("warning") || lower.startsWith("⚠")) {
-    style = yellowBold;
-  } else if (
-    lower.startsWith("switched") ||
-    lower.startsWith("connected") ||
-    lower.startsWith("done")
-  ) {
-    style = greenStyle;
+    color = Color.Yellow;
+  } else if (lower.startsWith("switched") || lower.startsWith("connected") || lower.startsWith("done")) {
+    color = Color.Green;
   }
-
-  return (
-    <Label>
-      <Label text="│ " style={dimGray} />
-      <Label text={content} style={style} />
-    </Label>
-  );
+  return <Label style={fgStyle(color)} text={`  ${content}`} />;
 }

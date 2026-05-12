@@ -1,10 +1,7 @@
-import { createStyle, styleFg, styleAddModifier, type Style, Color, Modifier } from "terminui";
-
-// ─── Spinner ──────────────────────────────────────────────
+import { createStyle, styleFg, styleAddModifier, Modifier, Color } from "terminui";
+import type { Style } from "terminui";
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-// ─── Text Helpers ─────────────────────────────────────────
 
 export function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -22,13 +19,6 @@ export function formatTokenCount(n: number): string {
   if (n < 1000) return String(n);
   return `${(n / 1000).toFixed(1)}k`;
 }
-
-export function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*m/g, "");
-}
-
-// ─── Style Factories ──────────────────────────────────────
 
 export function fgStyle(color: Style["fg"]): Style {
   return styleFg(createStyle(), color!);
