@@ -38,17 +38,21 @@ export function renderInputComposer(
   });
   frameRenderWidget(frame, renderBlock(topBlock), { ...area, height: 1 });
 
-  // Input line with cursor
+  // Input line — show placeholder when empty
   const before = text.slice(0, cursor);
   const after = text.slice(cursor);
-  const displayLine = `${before}█${after}`;
+  const showPlaceholder = text.length === 0;
+  const displayText = showPlaceholder
+    ? "Ask anything or type / for commands..."
+    : `${before}█${after}`;
 
   const prefixStyle = styleAddModifier(styleFg(createStyle(), Color.Cyan), Modifier.BOLD);
   const textStyle = styleFg(createStyle(), Color.White);
+  const placeholderStyle = styleFg(styleAddModifier(createStyle(), Modifier.DIM), Color.DarkGray);
 
   const inputLine = createLine([
     styledSpan(" > ", prefixStyle),
-    styledSpan(displayLine.slice(0, w - 6), textStyle),
+    styledSpan(displayText.slice(0, w - 6), showPlaceholder ? placeholderStyle : textStyle),
   ]);
   const inputPara = createParagraph("", { style: textStyle });
   const styledPara = {

@@ -2,18 +2,18 @@ import {
   createParagraph,
   createStyle,
   styleFg,
+  styleAddModifier,
+  Modifier,
   Color,
   frameRenderWidget,
   renderParagraph,
+  styledSpan,
+  createLine,
 } from "terminui";
 import type { Frame, Rect, Style } from "terminui";
 import type { UIState } from "../store.js";
 import { SPINNER_FRAMES, formatElapsed, formatTokenCount } from "./helpers.js";
 
-/**
- * Widget-based task status line.
- * Shows spinner + phase + elapsed time + tokens during agent execution.
- */
 export function renderTaskStatus(
   frame: Frame,
   state: UIState,
@@ -23,37 +23,65 @@ export function renderTaskStatus(
   const { task } = state;
   if (task.phase === "idle") return;
 
-  const spinner = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length] || SPINNER_FRAMES[0];
+  const spinner = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length] || SPINNER_FRAMES[0]!;
   const elapsed = task.startTime ? formatElapsed(Date.now() - task.startTime) : "";
 
+  let icon = spinner;
   let phaseText = "";
-  let fg: Style["fg"] = Color.Cyan;
+  let iconFg: Style["fg"] = Color.Cyan;
+  let textFg: Style["fg"] = Color.Cyan;
+
   switch (task.phase) {
     case "thinking":
-      phaseText = "Thinking...";
-      fg = Color.Cyan;
+      icon = spinner;
+      phaseText = "Thinking";
+      iconFg = Color.Cyan;
+      textFg = Color.Cyan;
       break;
     case "tool":
-      phaseText = `Using ${task.toolName || "tool"}...`;
-      fg = Color.Yellow;
+      icon = "▶";
+      phaseText = `Tool: ${task.toolName || "tool"}`;
+      iconFg = Color.Yellow;
+      textFg = Color.Yellow;
       break;
     case "streaming":
-      phaseText = "Streaming...";
-      fg = Color.Green;
+      icon = spinner;
+      phaseText = "Streaming";
+      iconFg = Color.Green;
+      textFg = Color.Green;
       break;
     case "done":
+      icon = "✓";
       phaseText = "Done";
-      fg = Color.Green;
+      iconFg = Color.Green;
+      textFg = Color.Green;
       break;
   }
 
-  const toolsInfo = task.toolsCalled > 0 ? `  Tools: ${task.toolsCalled}` : "";
-  const usageInfo = task.usage
-    ? `  Tokens: ${formatTokenCount(task.usage.promptTokens)}in/${formatTokenCount(task.usage.completionTokens)}out`
+  const toolsInfo = task.toolsCalled > 0
+    ? `  · ${task.toolsCalled} tool${task.toolsCalled > 1 ? "s" : ""}`
     : "";
+  const usageInfo = task.usage
+    ? `  · ${formatTokenCount(task.usage.promptTokens + task.usage.completionTokens)} tokens`
+    : "";
+  const elapsedInfo = elapsed ? `  (${elapsed})` : "";
 
-  const text = `  ${spinner} ${phaseText}${elapsed ? ` (${elapsed})` : ""}${toolsInfo}${usageInfo}`;
-  const style = styleFg(createStyle(), fg);
-  const para = createParagraph(text, { style });
-  frameRenderWidget(frame, renderParagraph(para), { ...area, height: 1 });
+  const iconSt = styleAddModifier(styleFg(createStyle(), iconFg), Modifier.BOLD);
+  const textSt = styleFg(createStyle(), textFg);
+  const dimSt = styleFg(styleAddModifier(createStyle(), Modifier.DIM), Color.DarkGray);
+
+  const spans = [
+    styledSpan("  ", dimSt),
+    styledSpan(icon, iconSt),
+    styledSpan(`  ${phaseText}`, textSt),
+    styledSpan(`${elapsedInfo}${toolsInfo}${usageInfo}`, dimSt),
+  ];
+
+  const line = createLine(spans);
+  const para = createParagraph("", {});
+  const styledPara = {
+    ...para,
+    text: { lines: [line], style: textSt, alignment: "left" as const },
+  };
+  frameRenderWidget(frame, renderParagraph(styledPara), { ...area, height: 1 });
 }

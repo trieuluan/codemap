@@ -11,25 +11,19 @@ import type { Terminal, Frame, Rect } from "terminui";
 import { renderJsx } from "terminui/jsx";
 import type { UIState } from "./store.js";
 
-// JSX blocks — small single-child components
-import { HelpText } from "./blocks/help-text.js";
-import { StatusLine } from "./blocks/status-line.js";
+// JSX blocks — dialogs only
 import { ConfirmDialog } from "./blocks/confirm-dialog.js";
 import { SubprocessLog } from "./blocks/subprocess-log.js";
 import { renderHeader } from "./blocks/header.js";
 
-// Widget renderers — rendered via frameRenderWidget
+// Widget renderers
+import { renderHelpHints } from "./blocks/help-text.js";
+import { renderStatusLine } from "./blocks/status-line.js";
 import { renderMessages } from "./widgets/messages.js";
 import { renderInputComposer } from "./widgets/input-composer.js";
 import { renderTaskStatus } from "./widgets/task-status.js";
 import { renderHelpScreen } from "./widgets/help-screen.js";
 
-/**
- * Hybrid renderer:
- *
- * renderJsx         → single-child blocks (help-text, status-line, dialogs)
- * frameRenderWidget → startup, help, header, messages, input, task status
- */
 export function render(
   terminal: Terminal,
   state: UIState,
@@ -55,8 +49,9 @@ function renderMainChat(
 ): void {
   const taskActive = state.task.phase !== "idle";
 
-  const bannerLines = 11; // cfonts "simple" produces ~8 lines for "CODEMAP"
-  const headerH = bannerLines + 2 + 2; // +2 for subtitle+info, +2 for border top/bottom
+  const bannerLines = 11;
+  // +3 for subtitle + info pills + quick start; +2 for top/bottom borders
+  const headerH = bannerLines + 3 + 2;
   const helpH = 1;
   const statusH = 1;
   const inputH = 3;
@@ -84,33 +79,22 @@ function renderMainChat(
 
   let idx = 0;
 
-  // Widget: header with gradient banner
   renderHeader(frame, state, areas[idx++]!);
-
-  // JSX: single-child help hint
-  renderJsx(frame, <HelpText />, areas[idx++]!);
-
-  // Widget: messages
+  renderHelpHints(frame, areas[idx++]!);
   renderMessages(frame, state.messages, areas[idx++]!);
 
-  // Widget: task status
   if (taskActive) {
     renderTaskStatus(frame, state, spinnerFrame, areas[idx++]!);
   }
 
-  // JSX: confirm dialog (wrapped children via VStack inside Panel)
   if (state.confirm.active) {
     renderJsx(frame, <ConfirmDialog state={state} />, areas[idx++]!);
   }
 
-  // JSX: subprocess log (wrapped children via VStack inside Panel)
   if (state.subprocess.active) {
     renderJsx(frame, <SubprocessLog state={state} />, areas[idx++]!);
   }
 
-  // Widget: input composer
   renderInputComposer(frame, state, areas[idx++]!);
-
-  // JSX: single-child status line
-  renderJsx(frame, <StatusLine state={state} />, areas[idx++]!);
+  renderStatusLine(frame, state, areas[idx++]!);
 }

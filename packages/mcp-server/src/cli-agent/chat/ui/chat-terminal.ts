@@ -579,7 +579,7 @@ export class ChatTerminal {
 
   private appendMessage(msg: Message): void {
     this.store.dispatch((prev) => ({
-      messages: [...prev.messages, msg],
+      messages: [...prev.messages, { timestamp: Date.now(), ...msg }],
     }));
   }
 

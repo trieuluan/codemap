@@ -9,6 +9,7 @@ export interface Message {
   toolName?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   welcomeData?: WelcomeData;
+  timestamp?: number;
 }
 
 export interface WelcomeData {
