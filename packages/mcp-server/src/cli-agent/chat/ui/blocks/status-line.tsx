@@ -15,18 +15,22 @@ import type { UIState } from "../store.js";
 import { getModeDisplay } from "../../commands/route-policy.js";
 
 export function renderStatusLine(frame: Frame, state: UIState, area: Rect): void {
-  const { config } = state;
+  const { config, workspace } = state;
   const modeInfo = getModeDisplay(config.mode);
 
   const dim = styleFg(styleAddModifier(createStyle(), Modifier.DIM), Color.DarkGray);
   const white = styleFg(createStyle(), Color.White);
   const green = styleFg(createStyle(), Color.Green);
   const cyan = styleFg(createStyle(), Color.Cyan);
+  const magenta = styleFg(createStyle(), Color.Magenta);
   const sep = "  ·  ";
 
   const spans = [
-    styledSpan("  workspace: ", dim),
-    styledSpan(config.profile, white),
+    styledSpan("  ", dim),
+    styledSpan(workspace?.repoName ?? config.profile, white),
+    ...(workspace?.branch
+      ? [styledSpan("  ⎇ ", dim), styledSpan(workspace.branch, magenta)]
+      : []),
     styledSpan(sep, dim),
     styledSpan("model: ", dim),
     styledSpan(config.model, white),

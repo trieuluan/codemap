@@ -16,6 +16,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["[Tab]", "Complete"],
   ["[↑↓]", "History"],
   ["[@]", "Files"],
+  ["[Scroll]", "Messages"],
   ["[Ctrl+C]", "Cancel"],
   ["[Esc]", "Menu"],
   ["[/]", "Commands"],

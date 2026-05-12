@@ -24,6 +24,13 @@ import { renderInputComposer } from "./widgets/input-composer.js";
 import { renderTaskStatus } from "./widgets/task-status.js";
 import { renderHelpScreen } from "./widgets/help-screen.js";
 
+// Last known terminal cursor position for the input box (used by IME support)
+let _inputCursorPos: { row: number; col: number } | null = null;
+
+export function getInputCursorPos(): { row: number; col: number } | null {
+  return _inputCursorPos;
+}
+
 export function render(
   terminal: Terminal,
   state: UIState,
@@ -34,6 +41,7 @@ export function render(
 
     if (state.screen === "help") {
       renderHelpScreen(frame, area);
+      _inputCursorPos = null;
       return;
     }
 
@@ -49,9 +57,9 @@ function renderMainChat(
 ): void {
   const taskActive = state.task.phase !== "idle";
 
-  const bannerLines = 11;
-  // +3 for subtitle + info pills + quick start; +2 for top/bottom borders
-  const headerH = bannerLines + 3 + 2;
+  const bannerLines = 8;
+  // outer borders(2) + banner + subtitle(1) + blank(1) + pills box(4) + qs box(3)
+  const headerH = bannerLines + 11;
   const helpH = 1;
   const statusH = 1;
   const inputH = 3;
@@ -81,7 +89,7 @@ function renderMainChat(
 
   renderHeader(frame, state, areas[idx++]!);
   renderHelpHints(frame, areas[idx++]!);
-  renderMessages(frame, state.messages, areas[idx++]!);
+  renderMessages(frame, state.messages, areas[idx++]!, state.messageScroll.offset);
 
   if (taskActive) {
     renderTaskStatus(frame, state, spinnerFrame, areas[idx++]!);
@@ -95,6 +103,20 @@ function renderMainChat(
     renderJsx(frame, <SubprocessLog state={state} />, areas[idx++]!);
   }
 
-  renderInputComposer(frame, state, areas[idx++]!);
+  const inputArea = areas[idx]!;
+  renderInputComposer(frame, state, inputArea);
+  idx++;
+
+  // Track cursor terminal position so macOS IME can show composition popup.
+  // Row 1 = inside top border; col = left border(1) + " > "(3) + cursor offset.
+  if (state.inputActive) {
+    _inputCursorPos = {
+      row: inputArea.y + 1,
+      col: inputArea.x + 4 + state.inputCursor,
+    };
+  } else {
+    _inputCursorPos = null;
+  }
+
   renderStatusLine(frame, state, areas[idx++]!);
 }

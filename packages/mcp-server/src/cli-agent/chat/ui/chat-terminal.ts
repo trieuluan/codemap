@@ -12,10 +12,12 @@ import {
   selectModelForMode,
   getRecommendedMode,
 } from "../commands/route-policy.js";
+import readline from "node:readline";
+import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
-import { render } from "./renderer.js";
+import { render, getInputCursorPos } from "./renderer.js";
 import { createNodeBackend } from "./node-backend.js";
 
 // Re-export for backward compat with commands/index.ts
@@ -81,6 +83,24 @@ export class ChatTerminal {
   async start(): Promise<void> {
     terminalClear(this.terminal);
 
+    // Enable SGR extended mouse tracking so the scroll wheel is sent to stdin
+    // instead of being intercepted by the terminal emulator's scroll buffer.
+    process.stdout.write("\x1b[?1000h\x1b[?1006h");
+
+    // readline.emitKeypressEvents makes stdin emit 'keypress' events with proper
+    // Unicode support — this fixes Vietnamese (and all IME) input in raw mode.
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setEncoding("utf8");
+
+    // Populate git workspace info (non-blocking — UI renders before this resolves)
+    tryGetCurrentWorkspaceInfo().then((info) => {
+      if (info) {
+        this.store.dispatch({
+          workspace: { repoName: info.repoName, branch: info.branch },
+        });
+      }
+    }).catch(() => { /* ignore if not a git repo */ });
+
     // Main input loop — key-by-key stdin, input rendered by terminui
     while (true) {
       const currentScreen = this.store.getState().screen;
@@ -121,6 +141,7 @@ export class ChatTerminal {
 
     this.stopSpinner();
     terminalShowCursor(this.terminal);
+    process.stdout.write("\x1b[?1000l\x1b[?1006l");
     process.exit(0);
   }
 
@@ -151,130 +172,128 @@ export class ChatTerminal {
     const historyIdx = { current: -1 };
     const history = this.store.getState().input.history;
 
+    type KpKey = { name?: string; ctrl?: boolean; meta?: boolean; sequence?: string };
+
     return new Promise<string | null>((resolve) => {
-      const onData = (data: Buffer) => {
-        const s = data.toString();
-
-        // Enter — submit
-        if (s === "\r" || s === "\n") {
-          cleanup();
-          const trimmed = text.trim();
-          resolve(trimmed || null);
-          return;
-        }
-
-        // Ctrl+C — cancel
-        if (s === "\x03") {
-          cleanup();
-          resolve(null);
-          return;
-        }
-
-        // Ctrl+D — EOF (empty only)
-        if (s === "\x04" && text.length === 0) {
-          cleanup();
-          resolve(null);
-          return;
-        }
-
-        // Backspace / DEL
-        if (s === "\x7f" || s === "\b") {
-          if (cursor > 0) {
-            text = text.slice(0, cursor - 1) + text.slice(cursor);
-            cursor--;
-          }
-          sync();
-          return;
-        }
-
-        // Escape sequences
-        if (s === "\x1b") return; // bare ESC, skip
-        if (s.startsWith("\x1b[")) {
-          const seq = s.slice(2);
-          if (seq === "D") {
-            // Left arrow
-            if (cursor > 0) cursor--;
-            sync();
-            return;
-          }
-          if (seq === "C") {
-            // Right arrow
-            if (cursor < text.length) cursor++;
-            sync();
-            return;
-          }
-          if (seq === "A") {
-            // Up arrow — history prev
-            if (history.length > 0) {
-              historyIdx.current = Math.min(historyIdx.current + 1, history.length - 1);
-              text = history[history.length - 1 - historyIdx.current] || "";
-              cursor = text.length;
-              sync();
-            }
-            return;
-          }
-          if (seq === "B") {
-            // Down arrow — history next
-            if (historyIdx.current > 0) {
-              historyIdx.current--;
-              text = history[history.length - 1 - historyIdx.current] || "";
-              cursor = text.length;
-            } else {
-              historyIdx.current = -1;
-              text = "";
-              cursor = 0;
-            }
-            sync();
-            return;
-          }
-          if (seq === "3~") {
-            // Delete key
-            if (cursor < text.length) {
-              text = text.slice(0, cursor) + text.slice(cursor + 1);
-            }
-            sync();
-            return;
-          }
-          // Ignore other escape sequences
-          return;
-        }
-
-        // Ctrl+A — home
-        if (s === "\x01") { cursor = 0; sync(); return; }
-        // Ctrl+E — end
-        if (s === "\x05") { cursor = text.length; sync(); return; }
-        // Ctrl+K — kill to end
-        if (s === "\x0b") { text = text.slice(0, cursor); sync(); return; }
-        // Ctrl+U — kill to start
-        if (s === "\x15") { text = text.slice(cursor); cursor = 0; sync(); return; }
-
-        // Printable character(s)
-        for (const ch of s) {
-          const code = ch.charCodeAt(0);
-          if (code >= 0x20 && code !== 0x7f) {
-            text = text.slice(0, cursor) + ch + text.slice(cursor);
-            cursor++;
-          }
-        }
-        sync();
-      };
+      let finished = false;
 
       const cleanup = () => {
-        process.stdin.removeListener("data", onData);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (process.stdin as any).removeListener("keypress", onKeypress);
+        process.stdin.removeListener("data", onMouseData);
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
         process.stdin.pause();
       };
 
-      const sync = () => {
-        this.store.dispatchImmediate({
-          inputText: text,
-          inputCursor: cursor,
-        });
+      const finish = (result: string | null) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve(result);
       };
 
-      process.stdin.on("data", onData);
+      const sync = () => {
+        this.store.dispatchImmediate({ inputText: text, inputCursor: cursor });
+      };
+
+      const charLen = () => [...text].length;
+
+      // ── Mouse scroll (SGR: \x1b[<64/65;...) ─────────────
+      const onMouseData = (data: Buffer | string) => {
+        const s = typeof data === "string" ? data : data.toString("utf8");
+        if (!s.startsWith("\x1b[<")) return;
+        const m = s.match(/^\x1b\[<(\d+);/);
+        if (!m) return;
+        const btn = parseInt(m[1]!, 10);
+        if (btn === 64) {
+          const st = this.store.getState();
+          this.store.dispatch({ messageScroll: { offset: st.messageScroll.offset + 3, autoScroll: false } });
+        } else if (btn === 65) {
+          const st = this.store.getState();
+          const newOffset = Math.max(0, st.messageScroll.offset - 3);
+          this.store.dispatch({ messageScroll: { offset: newOffset, autoScroll: newOffset === 0 } });
+        }
+      };
+
+      // ── Keyboard (readline keypress — handles all Unicode/IME) ───
+      const onKeypress = (str: string | undefined, key: KpKey | undefined) => {
+        if (!key) return;
+
+        if (key.name === "return") { finish(text.trim() || null); return; }
+        if (key.ctrl && key.name === "c") { finish(null); return; }
+        if (key.ctrl && key.name === "d" && text.length === 0) { finish(null); return; }
+
+        if (key.name === "backspace") {
+          if (cursor > 0) {
+            const arr = [...text]; arr.splice(cursor - 1, 1);
+            text = arr.join(""); cursor--;
+          }
+          sync(); return;
+        }
+
+        if (key.name === "delete") {
+          const arr = [...text];
+          if (cursor < arr.length) { arr.splice(cursor, 1); text = arr.join(""); }
+          sync(); return;
+        }
+
+        if (key.name === "left")  { if (cursor > 0) cursor--; sync(); return; }
+        if (key.name === "right") { if (cursor < charLen()) cursor++; sync(); return; }
+
+        if (key.name === "up") {
+          if (history.length > 0) {
+            historyIdx.current = Math.min(historyIdx.current + 1, history.length - 1);
+            text = history[history.length - 1 - historyIdx.current] || "";
+            cursor = charLen();
+            sync();
+          }
+          return;
+        }
+
+        if (key.name === "down") {
+          if (historyIdx.current > 0) {
+            historyIdx.current--;
+            text = history[history.length - 1 - historyIdx.current] || "";
+            cursor = charLen();
+          } else {
+            historyIdx.current = -1; text = ""; cursor = 0;
+          }
+          sync(); return;
+        }
+
+        if (key.name === "pageup"  || (key.ctrl && key.name === "up")) {
+          const st = this.store.getState();
+          this.store.dispatch({ messageScroll: { offset: st.messageScroll.offset + 8, autoScroll: false } });
+          return;
+        }
+        if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+          const st = this.store.getState();
+          const newOffset = Math.max(0, st.messageScroll.offset - 8);
+          this.store.dispatch({ messageScroll: { offset: newOffset, autoScroll: newOffset === 0 } });
+          return;
+        }
+
+        if (key.ctrl && key.name === "a") { cursor = 0; sync(); return; }
+        if (key.ctrl && key.name === "e") { cursor = charLen(); sync(); return; }
+        if (key.ctrl && key.name === "k") { text = [...text].slice(0, cursor).join(""); sync(); return; }
+        if (key.ctrl && key.name === "u") { text = [...text].slice(cursor).join(""); cursor = 0; sync(); return; }
+
+        // Printable — includes Vietnamese, emoji, all Unicode
+        if (str && !key.ctrl && !key.meta) {
+          for (const ch of str) {
+            const cp = ch.codePointAt(0) ?? 0;
+            if (cp >= 0x20 && cp !== 0x7f) {
+              const arr = [...text]; arr.splice(cursor, 0, ch);
+              text = arr.join(""); cursor++;
+            }
+          }
+          sync();
+        }
+      };
+
+      process.stdin.on("data", onMouseData);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (process.stdin as any).on("keypress", onKeypress);
     });
   }
 
@@ -580,6 +599,9 @@ export class ChatTerminal {
   private appendMessage(msg: Message): void {
     this.store.dispatch((prev) => ({
       messages: [...prev.messages, { timestamp: Date.now(), ...msg }],
+      ...(prev.messageScroll.autoScroll
+        ? { messageScroll: { offset: 0, autoScroll: true } }
+        : {}),
     }));
   }
 
@@ -672,6 +694,7 @@ export class ChatTerminal {
       exit: () => {
         this.stopSpinner();
         terminalShowCursor(this.terminal);
+        process.stdout.write("\x1b[?1000l\x1b[?1006l");
         process.exit(0);
       },
     };
@@ -680,7 +703,19 @@ export class ChatTerminal {
   // ─── Rendering ───────────────────────────────────────
 
   private redraw(): void {
-    render(this.terminal, this.store.getState(), this.spinnerFrame);
+    const state = this.store.getState();
+    render(this.terminal, state, this.spinnerFrame);
+
+    // Move the real terminal cursor to the input insertion point so macOS IME
+    // can locate the composition popup. Without a visible cursor at the right
+    // position, the OS input pipeline never activates IME composition.
+    const pos = getInputCursorPos();
+    if (pos && state.inputActive) {
+      // ANSI cursor position is 1-indexed; show cursor so IME sees it
+      process.stdout.write(`\x1b[${pos.row + 1};${pos.col + 1}H\x1b[?25h`);
+    } else {
+      process.stdout.write("\x1b[?25l"); // hide cursor when not inputting
+    }
   }
 
   private startSpinner(): void {

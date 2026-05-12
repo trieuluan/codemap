@@ -91,8 +91,20 @@ export interface UIState {
     availableModels: string[];
   };
 
+  // Git workspace info — populated async after start
+  workspace?: {
+    repoName: string;
+    branch: string;
+  };
+
   // Agent history (ChatMessage[] sent to provider)
   agentHistory: Array<{ role: string; content: string; toolCalls?: unknown[] }>;
+
+  // Message scroll
+  messageScroll: {
+    offset: number;      // lines scrolled up from bottom (0 = at bottom)
+    autoScroll: boolean; // follow new messages when true
+  };
 
   // Debug
   debug: boolean;
@@ -148,6 +160,7 @@ export function createInitialState(opts: {
       availableModels: opts.availableModels ?? [],
     },
     agentHistory: [],
+    messageScroll: { offset: 0, autoScroll: true },
     debug: opts.debug ?? false,
     debugLogFile: null,
     inputText: "",
