@@ -7,7 +7,8 @@
     "outDir": "dist",
     "types": ["node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "terminui"
+    "jsxImportSource": "react",
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

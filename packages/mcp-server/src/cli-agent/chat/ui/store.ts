@@ -64,11 +64,6 @@ export interface UIState {
     autoAccept: boolean;
   };
 
-  // Input rendering state (managed by ChatTerminal readKey loop)
-  inputText: string;
-  inputCursor: number;
-  inputActive: boolean;
-
   // Subprocess
   subprocess: {
     active: boolean;
@@ -163,9 +158,6 @@ export function createInitialState(opts: {
     messageScroll: { offset: 0, autoScroll: true },
     debug: opts.debug ?? false,
     debugLogFile: null,
-    inputText: "",
-    inputCursor: 0,
-    inputActive: false,
   };
 }
 
