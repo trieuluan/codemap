@@ -9,7 +9,8 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
       title: "Get Current Workspace Info",
       description:
         "Returns the current Git workspace root, repo name, branch, commit SHA, and origin remote URL if available. " +
-        "Use this before creating a CodeMap project from the current workspace.",
+        "Works without authentication or a linked project. " +
+        "Use this to inspect local git state, or before creating/linking a CodeMap cloud project.",
       inputSchema: {},
     },
     async () => {
@@ -19,13 +20,12 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
 
         if (!workspace) {
           return success(
-            "No Git workspace detected. Project creation can still use upload flow if create_project is called with upload confirmation.",
+            "No Git workspace detected. Local tools (refresh_local_index, edit_file, bash) still work. Cloud project creation can use the upload flow via create_project.",
             {
               detected: false,
               workspace: null,
               workspaceRootPath: resolvedWorkspace.workspaceRootPath,
               resolution: resolvedWorkspace.resolution,
-              nextAction: "create_project",
             },
           );
         }
@@ -46,7 +46,6 @@ export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
           workspace,
           workspaceRootPath: resolvedWorkspace.workspaceRootPath,
           resolution: resolvedWorkspace.resolution,
-          nextAction: "create_project",
         });
       } catch (error) {
         return errorContent(error);

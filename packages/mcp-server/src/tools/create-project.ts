@@ -5,7 +5,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { zipWorkspaceFolder } from "../lib/workspace-zip.js";
-import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
+import { saveWorkspaceProjectId, readWorkspaceProjectId } from "../lib/workspace-project.js";
 import { resolveWorkspace } from "../lib/workspace-resolver.js";
 import type { GithubStatus, ProjectSourceImportResult } from "../lib/api-types.js";
 
@@ -52,6 +52,19 @@ export function registerCreateProjectTool(
       workspace_id,
       upload_confirmed,
     }) => {
+      // Guard: refuse to create if a project already exists for this workspace.
+      // Creating a new project would overwrite the projectId in .codemap/mcp.json,
+      // breaking all existing CodeMap tools for this workspace.
+      const existingProjectId = await readWorkspaceProjectId();
+      if (existingProjectId) {
+        return success(
+          `This workspace is already linked to CodeMap project \`${existingProjectId}\`.\n` +
+          `Use \`trigger_reimport\` to re-sync, or \`link_project\` to switch to a different project.\n` +
+          `Do NOT call create_project again — it would overwrite the existing project link.`,
+          { projectId: existingProjectId },
+        );
+      }
+
       const resolvedWorkspace = await resolveWorkspace();
       const workspace = resolvedWorkspace.workspace;
 
@@ -167,7 +180,7 @@ export function registerCreateProjectTool(
           project: null,
           import: null,
           uploadConfirmed: false,
-          nextAction: "create_project",
+          nextAction: "link_or_create_project",
         });
       }
 

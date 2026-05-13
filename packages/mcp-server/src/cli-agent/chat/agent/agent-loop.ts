@@ -5,13 +5,17 @@ import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
 
+// Minimal system prompt — intentionally brief.
+// Detailed tool routing, workflow gates, and project state are in the MCP
+// resource context (codemap://project/context + codemap://rules/agent-workflow)
+// which is appended below. This prompt only covers things not in the resource:
+// identity, non-CodeMap tools, and hard safety rules.
 const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistant.
 
-Use MCP tools for codebase work. Start broad implementation/debug/refactor tasks with get_agent_workflow and recommend_agent_workflow. Use search_codebase, get_file, get_files, find_related_files, find_usages, and find_callers before proposing edits.
+## Editing safety
+Use edit_file(path, old_string, new_string) for targeted replacements — include enough surrounding context in old_string to make it unique. Use write_file for new files or full rewrites. Never claim a file changed until the tool confirms it was applied.
 
-For edits, use edit_file(path, old_string, new_string) for targeted string replacements. Use write_file(path, content) for new files or full rewrites. Include enough surrounding context in old_string to make it unique. The CLI will ask the user before applying real file changes. Never claim a file was changed until the tool reports it was applied. After edits, call get_working_diff and refresh_local_index.
-
-Keep final answers concise and include verification or remaining risk.`;
+Keep answers concise. Include verification steps and remaining risk.`;
 
 export interface AgentLoopResult {
   text: string;

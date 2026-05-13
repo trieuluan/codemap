@@ -5,6 +5,7 @@ import { selectChatProfile } from "../chat/commands/profiles.js";
 import { NineRouterProvider } from "../provider.js";
 import type { GatewayConfig } from "../types.js";
 import { printGatewayHint } from "./gateway-hint.js";
+import { loadConfig } from "../../config.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const mode = parseModeFlag(ctx.flags.mode);
@@ -17,6 +18,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   await toolClient.connectExtras();
 
   try {
+    const mcpConfig = await loadConfig();
     const { ChatTerminal } = await import("../chat/ui/chat-terminal.js");
     const terminal = new ChatTerminal({
       provider,
@@ -25,6 +27,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       profileId: profile.id,
       mode: mode ?? ctx.config.mode,
       availableModels,
+      apiToken: mcpConfig.apiToken ?? undefined,
+      mcpConfig,
     });
     await terminal.start();
   } catch (err) {

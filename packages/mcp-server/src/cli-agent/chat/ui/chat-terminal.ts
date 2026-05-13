@@ -40,6 +40,8 @@ interface ChatTerminalOptions {
   profileId: string;
   mode: GatewayMode;
   availableModels?: string[];
+  apiToken?: string; // from McpServerConfig — used to detect unauthenticated state
+  mcpConfig?: import("../../../config.js").McpServerConfig;
 }
 
 export class ChatTerminal {
@@ -48,6 +50,7 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _confirmResolve: ((accept: boolean) => void) | null = null;
+  private _taskAbort: AbortController | null = null;
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
@@ -81,6 +84,22 @@ export class ChatTerminal {
 
   // ─── Public API for components ───────────────────────────
 
+  /** Cancel the running task and reset to idle — soft cancel (HTTP may still finish in bg). */
+  cancelTask(): void {
+    if (!this.store.getState().input.busy) return;
+    this._taskAbort?.abort();
+    this._taskAbort = null;
+    // Also cancel any pending confirm dialog
+    this._confirmResolve?.(false);
+    this._confirmResolve = null;
+    this.store.dispatch({
+      input: { ...this.store.getState().input, busy: false },
+      task: { phase: "idle", toolsCalled: 0 },
+      confirm: { active: false, toolName: "", preview: null },
+      streaming: { active: false, content: "", entryIndex: -1 },
+    });
+  }
+
   resolveConfirm(accept: boolean): void {
     this._confirmResolve?.(accept);
     this._confirmResolve = null;
@@ -95,6 +114,14 @@ export class ChatTerminal {
   // ─── Start ───────────────────────────────────────────────
 
   async start(): Promise<void> {
+    // Show login screen if not authenticated
+    if (!this.options.apiToken && this.options.mcpConfig) {
+      const { showLoginScreen } = await import("./pi-tui/login-screen.js");
+      const result = await showLoginScreen(this.options.mcpConfig);
+      if (result === "exit") return;
+      // "loggedin" or "skip" → proceed to main chat
+    }
+
     // Git workspace info (non-blocking)
     tryGetCurrentWorkspaceInfo()
       .then((info) => {

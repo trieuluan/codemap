@@ -92,7 +92,7 @@ export function registerListProjectsTool(
       if (filtered.length === 0) {
         const summary = status
             ? `No projects with status "${status}" found.`
-            : "No projects found. Create one with create_project or create_project_from_github.";
+            : "No cloud projects found. Use create_project to create one (local tools work without a cloud project).";
 
         return success(summary, {
           items: [],

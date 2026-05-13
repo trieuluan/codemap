@@ -61,7 +61,7 @@ export function registerCheckAuthStatusTool(
           whoami.user.name ? `Name: ${whoami.user.name}` : null,
           github?.connected ? `GitHub: connected as @${github.githubLogin}` : "GitHub: not connected",
           gitlab?.connected ? `GitLab: connected as @${gitlab.gitlabLogin}` : "GitLab: not connected",
-          "Next action: call get_project to check project/index health, or create_project if this workspace is not linked yet.",
+          "Authenticated. Local tools (search_codebase, get_file, edit_file, bash) work now — call refresh_local_index if not done yet. Cloud project is optional: use link_project to connect an existing one, or create_project to create one (first time only).",
         ]
           .filter(Boolean)
           .join("\n");

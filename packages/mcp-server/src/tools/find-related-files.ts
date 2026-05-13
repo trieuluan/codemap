@@ -323,7 +323,7 @@ export function registerFindRelatedFilesTool(
 
         if (!resolvedProjectId) {
           return success(
-            "No project linked. Run link_project or get_project first.",
+            "No cloud project linked — cloud-enhanced results unavailable. Local index results returned if available. Use link_project to connect a cloud project for richer results.",
             { projectId: null, query, file_path, relatedFiles: [] },
           );
         }

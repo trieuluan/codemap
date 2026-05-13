@@ -4,7 +4,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import type { ProjectSourceImportResult } from "../lib/api-types.js";
-import { saveWorkspaceProjectId } from "../lib/workspace-project.js";
+import { saveWorkspaceProjectId, readWorkspaceProjectId } from "../lib/workspace-project.js";
 import { resolveWorkspace } from "../lib/workspace-resolver.js";
 
 export function registerCreateProjectFromGitlabTool(
@@ -51,6 +51,16 @@ export function registerCreateProjectFromGitlabTool(
       branch,
       workspace_id,
     }) => {
+      const existingProjectId = await readWorkspaceProjectId();
+      if (existingProjectId) {
+        return success(
+          `This workspace is already linked to CodeMap project \`${existingProjectId}\`.\n` +
+          `Use \`trigger_reimport\` to re-sync the existing project instead.\n` +
+          `Do NOT call create_project_from_gitlab again — it would overwrite the existing project link.`,
+          { projectId: existingProjectId },
+        );
+      }
+
       const result = await client.request<ProjectSourceImportResult>(
         "/projects/from-gitlab",
         {

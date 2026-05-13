@@ -77,7 +77,7 @@ export function registerCodeReviewTool(
         if (!resolvedProjectId) {
           return success(
             "No project ID provided and no linked project found for this workspace.\n" +
-              "Run create_project first to link this workspace to a CodeMap project.",
+              "Use link_project to connect an existing project, or create_project to create one (first time only). These require a cloud project.",
             {
               projectId: null,
               reviews: [],

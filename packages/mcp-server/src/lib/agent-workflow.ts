@@ -193,7 +193,7 @@ export const AGENT_WORKFLOW_SUMMARY = [
 ];
 
 export const AGENT_WORKFLOW_SEQUENCE = [
-  "New session: get_agent_workflow, then get_project or project-context resource.",
+  "New session: get_agent_workflow, then check project-context resource. If no local index exists yet, call refresh_local_index first (no auth required).",
   "Broad task: explore_task -> follow suggestedNextTools -> get_file/get_files.",
   "Related-file question: find_related_files(query/file_path/symbol_name) -> get_files -> get_file.",
   "Narrow lookup: search_codebase -> get_file(include=[outline] or [symbols]).",
@@ -232,7 +232,7 @@ CodeMap Agent Pack uses Superpowers-style gates to keep agents from jumping into
 
 ## Gates
 
-1. **Orient** — call \`get_agent_workflow\`, \`get_project\`, then the first tools from \`recommend_agent_workflow\`.
+1. **Orient** — call \`get_agent_workflow\`. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then \`get_project\` or read the project-context resource. Finally run the first tools from \`recommend_agent_workflow\`.
 2. **Design** — for features or vague tasks, complete brainstorming and get design approval before editing production files.
 3. **Plan** — after design approval, write an implementation plan with exact files, steps, and verification commands.
 4. **Implement** — follow the plan or TDD loop; keep changes scoped.

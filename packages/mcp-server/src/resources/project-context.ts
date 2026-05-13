@@ -43,6 +43,9 @@ const TOOLS_LITE = [
   "- wait_for_import — wait until an import finishes",
   "- check_auth_status — verify MCP authentication, current API URL, user, and next action",
   "- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset",
+  "- web_search — search the web for documentation, library APIs, changelogs, or error solutions; returns ranked results with URLs",
+  "- web_fetch — fetch and read a URL as plain text; auto-converts GitHub blob URLs to raw content and strips HTML; flow: web_search → web_fetch",
+  "- get_agent_workflow — load the full agent workflow rules and tool routing guide; call at the start of any broad or multi-step task",
 ];
 
 const TOOLS_STANDARD_EXTRA = [
@@ -54,6 +57,9 @@ const TOOLS_STANDARD_EXTRA = [
   "- get_project_insights — full codebase health report: cycles, entry points, orphans, top files",
   "- run_tests — run the project test suite (Jest, Vitest, Playwright, npm test) with pattern/name filtering",
   "- find_related_files — find files related to a query, file, or symbol using multi-signal ranking",
+  "- get_symbol_context — get full body and context for a specific symbol (function, class, method) by name and file",
+  "- summarize_feature_area — summarize the purpose, key files, and entry points of a feature area or directory",
+  "- recommend_agent_workflow — get a task-specific workflow recommendation with required skills, gates, and artifact templates; call before implementing a broad task",
   "- create_project — create or reuse a CodeMap project from the current workspace",
   "- create_project_from_github — create or reuse a CodeMap project from a GitHub repository",
   "- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository",
@@ -67,7 +73,9 @@ const TOOLS_FULL_EXTRA = [
   "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
   "- edit_file — replace a unique string in a file; use for targeted edits (preferred over apply_patch)",
   "- write_file — write full content to a file, creating it if needed; use for new files or full rewrites",
+  "- bash — execute shell commands; use for builds, tests, git operations, package installs, or anything other tools don't cover; cwd defaults to workspace root, pass cwd param for sub-packages",
   "- suggest_patch — analyze workspace changes and generate unified diffs with blast radius",
+  "- apply_patch — apply a unified diff patch to the workspace; use after suggest_patch to commit proposed changes",
   "- deploy_preview — deploy a preview build of the project",
   "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
   "- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage GitLab OAuth for repository imports",
@@ -80,6 +88,7 @@ const TOOLS_FULL_EXTRA = [
 
 const WORKFLOW_LITE = [
   "- Start with check_auth_status if API calls fail or auth is unclear.",
+  "- Use get_agent_workflow at the start of any broad or multi-step task to load workflow rules and tool routing.",
   "- Use get_project to confirm the current linked project. If no project is linked, call link_project first (no arguments) — it auto-detects by git remote.",
   "- Use explore_task first for any coding task — returns likelyFiles, entrypoints, symbols, risks, and suggestedNextTools in one call.",
   "- Follow suggestedNextTools returned by explore_task — it provides exact get_file calls to make next.",
@@ -88,10 +97,14 @@ const WORKFLOW_LITE = [
   "- Use get_working_diff after making edits to verify what changed before committing.",
   "- Use refresh_local_index after editing files to refresh local MCP search/read context without touching cloud indexing.",
   "- Use trigger_reimport then wait_for_import when you need cloud indexing for web graph/insights.",
+  "- Use web_search to find documentation, library APIs, or error solutions. Use web_fetch to read the full content of a result URL.",
 ];
 
 const WORKFLOW_STANDARD_EXTRA = [
+  "- Call recommend_agent_workflow before implementing any broad task — it returns required skills, hard gates, and artifact templates specific to the task type.",
   "- After suggest_edit_locations returns candidates, use get_files to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
+  "- Use get_symbol_context to read the full body of a specific function or class when you already know its name and file.",
+  "- Use summarize_feature_area to get a high-level overview of a feature directory before diving into individual files.",
   "- Use find_usages to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names.",
   "- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
   "- Use find_related_files with a natural-language query (e.g. 'login bug') to find related files across feature boundaries.",
@@ -102,11 +115,12 @@ const WORKFLOW_STANDARD_EXTRA = [
 ];
 
 const WORKFLOW_FULL_EXTRA = [
+  "- Use bash for builds, tests, git commands, and package installs. Pass cwd param when running sub-package commands (e.g. cwd: 'packages/api').",
   "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
   "- Use rename_symbol to rename a symbol codebase-wide — call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true.",
   "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
   "- Use code_review for automated quality checks. Set focus_areas to target specific concerns (bugs, security, performance, etc.).",
-  "- Use suggest_patch / apply_patch for proposing and applying code changes — always review patch diffs before applying.",
+  "- Use suggest_patch to generate a unified diff for proposed changes, then apply_patch to apply it — always review the diff before applying.",
   "- Use deploy_preview after completing a feature to share a testable build.",
 ];
 
@@ -353,28 +367,68 @@ export function registerProjectContextResource(
       const projectId = workspaceConfig.projectId;
 
       if (!projectId) {
+        // Check auth locally — no API call, just check if a token is configured
+        const isAuthenticated = Boolean(config.apiToken);
+
+        const noProjectText = isAuthenticated
+          ? [
+              "# CodeMap Project Context",
+              "",
+              "## Status: Logged in — local workspace, no cloud project linked",
+              "",
+              "You are logged in to CodeMap. Local MCP tools work right now without a cloud project.",
+              "",
+              "## What works locally (no cloud project needed)",
+              "- refresh_local_index — build/refresh local SQLite index from disk; required before search/read tools work",
+              "- explore_task, search_codebase, get_file, get_files, find_usages, find_callers — full codebase navigation",
+              "- edit_file, write_file, bash — code editing and shell commands",
+              "- web_search, web_fetch — search the web and fetch URLs; no auth required",
+              "- get_working_diff — see uncommitted changes",
+              "",
+              "## Recommended first step",
+              "Call refresh_local_index now (no arguments) to build the local index. After that, you can search and navigate the codebase immediately.",
+              "",
+              "## Cloud project (optional — only needed for web features)",
+              "A cloud project is only required if the user asks about:",
+              "- Dependency graph on the web dashboard",
+              "- Insights (orphan files, circular deps, top files) on the web",
+              "- Sharing project analysis with teammates",
+              "",
+              "Do NOT proactively suggest creating a cloud project. Only bring it up if the user explicitly asks for graph, insights, or web dashboard features.",
+              "If the user does want a cloud project: call link_project first (auto-detects by git remote). Only call create_project if link_project finds no match.",
+              "",
+              "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions.",
+            ].join("\n")
+          : [
+              "# CodeMap Project Context",
+              "",
+              "## Status: Not logged in — local tools still available",
+              "",
+              "The user has not logged in to CodeMap yet.",
+              "",
+              "## What works right now (no login needed)",
+              "- refresh_local_index — build local index from disk; no auth required",
+              "- After indexing: explore_task, search_codebase, get_file, get_files, find_usages — full local navigation",
+              "- edit_file, write_file, bash — code editing and shell commands",
+              "- web_search, web_fetch — search the web and fetch URLs; no auth required",
+              "",
+              "## Recommended first step",
+              "Call refresh_local_index now to build the local index. The user can start working immediately.",
+              "",
+              "## Login (only needed for cloud features)",
+              "Login is only required for: graph/insights on the web dashboard, cloud project sync, or team features.",
+              "If the user wants to login: call start_auth_flow (opens browser), then wait_for_auth.",
+              "Do NOT push the user to login unless they ask for cloud/web features.",
+              "",
+              "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions.",
+            ].join("\n");
+
         return {
           contents: [
             {
               uri: uri.href,
               mimeType: "text/plain",
-              text: [
-                "# CodeMap Project Context",
-                "",
-                "No CodeMap project is linked to this workspace.",
-                "",
-                "get_project only reads the current project saved in .codemap/mcp.json.",
-                "Next action: call link_project (no arguments) first — it checks if an existing project matches this workspace by git remote URL and suggests it automatically.",
-                "If no match is found, link_project lists all your projects for manual selection.",
-                "Only call create_project if no suitable project exists yet.",
-                "",
-                "Run one of the following tools to link or create a project:",
-                "- link_project — recommended if you already have a project in CodeMap; auto-detects by git remote",
-                "- create_project — recommended for the current local workspace if no project exists yet",
-                "- create_project_from_github — import a GitHub repository when you are not working from the local repo",
-                "",
-                "CodeMap MCP tools use structured responses. Prefer structuredContent.data for workflow decisions and treat summary text as a human-readable fallback.",
-              ].join("\n"),
+              text: noProjectText,
             },
           ],
         };

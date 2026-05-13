@@ -42,6 +42,8 @@ import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area
 import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
 import { registerFindByPatternTool } from "./tools/find-by-pattern.js";
 import { registerRunTestsTool } from "./tools/run-tests.js";
+import { registerBashTool } from "./tools/bash.js";
+import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
@@ -135,6 +137,8 @@ async function runMcpServer() {
     registerGetDiffTool(server, config);
     registerGetProjectInsightsTool(server, config);
     registerRunTestsTool(server, config);
+    registerBashTool(server, config);
+    registerWebFetchTool(server, config);
     registerFindRelatedFilesTool(server, config);
     registerSummarizeFeatureAreaTool(server, config);
     registerCreateProjectTool(server, config);

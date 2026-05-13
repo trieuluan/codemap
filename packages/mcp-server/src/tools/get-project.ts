@@ -89,9 +89,9 @@ export function registerGetProjectTool(
     {
       title: "Get Project",
       description:
-        "Returns the current linked CodeMap project for this workspace. " +
-        "The project link is read from .codemap/mcp.json after create_project saves it. " +
-        "Call this with no arguments. If no project is linked, call create_project.",
+        "Returns the current linked CodeMap cloud project for this workspace (read from .codemap/mcp.json). " +
+        "Call this with no arguments. A linked project is only needed for cloud features (graph, insights, web dashboard). " +
+        "Local tools work without a project — use refresh_local_index to build the local index.",
       inputSchema: {
         verbose: z
           .boolean()
@@ -106,11 +106,11 @@ export function registerGetProjectTool(
 
       if (!resolvedProjectId) {
         const summary =
-          "No CodeMap project is linked to this workspace.\n" +
-          "get_project only reads the current project saved in .codemap/mcp.json.\n" +
+          "No CodeMap cloud project is linked to this workspace.\n" +
+          "get_project only reads the project saved in .codemap/mcp.json.\n" +
           `Workspace path: ${workspaceConfig.workspaceRootPath ?? process.cwd()}\n` +
-          "Configure your MCP client to start this server with cwd set to the repo path.\n" +
-          "Next action: call create_project to create or link a project for this workspace.";
+          "Local tools (search_codebase, get_file, edit_file, bash) work without a linked project — call refresh_local_index if not done yet.\n" +
+          "To use cloud features (graph, insights): call link_project to connect an existing project, or create_project to create one (first time only).";
 
         return success(summary, {
           linkedWorkspace: false,
@@ -118,7 +118,7 @@ export function registerGetProjectTool(
           projectId: null,
           found: false,
           project: null,
-          nextAction: "create_project",
+          nextAction: "link_or_create_project",
         });
       }
 
@@ -143,7 +143,7 @@ export function registerGetProjectTool(
             projectId: resolvedProjectId,
             found: false,
             project: null,
-            nextAction: "create_project",
+            nextAction: "link_or_create_project",
           });
         }
 
