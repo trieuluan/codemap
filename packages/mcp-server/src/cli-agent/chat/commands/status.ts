@@ -1,5 +1,5 @@
 import { getModeDisplay } from "./route-policy.js";
-import type { Command } from "./index.js";
+import type { Command } from "./types.js";
 
 export const statusCommand: Command = {
   name: "status",

@@ -5,6 +5,12 @@ import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
 
+function stripAnsi(s: string): string {
+  return s
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+}
+
 // Minimal system prompt — intentionally brief.
 // Detailed tool routing, workflow gates, and project state are in the MCP
 // resource context (codemap://project/context + codemap://rules/agent-workflow)
@@ -73,7 +79,9 @@ export async function runAgentLoop(input: {
     ? AGENT_SYSTEM_PROMPT + "\n\n" + resourceContext
     : AGENT_SYSTEM_PROMPT;
 
-  let allMessages: ChatMessage[] = [...input.history, input.userMessage];
+  let allMessages: ChatMessage[] = [...input.history, input.userMessage].map((msg) =>
+    msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
+  );
   const resultMessages: ChatMessage[] = [input.userMessage];
   let usedTools = false;
   let finalText = "";
@@ -214,8 +222,9 @@ export async function runAgentLoop(input: {
         toolCall.function.arguments,
         toolCall.id,
       );
-      const result = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
+      const rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
       throwIfAborted(input.signal);
+      const result = stripAnsi(rawResult);
       const uiResult = formatToolUiResult(toolCall.function.name, result);
       const uiLimit = isFileWriteTool(toolCall.function.name) ? 1_200 : 500;
       const truncatedResult =

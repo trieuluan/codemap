@@ -1,4 +1,4 @@
-import type { Command } from "./index.js";
+import type { Command } from "./types.js";
 import { getCommandList } from "./index.js";
 
 export const helpCommand: Command = {

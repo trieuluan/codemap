@@ -3,7 +3,7 @@ import type { Message, UIState } from "../store.js";
 import { formatTime, gradientStr, truncate } from "../ink-utils.js";
 import { getModeDisplay } from "../../commands/route-policy.js";
 import { BOLD, RESET, C_CYAN, C_GRAY, C_GREEN, C_WHITE, C_YELLOW } from "./theme.js";
-import { renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
+import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
 
 function generateBanner(): string[] {
   const result = cfonts.render("CODEMAP", {
@@ -24,6 +24,9 @@ const BANNER_LINES = generateBanner();
 
 function toolLineLimit(msg: Message): number {
   const name = (msg.toolName ?? "").toLowerCase();
+  if (name.endsWith(" preview")) {
+    return Infinity;
+  }
   const content = msg.content.toLowerCase();
   if (
     name.includes("edit_file") ||
@@ -85,16 +88,18 @@ export function messageLines(messages: Message[], width: number): string[] {
   for (const msg of messages) {
     const time = `${C_GRAY}${formatTime(msg.timestamp)}${RESET}`;
     if (msg.role === "user") {
+      const BG = "\x1b[48;2;40;44;52m";
+      const bg = (raw: string) => BG + padToWidth(raw, width).replace(/\x1b\[0m/g, `\x1b[0m${BG}`) + RESET;
       const prefixW = 11;
-      const bodyW = Math.max(20, width - prefixW);
+      const bodyW = Math.max(20, width - prefixW - 2);
       const lines = renderMarkdownish(msg.content, bodyW);
-      out.push(`${time} ${C_GREEN}>${RESET} ${lines[0] ?? ""}`);
-      for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${line}`);
+      out.push(bg(`${time} ${C_GREEN}>${RESET} ${lines[0] ?? ""}`));
+      for (const line of lines.slice(1)) out.push(bg(`${" ".repeat(prefixW)}${line}`));
     } else if (msg.role === "assistant") {
-      const prefixW = 20;
+      const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
-      const lines = renderMarkdownish(msg.content, bodyW);
-      out.push(`${time} ${C_CYAN}assistant:${RESET} ${lines[0] ?? ""}`);
+      const lines = renderMarkdownish(stripAnsi(msg.content), bodyW);
+      out.push(`${time} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${line}`);
     } else if (msg.role === "tool") {
       const toolName = truncate(msg.toolName ?? "tool", 20);

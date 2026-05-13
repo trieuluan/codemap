@@ -1,5 +1,5 @@
 import { checkModelPolicy } from "./route-policy.js";
-import type { Command } from "./index.js";
+import type { Command } from "./types.js";
 
 export const modelCommand: Command = {
   name: "model",

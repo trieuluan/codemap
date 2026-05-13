@@ -1,6 +1,12 @@
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage } from "../../types.js";
 
+function stripAnsi(s: string): string {
+  return s
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+}
+
 const SUMMARIZE_PROMPT = `You are a conversation summarizer. Summarize the following conversation into a concise paragraph preserving:
 - What the user asked for
 - Key decisions made
@@ -152,10 +158,11 @@ export class ContextCompactor {
               : m.role === "tool"
                 ? `Tool(${m.name ?? "?"})`
                 : "System";
-        const content =
+        const content = stripAnsi(
           m.content.length > 2000
             ? m.content.slice(0, 2000) + "...[truncated]"
-            : m.content;
+            : m.content,
+        );
         return `${prefix}: ${content}`;
       })
       .join("\n\n");

@@ -1,6 +1,6 @@
 import type { GatewayMode } from "../../types.js";
 import { getModeDisplay, getModeSwitchWarning } from "./route-policy.js";
-import type { Command } from "./index.js";
+import type { Command } from "./types.js";
 
 const VALID_MODES: GatewayMode[] = [
   "local-only",

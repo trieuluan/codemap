@@ -1,7 +1,3 @@
-import type { GatewayMode, ChatMessage } from "../../types.js";
-import type { ChatEntry } from "../ui/chat-terminal.js";
-import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
-
 import { helpCommand } from "./help.js";
 import { clearCommand } from "./clear.js";
 import { exitCommand } from "./exit.js";

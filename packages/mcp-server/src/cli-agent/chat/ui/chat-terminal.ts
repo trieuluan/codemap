@@ -447,6 +447,10 @@ export class ChatTerminal {
   private makeConfirmEdit(): ConfirmEditFn {
     return async (name, args, preview) => {
       if (this.store.getState().input.autoAccept) return true;
+      if (preview) {
+        this.appendMessage({ role: "tool", content: preview, toolName: `${name} preview` });
+        this.bus.scheduleRefresh();
+      }
       this.store.dispatch({ confirm: { active: true, toolName: name, preview } });
       const result = await new Promise<boolean>((resolve) => {
         this._confirmResolve = resolve;

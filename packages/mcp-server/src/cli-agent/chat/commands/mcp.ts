@@ -1,4 +1,4 @@
-import type { Command } from "./index.js";
+import type { Command } from "./types.js";
 import {
   readWorkspacePath,
   saveMcpServerEntry,

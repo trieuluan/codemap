@@ -10,7 +10,6 @@ import {
   C_CYAN,
   C_GRAY,
   C_GREEN,
-  C_RED,
   C_WHITE,
   C_YELLOW,
   RESET,
@@ -348,8 +347,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         confirmSignature = signature;
         confirmSelection = 0;
       }
-      const allPreviewLines = state.confirm.preview?.split("\n") ?? [];
-      const preview = allPreviewLines.slice(0, 30);
       out.push(
         fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
         fitLine(`${C_GRAY}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
@@ -366,13 +363,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
           ? `${C_WHITE}${BOLD}${option.label}${RESET}`
           : `${C_WHITE}${option.label}${RESET}`;
         out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w));
-      }
-      for (const line of preview) {
-        const col = line.startsWith("+") ? C_GREEN : line.startsWith("-") ? C_RED : line.startsWith("@@") ? C_CYAN : C_GRAY;
-        out.push(fitLine(`${col}${line}${RESET}`, w));
-      }
-      if (allPreviewLines.length > preview.length) {
-        out.push(fitLine(`${C_GRAY}... ${allPreviewLines.length - preview.length} more lines${RESET}`, w));
       }
     }
 
