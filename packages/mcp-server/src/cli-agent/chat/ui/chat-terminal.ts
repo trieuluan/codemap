@@ -10,6 +10,7 @@ import {
   getRecommendedMode,
 } from "../commands/route-policy.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
+import { warmupFileSearch } from "../file-search.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
@@ -74,12 +75,6 @@ export class ChatTerminal {
 
     if (debug) this.logger = createDebugLogger();
 
-    // Viewport resize → store update
-    process.stdout.on("resize", () => {
-      this.store.dispatch({
-        viewport: { width: process.stdout.columns || 80, height: process.stdout.rows || 24 },
-      });
-    });
   }
 
   // ─── Public API for components ───────────────────────────
@@ -121,6 +116,9 @@ export class ChatTerminal {
       if (result === "exit") return;
       // "loggedin" or "skip" → proceed to main chat
     }
+
+    // Warm up file search index so @ mention is instant on first use
+    await warmupFileSearch();
 
     // Git workspace info (non-blocking)
     tryGetCurrentWorkspaceInfo()
@@ -329,7 +327,6 @@ export class ChatTerminal {
   private appendMessage(msg: Message): void {
     this.store.dispatch((prev) => ({
       messages: [...prev.messages, { timestamp: Date.now(), ...msg }],
-      ...(prev.messageScroll.autoScroll ? { messageScroll: { offset: 0, autoScroll: true } } : {}),
     }));
   }
 

@@ -16,6 +16,10 @@ type WorkspaceFiles = Awaited<ReturnType<typeof collectWorkspaceFiles>>;
 let cachedWorkspaceFiles: WorkspaceFiles | null = null;
 let workspaceFilesPromise: Promise<WorkspaceFiles> | null = null;
 
+export async function warmupFileSearch(): Promise<void> {
+  await searchIndexedFiles("").catch(() => {});
+}
+
 export async function searchIndexedFiles(
   query: string,
 ): Promise<IndexedFileOption[]> {

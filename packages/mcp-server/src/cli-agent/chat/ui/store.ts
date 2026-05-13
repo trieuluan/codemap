@@ -74,12 +74,6 @@ export interface UIState {
     logLines: string[];
   };
 
-  // Viewport
-  viewport: {
-    width: number;
-    height: number;
-  };
-
   // Session config
   config: {
     model: string;
@@ -97,12 +91,6 @@ export interface UIState {
 
   // Agent history (ChatMessage[] sent to provider)
   agentHistory: Array<{ role: string; content: string; toolCalls?: unknown[] }>;
-
-  // Message scroll
-  messageScroll: {
-    offset: number;      // lines scrolled up from bottom (0 = at bottom)
-    autoScroll: boolean; // follow new messages when true
-  };
 
   // Debug
   debug: boolean;
@@ -151,10 +139,6 @@ export function createInitialState(opts: {
       command: "",
       logLines: [],
     },
-    viewport: {
-      width: process.stdout.columns || 80,
-      height: process.stdout.rows || 24,
-    },
     config: {
       model: opts.model,
       mode: opts.mode,
@@ -163,7 +147,6 @@ export function createInitialState(opts: {
       availableModels: opts.availableModels ?? [],
     },
     agentHistory: [],
-    messageScroll: { offset: 0, autoScroll: true },
     debug: opts.debug ?? false,
     debugLogFile: null,
   };
