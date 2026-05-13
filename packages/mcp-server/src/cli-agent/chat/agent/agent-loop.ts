@@ -216,9 +216,10 @@ export async function runAgentLoop(input: {
       );
       const result = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
       throwIfAborted(input.signal);
-      const uiLimit = toolCall.function.name === "edit_file" ? 12_000 : 500;
+      const uiResult = formatToolUiResult(toolCall.function.name, result);
+      const uiLimit = isFileWriteTool(toolCall.function.name) ? 1_200 : 500;
       const truncatedResult =
-        result.length > uiLimit ? result.slice(0, uiLimit) + "\n..." : result;
+        uiResult.length > uiLimit ? uiResult.slice(0, uiLimit) + "\n..." : uiResult;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
       // Track consecutive tool failures
@@ -431,6 +432,32 @@ function formatToolResult(result: {
   }
   if (result.isError) parts.push("[tool returned error]");
   return parts.filter(Boolean).join("\n");
+}
+
+function isFileWriteTool(name: string): boolean {
+  return name === "edit_file" || name === "write_file";
+}
+
+function formatToolUiResult(name: string, result: string): string {
+  if (!isFileWriteTool(name)) return result;
+  if (!result.includes("After apply:")) return result;
+
+  const appliedBlock = result.split(/\nAfter apply:/)[0]?.trimEnd() ?? result;
+  const visibleAppliedLines: string[] = [];
+  for (const line of appliedBlock.split("\n")) {
+    if (line.trimStart().startsWith("{")) break;
+    visibleAppliedLines.push(line);
+  }
+
+  const followUps: string[] = [];
+  if (result.includes("After apply: get_working_diff")) {
+    followUps.push("- Working diff checked");
+  }
+  if (result.includes("After apply: refresh_local_index")) {
+    followUps.push("- Index refreshed");
+  }
+
+  return [...visibleAppliedLines, "", ...followUps].filter(Boolean).join("\n");
 }
 
 function isToolSupportError(message: string): boolean {

@@ -52,6 +52,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let streamingLinesInScrollback = 0;
   // Debounce: coalesce rapid full-refresh calls into one microtask flush.
   let refreshQueued = false;
+  let confirmSelection = 0;
+  let confirmSignature = "";
   const pendingImages: PastedImage[] = [];
 
   // ── TUI stub — Editor only needs terminal.rows + requestRender() ──────────
@@ -296,23 +298,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       }
     }
 
-    // Confirm dialog.
-    if (state.confirm.active) {
-      const allPreviewLines = state.confirm.preview?.split("\n") ?? [];
-      const preview = allPreviewLines.slice(0, 30);
-      out.push(
-        fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
-        fitLine(`${C_GRAY}y = yes  n = no  a = accept all${RESET}`, w),
-      );
-      for (const line of preview) {
-        const col = line.startsWith("+") ? C_GREEN : line.startsWith("-") ? C_RED : line.startsWith("@@") ? C_CYAN : C_GRAY;
-        out.push(fitLine(`${col}${line}${RESET}`, w));
-      }
-      if (allPreviewLines.length > preview.length) {
-        out.push(fitLine(`${C_GRAY}... ${allPreviewLines.length - preview.length} more lines${RESET}`, w));
-      }
-    }
-
     // Task / progress line.
     if (state.task.phase !== "idle") {
       const active = isActiveTaskPhase(state.task.phase);
@@ -356,6 +341,41 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     cursorCol = eCursorCol;
     out.push(...editorLines);
 
+    // Confirm dialog, docked under the editor like autocomplete suggestions.
+    if (state.confirm.active) {
+      const signature = `${state.confirm.toolName}\n${state.confirm.preview ?? ""}`;
+      if (signature !== confirmSignature) {
+        confirmSignature = signature;
+        confirmSelection = 0;
+      }
+      const allPreviewLines = state.confirm.preview?.split("\n") ?? [];
+      const preview = allPreviewLines.slice(0, 30);
+      out.push(
+        fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
+        fitLine(`${C_GRAY}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
+      );
+      const options = [
+        { label: "Apply", desc: "Apply this change" },
+        { label: "Reject", desc: "Skip this change" },
+        { label: "Accept all", desc: "Apply this and future edits" },
+      ];
+      for (const [idx, option] of options.entries()) {
+        const selected = idx === confirmSelection;
+        const prefix = selected ? `${C_CYAN}>${RESET}` : " ";
+        const label = selected
+          ? `${C_WHITE}${BOLD}${option.label}${RESET}`
+          : `${C_WHITE}${option.label}${RESET}`;
+        out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w));
+      }
+      for (const line of preview) {
+        const col = line.startsWith("+") ? C_GREEN : line.startsWith("-") ? C_RED : line.startsWith("@@") ? C_CYAN : C_GRAY;
+        out.push(fitLine(`${col}${line}${RESET}`, w));
+      }
+      if (allPreviewLines.length > preview.length) {
+        out.push(fitLine(`${C_GRAY}... ${allPreviewLines.length - preview.length} more lines${RESET}`, w));
+      }
+    }
+
     // Status bar.
     out.push(statusBarLine(state, w));
 
@@ -381,11 +401,23 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     if (state.confirm.active) {
-      if (data === "y") chatTerminal.resolveConfirm(true);
+      if (matchesKey(data, Key.up)) {
+        confirmSelection = (confirmSelection + 2) % 3;
+        scheduleRefresh();
+      } else if (matchesKey(data, Key.down) || matchesKey(data, Key.tab)) {
+        confirmSelection = (confirmSelection + 1) % 3;
+        scheduleRefresh();
+      } else if (matchesKey(data, Key.enter)) {
+        if (confirmSelection === 0) chatTerminal.resolveConfirm(true);
+        else if (confirmSelection === 1) chatTerminal.resolveConfirm(false);
+        else chatTerminal.resolveConfirmAll();
+      } else if (data === "y") chatTerminal.resolveConfirm(true);
       else if (data === "a") chatTerminal.resolveConfirmAll();
       else if (data === "n" || matchesKey(data, Key.escape)) chatTerminal.resolveConfirm(false);
       return;
     }
+    confirmSignature = "";
+    confirmSelection = 0;
 
     void handleEditorInput(data);
   }
