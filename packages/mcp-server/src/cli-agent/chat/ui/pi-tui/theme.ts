@@ -7,7 +7,7 @@ export const C_GREEN = fg(34, 197, 94);
 export const C_YELLOW = fg(250, 204, 21);
 export const C_RED = fg(248, 113, 113);
 
-export const COMMANDS = ["/help", "/model", "/models", "/mode", "/clear", "/retry", "/debug"] as const;
+export const COMMANDS = ["/help", "/model", "/models", "/mode", "/clear", "/compact", "/retry", "/debug"] as const;
 export const SPINNER = ["|", "/", "-", "\\"] as const;
 
 export const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1006h";

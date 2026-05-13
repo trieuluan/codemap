@@ -17,6 +17,12 @@ interface EditFileResult {
   [key: string]: unknown;
 }
 
+interface MatchLocation {
+  index: number;
+  startLine: number;
+  endLine: number;
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function countOccurrences(haystack: string, needle: string): number {
@@ -28,6 +34,29 @@ function countOccurrences(haystack: string, needle: string): number {
     pos += needle.length;
   }
   return count;
+}
+
+function findMatchLocations(content: string, needle: string): MatchLocation[] {
+  const locations: MatchLocation[] = [];
+  if (!needle) return locations;
+
+  let pos = 0;
+  while ((pos = content.indexOf(needle, pos)) !== -1) {
+    const before = content.slice(0, pos);
+    const startLine = before.split("\n").length;
+    const endLine = startLine + needle.split("\n").length - 1;
+    locations.push({ index: pos, startLine, endLine });
+    pos += needle.length;
+  }
+  return locations;
+}
+
+function lineNumber(n: number): string {
+  return String(n).padStart(4, " ");
+}
+
+function rangeLabel(start: number, end: number): string {
+  return start === end ? String(start) : `${start}-${end}`;
 }
 
 function validateUniqueMatch(
@@ -55,24 +84,66 @@ function validateUniqueMatch(
 
 function buildDiffPreview(
   filePath: string,
+  content: string,
   oldString: string,
   newString: string,
   replaceAll: boolean,
 ): string {
-  const lines = [
-    `--- a/${filePath}`,
-    `+++ b/${filePath}`,
-    `@@ -1 +1 @@`,
-  ];
-
+  const contentLines = content.split("\n");
   const oldLines = oldString.split("\n");
   const newLines = newString.split("\n");
-  for (const line of oldLines) lines.push(`-${line}`);
-  for (const line of newLines) lines.push(`+${line}`);
-
-  if (replaceAll) {
-    lines.push("", "(all occurrences will be replaced)");
+  const locations = findMatchLocations(content, oldString);
+  const added = locations.length * newLines.length;
+  const removed = locations.length * oldLines.length;
+  const lines = [
+    `Edit preview: ${filePath}`,
+    `Mode: ${replaceAll ? "replace all" : "replace one"}`,
+    `Matches: ${locations.length}`,
+    `Lines: +${added} -${removed}`,
+    "",
+    "Changes:",
+  ];
+  if (locations.length === 0) {
+    lines.push("  no matching lines");
+  } else {
+    for (const loc of locations.slice(0, 12)) {
+      const newEnd = loc.startLine + newLines.length - 1;
+      lines.push(`~ ${rangeLabel(loc.startLine, loc.endLine).padEnd(12)} -> ${rangeLabel(loc.startLine, newEnd)} Changed`);
+    }
+    if (locations.length > 12) lines.push(`... ${locations.length - 12} more match(es)`);
   }
+  lines.push("", "```diff", `--- a/${filePath}`, `+++ b/${filePath}`);
+  const shown = replaceAll ? locations.slice(0, 5) : locations.slice(0, 1);
+
+  for (const [idx, loc] of shown.entries()) {
+    const contextBefore = 3;
+    const contextAfter = 3;
+    const start = Math.max(1, loc.startLine - contextBefore);
+    const end = Math.min(contentLines.length, loc.endLine + contextAfter);
+    const oldRange = `${start},${end - start + 1}`;
+    const newRangeEnd = end - oldLines.length + newLines.length;
+    const newRange = `${start},${Math.max(1, newRangeEnd - start + 1)}`;
+    if (idx > 0) lines.push("");
+    lines.push(`@@ -${oldRange} +${newRange} @@ ${filePath}:${loc.startLine}-${loc.endLine}`);
+
+    for (let lineNo = start; lineNo < loc.startLine; lineNo++) {
+      lines.push(`  ${lineNumber(lineNo)} | ${contentLines[lineNo - 1] ?? ""}`);
+    }
+    oldLines.forEach((line, offset) => {
+      lines.push(`- ${lineNumber(loc.startLine + offset)} | ${line}`);
+    });
+    newLines.forEach((line, offset) => {
+      lines.push(`+ ${lineNumber(loc.startLine + offset)} | ${line}`);
+    });
+    for (let lineNo = loc.endLine + 1; lineNo <= end; lineNo++) {
+      lines.push(`  ${lineNumber(lineNo)} | ${contentLines[lineNo - 1] ?? ""}`);
+    }
+  }
+
+  if (replaceAll && locations.length > shown.length) {
+    lines.push("", `... ${locations.length - shown.length} more occurrence(s) not shown`);
+  }
+  lines.push("```");
 
   return lines.join("\n");
 }
@@ -187,11 +258,19 @@ export function registerEditFileTool(
           filePath: file_path,
           replacements: count,
         };
+        const locations = findMatchLocations(content, old_string);
+        const firstLocation = locations[0];
+        if (firstLocation) {
+          result.startLine = firstLocation.startLine;
+          result.endLine = firstLocation.endLine;
+          result.newLineCount = new_string.split("\n").length;
+          result.matchesFound = locations.length;
+        }
 
         if (dry_run) {
-          const diff = buildDiffPreview(file_path, old_string, new_string, replace_all);
+          const diff = buildDiffPreview(file_path, content, old_string, new_string, replace_all);
           return success(
-            `### Dry Run — would replace ${count} occurrence(s)\n\n\`\`\`diff\n${diff}\n\`\`\``,
+            diff,
             result,
           );
         }

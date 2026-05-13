@@ -1,8 +1,11 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { C_CYAN, C_GRAY, C_WHITE, BOLD, RESET } from "./theme.js";
+import { C_CYAN, C_GRAY, C_GREEN, C_RED, C_WHITE, C_YELLOW, BOLD, RESET } from "./theme.js";
 
 export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "").replace(CURSOR_MARKER, "");
+  return s
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")  // CSI sequences (colors, cursor, etc.)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")  // OSC sequences
+    .replace(CURSOR_MARKER, "");
 }
 
 export function padToWidth(line: string, width: number): string {
@@ -68,6 +71,72 @@ export function renderInlineMarkdown(text: string): string {
     .replace(/`([^`\n]+)`/g, `${C_CYAN}$1${RESET}`);
 }
 
+const CODE_LANG_ALIASES: Record<string, string> = {
+  bash: "sh",
+  shell: "sh",
+  javascript: "js",
+  jsx: "js",
+  jsonc: "json",
+  kotlin: "kt",
+  typescript: "ts",
+  tsx: "ts",
+};
+
+const KEYWORD_LANGS = new Set(["ts", "js", "dart", "java", "kt", "kotlin"]);
+const KEYWORDS =
+  /\b(abstract|as|async|await|break|case|catch|class|const|continue|default|do|else|enum|export|extends|final|finally|for|fun|function|if|implements|import|in|interface|let|new|null|override|package|private|protected|public|return|static|super|switch|this|throw|throws|try|type|val|var|void|when|while|yield)\b/g;
+const STRING_RE = /("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`)/g;
+const NUMBER_RE = /\b(\d+(?:\.\d+)?)\b/g;
+const COMMENT_RE = /(\/\/.*|#.*)$/;
+
+function normalizeLang(lang: string): string {
+  const lower = lang.toLowerCase().trim();
+  return CODE_LANG_ALIASES[lower] ?? lower;
+}
+
+function highlightCodeLine(raw: string, lang: string): string {
+  const normalized = normalizeLang(lang);
+  if (normalized === "diff") {
+    if (raw.startsWith("+") && !raw.startsWith("+++")) return `${C_GREEN}${raw}${RESET}`;
+    if (raw.startsWith("-") && !raw.startsWith("---")) return `${C_RED}${raw}${RESET}`;
+    if (raw.startsWith("@@")) return `${C_CYAN}${raw}${RESET}`;
+    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("---") || raw.startsWith("+++")) {
+      return `${C_YELLOW}${raw}${RESET}`;
+    }
+    return `${C_GRAY}${raw}${RESET}`;
+  }
+
+  if (normalized === "json") {
+    return raw
+      .replace(/("(?:[^"\\]|\\.)*")(\s*:)?/g, (_m, key: string, colon: string | undefined) =>
+        colon ? `${C_CYAN}${key}${RESET}${colon}` : `${C_GREEN}${key}${RESET}`,
+      )
+      .replace(/\b(true|false|null)\b/g, `${C_YELLOW}$1${RESET}`)
+      .replace(NUMBER_RE, `${C_YELLOW}$1${RESET}`);
+  }
+
+  if (normalized === "sh") {
+    const comment = raw.match(COMMENT_RE);
+    const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
+    const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
+    return body
+      .replace(/\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g, `${C_CYAN}$1${RESET}`)
+      .replace(STRING_RE, `${C_GREEN}$1${RESET}`) + suffix;
+  }
+
+  if (KEYWORD_LANGS.has(normalized)) {
+    const comment = raw.match(COMMENT_RE);
+    const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
+    const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
+    return body
+      .replace(STRING_RE, `${C_GREEN}$1${RESET}`)
+      .replace(KEYWORDS, `${C_CYAN}$1${RESET}`)
+      .replace(NUMBER_RE, `${C_YELLOW}$1${RESET}`) + suffix;
+  }
+
+  return raw;
+}
+
 export function renderMarkdownish(text: string, width: number): string[] {
   const out: string[] = [];
   let inCode = false;
@@ -85,7 +154,8 @@ export function renderMarkdownish(text: string, width: number): string[] {
 
     if (inCode) {
       const line = raw.length === 0 ? " " : raw;
-      for (const wrapped of wrapPlain(line, Math.max(8, width - 4))) {
+      const highlighted = highlightCodeLine(line, codeLang);
+      for (const wrapped of wrapPlain(highlighted, Math.max(8, width - 4))) {
         out.push(`${C_GRAY}    ${wrapped}${RESET}`);
       }
       continue;

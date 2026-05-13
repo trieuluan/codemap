@@ -34,6 +34,39 @@ function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
   };
 }
 
+function createAbortError(): Error {
+  const err = new Error("Task canceled.");
+  err.name = "AbortError";
+  return err;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
+async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw createAbortError();
+  let cleanup: (() => void) | undefined;
+  const abortPromise = new Promise<T>((_, reject) => {
+    const onAbort = () => reject(createAbortError());
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return Promise.race([
+    promise.then(
+      (value) => {
+        cleanup?.();
+        return value;
+      },
+      (err) => {
+        cleanup?.();
+        throw err;
+      },
+    ),
+    abortPromise,
+  ]);
+}
+
 interface ChatTerminalOptions {
   provider: NineRouterProvider;
   model: string;
@@ -52,6 +85,8 @@ export class ChatTerminal {
 
   private _confirmResolve: ((accept: boolean) => void) | null = null;
   private _taskAbort: AbortController | null = null;
+  private _taskSeq = 0;
+  private _activeTaskId = 0;
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
@@ -79,16 +114,19 @@ export class ChatTerminal {
 
   // ─── Public API for components ───────────────────────────
 
-  /** Cancel the running task and reset to idle — soft cancel (HTTP may still finish in bg). */
+  /** Cancel the running task and reset to idle. Late async results are ignored by task id. */
   cancelTask(): void {
-    if (!this.store.getState().input.busy) return;
+    const state = this.store.getState();
+    if (!state.input.busy) return;
     this._taskAbort?.abort();
     this._taskAbort = null;
+    this._activeTaskId = 0;
     // Also cancel any pending confirm dialog
     this._confirmResolve?.(false);
     this._confirmResolve = null;
+    this.appendMessage({ role: "system", content: this.formatCancelMessage(state.task) });
     this.store.dispatch({
-      input: { ...this.store.getState().input, busy: false },
+      input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       confirm: { active: false, toolName: "", preview: null },
       streaming: { active: false, content: "", entryIndex: -1 },
@@ -104,6 +142,33 @@ export class ChatTerminal {
   resolveConfirmAll(): void {
     this.store.dispatch((prev) => ({ input: { ...prev.input, autoAccept: true } }));
     this.resolveConfirm(true);
+  }
+
+  async compactHistory(): Promise<{
+    beforeMessages: number;
+    afterMessages: number;
+    beforeTokens: number;
+    afterTokens: number;
+    compacted: boolean;
+  }> {
+    const state = this.store.getState();
+    const beforeHistory = state.agentHistory as ChatMessage[];
+    const beforeTokens = this.compactor.estimateTokens(beforeHistory);
+    const compacted = await this.compactor.compactNow(beforeHistory, state.config.model);
+    const nextHistory = compacted ?? beforeHistory;
+    const afterTokens = this.compactor.estimateTokens(nextHistory);
+
+    if (compacted) {
+      this.store.dispatch({ agentHistory: nextHistory });
+    }
+
+    return {
+      beforeMessages: beforeHistory.length,
+      afterMessages: nextHistory.length,
+      beforeTokens,
+      afterTokens,
+      compacted: Boolean(compacted),
+    };
   }
 
   // ─── Start ───────────────────────────────────────────────
@@ -134,24 +199,33 @@ export class ChatTerminal {
   // ─── Submit ──────────────────────────────────────────────
 
   async handleSubmit(text: string): Promise<void> {
+    await this.handleSubmitWithContent(text, text);
+  }
+
+  async handleSubmitWithContent(displayText: string, contentText: string): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;
 
     // Command dispatch
-    if (text.startsWith("/")) {
-      if (text === "/help") {
+    if (displayText.startsWith("/")) {
+      if (displayText === "/help") {
         this.store.dispatch({ screen: "help" });
         return;
       }
-      const handled = executeCommand(text, this.buildCommandContext());
+      const handled = executeCommand(displayText, this.buildCommandContext());
       if (!handled) {
         this.appendMessage({ role: "system", content: "Unknown command. Type /help for available commands." });
       }
       return;
     }
 
-    this.store.dispatch({ input: { ...state.input, busy: true, lastUserText: text } });
-    this.appendMessage({ role: "user", content: text });
+    if (displayText.startsWith("!")) {
+      await this.handleShellSubmit(displayText);
+      return;
+    }
+
+    this.store.dispatch({ input: { ...state.input, busy: true, lastUserText: contentText } });
+    this.appendMessage({ role: "user", content: displayText });
     this.store.dispatch({
       task: {
         phase: "thinking",
@@ -161,13 +235,16 @@ export class ChatTerminal {
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       },
     });
+    const taskAbort = new AbortController();
+    const taskId = this.beginTask(taskAbort);
 
     let streamingContent = "";
     let hasStreamingEntry = false;
     let lastTurnUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     try {
-      const mentionContext = await hydrateMentionContext(text);
+      const mentionContext = await hydrateMentionContext(contentText);
+      if (!this.isActiveTask(taskId, taskAbort)) return;
       for (const warning of mentionContext.warnings) {
         this.appendMessage({ role: "system", content: `⚠ ${warning}` });
       }
@@ -179,9 +256,11 @@ export class ChatTerminal {
         userMessage: { role: "user", content: mentionContext.content },
         toolClient: this.options.toolClient,
         debug: this.store.getState().debug,
+        signal: taskAbort.signal,
         compactor: this.compactor,
         confirmEdit: this.makeConfirmEdit(),
         onToken: (token) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           const s = this.store.getState();
           if (!s.task || s.task.phase === "idle") return;
           streamingContent += token;
@@ -195,9 +274,11 @@ export class ChatTerminal {
           this.bus.scheduleRefresh();
         },
         onModel: (model) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           this.store.dispatch({ task: { ...this.store.getState().task, model } });
         },
         onUsage: (usage) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           const delta = subtractUsage(usage, lastTurnUsage);
           lastTurnUsage = usage;
           this.store.dispatch((prev) => ({
@@ -206,6 +287,7 @@ export class ChatTerminal {
           }));
         },
         onToolStart: (name, args, id) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           this.logger?.logToolStart(name, args, id);
           streamingContent = ""; hasStreamingEntry = false;
           const s = this.store.getState();
@@ -219,6 +301,7 @@ export class ChatTerminal {
           });
         },
         onToolResult: (name, resultText) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           this.logger?.logToolResult(name, resultText);
           streamingContent = ""; hasStreamingEntry = false;
           this.store.dispatch({
@@ -227,6 +310,7 @@ export class ChatTerminal {
           this.appendMessage({ role: "tool", content: resultText, toolName: `${name} result` });
         },
         onDebug: (info) => {
+          if (!this.isActiveTask(taskId, taskAbort)) return;
           if (!this.store.getState().debug) return;
           if (info.event === "stream_request") {
             this.logger?.logStreamRequest({
@@ -242,6 +326,7 @@ export class ChatTerminal {
         },
       });
 
+      if (!this.isActiveTask(taskId, taskAbort)) return;
       const s = this.store.getState();
       this.store.dispatch({ task: { ...s.task, phase: "done", endTime: Date.now() } });
 
@@ -277,6 +362,7 @@ export class ChatTerminal {
         agentHistory: [...(prev.agentHistory as ChatMessage[]), ...result.messages],
       }));
     } catch (err) {
+      if (isAbortError(err) || taskAbort.signal.aborted) return;
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
       this.logger?.logError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -306,7 +392,54 @@ export class ChatTerminal {
       }
     }
 
-    this.store.dispatch((prev) => ({ input: { ...prev.input, busy: false } }));
+    if (this.isActiveTask(taskId, taskAbort)) {
+      this.finishTask(taskId);
+    }
+  }
+
+  private async handleShellSubmit(text: string): Promise<void> {
+    const command = text.slice(1).trim();
+    if (!command) {
+      this.appendMessage({ role: "system", content: "Usage: !<shell command>" });
+      return;
+    }
+
+    this.store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
+    this.appendMessage({ role: "user", content: text });
+    this.store.dispatch({
+      task: {
+        phase: "tool",
+        startTime: Date.now(),
+        toolsCalled: 1,
+        toolName: "bash",
+        toolArgs: command,
+        model: this.store.getState().config.model,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      },
+    });
+    const taskAbort = new AbortController();
+    const taskId = this.beginTask(taskAbort);
+
+    try {
+      const result = await abortable(
+        this.options.toolClient.callTool("bash", { command }),
+        taskAbort.signal,
+      );
+      if (!this.isActiveTask(taskId, taskAbort)) return;
+      const content = result.content || "(no output)";
+      this.appendMessage({ role: "tool", content, toolName: "bash result" });
+      this.store.dispatch({ task: { ...this.store.getState().task, phase: "done", endTime: Date.now() } });
+    } catch (err) {
+      if (isAbortError(err) || taskAbort.signal.aborted) return;
+      const message = err instanceof Error ? err.message : String(err);
+      this.appendMessage({ role: "system", content: `Shell command failed: ${message}` });
+      this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
+    } finally {
+      if (this.isActiveTask(taskId, taskAbort)) {
+        this.finishTask(taskId);
+      }
+      this.bus.scheduleRefresh();
+    }
   }
 
   // ─── Confirm edit ─────────────────────────────────────────
@@ -341,6 +474,40 @@ export class ChatTerminal {
       }
       return { messages: msgs };
     });
+  }
+
+  private beginTask(controller: AbortController): number {
+    const taskId = ++this._taskSeq;
+    this._activeTaskId = taskId;
+    this._taskAbort = controller;
+    return taskId;
+  }
+
+  private finishTask(taskId: number): void {
+    if (this._activeTaskId !== taskId) return;
+    this._activeTaskId = 0;
+    this._taskAbort = null;
+    this.store.dispatch((prev) => ({ input: { ...prev.input, busy: false } }));
+  }
+
+  private isActiveTask(taskId: number, controller: AbortController): boolean {
+    return this._activeTaskId === taskId && this._taskAbort === controller && !controller.signal.aborted;
+  }
+
+  private formatCancelMessage(task: ReturnType<Store["getState"]>["task"]): string {
+    const elapsed = task.startTime
+      ? ` after ${Math.max(1, Math.round((Date.now() - task.startTime) / 1000))}s`
+      : "";
+    if (task.phase === "tool" && task.toolName) {
+      return `Task canceled${elapsed} while running ${task.toolName}.`;
+    }
+    if (task.phase === "streaming") {
+      return `Task canceled${elapsed} while streaming the model response.`;
+    }
+    if (task.phase === "thinking") {
+      return `Task canceled${elapsed} while waiting for the model.`;
+    }
+    return `Task canceled${elapsed}.`;
   }
 
   // ─── Command context ──────────────────────────────────────
@@ -392,6 +559,7 @@ export class ChatTerminal {
       },
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
+      compactHistory: () => this.compactHistory(),
       resend: () => {
         const cs = this.store.getState();
         if (cs.input.lastUserText && !cs.input.busy) this.handleSubmit(cs.input.lastUserText);

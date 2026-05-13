@@ -114,8 +114,14 @@ export class NineRouterProvider implements GatewayProvider {
 
     let response: Response;
     try {
-      response = await fetch(url, { method: "POST", headers, body: requestBody });
+      response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: requestBody,
+        signal: request.signal,
+      });
     } catch (err) {
+      if (request.signal?.aborted || isAbortError(err)) throw createAbortError();
       const cause = err instanceof Error && "cause" in err
         ? ` (cause: ${JSON.stringify(err.cause)})`
         : "";
@@ -162,8 +168,14 @@ export class NineRouterProvider implements GatewayProvider {
 
     let response: Response;
     try {
-      response = await fetch(url, { method: "POST", headers, body });
+      response = await fetch(url, {
+        method: "POST",
+        headers,
+        body,
+        signal: request.signal,
+      });
     } catch (err) {
+      if (request.signal?.aborted || isAbortError(err)) throw createAbortError();
       const cause = err instanceof Error && "cause" in err
         ? ` (cause: ${JSON.stringify(err.cause)})`
         : "";
@@ -211,13 +223,16 @@ export class NineRouterProvider implements GatewayProvider {
       };
 
       while (true) {
+        throwIfAborted(request.signal);
         const { done, value } = await reader.read();
+        throwIfAborted(request.signal);
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
+          throwIfAborted(request.signal);
           const result = emitLine(line);
           if (result === "done") {
             yield* finalizeToolCalls(toolCallsByIdx, model);
@@ -229,6 +244,7 @@ export class NineRouterProvider implements GatewayProvider {
 
       buffer += decoder.decode();
       for (const line of buffer.split(/\r?\n/)) {
+        throwIfAborted(request.signal);
         const result = emitLine(line);
         if (result === "done") {
           yield* finalizeToolCalls(toolCallsByIdx, model);
@@ -362,6 +378,20 @@ function* finalizeToolCalls(
 
 function isString(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function createAbortError(): Error {
+  const err = new Error("Task canceled.");
+  err.name = "AbortError";
+  return err;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createAbortError();
 }
 
 function parseCompletionBody(raw: string): ChatCompletionResponse {

@@ -22,6 +22,20 @@ function generateBanner(): string[] {
 
 const BANNER_LINES = generateBanner();
 
+function toolLineLimit(msg: Message): number {
+  const name = (msg.toolName ?? "").toLowerCase();
+  const content = msg.content.toLowerCase();
+  if (
+    name.includes("edit_file") ||
+    name.includes("diff") ||
+    content.includes("```diff") ||
+    content.includes("@@ -")
+  ) {
+    return 120;
+  }
+  return 6;
+}
+
 export function headerLines(state: UIState): string[] {
   const modeInfo = getModeDisplay(state.config.mode);
   const workspace = state.workspace?.repoName ?? state.config.profile;
@@ -86,8 +100,8 @@ export function messageLines(messages: Message[], width: number): string[] {
       const toolName = truncate(msg.toolName ?? "tool", 20);
       const prefixW = Math.min(9 + toolName.length + 1, 32);
       const bodyW = Math.max(20, width - prefixW);
-      const rawLines = renderMarkdownish(msg.content, bodyW);
-      const limit = 6;
+      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW);
+      const limit = toolLineLimit(msg);
       const lines = rawLines.length > limit
         ? [...rawLines.slice(0, limit), `${C_GRAY}... ${rawLines.length - limit} more lines${RESET}`]
         : rawLines;

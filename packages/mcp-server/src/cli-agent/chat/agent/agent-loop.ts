@@ -52,18 +52,22 @@ export async function runAgentLoop(input: {
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   debug?: boolean;
+  signal?: AbortSignal;
   compactor?: ContextCompactor;
   confirmEdit?: ConfirmEditFn;
 }): Promise<AgentLoopResult> {
+  throwIfAborted(input.signal);
   let tools = await input.toolClient.listChatTools();
+  throwIfAborted(input.signal);
 
   // Fetch MCP resources once and prepend to system prompt
   let resourceContext: string | null = null;
   try {
-    resourceContext = await fetchResourceContext(input.toolClient);
+    resourceContext = await abortable(fetchResourceContext(input.toolClient), input.signal);
   } catch {
     /* non-blocking — agent runs fine without resource context */
   }
+  throwIfAborted(input.signal);
 
   const systemPrompt = resourceContext
     ? AGENT_SYSTEM_PROMPT + "\n\n" + resourceContext
@@ -85,16 +89,22 @@ export async function runAgentLoop(input: {
 
   let shouldBreak = false;
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
+    throwIfAborted(input.signal);
     // Compact history if it's growing too large
     if (input.compactor && i > 0) {
-      const compacted = await input.compactor.compactIfNeeded(allMessages, input.model);
+      const compacted = await abortable(
+        input.compactor.compactIfNeeded(allMessages, input.model),
+        input.signal,
+      );
       if (compacted) allMessages = compacted;
     }
+    throwIfAborted(input.signal);
 
     const streamRequest = {
       model: input.model,
       system: systemPrompt,
       messages: allMessages,
+      signal: input.signal,
       ...(tools.length > 0 && !toolSupportFailed ? { tools } : {}),
     };
 
@@ -113,6 +123,7 @@ export async function runAgentLoop(input: {
         streamRequest,
         input.debug,
       )) {
+        throwIfAborted(input.signal);
         const debugInfo: Record<string, unknown> = {
           chunk: chunkIdx++,
           text: chunk.text || "",
@@ -154,6 +165,7 @@ export async function runAgentLoop(input: {
     }
 
     finalText = accumulated;
+    throwIfAborted(input.signal);
 
     if (!streamToolCalls || streamToolCalls.length === 0) {
       // No tool calls — final text response, done streaming
@@ -181,6 +193,7 @@ export async function runAgentLoop(input: {
     });
 
     for (const toolCall of streamToolCalls) {
+      throwIfAborted(input.signal);
       // Detect consecutive identical failed tool calls
       if (
         lastFailedTool &&
@@ -201,9 +214,11 @@ export async function runAgentLoop(input: {
         toolCall.function.arguments,
         toolCall.id,
       );
-      const result = await executeToolCall(input.toolClient, toolCall, input.confirmEdit);
+      const result = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
+      throwIfAborted(input.signal);
+      const uiLimit = toolCall.function.name === "edit_file" ? 12_000 : 500;
       const truncatedResult =
-        result.length > 500 ? result.slice(0, 500) + "\n..." : result;
+        result.length > uiLimit ? result.slice(0, uiLimit) + "\n..." : result;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
       // Track consecutive tool failures
@@ -260,15 +275,17 @@ async function executeToolCall(
   toolClient: CodeMapMcpToolClient,
   toolCall: ChatToolCall,
   confirmEdit?: ConfirmEditFn,
+  signal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(signal);
   const name = toolCall.function.name;
   const args = parseToolArguments(toolCall.function.arguments);
 
   if (isConfirmTool(name)) {
-    return runConfirmedEditTool(toolClient, name, args, confirmEdit);
+    return runConfirmedEditTool(toolClient, name, args, confirmEdit, signal);
   }
 
-  const result = await toolClient.callTool(name, args);
+  const result = await abortable(toolClient.callTool(name, args), signal);
   return formatToolResult(result);
 }
 
@@ -277,35 +294,51 @@ async function runConfirmedEditTool(
   name: string,
   args: Record<string, unknown>,
   confirmEdit?: ConfirmEditFn,
+  signal?: AbortSignal,
 ): Promise<string> {
+  throwIfAborted(signal);
   const dryRunArgs = { ...args, dry_run: true };
-  const dryRun = await toolClient.callTool(name, dryRunArgs);
+  const dryRun = await abortable(toolClient.callTool(name, dryRunArgs), signal);
+  throwIfAborted(signal);
   const dryRunText = formatToolResult(dryRun);
+  const dryRunPreview = dryRun.content || dryRunText;
 
   if (dryRun.isError) return dryRunText;
 
-  const preview = renderEditDiffPreview(name, args);
+  const preview = dryRunPreview || renderEditDiffPreview(name, args);
 
   // Use Ink-native confirm callback, or auto-approve if no callback (non-TUI mode)
   const approved = confirmEdit
     ? await confirmEdit(name, args, preview)
     : true;
+  throwIfAborted(signal);
 
   if (!approved) {
     return `${dryRunText}\n\nUser declined. No files were changed.`;
   }
 
-  const applied = await toolClient.callTool(name, {
-    ...args,
-    dry_run: false,
-  });
-  const diff = await toolClient.callTool("get_working_diff", {
-    include_patch: false,
-    include_untracked: true,
-  });
-  const refreshed = await toolClient.callTool("refresh_local_index", {
-    force: true,
-  });
+  const applied = await abortable(
+    toolClient.callTool(name, {
+      ...args,
+      dry_run: false,
+    }),
+    signal,
+  );
+  throwIfAborted(signal);
+  const diff = await abortable(
+    toolClient.callTool("get_working_diff", {
+      include_patch: false,
+      include_untracked: true,
+    }),
+    signal,
+  );
+  throwIfAborted(signal);
+  const refreshed = await abortable(
+    toolClient.callTool("refresh_local_index", {
+      force: true,
+    }),
+    signal,
+  );
 
   return [
     formatToolResult(applied),
@@ -351,6 +384,40 @@ function parseToolArguments(raw: string): Record<string, unknown> {
     // Fall through to a helpful error payload.
   }
   return { __invalidArguments: raw };
+}
+
+function createAbortError(): Error {
+  const err = new Error("Task canceled.");
+  err.name = "AbortError";
+  return err;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+async function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  throwIfAborted(signal);
+  if (!signal) return promise;
+  let cleanup: (() => void) | undefined;
+  const abortPromise = new Promise<T>((_, reject) => {
+    const onAbort = () => reject(createAbortError());
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return Promise.race([
+    promise.then(
+      (value) => {
+        cleanup?.();
+        return value;
+      },
+      (err) => {
+        cleanup?.();
+        throw err;
+      },
+    ),
+    abortPromise,
+  ]);
 }
 
 function formatToolResult(result: {

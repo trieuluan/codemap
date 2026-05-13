@@ -15,6 +15,7 @@ import { historyCommand } from "./history.js";
 import { debugCommand } from "./debug.js";
 import { retryCommand } from "./retry.js";
 import { mcpCommand } from "./mcp.js";
+import { compactCommand } from "./compact.js";
 
 export interface CommandContext {
   currentModel: string;
@@ -33,6 +34,7 @@ export interface CommandContext {
   setDebug: (debug: boolean) => void;
   debugLogFile: string | null;
   lastUserText: string | null;
+  compactHistory: () => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean }>;
   resend: () => void;
   exit: () => void;
 }
@@ -54,6 +56,7 @@ const commands: Command[] = [
   clearCommand,
   historyCommand,
   debugCommand,
+  compactCommand,
   retryCommand,
   mcpCommand,
   exitCommand,

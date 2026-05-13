@@ -103,6 +103,41 @@ export class ContextCompactor {
     }
   }
 
+  async compactNow(
+    messages: ChatMessage[],
+    model: string,
+  ): Promise<ChatMessage[] | null> {
+    const { preserveRecentMessages } = this.config;
+    const recentStart = Math.max(0, messages.length - preserveRecentMessages);
+    const oldMessages = messages.slice(0, recentStart);
+    const recentMessages = messages.slice(recentStart);
+
+    if (oldMessages.length === 0) {
+      return null;
+    }
+
+    try {
+      const summary = await this.summarize(oldMessages, model);
+      return [
+        {
+          role: "system",
+          content: `[Previous conversation summary]\n${summary}`,
+        },
+        ...recentMessages,
+      ];
+    } catch {
+      const halfOld = oldMessages.slice(Math.floor(oldMessages.length / 2));
+      return [
+        {
+          role: "system",
+          content: "[Earlier messages dropped during manual compaction]",
+        },
+        ...halfOld,
+        ...recentMessages,
+      ];
+    }
+  }
+
   private async summarize(
     messages: ChatMessage[],
     model: string,

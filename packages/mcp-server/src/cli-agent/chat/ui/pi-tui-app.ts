@@ -4,6 +4,7 @@ import type { UIState } from "./store.js";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
+import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
 import {
   BOLD,
   C_CYAN,
@@ -51,6 +52,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let streamingLinesInScrollback = 0;
   // Debounce: coalesce rapid full-refresh calls into one microtask flush.
   let refreshQueued = false;
+  const pendingImages: PastedImage[] = [];
 
   // ── TUI stub — Editor only needs terminal.rows + requestRender() ──────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,12 +80,17 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   editor.onSubmit = (value) => {
     const trimmed = value.trim();
     if (!trimmed || chatTerminal.store.getState().input.busy) return;
+    const imageMarkdown = pendingImages.map((img) => img.markdown);
+    const content = imageMarkdown.length > 0
+      ? `${trimmed}\n\n${imageMarkdown.join("\n\n")}`
+      : trimmed;
+    pendingImages.length = 0;
     chatTerminal.store.dispatch((prev) => ({
       input: { ...prev.input, history: [...prev.input.history, trimmed] },
     }));
     editor.addToHistory(trimmed);
     editor.setText("");
-    void chatTerminal.handleSubmit(trimmed);
+    void chatTerminal.handleSubmitWithContent(trimmed, content);
   };
 
   // ── rendering ─────────────────────────────────────────────────────────────
@@ -273,7 +280,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         fitLine("  /model      Switch model", w),
         fitLine("  /mode       Switch gateway mode", w),
         fitLine("  /clear      Clear conversation", w),
+        fitLine("  /compact    Compact agent context", w),
         fitLine("  /retry      Retry last message", w),
+        fitLine("  !<cmd>      Run shell command", w),
         fitLine(`  ${C_GRAY}Esc to close${RESET}`, w),
         fitLine("", w),
       );
@@ -289,14 +298,18 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     // Confirm dialog.
     if (state.confirm.active) {
-      const preview = state.confirm.preview?.split("\n").slice(0, 8) ?? [];
+      const allPreviewLines = state.confirm.preview?.split("\n") ?? [];
+      const preview = allPreviewLines.slice(0, 30);
       out.push(
         fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
         fitLine(`${C_GRAY}y = yes  n = no  a = accept all${RESET}`, w),
       );
       for (const line of preview) {
-        const col = line.startsWith("+") ? C_GREEN : line.startsWith("-") ? C_RED : C_GRAY;
+        const col = line.startsWith("+") ? C_GREEN : line.startsWith("-") ? C_RED : line.startsWith("@@") ? C_CYAN : C_GRAY;
         out.push(fitLine(`${col}${line}${RESET}`, w));
+      }
+      if (allPreviewLines.length > preview.length) {
+        out.push(fitLine(`${C_GRAY}... ${allPreviewLines.length - preview.length} more lines${RESET}`, w));
       }
     }
 
@@ -328,6 +341,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         `  ${C_CYAN}Tab${RESET} ${C_GRAY}complete${RESET}` +
           `  ${C_CYAN}↑↓${RESET} ${C_GRAY}history${RESET}` +
           `  ${C_CYAN}@${RESET} ${C_GRAY}files${RESET}` +
+          `  ${C_CYAN}!${RESET} ${C_GRAY}shell${RESET}` +
           `  ${C_CYAN}/help${RESET} ${C_GRAY}commands${RESET}` +
           `  ${C_CYAN}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
         w,
@@ -370,6 +384,31 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       if (data === "y") chatTerminal.resolveConfirm(true);
       else if (data === "a") chatTerminal.resolveConfirmAll();
       else if (data === "n" || matchesKey(data, Key.escape)) chatTerminal.resolveConfirm(false);
+      return;
+    }
+
+    void handleEditorInput(data);
+  }
+
+  async function handleEditorInput(data: string): Promise<void> {
+    try {
+      const image = await imageFromPaste(data);
+      if (image) {
+        pendingImages.push(image);
+        const current = editor.getText();
+        editor.setText(current ? `${current} ${image.marker}` : image.marker);
+        doEditorRefresh();
+        return;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      chatTerminal.store.dispatch((prev) => ({
+        messages: [
+          ...prev.messages,
+          { role: "system", content: `Image paste skipped: ${message}`, timestamp: Date.now() },
+        ],
+      }));
+      scheduleRefresh();
       return;
     }
 

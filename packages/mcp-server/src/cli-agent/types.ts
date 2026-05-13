@@ -68,6 +68,7 @@ export interface CompletionRequest {
   temperature?: number;
   maxTokens?: number;
   system?: string;
+  signal?: AbortSignal;
   tools?: ChatToolDefinition[];
   toolChoice?:
     | "auto"
