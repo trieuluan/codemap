@@ -46,12 +46,15 @@ test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, an
   assert.equal(semantics.issues.length, 0);
 });
 
-test("parseWorkspaceFileSemantics extracts Dart imports and declarations", async () => {
+test("parseWorkspaceFileSemantics extracts Dart and Flutter imports and declarations", async () => {
   const semantics = await parseWorkspaceFileSemantics({
     projectImportId: "import-1",
     workspacePath: "/tmp",
     resolverConfigs: [],
-    filePathSet: new Set(["lib/src/models.dart"]),
+    filePathSet: new Set([
+      "lib/app_state.g.dart",
+      "lib/src/models.dart",
+    ]),
     file: {
       path: "lib/main.dart",
       absolutePath: "/tmp/lib/main.dart",
@@ -71,21 +74,47 @@ test("parseWorkspaceFileSemantics extracts Dart imports and declarations", async
       parseStatus: "parsed",
       parserName: "codemap-regex-parser",
       parserVersion: "0.1.0",
-      lineCount: 3,
+      lineCount: 18,
       content: [
-        "import 'src/models.dart';",
-        "class App {}",
+        "import 'dart:async';",
+        "import 'package:flutter/material.dart';",
+        "import 'package:sample_app/src/models.dart';",
+        "export 'src/models.dart';",
+        "part 'app_state.g.dart';",
+        "",
+        "class App extends StatelessWidget {",
+        "  const App({super.key});",
+        "",
+        "  @override",
+        "  Widget build(BuildContext context) {",
+        "    return const SizedBox.shrink();",
+        "  }",
+        "}",
+        "",
         "mixin Loadable {}",
+        "enum LoadState { idle, loading }",
+        "typedef WidgetBuilderFactory = Widget Function();",
       ].join("\n"),
     },
   });
 
-  assert.equal(semantics.imports.length, 1);
+  assert.equal(semantics.imports.length, 5);
   assert.equal(semantics.imports[0]?.importKind, "import");
-  assert.equal(semantics.imports[0]?.targetPathText, "lib/src/models.dart");
-  assert.equal(semantics.symbols.length, 2);
-  assert.equal(semantics.symbols[0]?.displayName, "App");
-  assert.equal(semantics.symbols[1]?.kind, "mixin");
+  assert.equal(semantics.imports[0]?.resolutionKind, "builtin");
+  assert.equal(semantics.imports[1]?.resolutionKind, "package");
+  assert.equal(semantics.imports[2]?.targetPathText, "lib/src/models.dart");
+  assert.equal(semantics.imports[3]?.importKind, "export_from");
+  assert.equal(semantics.imports[4]?.importKind, "include");
+  assert.equal(semantics.imports[4]?.targetPathText, "lib/app_state.g.dart");
+  assert.equal(semantics.exports.length, 1);
+  assert.equal(semantics.externalSymbols.length, 2);
+
+  const symbolsByName = new Map(semantics.symbols.map((symbol) => [symbol.displayName, symbol]));
+  assert.equal(symbolsByName.get("App")?.kind, "class");
+  assert.equal(symbolsByName.get("build")?.kind, "method");
+  assert.equal(symbolsByName.get("Loadable")?.kind, "mixin");
+  assert.equal(symbolsByName.get("LoadState")?.kind, "enum");
+  assert.equal(symbolsByName.get("WidgetBuilderFactory")?.kind, "type_alias");
 });
 
 test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and symbols", async () => {
@@ -129,6 +158,114 @@ test("parseWorkspaceFileSemantics extracts PHP namespaces, use statements, and s
   assert.equal(semantics.symbols.length, 2);
   assert.equal(semantics.symbols[0]?.kind, "namespace");
   assert.equal(semantics.symbols[1]?.displayName, "ExampleService");
+});
+
+test("parseWorkspaceFileSemantics extracts Java Android imports and symbols", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
+    projectImportId: "import-1",
+    workspacePath: "/tmp",
+    resolverConfigs: [],
+    filePathSet: new Set(),
+    file: {
+      path: "android/app/src/main/java/com/example/app/MainActivity.java",
+      absolutePath: "/tmp/android/app/src/main/java/com/example/app/MainActivity.java",
+      dirPath: "android/app/src/main/java/com/example/app",
+      baseName: "MainActivity.java",
+      extension: "java",
+      language: "Java",
+      mimeType: "text/x-java-source",
+      sizeBytes: 220,
+      contentSha256: "abc",
+      isText: true,
+      isBinary: false,
+      isGenerated: false,
+      isIgnored: false,
+      ignoreReason: null,
+      isParseable: true,
+      parseStatus: "parsed",
+      parserName: "codemap-regex-parser",
+      parserVersion: "0.1.0",
+      lineCount: 10,
+      content: [
+        "package com.example.app;",
+        "",
+        "import android.os.Bundle;",
+        "import io.flutter.embedding.android.FlutterActivity;",
+        "",
+        "public class MainActivity extends FlutterActivity {",
+        "  @Override",
+        "  protected void onCreate(Bundle savedInstanceState) {",
+        "    super.onCreate(savedInstanceState);",
+        "  }",
+        "}",
+      ].join("\n"),
+    },
+  });
+
+  assert.equal(semantics.imports.length, 2);
+  assert.equal(semantics.imports[0]?.moduleSpecifier, "android.os.Bundle");
+  assert.equal(semantics.externalSymbols.length, 2);
+
+  const symbolsByName = new Map(semantics.symbols.map((symbol) => [symbol.displayName, symbol]));
+  assert.equal(symbolsByName.get("com.example.app")?.kind, "namespace");
+  assert.equal(symbolsByName.get("MainActivity")?.kind, "class");
+  assert.equal(symbolsByName.get("onCreate")?.kind, "method");
+});
+
+test("parseWorkspaceFileSemantics extracts Kotlin Android imports and symbols", async () => {
+  const semantics = await parseWorkspaceFileSemantics({
+    projectImportId: "import-1",
+    workspacePath: "/tmp",
+    resolverConfigs: [],
+    filePathSet: new Set(),
+    file: {
+      path: "android/app/src/main/kotlin/com/example/app/MainActivity.kt",
+      absolutePath: "/tmp/android/app/src/main/kotlin/com/example/app/MainActivity.kt",
+      dirPath: "android/app/src/main/kotlin/com/example/app",
+      baseName: "MainActivity.kt",
+      extension: "kt",
+      language: "Kotlin",
+      mimeType: "text/x-kotlin",
+      sizeBytes: 220,
+      contentSha256: "abc",
+      isText: true,
+      isBinary: false,
+      isGenerated: false,
+      isIgnored: false,
+      ignoreReason: null,
+      isParseable: true,
+      parseStatus: "parsed",
+      parserName: "codemap-regex-parser",
+      parserVersion: "0.1.0",
+      lineCount: 10,
+      content: [
+        "package com.example.app",
+        "",
+        "import android.os.Bundle",
+        "import io.flutter.embedding.android.FlutterActivity",
+        "",
+        "class MainActivity : FlutterActivity() {",
+        "  private val channelName = \"app/channel\"",
+        "  override fun onCreate(savedInstanceState: Bundle?) {",
+        "    super.onCreate(savedInstanceState)",
+        "  }",
+        "}",
+        "",
+        "fun configureApp() = Unit",
+      ].join("\n"),
+    },
+  });
+
+  assert.equal(semantics.imports.length, 2);
+  assert.equal(semantics.imports[1]?.moduleSpecifier, "io.flutter.embedding.android.FlutterActivity");
+  assert.equal(semantics.externalSymbols.length, 2);
+
+  const symbolsByName = new Map(semantics.symbols.map((symbol) => [symbol.displayName, symbol]));
+  assert.equal(symbolsByName.get("com.example.app")?.kind, "namespace");
+  assert.equal(symbolsByName.get("MainActivity")?.kind, "class");
+  assert.equal(symbolsByName.get("channelName")?.kind, "property");
+  assert.equal(symbolsByName.get("onCreate")?.kind, "method");
+  assert.equal(symbolsByName.get("configureApp")?.kind, "function");
 });
 
 test("parseWorkspaceFileSemantics resolves tsconfig path aliases for internal imports", async () => {

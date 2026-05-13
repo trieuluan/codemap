@@ -6,6 +6,7 @@ import {
   ensureLocalIndexWithSummary,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
+  toRepoRelativePath,
 } from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
@@ -159,12 +160,22 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
     withToolError(async ({ paths, project_id }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
+      // Normalize any absolute paths to repo-relative before querying
+      async function normalizePaths(rawPaths: string[]): Promise<string[]> {
+        if (!rawPaths.some((p) => p.startsWith("/"))) return rawPaths;
+        const { store } = await ensureLocalIndexWithSummary();
+        const meta = store.getMeta();
+        if (!meta?.workspaceRootPath) return rawPaths;
+        return rawPaths.map((p) => toRepoRelativePath(p, meta.workspaceRootPath));
+      }
+      const normalizedPaths = await normalizePaths(paths);
+
       async function buildLocalResults(source: "local") {
         const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
-        const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
+        const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
         const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
 
-        for (const filePath of paths) {
+        for (const filePath of normalizedPaths) {
           output.push(`## ${filePath}`);
           output.push("");
           const parsed = store.getFileParse(filePath);
@@ -182,7 +193,7 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
           projectId: resolvedProjectId ?? null,
           source,
           localIndex,
-          paths,
+          paths: normalizedPaths,
           results: structured,
           available: true,
         });
@@ -200,7 +211,7 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
       let localIndex: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
 
       const results = await Promise.allSettled(
-        paths.map(async (filePath) => {
+        normalizedPaths.map(async (filePath) => {
           try {
             return await client.request<FileParseResponse>(
               `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
@@ -223,10 +234,10 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
         source = "local";
         localIndex = summary;
 
-        const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
+        const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
         const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
 
-        for (const filePath of paths) {
+        for (const filePath of normalizedPaths) {
           output.push(`## ${filePath}`);
           output.push("");
           const parsed = store.getFileParse(filePath);
@@ -244,17 +255,17 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
           projectId: resolvedProjectId,
           source,
           localIndex,
-          paths,
+          paths: normalizedPaths,
           results: structured,
           available: true,
         });
       }
 
-      const output: string[] = [`# Batch Outline (${paths.length} files)`, ""];
+      const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
       const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
 
-      for (let i = 0; i < paths.length; i++) {
-        const filePath = paths[i];
+      for (let i = 0; i < normalizedPaths.length; i++) {
+        const filePath = normalizedPaths[i];
         const result = results[i];
         output.push(`## ${filePath}`);
         output.push("");
@@ -280,7 +291,7 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
         projectId: resolvedProjectId,
         source,
         ...(localIndex ? { localIndex } : {}),
-        paths,
+        paths: normalizedPaths,
         results: structured,
         available: true,
       });

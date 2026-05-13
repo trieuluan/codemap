@@ -10,6 +10,9 @@ export const SOURCE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   dart: "Dart",
   php: "PHP",
   py: "Python",
+  java: "Java",
+  kt: "Kotlin",
+  kts: "Kotlin",
   po: "Gettext",
 };
 
@@ -20,6 +23,9 @@ export const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   jsx: "text/javascript",
   dart: "text/plain",
   php: "text/x-php",
+  java: "text/x-java-source",
+  kt: "text/x-kotlin",
+  kts: "text/x-kotlin",
 };
 
 export const BINARY_SAMPLE_BYTES = 8192;

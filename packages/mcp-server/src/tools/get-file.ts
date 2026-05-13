@@ -10,6 +10,7 @@ import {
   ensureLocalIndexWithSummary,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
+  toRepoRelativePath,
 } from "../lib/local-index.js";
 
 // ─── types from /map/files/parse ─────────────────────────────────────────────
@@ -378,6 +379,16 @@ export function registerGetFileTool(
       async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line, symbol_names }) => {
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
+
+        // Normalize absolute paths (e.g. from bash/tool output) to repo-relative
+        if (filePath.startsWith("/")) {
+          const { store } = await ensureLocalIndexWithSummary();
+          const meta = store.getMeta();
+          if (meta?.workspaceRootPath) {
+            filePath = toRepoRelativePath(filePath, meta.workspaceRootPath);
+          }
+        }
+
         const sections = include ?? ["content", "outline"];
         const wantSymbols = sections.includes("symbols") && (symbol_names?.length ?? 0) > 0;
         const wantContent = sections.includes("content") || wantSymbols;

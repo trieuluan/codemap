@@ -232,7 +232,7 @@ CodeMap Agent Pack uses Superpowers-style gates to keep agents from jumping into
 
 ## Gates
 
-1. **Orient** — call \`get_agent_workflow\`. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then \`get_project\` or read the project-context resource. Finally run the first tools from \`recommend_agent_workflow\`.
+1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then run the first tools from \`recommend_agent_workflow\`.
 2. **Design** — for features or vague tasks, complete brainstorming and get design approval before editing production files.
 3. **Plan** — after design approval, write an implementation plan with exact files, steps, and verification commands.
 4. **Implement** — follow the plan or TDD loop; keep changes scoped.
@@ -290,7 +290,7 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 ## 1. Orient
 
 - Call \`get_agent_workflow\` at the start of a new session if workflow is unknown.
-- Call \`get_project\` or read \`codemap://project/context\` to confirm linked project and index health.
+- The project-context resource is already loaded in your context — skip \`get_project\` and \`list_projects\` unless the user explicitly asks for project or account info.
 - Use \`explore_task\`, \`find_related_files\`, or \`search_codebase\` according to the task shape.
 
 ## 2. Read Deliberately
