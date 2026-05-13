@@ -27,6 +27,14 @@ export type ConfirmEditFn = (
   preview: string | null,
 ) => Promise<boolean>;
 
+function addUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {
+  return {
+    promptTokens: (total?.promptTokens ?? 0) + next.promptTokens,
+    completionTokens: (total?.completionTokens ?? 0) + next.completionTokens,
+    totalTokens: (total?.totalTokens ?? 0) + next.totalTokens,
+  };
+}
+
 export async function runAgentLoop(input: {
   provider: NineRouterProvider;
   model: string;
@@ -125,8 +133,8 @@ export async function runAgentLoop(input: {
           streamToolCalls = chunk.toolCalls;
         }
         if (chunk.usage) {
-          accumulatedUsage = chunk.usage;
-          input.onUsage?.(chunk.usage);
+          accumulatedUsage = addUsage(accumulatedUsage, chunk.usage);
+          input.onUsage?.(accumulatedUsage);
         }
       }
     } catch (err) {

@@ -42,6 +42,9 @@ export interface UIState {
     usage?: UsageStats;
   };
 
+  // Accumulated token usage for the current chat session.
+  sessionUsage: UsageStats;
+
   // Streaming buffer
   streaming: {
     active: boolean;
@@ -121,6 +124,11 @@ export function createInitialState(opts: {
     task: {
       phase: "idle",
       toolsCalled: 0,
+    },
+    sessionUsage: {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
     },
     streaming: {
       active: false,

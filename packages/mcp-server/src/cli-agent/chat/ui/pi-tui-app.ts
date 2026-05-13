@@ -33,6 +33,8 @@ const C_RED = fg(248, 113, 113);
 
 const COMMANDS = ["/help", "/model", "/models", "/mode", "/clear", "/retry", "/debug"] as const;
 const SPINNER = ["|", "/", "-", "\\"] as const;
+const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1006h";
+const DISABLE_MOUSE_TRACKING = "\x1b[?1000l\x1b[?1006l";
 
 function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return phase === "thinking" || phase === "tool" || phase === "streaming";
@@ -76,6 +78,30 @@ function truncateVisible(line: string, width: number): string {
 
 function fitLine(line: string, width: number): string {
   return padToWidth(truncateVisible(line, width), width);
+}
+
+function parseMouseWheel(data: string): -1 | 1 | null {
+  const sgr = data.match(/^\x1b\[<(\d+);\d+;\d+M$/);
+  if (!sgr) return null;
+  const code = Number(sgr[1]);
+  if (!Number.isFinite(code) || (code & 64) === 0) return null;
+  return (code & 1) === 0 ? -1 : 1;
+}
+
+function isSgrMouseEvent(data: string): boolean {
+  return /^\x1b\[<\d+;\d+;\d+[mM]$/.test(data);
+}
+
+function pageScrollStep(state: UIState): number {
+  return Math.max(4, Math.floor((process.stdout.rows || state.viewport.height || 24) * 0.45));
+}
+
+function wheelScrollStep(): number {
+  return 3;
+}
+
+function messageContentLineCount(state: UIState, width: number): number {
+  return headerLines(state).length + messageLines(state.messages, width - 2).length;
 }
 
 function wrapPlain(text: string, width: number): string[] {
@@ -232,8 +258,10 @@ class ChatScreen implements Component {
 
     const endTime = active ? Date.now() : state.task.endTime ?? Date.now();
     const elapsed = state.task.startTime ? formatElapsed(Math.max(0, endTime - state.task.startTime)) : "0s";
-    const usage = state.task.usage
-      ? ` · ${formatTokenCount(state.task.usage.totalTokens)} tok`
+    const turnTokens = state.task.usage?.totalTokens ?? 0;
+    const sessionTokens = state.sessionUsage.totalTokens;
+    const usage = turnTokens > 0 || sessionTokens > 0
+      ? ` · turn ${formatTokenCount(turnTokens)} · session ${formatTokenCount(sessionTokens)} tok`
       : "";
     const tool = state.task.toolName ? ` · ${state.task.toolName}` : "";
     const marker = state.task.phase === "done" ? `${C_GREEN}✓${RESET}` : `${C_CYAN}${SPINNER[this.frame]}${RESET}`;
@@ -258,7 +286,7 @@ class ChatScreen implements Component {
 
   private confirmLines(state: UIState, width: number): string[] {
     const preview = state.confirm.preview?.split("\n").slice(0, 8) ?? [];
-    const lines = [
+    return [
       fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, width),
       fitLine(`${C_GRAY}y = yes  n = no  a = accept all${RESET}`, width),
       ...preview.map((line) => {
@@ -266,7 +294,6 @@ class ChatScreen implements Component {
         return fitLine(`${color}${line}${RESET}`, width);
       }),
     ];
-    return lines;
   }
 
   private subprocessLines(state: UIState): string[] {
@@ -289,6 +316,27 @@ class ChatScreen implements Component {
       "",
     ];
   }
+}
+
+function bottomLineCount(state: UIState): number {
+  let count = 0;
+  if (state.confirm.active) count += 2 + (state.confirm.preview?.split("\n").slice(0, 8).length ?? 0);
+  if (state.task.phase !== "idle") count += 1;
+  count += 1; // help line
+  count += 3; // bordered input
+  count += 1; // status line
+  return count;
+}
+
+function maxMessageOffset(state: UIState): number {
+  const width = process.stdout.columns || state.viewport.width || 80;
+  const height = process.stdout.rows || state.viewport.height || 24;
+  const contentHeight = Math.max(1, height - bottomLineCount(state));
+  return Math.max(0, messageContentLineCount(state, width) - contentHeight);
+}
+
+function clampMessageOffset(state: UIState, offset: number): number {
+  return Math.max(0, Math.min(offset, maxMessageOffset(state)));
 }
 
 function setInputValue(input: Input, value: string): void {
@@ -318,6 +366,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     if (stopped) return;
     stopped = true;
     unsubscribe();
+    terminal.write(DISABLE_MOUSE_TRACKING);
     tui.stop();
   };
 
@@ -367,12 +416,24 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       return { consume: true };
     }
 
+    const wheelDirection = parseMouseWheel(data);
+    if (wheelDirection) {
+      const step = wheelScrollStep();
+      const offset = wheelDirection < 0
+        ? clampMessageOffset(state, state.messageScroll.offset + step)
+        : clampMessageOffset(state, state.messageScroll.offset - step);
+      chatTerminal.store.dispatch({ messageScroll: { offset, autoScroll: offset === 0 } });
+      return { consume: true };
+    }
+    if (isSgrMouseEvent(data)) return { consume: true };
+
     if (matchesKey(data, Key.pageUp)) {
-      chatTerminal.store.dispatch({ messageScroll: { offset: state.messageScroll.offset + 8, autoScroll: false } });
+      const offset = clampMessageOffset(state, state.messageScroll.offset + pageScrollStep(state));
+      chatTerminal.store.dispatch({ messageScroll: { offset, autoScroll: false } });
       return { consume: true };
     }
     if (matchesKey(data, Key.pageDown)) {
-      const offset = Math.max(0, state.messageScroll.offset - 8);
+      const offset = clampMessageOffset(state, state.messageScroll.offset - pageScrollStep(state));
       chatTerminal.store.dispatch({ messageScroll: { offset, autoScroll: offset === 0 } });
       return { consume: true };
     }
@@ -401,6 +462,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   });
 
   tui.start();
+  terminal.write(ENABLE_MOUSE_TRACKING);
   tui.requestRender(true);
 
   await new Promise<void>((resolve) => {

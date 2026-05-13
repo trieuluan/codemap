@@ -1,5 +1,5 @@
 import type { NineRouterProvider } from "../../provider.js";
-import type { ChatMessage, GatewayMode } from "../../types.js";
+import type { ChatMessage, GatewayMode, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { runAgentLoop, type ConfirmEditFn } from "../agent/agent-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
@@ -16,6 +16,22 @@ import { Store, createInitialState, type Message } from "./store.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
+
+function subtractUsage(next: TokenUsage, prev: TokenUsage): TokenUsage {
+  return {
+    promptTokens: Math.max(0, next.promptTokens - prev.promptTokens),
+    completionTokens: Math.max(0, next.completionTokens - prev.completionTokens),
+    totalTokens: Math.max(0, next.totalTokens - prev.totalTokens),
+  };
+}
+
+function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
+  return {
+    promptTokens: total.promptTokens + next.promptTokens,
+    completionTokens: total.completionTokens + next.completionTokens,
+    totalTokens: total.totalTokens + next.totalTokens,
+  };
+}
 
 interface ChatTerminalOptions {
   provider: NineRouterProvider;
@@ -112,11 +128,18 @@ export class ChatTerminal {
     this.store.dispatch({ input: { ...state.input, busy: true, lastUserText: text } });
     this.appendMessage({ role: "user", content: text });
     this.store.dispatch({
-      task: { phase: "thinking", startTime: Date.now(), toolsCalled: 0, model: this.store.getState().config.model },
+      task: {
+        phase: "thinking",
+        startTime: Date.now(),
+        toolsCalled: 0,
+        model: this.store.getState().config.model,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      },
     });
 
     let streamingContent = "";
     let hasStreamingEntry = false;
+    let lastTurnUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     try {
       const mentionContext = await hydrateMentionContext(text);
@@ -150,7 +173,12 @@ export class ChatTerminal {
           this.store.dispatch({ task: { ...this.store.getState().task, model } });
         },
         onUsage: (usage) => {
-          this.store.dispatch({ task: { ...this.store.getState().task, usage } });
+          const delta = subtractUsage(usage, lastTurnUsage);
+          lastTurnUsage = usage;
+          this.store.dispatch((prev) => ({
+            task: { ...prev.task, usage },
+            sessionUsage: addUsage(prev.sessionUsage, delta),
+          }));
         },
         onToolStart: (name, args, id) => {
           this.logger?.logToolStart(name, args, id);
