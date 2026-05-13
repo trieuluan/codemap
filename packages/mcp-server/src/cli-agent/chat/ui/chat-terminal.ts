@@ -1,6 +1,3 @@
-import { createElement } from "react";
-import { render as inkRender } from "ink";
-
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, GatewayMode } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
@@ -16,7 +13,6 @@ import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
-import { App } from "./app.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -36,7 +32,6 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _confirmResolve: ((accept: boolean) => void) | null = null;
-  private _inkUnmount: (() => void) | null = null;
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
@@ -84,9 +79,6 @@ export class ChatTerminal {
   // ─── Start ───────────────────────────────────────────────
 
   async start(): Promise<void> {
-    // Proper Unicode / IME input (Ink v7 calls this internally too, safe to call twice)
-    process.stdin.setEncoding("utf8");
-
     // Git workspace info (non-blocking)
     tryGetCurrentWorkspaceInfo()
       .then((info) => {
@@ -94,13 +86,8 @@ export class ChatTerminal {
       })
       .catch(() => {});
 
-    // Mount Ink app
-    const { unmount, waitUntilExit } = inkRender(
-      createElement(App, { chatTerminal: this }),
-    );
-    this._inkUnmount = unmount;
-
-    await waitUntilExit();
+    const { startPiTuiApp } = await import("./pi-tui-app.js");
+    await startPiTuiApp(this);
   }
 
   // ─── Submit ──────────────────────────────────────────────
@@ -359,7 +346,6 @@ export class ChatTerminal {
       },
       exit: () => {
         process.stdout.write("\x1b[?1000l\x1b[?1006l");
-        this._inkUnmount?.();
         process.exit(0);
       },
     };

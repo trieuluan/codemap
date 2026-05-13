@@ -17,6 +17,18 @@ args = [
 ]
 command = "npx"
 
+[mcp_servers.codemap-mcp-dev.tools.recommend_agent_workflow]
+approval_mode = "approve"
+
+[mcp_servers.codemap-mcp-dev.tools.get_working_diff]
+approval_mode = "approve"
+
+[mcp_servers.codemap-mcp-dev.tools.refresh_local_index]
+approval_mode = "approve"
+
+[mcp_servers.codemap-mcp-dev.tools.search_codebase]
+approval_mode = "approve"
+
 [mcp_servers.codemap_mcp_dev]
 args = [
     "tsx",
