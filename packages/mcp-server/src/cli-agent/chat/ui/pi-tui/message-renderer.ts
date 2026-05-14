@@ -105,13 +105,15 @@ export function messageLines(messages: Message[], width: number): string[] {
       const toolName = truncate(msg.toolName ?? "tool", 20);
       const prefixW = Math.min(9 + toolName.length + 1, 32);
       const bodyW = Math.max(20, width - prefixW);
-      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW, { noHighlight: true });
+      // Preview messages (dry-run diff) get diff highlighting; other tool results stay plain
+      const isPreview = (msg.toolName ?? "").endsWith(" preview") || msg.toolName === "plan";
+      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW, { noHighlight: !isPreview });
       const limit = toolLineLimit(msg);
       const lines = rawLines.length > limit
         ? [...rawLines.slice(0, limit), `${C_GRAY}... ${rawLines.length - limit} more lines${RESET}`]
         : rawLines;
       out.push(`${time} ${C_YELLOW}${toolName}:${RESET} ${C_GRAY}${lines[0] ?? ""}${RESET}`);
-      for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${C_GRAY}${line}${RESET}`);
+      for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${isPreview ? "" : C_GRAY}${line}${RESET}`);
     } else if (msg.role === "system") {
       const prefixW = 17;
       const bodyW = Math.max(20, width - prefixW);

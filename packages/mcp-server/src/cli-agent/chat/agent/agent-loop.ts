@@ -1,7 +1,7 @@
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
 import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
-import { getCachedConventions } from "../../convention-synthesizer.js";
+import { getCachedContext } from "../../convention-synthesizer.js";
 import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
@@ -76,16 +76,17 @@ export async function runAgentLoop(input: {
   }
   throwIfAborted(input.signal);
 
-  // Inject synthesized project conventions (read from cache — synthesis happens at startup)
-  let conventionContext: string | null = null;
-  try {
-    conventionContext = await getCachedConventions();
-  } catch { /* non-blocking */ }
+  // Inject synthesized project context (read from cache — synthesis happens at startup)
+  let cachedCtx: { conventions: string | null; rules: string | null; skills: string | null } =
+    { conventions: null, rules: null, skills: null };
+  try { cachedCtx = await getCachedContext(); } catch { /* non-blocking */ }
 
   const systemPrompt = [
     AGENT_SYSTEM_PROMPT,
     resourceContext,
-    conventionContext ? `## Project Conventions\n\n${conventionContext}` : null,
+    cachedCtx.conventions ? `## Project Conventions\n\n${cachedCtx.conventions}` : null,
+    cachedCtx.rules       ? `## Project Rules\n\n${cachedCtx.rules}`             : null,
+    cachedCtx.skills      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}` : null,
   ].filter(Boolean).join("\n\n");
 
   let allMessages: ChatMessage[] = [...input.history, input.userMessage].map((msg) =>

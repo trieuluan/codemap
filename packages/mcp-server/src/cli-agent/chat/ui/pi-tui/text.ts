@@ -1,5 +1,6 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { C_CYAN, C_GRAY, C_GREEN, C_RED, C_WHITE, C_YELLOW, BOLD, RESET } from "./theme.js";
+import { highlightBlock, isShikiReady } from "./shiki-highlight.js";
 
 export function stripAnsi(s: string): string {
   return s
@@ -141,23 +142,41 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
   const out: string[] = [];
   let inCode = false;
   let codeLang = "";
+  let codeLines: string[] = [];
+
+  const flushCodeBlock = () => {
+    const code = codeLines.join("\n");
+    const useShiki = !options?.noHighlight && isShikiReady() && codeLang !== "diff";
+    const hlLines = useShiki
+      ? highlightBlock(code, codeLang)
+      : codeLines.map((l) => options?.noHighlight ? l : highlightCodeLine(l.length === 0 ? " " : l, codeLang));
+    for (const hl of hlLines) {
+      for (const wrapped of wrapPlain(hl, Math.max(8, width - 4))) {
+        out.push(`    ${wrapped}${RESET}`);
+      }
+    }
+    codeLines = [];
+  };
 
   for (const raw of text.split("\n")) {
     const fence = raw.match(/^\s*```(\S*)?/);
     if (fence) {
-      inCode = !inCode;
-      codeLang = inCode ? fence[1] ?? "" : "";
+      if (!inCode) {
+        inCode = true;
+        codeLang = fence[1] ?? "";
+        codeLines = [];
+      } else {
+        flushCodeBlock();
+        inCode = false;
+        codeLang = "";
+      }
       const label = inCode ? ` code${codeLang ? `:${codeLang}` : ""} ` : " end ";
       out.push(`${C_GRAY}${"-".repeat(Math.min(width, Math.max(12, label.length + 8)))}${RESET}`);
       continue;
     }
 
     if (inCode) {
-      const line = raw.length === 0 ? " " : raw;
-      const highlighted = options?.noHighlight ? line : highlightCodeLine(line, codeLang);
-      for (const wrapped of wrapPlain(highlighted, Math.max(8, width - 4))) {
-        out.push(`${C_GRAY}    ${wrapped}${RESET}`);
-      }
+      codeLines.push(raw);
       continue;
     }
 

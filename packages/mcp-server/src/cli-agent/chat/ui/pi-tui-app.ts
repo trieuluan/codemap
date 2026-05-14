@@ -1,67 +1,62 @@
-import { CURSOR_MARKER, Editor, type EditorTheme, Key, matchesKey, ProcessTerminal, visibleWidth } from "@earendil-works/pi-tui";
+import {
+  Editor,
+  type EditorTheme,
+  Key,
+  matchesKey,
+  ProcessTerminal,
+} from "@earendil-works/pi-tui";
 import type { ChatTerminal } from "./chat-terminal.js";
-import type { UIState } from "./store.js";
-import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
 import { getCommandList } from "../commands/index.js";
+import { initShiki } from "./pi-tui/shiki-highlight.js";
 import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
 import {
-  BOLD,
   C_CYAN,
   C_GRAY,
   C_GREEN,
-  C_WHITE,
+  C_RED,
   C_YELLOW,
+  DISABLE_MOUSE_TRACKING,
+  ENABLE_MOUSE_TRACKING,
   RESET,
   SPINNER,
 } from "./pi-tui/theme.js";
 import { fitLine } from "./pi-tui/text.js";
-import { getModeDisplay } from "../commands/route-policy.js";
-
-function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
-  return phase === "thinking" || phase === "tool" || phase === "streaming"
-    || phase === "planning" || phase === "executing" || phase === "reviewing";
-}
+import { renderEditor } from "./pi-tui/editor-renderer.js";
+import {
+  buildPanel,
+  buildStatusBar,
+  isActiveTaskPhase,
+} from "./pi-tui/panel-builder.js";
 
 export { isActiveTaskPhase };
+
+const SCROLL_SPEED = 3;
+// Border characters used in copy mode.
+const BDR = { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│", ml: "├", mr: "┤" };
 
 export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   const W = () => process.stdout.columns || 80;
   const R = () => process.stdout.rows || 24;
 
-  // ProcessTerminal handles raw mode, StdinBuffer (sequence splitting),
-  // bracketed paste, and Kitty keyboard protocol — used for input only.
   const terminal = new ProcessTerminal();
 
   // ── render state ──────────────────────────────────────────────────────────
   let stopped = false;
-  // Total lines owned by the last doRefresh (streaming content + panel).
-  // Single source of truth for the erase-and-redraw cycle — replaces the
-  // old separate bottomHeight + streamingLinesInScrollback pair that could
-  // drift out of sync when doEditorRefresh changed the panel size between
-  // full refreshes, causing duplicate messages in the scrollback.
-  let lastManagedLines = 0;
-  // Current panel height (may be updated by doEditorRefresh when autocomplete
-  // opens/closes). doEditorRefresh keeps lastManagedLines in sync via delta.
   let currentBottomHeight = 0;
-  let printedMsgCount = 0;      // messages committed to scrollback
-  let frame = 0;                // spinner frame index
-  // How many lines the hardware cursor is ABOVE the "below-panel" row.
-  // After each refresh we reposition cursor into the editor for IME;
-  // linesFromCursorToEnd records the upward offset so the next refresh
-  // can move back down using relative CUD (immune to scrollback shifts).
-  let linesFromCursorToEnd = 0;
-  // Where the editor starts within the bottom panel (lines from panel top).
-  // Tracked so doEditorRefresh() can skip re-rendering the static upper part.
   let editorStartInPanel = 0;
-  // Debounce: coalesce rapid full-refresh calls into one microtask flush.
+  let scrollOffset = 0;
+  let copyMode = false;
+  let shellMode = false;
+  let debugMode = false;
+  let frame = 0;
   let refreshQueued = false;
   let confirmSelection = 0;
   let confirmSignature = "";
   const pendingImages: PastedImage[] = [];
 
-  // ── TUI stub — Editor only needs terminal.rows + requestRender() ──────────
+  // ── TUI stub ──────────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tuiStub: any = {
     terminal: { get rows() { return R(); } },
@@ -70,10 +65,14 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── editor ────────────────────────────────────────────────────────────────
   const editorTheme: EditorTheme = {
-    borderColor: (str) => `${C_GRAY}${str}${RESET}`,
+    borderColor: (str) => {
+      if (shellMode) return `${C_GREEN}${str}${RESET}`;
+      if (debugMode) return `${C_RED}${str}${RESET}`;
+      return `${C_GRAY}${str}${RESET}`;
+    },
     selectList: {
       selectedPrefix: (s) => `${C_CYAN}> ${RESET}${s}`,
-      selectedText: (s) => `${C_WHITE}${BOLD}${s}${RESET}`,
+      selectedText: (s) => `\x1b[1m${s}${RESET}`,
       description: (s) => `${C_GRAY}${s}${RESET}`,
       scrollInfo: (s) => `${C_GRAY}${s}${RESET}`,
       noMatch: (s) => `${C_GRAY}${s}${RESET}`,
@@ -101,323 +100,207 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }));
     editor.addToHistory(trimmed);
     editor.setText("");
+    scrollOffset = 0;
+    shellMode = false;
     void chatTerminal.handleSubmitWithContent(trimmed, content);
   };
+
+  // ── layout helpers ────────────────────────────────────────────────────────
+
+  function innerWidth(): number { return copyMode ? W() - 2 : W(); }
+  function borderRows(): number { return copyMode ? 3 : 0; }
+
+  // Absolute (1-indexed) row where the panel starts.
+  //   normal: messagesHeight + 1
+  //   copy:   1(top) + messagesHeight + 1(sep) + 1(panel start) = messagesHeight + 3
+  function panelStartRow(messagesHeight: number): number {
+    return messagesHeight + 1 + (copyMode ? 2 : 0);
+  }
 
   // ── rendering ─────────────────────────────────────────────────────────────
 
   function scheduleRefresh(): void {
     if (refreshQueued || stopped) return;
     refreshQueued = true;
-    queueMicrotask(() => {
-      refreshQueued = false;
-      doRefresh();
-    });
+    queueMicrotask(() => { refreshQueued = false; doRefresh(); });
   }
 
   function doRefresh(): void {
     if (stopped) return;
     const state = chatTerminal.store.getState();
+    debugMode = state.debug;
+
     const w = W();
-    const streaming = state.task.phase === "streaming";
+    const h = R();
+    const iw = innerWidth();
 
-    // Synchronized output + hide cursor: terminal buffers all rendering until the
-    // closing sequence, then paints everything at once — no flicker on message commit.
+    // Advance spinner frame once per render when active.
+    if (isActiveTaskPhase(state.task.phase) || state.synthRunning) {
+      frame = (frame + 1) % SPINNER.length;
+    }
+
+    const panelResult = buildPanel(state, iw, {
+      editor, frame, shellMode, debugMode, copyMode, confirmSelection, confirmSignature,
+    });
+    confirmSignature = panelResult.confirmSignature;
+    confirmSelection = panelResult.confirmSelection;
+    editorStartInPanel = panelResult.editorStart;
+    currentBottomHeight = panelResult.lines.length;
+    const { lines: panel, cursorRow, cursorCol } = panelResult;
+
+    const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
+    const allLines = [...headerLines(state), ...messageLines(state.messages, w - 2)];
+
+    const maxScroll = Math.max(0, allLines.length - messagesHeight);
+    scrollOffset = Math.min(scrollOffset, maxScroll);
+    const startLine = Math.max(0, allLines.length - messagesHeight - scrollOffset);
+
     let buf = "\x1b[?2026h\x1b[?25l";
+    buf += "\x1b[H";
 
-    // Restore cursor to the "below-panel" row using relative CUD.
-    // Unlike DECSC/DECRC, relative movement is not affected by scrollback shifts
-    // that occur when committed messages push the panel down.
-    if (linesFromCursorToEnd > 0) {
-      buf += `\x1b[${linesFromCursorToEnd}B\r`;
-      linesFromCursorToEnd = 0;
-    }
+    if (copyMode) {
+      const bc = C_YELLOW;
+      const hbar = BDR.h.repeat(iw);
 
-    // Erase everything owned by the previous render in one shot.
-    if (lastManagedLines > 0) {
-      buf += `\x1b[${lastManagedLines}A\x1b[J`;
-    }
-    lastManagedLines = 0;
-    currentBottomHeight = 0;
+      buf += `\x1b[2K${bc}${BDR.tl}${hbar}${BDR.tr}${RESET}\r\n`;
 
-    // /clear resets the message array — wipe visible screen + scrollback and redraw.
-    if (state.messages.length < printedMsgCount) {
-      buf += "\x1b[3J\x1b[2J\x1b[H"; // clear scrollback + screen, cursor to top
-      lastManagedLines = 0;
-      currentBottomHeight = 0;
-      printedMsgCount = 0;
-    }
+      for (let i = 0; i < messagesHeight; i++) {
+        buf += `\x1b[2K${bc}${BDR.v}${RESET}`;
+        let cell = "";
+        if (i === 0 && startLine > 0) {
+          cell = fitLine(`${C_GRAY}  ↑ ${startLine} line${startLine === 1 ? "" : "s"} above${RESET}`, iw);
+        } else if (i === messagesHeight - 1 && scrollOffset > 0) {
+          const below = allLines.length - (startLine + messagesHeight);
+          if (below > 0) cell = fitLine(`${C_GRAY}  ↓ ${below} more — scroll down for latest${RESET}`, iw);
+        }
+        if (!cell) {
+          const lineIdx = startLine + i;
+          cell = fitLine(lineIdx < allLines.length ? (allLines[lineIdx] ?? "") : "", iw);
+        }
+        buf += `${cell}${bc}${BDR.v}${RESET}\r\n`;
+      }
 
-    // Commit complete non-streaming messages to scrollback.
-    const commitUntil = streaming
-      ? Math.max(printedMsgCount, state.messages.length - 1)
-      : state.messages.length;
+      buf += `\x1b[2K${bc}${BDR.ml}${hbar}${BDR.mr}${RESET}\r\n`;
 
-    if (commitUntil > printedMsgCount) {
-      const batch = state.messages.slice(printedMsgCount, commitUntil);
-      const lines = messageLines(batch, w - 2);
-      buf += lines.join("\r\n") + "\r\n";
-      printedMsgCount = commitUntil;
-    }
+      for (const [i, line] of panel.entries()) {
+        buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(line, iw)}${bc}${BDR.v}${RESET}`;
+        if (i < panel.length - 1) buf += "\r\n";
+      }
 
-    // Write the active streaming message into the managed area so it
-    // grows smoothly with each token — no flash when streaming ends.
-    let streamingLines = 0;
-    if (streaming && state.messages.length > 0) {
-      const streamingMsg = state.messages[state.messages.length - 1]!;
-      const sLines = messageLines([streamingMsg], w - 2);
-      buf += sLines.join("\r\n") + "\r\n";
-      streamingLines = sLines.length;
-    }
+      buf += `\r\n\x1b[2K${bc}${BDR.bl}${hbar}${BDR.br}${RESET}`;
 
-    // Draw the bottom panel.
-    const { lines: bottom, cursorRow, cursorCol, editorStart } = buildBottom(state, w);
-    editorStartInPanel = editorStart;
-    buf += bottom.join("\r\n") + "\r\n";
-    currentBottomHeight = bottom.length;
-    lastManagedLines = streamingLines + currentBottomHeight;
-
-    // Reposition hardware cursor inside the editor for macOS IME support.
-    // CUU (cursor up) is relative — safe across scrollback shifts.
-    if (cursorRow >= 0) {
-      const upLines = currentBottomHeight - cursorRow;
-      if (upLines > 0) buf += `\x1b[${upLines}A`;
-      buf += `\x1b[${cursorCol + 1}G`;
-      linesFromCursorToEnd = upLines;
+      if (cursorRow >= 0) {
+        buf += `\x1b[${panelStartRow(messagesHeight) + cursorRow};${cursorCol + 2}H`;
+      }
     } else {
-      linesFromCursorToEnd = 0;
-    }
-    buf += "\x1b[?25h\x1b[?2026l";
+      for (let i = 0; i < messagesHeight; i++) {
+        buf += "\x1b[2K";
+        if (i === 0 && startLine > 0) {
+          buf += fitLine(`${C_GRAY}  ↑ ${startLine} line${startLine === 1 ? "" : "s"} above${RESET}`, w);
+          buf += "\r\n"; continue;
+        }
+        if (i === messagesHeight - 1 && scrollOffset > 0) {
+          const below = allLines.length - (startLine + messagesHeight);
+          if (below > 0) {
+            buf += fitLine(`${C_GRAY}  ↓ ${below} more — scroll down for latest${RESET}`, w);
+            buf += "\r\n"; continue;
+          }
+        }
+        const lineIdx = startLine + i;
+        if (lineIdx < allLines.length) buf += allLines[lineIdx];
+        buf += "\r\n";
+      }
 
+      for (const [i, line] of panel.entries()) {
+        buf += `\x1b[2K\r${line}`;
+        if (i < panel.length - 1) buf += "\r\n";
+      }
+
+      if (cursorRow >= 0) {
+        buf += `\x1b[${panelStartRow(messagesHeight) + cursorRow};${cursorCol + 1}H`;
+      }
+    }
+
+    buf += "\x1b[?25h\x1b[?2026l";
     process.stdout.write(buf);
   }
 
-  function statusBarLine(state: UIState, w: number): string {
-    const workspace = state.workspace?.repoName ?? state.config.profile;
-    const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
-    const modeInfo = getModeDisplay(state.config.mode);
-    return fitLine(
-      `${C_WHITE}${workspace}${RESET}${C_GRAY}${branch} · ${RESET}` +
-        `${C_WHITE}${truncate(state.config.model, 24)}${RESET}${C_GRAY} · ${RESET}` +
-        `${C_GREEN}${modeInfo.label}${RESET}${C_GRAY} · ${RESET}` +
-        `${C_CYAN}MCP connected${RESET}`,
-      w,
-    );
-  }
-
-  // Renders just the editor lines (+ autocomplete if active) with CURSOR_MARKER stripped.
-  // Returns the lines and the cursor position within those lines.
-  function renderEditor(w: number, offsetInPanel: number): {
-    lines: string[];
-    cursorRow: number; // absolute row within bottom panel
-    cursorCol: number;
-  } {
-    const lines: string[] = [];
-    let cursorRow = -1;
-    let cursorCol = 0;
-    for (const [i, l] of editor.render(w).entries()) {
-      const markerIdx = l.indexOf(CURSOR_MARKER);
-      if (markerIdx >= 0) {
-        cursorRow = offsetInPanel + i;
-        cursorCol = visibleWidth(l.slice(0, markerIdx));
-        lines.push(l.replace(CURSOR_MARKER, ""));
-      } else {
-        lines.push(l);
-      }
-    }
-    return { lines, cursorRow, cursorCol };
-  }
-
-  // Fast partial refresh — overwrites only the editor area + status bar in-place.
-  // No \x1b[J] clear in the common case (stable line count), so zero flicker.
-  // Falls back to clearing only the orphaned tail when autocomplete disappears.
+  // Partial refresh — rewrites only the editor + status-bar rows in the panel
+  // using absolute cursor addressing. Avoids a full repaint on every keystroke.
   function doEditorRefresh(): void {
-    if (stopped) return;
+    if (stopped || currentBottomHeight === 0) return;
     const state = chatTerminal.store.getState();
-    const w = W();
+    debugMode = state.debug;
+    const h = R();
+    const iw = innerWidth();
 
-    const { lines: editorLines, cursorRow, cursorCol } = renderEditor(w, editorStartInPanel);
+    const { lines: editorLines, cursorRow, cursorCol } =
+      renderEditor(editor, iw, editorStartInPanel, shellMode, debugMode);
     const newEditorAndBelow = editorLines.length + 1; // +1 for status bar
     const oldEditorAndBelow = currentBottomHeight - editorStartInPanel;
 
-    // Synchronized output: terminal buffers all rendering until the closing
-    // sequence, then paints everything at once — eliminates text/cursor flicker.
-    let buf = "\x1b[?2026h\x1b[?25l";
+    const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
+    const editorAbsRow = panelStartRow(messagesHeight) + editorStartInPanel;
 
-    // Return cursor to "below-panel" row using relative CUD.
-    if (linesFromCursorToEnd > 0) {
-      buf += `\x1b[${linesFromCursorToEnd}B\r`;
-      linesFromCursorToEnd = 0;
+    let buf = "\x1b[?2026h\x1b[?25l";
+    buf += `\x1b[${editorAbsRow};1H`;
+
+    if (copyMode) {
+      const bc = C_YELLOW;
+      for (const l of editorLines) {
+        buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(l, iw)}${bc}${BDR.v}${RESET}\r\n`;
+      }
+      buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(buildStatusBar(state, iw, copyMode, debugMode), iw)}${bc}${BDR.v}${RESET}`;
+    } else {
+      for (const l of editorLines) buf += `\x1b[2K\r${l}\r\n`;
+      buf += `\x1b[2K\r${buildStatusBar(state, iw, copyMode, debugMode)}`;
     }
 
-    // Move up to the start of the editor area (not all the way to panel top).
-    if (oldEditorAndBelow > 0) buf += `\x1b[${oldEditorAndBelow}A`;
-
-    // Overwrite editor lines in-place. fitLine pads each line to exactly w chars
-    // so old content is fully replaced without a visible clear-then-repaint flash.
-    for (const l of editorLines) buf += `\r${l}\r\n`;
-    buf += `\r${statusBarLine(state, w)}\r\n`;
-
-    // If the panel shrank (autocomplete closed), clear the orphaned tail lines.
     if (newEditorAndBelow < oldEditorAndBelow) buf += "\x1b[J";
 
-    // Keep lastManagedLines in sync so the next doRefresh erases the correct
-    // amount regardless of how many times autocomplete grew or shrank here.
     const delta = newEditorAndBelow - oldEditorAndBelow;
     currentBottomHeight = editorStartInPanel + newEditorAndBelow;
-    lastManagedLines += delta;
+    if (delta !== 0) scheduleRefresh();
 
-    // Reposition hardware cursor inside the editor for IME, then show it again.
     if (cursorRow >= 0) {
-      const upLines = currentBottomHeight - cursorRow;
-      if (upLines > 0) buf += `\x1b[${upLines}A`;
-      buf += `\x1b[${cursorCol + 1}G`;
-      linesFromCursorToEnd = upLines;
-    } else {
-      linesFromCursorToEnd = 0;
+      const absRow = panelStartRow(messagesHeight) + cursorRow;
+      const absCol = copyMode ? cursorCol + 2 : cursorCol + 1;
+      buf += `\x1b[${absRow};${absCol}H`;
     }
+
     buf += "\x1b[?25h\x1b[?2026l";
-
     process.stdout.write(buf);
-  }
-
-  function buildBottom(
-    state: UIState,
-    w: number,
-  ): { lines: string[]; cursorRow: number; cursorCol: number; editorStart: number } {
-    const out: string[] = [];
-    let cursorRow = -1;
-    let cursorCol = 0;
-
-    // /help overlay.
-    if (state.screen === "help") {
-      out.push(
-        fitLine(`${C_CYAN}${BOLD}Commands${RESET}`, w),
-        fitLine("  /help       Show this help", w),
-        fitLine("  /model      Switch model", w),
-        fitLine("  /mode       Switch gateway mode", w),
-        fitLine("  /clear      Clear conversation", w),
-        fitLine("  /compact    Compact agent context", w),
-        fitLine("  /retry      Retry last message", w),
-        fitLine("  !<cmd>      Run shell command", w),
-        fitLine(`  ${C_GRAY}Esc to close${RESET}`, w),
-        fitLine("", w),
-      );
-    }
-
-    // Subprocess log.
-    if (state.subprocess.active) {
-      out.push(fitLine(`${C_YELLOW}Running:${RESET} ${state.subprocess.command}`, w));
-      for (const l of state.subprocess.logLines.slice(-4)) {
-        out.push(fitLine(`${C_GRAY}${l}${RESET}`, w));
-      }
-    }
-
-    // Task / progress line.
-    if (state.task.phase !== "idle") {
-      const active = isActiveTaskPhase(state.task.phase);
-      if (active) frame = (frame + 1) % SPINNER.length;
-      const endTime = active ? Date.now() : (state.task.endTime ?? Date.now());
-      const elapsed = state.task.startTime
-        ? formatElapsed(Math.max(0, endTime - state.task.startTime))
-        : "0s";
-      const turnTok = state.task.usage?.totalTokens ?? 0;
-      const sessTok = state.sessionUsage.totalTokens;
-      const usage =
-        turnTok > 0 || sessTok > 0
-          ? ` · t ${formatTokenCount(turnTok)} · s ${formatTokenCount(sessTok)} tok`
-          : "";
-      const tool = state.task.toolName ? ` · ${state.task.toolName}` : "";
-      const model = state.task.model ? ` ${C_GRAY}${truncate(state.task.model, 28)}${RESET}` : "";
-      const phaseLabel: Record<string, string> = {
-        planning: "planning...",
-        executing: "executing...",
-        reviewing: "reviewing...",
-        thinking: "thinking",
-        streaming: "streaming",
-        tool: "tool",
-        done: "done",
-      };
-      const label = phaseLabel[state.task.phase] ?? state.task.phase;
-      const marker =
-        state.task.phase === "done"
-          ? `${C_GREEN}✓${RESET}`
-          : `${C_CYAN}${SPINNER[frame]}${RESET}`;
-      out.push(fitLine(` ${marker} ${label}${model}${tool} · ${elapsed}${usage}`, w));
-    }
-
-    // Hint bar.
-    out.push(
-      fitLine(
-        `  ${C_CYAN}Tab${RESET} ${C_GRAY}complete${RESET}` +
-          `  ${C_CYAN}↑↓${RESET} ${C_GRAY}history${RESET}` +
-          `  ${C_CYAN}@${RESET} ${C_GRAY}files${RESET}` +
-          `  ${C_CYAN}!${RESET} ${C_GRAY}shell${RESET}` +
-          `  ${C_CYAN}/help${RESET} ${C_GRAY}commands${RESET}` +
-          `  ${C_CYAN}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
-        w,
-      ),
-    );
-
-    // Editor + autocomplete.
-    const editorStart = out.length;
-    const { lines: editorLines, cursorRow: eCursorRow, cursorCol: eCursorCol } =
-      renderEditor(w, editorStart);
-    cursorRow = eCursorRow;
-    cursorCol = eCursorCol;
-    out.push(...editorLines);
-
-    // Confirm dialog, docked under the editor like autocomplete suggestions.
-    if (state.confirm.active) {
-      const signature = `${state.confirm.toolName}\n${state.confirm.preview ?? ""}`;
-      if (signature !== confirmSignature) {
-        confirmSignature = signature;
-        confirmSelection = 0;
-      }
-      out.push(
-        fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
-        fitLine(`${C_GRAY}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
-      );
-      const options = [
-        { label: "Apply", desc: "Apply this change" },
-        { label: "Reject", desc: "Skip this change" },
-        { label: "Accept all", desc: "Apply this and future edits" },
-      ];
-      for (const [idx, option] of options.entries()) {
-        const selected = idx === confirmSelection;
-        const prefix = selected ? `${C_CYAN}>${RESET}` : " ";
-        const label = selected
-          ? `${C_WHITE}${BOLD}${option.label}${RESET}`
-          : `${C_WHITE}${option.label}${RESET}`;
-        out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w));
-      }
-    }
-
-    // Status bar.
-    out.push(statusBarLine(state, w));
-
-    return { lines: out, cursorRow, cursorCol, editorStart };
   }
 
   // ── input ─────────────────────────────────────────────────────────────────
 
   function onInput(data: string): void {
-    // Drop mouse scroll events before they reach the editor.
-    // Scroll wheel sends button 64 (up) / 65 (down) via SGR (\x1b[<64;...M)
-    // or X10 (\x1b[M + encoded byte). Passing them to editor.handleInput()
-    // triggers spurious doEditorRefresh() calls that corrupt lastManagedLines
-    // during streaming, causing rapid duplicate redraws in the scrollback.
-    if (/^\x1b\[<6[45];/.test(data)) return;
+    // Mouse scroll: SGR encoding.
+    if (/^\x1b\[<64;/.test(data)) { scrollOffset += SCROLL_SPEED; scheduleRefresh(); return; }
+    if (/^\x1b\[<65;/.test(data)) { scrollOffset = Math.max(0, scrollOffset - SCROLL_SPEED); scheduleRefresh(); return; }
+    // Mouse scroll: X10 encoding.
     if (data.startsWith("\x1b[M") && data.length >= 6) {
       const btn = data.charCodeAt(3) - 32;
-      if (btn === 64 || btn === 65) return;
+      if (btn === 64) { scrollOffset += SCROLL_SPEED; scheduleRefresh(); return; }
+      if (btn === 65) { scrollOffset = Math.max(0, scrollOffset - SCROLL_SPEED); scheduleRefresh(); return; }
     }
+    // PgUp / PgDn.
+    if (data === "\x1b[5~") { scrollOffset += Math.max(1, R() - currentBottomHeight - borderRows() - 1); scheduleRefresh(); return; }
+    if (data === "\x1b[6~") { scrollOffset = Math.max(0, scrollOffset - Math.max(1, R() - currentBottomHeight - borderRows() - 1)); scheduleRefresh(); return; }
 
     const state = chatTerminal.store.getState();
 
+    // Ctrl+T: toggle copy mode.
+    if (matchesKey(data, Key.ctrl("t"))) {
+      copyMode = !copyMode;
+      process.stdout.write(copyMode ? DISABLE_MOUSE_TRACKING : ENABLE_MOUSE_TRACKING);
+      scheduleRefresh();
+      return;
+    }
+
     if (matchesKey(data, Key.ctrl("c"))) {
       if (state.input.busy) { chatTerminal.cancelTask(); return; }
-      if (editor.getText().length > 0) { editor.setText(""); doEditorRefresh(); return; }
+      if (editor.getText().length > 0) { editor.setText(""); shellMode = false; doEditorRefresh(); return; }
       cleanup();
       process.exit(0);
     }
@@ -429,13 +312,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     if (state.confirm.active) {
-      if (matchesKey(data, Key.up)) {
-        confirmSelection = (confirmSelection + 2) % 3;
-        scheduleRefresh();
-      } else if (matchesKey(data, Key.down) || matchesKey(data, Key.tab)) {
-        confirmSelection = (confirmSelection + 1) % 3;
-        scheduleRefresh();
-      } else if (matchesKey(data, Key.enter)) {
+      if (matchesKey(data, Key.up)) { confirmSelection = (confirmSelection + 2) % 3; scheduleRefresh(); }
+      else if (matchesKey(data, Key.down) || matchesKey(data, Key.tab)) { confirmSelection = (confirmSelection + 1) % 3; scheduleRefresh(); }
+      else if (matchesKey(data, Key.enter)) {
         if (confirmSelection === 0) chatTerminal.resolveConfirm(true);
         else if (confirmSelection === 1) chatTerminal.resolveConfirm(false);
         else chatTerminal.resolveConfirmAll();
@@ -473,33 +352,26 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     editor.handleInput(data);
-    // Editor does not call requestRender() for regular text input — only for
-    // autocomplete. Partial-refresh just the editor area: no flicker, instant.
+    shellMode = editor.getText().startsWith("!");
     doEditorRefresh();
   }
 
   function onResize(): void {
-    if (linesFromCursorToEnd > 0) {
-      process.stdout.write(`\x1b[${linesFromCursorToEnd}B\r`);
-      linesFromCursorToEnd = 0;
-    }
-    if (lastManagedLines > 0) {
-      process.stdout.write(`\x1b[${lastManagedLines}A\x1b[J`);
-    }
-    lastManagedLines = 0;
     currentBottomHeight = 0;
     doRefresh();
   }
 
-  // terminal.start() sets raw mode, StdinBuffer, Kitty protocol, resize handler.
   terminal.start(onInput, onResize);
-  process.stdout.write("\x1b[?25h"); // ensure cursor visible
+
+  // Enter alternate screen + enable mouse tracking.
+  process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H\x1b[?25l" + ENABLE_MOUSE_TRACKING);
 
   // ── spinner tick ──────────────────────────────────────────────────────────
 
   const tick = setInterval(() => {
-    if (isActiveTaskPhase(chatTerminal.store.getState().task.phase)) doRefresh();
-  }, 250);
+    const state = chatTerminal.store.getState();
+    if (isActiveTaskPhase(state.task.phase) || state.synthRunning) doRefresh();
+  }, 120);
 
   // ── store subscription ────────────────────────────────────────────────────
 
@@ -513,24 +385,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     clearInterval(tick);
     unsubscribe();
     terminal.stop();
-    process.stdout.write("\r\n");
+    process.stdout.write(DISABLE_MOUSE_TRACKING + "\x1b[?1049l\r\n");
   }
 
   process.once("exit", cleanup);
+  process.once("SIGTERM", () => { cleanup(); process.exit(0); });
 
-  // ── initial paint ─────────────────────────────────────────────────────────
-  // Print header + pre-existing messages into scrollback, then draw the panel.
-
-  const init = chatTerminal.store.getState();
-  const initLines = [...headerLines(init), ...messageLines(init.messages, W() - 2)];
-  if (initLines.length > 0) {
-    process.stdout.write(initLines.join("\r\n") + "\r\n");
-    printedMsgCount = init.messages.length;
-  }
+  initShiki().then(() => scheduleRefresh()).catch(() => {});
 
   doRefresh();
-
-  // ── wait until stopped ────────────────────────────────────────────────────
 
   await new Promise<void>((resolve) => {
     const interval = setInterval(() => {

@@ -47,7 +47,8 @@
       "mcp__codemap-mcp-dev__get_files",
       "mcp__codemap-mcp-dev__recommend_agent_workflow",
       "mcp__codemap-mcp-dev__summarize_feature_area",
-      "mcp__codemap-mcp-dev__find_related_files"
+      "mcp__codemap-mcp-dev__find_related_files",
+      "WebFetch(domain:www.threads.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

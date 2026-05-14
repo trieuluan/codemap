@@ -1,27 +1,34 @@
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import type { NineRouterProvider } from "./provider.js";
 
-// ─── Convention file candidates (ordered by priority) ────
+// ─── Source definitions ───────────────────────────────────
 
-const CONVENTION_GLOBS: Array<{ label: string; paths: string[] }> = [
-  { label: "Claude Code",        paths: ["CLAUDE.md", ".claude/CLAUDE.md"] },
-  { label: "Claude Code rules",  paths: [".claude/rules/*.md"] },
-  { label: "Claude Code skills", paths: [".claude/skills/*/SKILL.md"] },
-  { label: "Codex",              paths: [".codex/codemap-agent-pack.md", ".codex/config.toml", ".codex/agents/*.toml"] },
-  { label: "Codex skills",       paths: [".codex/skills/*/SKILL.md"] },
-  { label: "Cursor",             paths: [".cursorrules", ".cursor/rules/*.mdc"] },
-  { label: "Windsurf",           paths: [".windsurfrules"] },
-  { label: "GitHub Copilot",     paths: [".github/copilot-instructions.md"] },
-  { label: "Cline",              paths: [".clinerules"] },
-  { label: "OpenAI Codex",       paths: ["AGENTS.md"] },
-  { label: "General",            paths: ["CONVENTIONS.md"] },
+const CONVENTION_SOURCES: Array<{ label: string; paths: string[] }> = [
+  { label: "Claude Code",    paths: ["CLAUDE.md", ".claude/CLAUDE.md"] },
+  { label: "Codex",          paths: [".codex/codemap-agent-pack.md", ".codex/config.toml", ".codex/agents/*.toml"] },
+  { label: "Cursor",         paths: [".cursorrules", ".cursor/rules/*.mdc"] },
+  { label: "Windsurf",       paths: [".windsurfrules"] },
+  { label: "GitHub Copilot", paths: [".github/copilot-instructions.md"] },
+  { label: "Cline",          paths: [".clinerules"] },
+  { label: "OpenAI Codex",   paths: ["AGENTS.md"] },
+  { label: "General",        paths: ["CONVENTIONS.md"] },
 ];
 
+const RULE_SOURCES: Array<{ label: string; paths: string[] }> = [
+  { label: "Claude Code rules", paths: [".claude/rules/*.md"] },
+];
+
+// Skills: .claude/skills takes priority over .codex/skills for same name
+const SKILL_DIRS = [".claude/skills", ".codex/skills"];
+
+// ─── Types ────────────────────────────────────────────────
+
 interface ScannedFile { label: string; filePath: string; content: string }
-interface ConventionMeta {
+
+interface SynthMeta {
   hash: string;
   scannedFiles: string[];
   tokenCount: number;
@@ -35,15 +42,16 @@ function getWorkspaceRoot(): string {
   return r.stdout?.trim() || process.cwd();
 }
 
-function cacheDir(): string {
+function dotCodemap(): string {
   return path.join(getWorkspaceRoot(), ".codemap");
 }
 
 function cachePaths() {
-  const dir = cacheDir();
+  const dir = dotCodemap();
   return {
-    conventions: path.join(dir, "synthesized-conventions.md"),
-    meta: path.join(dir, "convention-meta.json"),
+    conventions: { md: path.join(dir, "synthesized-conventions.md"), meta: path.join(dir, "conventions-meta.json") },
+    rules:       { md: path.join(dir, "synthesized-rules.md"),       meta: path.join(dir, "rules-meta.json") },
+    skills:      { md: path.join(dir, "synthesized-skills.md"),      meta: path.join(dir, "skills-meta.json") },
   };
 }
 
@@ -51,74 +59,75 @@ function cachePaths() {
 
 interface AgentContextConfig { conventionMaxTokens?: number | null }
 
-async function readAgentContextConfig(root: string): Promise<AgentContextConfig> {
+async function readConfig(root: string): Promise<AgentContextConfig> {
   try {
-    const raw = await readFile(path.join(root, ".codemap", "agent-context.json"), "utf8");
-    return JSON.parse(raw) as AgentContextConfig;
+    return JSON.parse(await readFile(path.join(root, ".codemap", "agent-context.json"), "utf8")) as AgentContextConfig;
   } catch { return {}; }
 }
 
-// ─── Scanner ──────────────────────────────────────────────
+// ─── Glob expansion ───────────────────────────────────────
 
 async function expandGlob(root: string, pattern: string): Promise<string[]> {
   if (!pattern.includes("*")) {
-    try { await stat(path.join(root, pattern)); return [pattern]; }
-    catch { return []; }
+    try { await stat(path.join(root, pattern)); return [pattern]; } catch { return []; }
   }
-
-  const { readdir } = await import("node:fs/promises");
   const parts = pattern.split("/");
   const starIdx = parts.findIndex((p) => p.includes("*"));
-
-  if (starIdx === -1) return [];
-
   const parentDir = parts.slice(0, starIdx).join("/") || ".";
   const starPart = parts[starIdx]!;
   const rest = parts.slice(starIdx + 1).join("/");
-
   let entries: string[];
-  try { entries = await readdir(path.join(root, parentDir)); }
-  catch { return []; }
-
+  try { entries = await readdir(path.join(root, parentDir)); } catch { return []; }
   const results: string[] = [];
-
   if (starPart === "*" && rest) {
-    // Pattern like `skills/*/SKILL.md` — star is a directory wildcard
-    for (const entry of entries) {
-      const candidate = [parentDir === "." ? "" : parentDir, entry, rest]
-        .filter(Boolean).join("/");
-      try { await stat(path.join(root, candidate)); results.push(candidate); }
-      catch { /* subdirectory doesn't have the file */ }
+    for (const e of entries) {
+      const c = [parentDir === "." ? "" : parentDir, e, rest].filter(Boolean).join("/");
+      try { await stat(path.join(root, c)); results.push(c); } catch {}
     }
   } else {
-    // Pattern like `rules/*.md` — star matches filenames with optional extension
     const ext = path.extname(rest || starPart).replace("*", "");
-    for (const entry of entries) {
-      if (!ext || entry.endsWith(ext)) {
-        results.push([parentDir === "." ? "" : parentDir, entry].filter(Boolean).join("/"));
-      }
+    for (const e of entries) {
+      if (!ext || e.endsWith(ext))
+        results.push([parentDir === "." ? "" : parentDir, e].filter(Boolean).join("/"));
     }
   }
-
   return results;
 }
 
-async function scanConventionFiles(root: string): Promise<ScannedFile[]> {
+async function scanSources(root: string, sources: Array<{ label: string; paths: string[] }>): Promise<ScannedFile[]> {
   const results: ScannedFile[] = [];
-  for (const { label, paths } of CONVENTION_GLOBS) {
+  for (const { label, paths } of sources) {
     for (const pattern of paths) {
       for (const rel of await expandGlob(root, pattern)) {
         try {
           const content = await readFile(path.join(root, rel), "utf8");
           if (content.trim()) results.push({ label, filePath: rel, content });
-        } catch { /* skip */ }
+        } catch {}
       }
     }
   }
   return results;
 }
 
-// ─── Hashing ──────────────────────────────────────────────
+async function scanSkills(root: string): Promise<ScannedFile[]> {
+  // Dedup by skill name — .claude/skills wins over .codex/skills
+  const seen = new Map<string, ScannedFile>();
+  for (const dir of SKILL_DIRS) {
+    let entries: string[];
+    try { entries = await readdir(path.join(root, dir)); } catch { continue; }
+    for (const skillName of entries) {
+      const rel = `${dir}/${skillName}/SKILL.md`;
+      if (seen.has(skillName)) continue; // already have this skill from higher-priority dir
+      try {
+        const content = await readFile(path.join(root, rel), "utf8");
+        if (content.trim()) seen.set(skillName, { label: `Skill: ${skillName}`, filePath: rel, content });
+      } catch {}
+    }
+  }
+  return [...seen.values()];
+}
+
+// ─── Hashing & tokens ─────────────────────────────────────
 
 function hashFiles(files: ScannedFile[]): string {
   const h = createHash("sha256");
@@ -130,138 +139,156 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-// ─── Synthesis ────────────────────────────────────────────
+// ─── Cache ────────────────────────────────────────────────
 
-function buildSynthesisPrompt(maxTokens: number | null | undefined): string {
-  const limitLine = maxTokens
-    ? `\nTarget length: ~${Math.floor(maxTokens * 0.75 / 1.33)} words. Prioritize the most impactful rules if space is tight.`
-    : "";
+async function loadCache(paths: { md: string; meta: string }, hash: string): Promise<string | null> {
+  try {
+    const [content, metaRaw] = await Promise.all([readFile(paths.md, "utf8"), readFile(paths.meta, "utf8")]);
+    const meta = JSON.parse(metaRaw) as SynthMeta;
+    if (meta.hash === hash && content.trim()) return content;
+  } catch {}
+  return null;
+}
 
-  return `You are synthesizing coding convention files from multiple AI agent configurations into a single unified guide.
+async function saveCache(paths: { md: string; meta: string }, content: string, hash: string, files: ScannedFile[]): Promise<void> {
+  const meta: SynthMeta = { hash, scannedFiles: files.map((f) => f.filePath), tokenCount: estimateTokens(content), synthesizedAt: Date.now() };
+  await mkdir(dotCodemap(), { recursive: true });
+  await Promise.all([writeFile(paths.md, content, "utf8"), writeFile(paths.meta, JSON.stringify(meta, null, 2), "utf8")]);
+}
+
+// ─── Streaming synthesis ──────────────────────────────────
+
+async function stream(provider: NineRouterProvider, model: string, system: string, userContent: string): Promise<string> {
+  let result = "";
+  for await (const chunk of provider.stream({ model, system, messages: [{ role: "user", content: userContent }] })) {
+    if (chunk.text) result += chunk.text;
+  }
+  return result.trim();
+}
+
+function buildInput(files: ScannedFile[]): string {
+  return files.map((f) => `=== ${f.label}: ${f.filePath} ===\n${f.content}`).join("\n\n");
+}
+
+// ─── 3 synthesis prompts ──────────────────────────────────
+
+const CONVENTIONS_PROMPT = `You are synthesizing project configuration and convention files from multiple AI agent configs into a unified project guide.
 
 Instructions:
-- Merge overlapping rules, keep the most specific version
-- Remove exact duplicates and redundant phrasing
-- Preserve: coding style, naming conventions, project structure, tech stack specifics, workflow rules, tone/language preferences
-- Drop: meta-instructions about how to USE the AI tool itself (e.g. "use MCP tools first")
-- Organize by topic (e.g. ## Architecture, ## Conventions, ## Workflow)
-- Output clean markdown${limitLine}
+- Merge overlapping content, keep the most specific version
+- Remove exact duplicates
+- Keep: architecture, tech stack, coding style, naming conventions, commands, UI routes, design system
+- Skip: rule lists and skill workflows (those are handled separately)
+- Organize by topic with ## headers
+- Output clean markdown
 
-Output ONLY the unified guide. No preamble, no explanation.`;
-}
+Output ONLY the unified guide. No preamble.`;
 
-function buildSynthesisInput(files: ScannedFile[]): string {
-  const parts: string[] = [];
-  for (const f of files) {
-    parts.push(`=== ${f.label}: ${f.filePath} ===\n${f.content}`);
-  }
-  return parts.join("\n\n");
-}
+const RULES_PROMPT = `You are synthesizing project rule files into a unified rule set.
 
-async function synthesize(
+Instructions:
+- Merge rules from all files
+- Remove EXACT duplicate rules only — preserve all unique rules fully intact
+- Do NOT compress, summarize, or shorten any rule
+- Organize by topic with ## headers
+- Output clean markdown
+
+Output ONLY the unified rules. No preamble.`;
+
+const SKILLS_PROMPT = `You are synthesizing project workflow skill files into a unified skills guide.
+
+Instructions:
+- Each skill has a name and step-by-step process
+- If multiple files describe the same skill, keep the most complete version
+- Keep ALL step-by-step processes fully intact — do NOT compress or summarize
+- Organize skills with ## headers (one per skill)
+- Output clean markdown
+
+Output ONLY the unified skills guide. No preamble.`;
+
+// ─── Per-type pipeline ────────────────────────────────────
+
+async function runPipeline(
+  root: string,
   files: ScannedFile[],
+  paths: { md: string; meta: string },
+  prompt: string,
   provider: NineRouterProvider,
   model: string,
   maxTokens: number | null | undefined,
-): Promise<string> {
-  const systemPrompt = buildSynthesisPrompt(maxTokens);
-  const userContent = buildSynthesisInput(files);
-
-  let result = "";
-  for await (const chunk of provider.stream({
-    model,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userContent }],
-  })) {
-    if (chunk.text) result += chunk.text;
+  forceRefresh: boolean,
+): Promise<string | null> {
+  if (files.length === 0) return null;
+  const hash = hashFiles(files);
+  if (!forceRefresh) {
+    const cached = await loadCache(paths, hash);
+    if (cached) return cached;
   }
-  result = result.trim();
+  const content = await stream(provider, model, prompt, buildInput(files));
+  if (!content) return null;
 
-  // Safety net: truncate if AI exceeded the limit
+  let final = content;
   if (maxTokens) {
-    const estimated = estimateTokens(result);
-    if (estimated > maxTokens) {
-      const charLimit = maxTokens * 4;
-      result = result.slice(0, charLimit).trimEnd()
-        + `\n\n_[Truncated — increase \`conventionMaxTokens\` in .codemap/agent-context.json to see more]_`;
+    const est = estimateTokens(content);
+    if (est > maxTokens) {
+      final = content.slice(0, maxTokens * 4).trimEnd()
+        + `\n\n_[Truncated — increase \`conventionMaxTokens\` in .codemap/agent-context.json]_`;
     }
   }
-
-  return result;
+  await saveCache(paths, final, hash, files).catch(() => {});
+  return final;
 }
 
 // ─── Public API ───────────────────────────────────────────
 
-export interface ConventionSynthesisResult {
-  content: string;
+export interface SynthesisResult {
+  conventions: string | null;
+  rules: string | null;
+  skills: string | null;
   fromCache: boolean;
-  fileCount: number;
-  tokenCount: number;
 }
 
-export async function loadOrSynthesizeConventions(
+export async function loadOrSynthesizeAll(
   provider: NineRouterProvider,
   plannerModel: string,
-): Promise<ConventionSynthesisResult | null> {
+  forceRefresh = false,
+): Promise<SynthesisResult | null> {
   const root = getWorkspaceRoot();
-  const config = await readAgentContextConfig(root);
+  const config = await readConfig(root);
   const maxTokens = config.conventionMaxTokens ?? null;
+  const cp = cachePaths();
 
-  const files = await scanConventionFiles(root);
-  if (files.length === 0) return null;
+  const [conventionFiles, ruleFiles, skillFiles] = await Promise.all([
+    scanSources(root, CONVENTION_SOURCES),
+    scanSources(root, RULE_SOURCES),
+    scanSkills(root),
+  ]);
 
-  const hash = hashFiles(files);
-  const { conventions: convPath, meta: metaPath } = cachePaths();
+  if (conventionFiles.length === 0 && ruleFiles.length === 0 && skillFiles.length === 0) return null;
 
-  // Try cache
-  try {
-    const [cached, metaRaw] = await Promise.all([
-      readFile(convPath, "utf8"),
-      readFile(metaPath, "utf8"),
-    ]);
-    const meta = JSON.parse(metaRaw) as ConventionMeta;
-    if (meta.hash === hash && cached.trim()) {
-      return { content: cached, fromCache: true, fileCount: files.length, tokenCount: meta.tokenCount };
-    }
-  } catch { /* cache miss */ }
+  const [conventions, rules, skills] = await Promise.all([
+    runPipeline(root, conventionFiles, cp.conventions, CONVENTIONS_PROMPT, provider, plannerModel, maxTokens, forceRefresh),
+    runPipeline(root, ruleFiles, cp.rules, RULES_PROMPT, provider, plannerModel, null, forceRefresh),
+    runPipeline(root, skillFiles, cp.skills, SKILLS_PROMPT, provider, plannerModel, null, forceRefresh),
+  ]);
 
-  // Synthesize
-  const content = await synthesize(files, provider, plannerModel, maxTokens);
-  if (!content) return null;
-
-  const tokenCount = estimateTokens(content);
-
-  // Save cache
-  try {
-    await mkdir(cacheDir(), { recursive: true });
-    const meta: ConventionMeta = {
-      hash,
-      scannedFiles: files.map((f) => f.filePath),
-      tokenCount,
-      synthesizedAt: Date.now(),
-    };
-    await Promise.all([
-      writeFile(convPath, content, "utf8"),
-      writeFile(metaPath, JSON.stringify(meta, null, 2), "utf8"),
-    ]);
-  } catch { /* non-blocking */ }
-
-  return { content, fromCache: false, fileCount: files.length, tokenCount };
+  const fromCache = !forceRefresh;
+  return { conventions, rules, skills, fromCache };
 }
 
-export async function refreshConventions(
+export async function refreshAll(
   provider: NineRouterProvider,
   plannerModel: string,
-): Promise<ConventionSynthesisResult | null> {
-  // Delete cache to force re-synthesis
-  const { meta: metaPath } = cachePaths();
-  try { await writeFile(metaPath, "{}", "utf8"); } catch { /* ignore */ }
-  return loadOrSynthesizeConventions(provider, plannerModel);
+): Promise<SynthesisResult | null> {
+  return loadOrSynthesizeAll(provider, plannerModel, true);
 }
 
-export async function getCachedConventions(): Promise<string | null> {
-  try {
-    const content = await readFile(cachePaths().conventions, "utf8");
-    return content.trim() || null;
-  } catch { return null; }
+export async function getCachedContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {
+  const cp = cachePaths();
+  const [conventions, rules, skills] = await Promise.all([
+    readFile(cp.conventions.md, "utf8").then((s) => s.trim() || null).catch(() => null),
+    readFile(cp.rules.md, "utf8").then((s) => s.trim() || null).catch(() => null),
+    readFile(cp.skills.md, "utf8").then((s) => s.trim() || null).catch(() => null),
+  ]);
+  return { conventions, rules, skills };
 }

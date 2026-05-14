@@ -92,6 +92,9 @@ export interface UIState {
   // Agent history (ChatMessage[] sent to provider)
   agentHistory: Array<{ role: string; content: string; toolCalls?: unknown[] }>;
 
+  // Background synthesis status
+  synthRunning: boolean;
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -147,6 +150,7 @@ export function createInitialState(opts: {
       availableModels: opts.availableModels ?? [],
     },
     agentHistory: [],
+    synthRunning: false,
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

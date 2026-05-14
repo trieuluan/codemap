@@ -18,7 +18,7 @@ import {
   loadSession,
   findLastSession,
 } from "../session-store.js";
-import { loadOrSynthesizeConventions } from "../../convention-synthesizer.js";
+import { loadOrSynthesizeAll } from "../../convention-synthesizer.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
@@ -213,7 +213,14 @@ export class ChatTerminal {
       profiles.find((p) => p.id === "planner")?.model ??
       profiles.find((p) => p.id === "coder")?.model ??
       this.store.getState().config.model;
-    loadOrSynthesizeConventions(this.options.provider, plannerModel).catch(() => {});
+    this.store.dispatch({ synthRunning: true });
+    this.bus.scheduleRefresh();
+    loadOrSynthesizeAll(this.options.provider, plannerModel)
+      .catch(() => {})
+      .finally(() => {
+        this.store.dispatch({ synthRunning: false });
+        this.bus.scheduleRefresh();
+      });
 
     const { startPiTuiApp } = await import("./pi-tui-app.js");
     await startPiTuiApp(this);

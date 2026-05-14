@@ -1,31 +1,38 @@
 import type { Command } from "./types.js";
-import { loadOrSynthesizeConventions, refreshConventions } from "../../convention-synthesizer.js";
+import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../convention-synthesizer.js";
+
+function getPlannerModel(ctx: Parameters<typeof conventionsCommand.execute>[1]): string {
+  const profiles = (ctx as unknown as { profiles?: Array<{ id: string; model: string }> }).profiles;
+  return (
+    profiles?.find((p) => p.id === "planner")?.model ??
+    profiles?.find((p) => p.id === "coder")?.model ??
+    ctx.currentModel
+  );
+}
 
 export const conventionsCommand: Command = {
   name: "conventions",
-  description: "Show synthesized project conventions. Use 'refresh' to re-synthesize from source files.",
+  description: "Show synthesized conventions/rules/skills. Use 'refresh' to re-synthesize.",
   execute: async (args, ctx) => {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
     const sub = args.trim().toLowerCase();
-    const profiles = (ctx as unknown as { profiles?: Array<{ id: string; model: string }> }).profiles;
-    const plannerModel =
-      profiles?.find((p) => p.id === "planner")?.model ??
-      profiles?.find((p) => p.id === "coder")?.model ??
-      ctx.currentModel;
+    const plannerModel = getPlannerModel(ctx);
 
     if (sub === "refresh") {
       ctx.setBusy(true);
-      append("Re-synthesizing project conventions…");
+      append("Re-synthesizing conventions, rules and skills in parallel…");
       try {
-        const result = await refreshConventions(ctx.provider, plannerModel);
+        const result = await refreshAll(ctx.provider, plannerModel);
         if (!result) {
-          append("No convention files found in workspace.");
+          append("No convention/rule/skill files found in workspace.");
         } else {
-          append(
-            `**Conventions refreshed** · ${result.fileCount} files · ~${result.tokenCount} tokens\n\n${result.content}`,
-          );
+          const parts: string[] = [];
+          if (result.conventions) parts.push(`### Conventions\n${result.conventions}`);
+          if (result.rules) parts.push(`### Rules\n${result.rules}`);
+          if (result.skills) parts.push(`### Skills\n${result.skills}`);
+          append(`**Refreshed** (3 synthesis runs in parallel)\n\n${parts.join("\n\n---\n\n")}`);
         }
       } catch (err) {
         append(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -34,20 +41,29 @@ export const conventionsCommand: Command = {
       return;
     }
 
-    // Show current (load or synthesize if not cached)
+    // Show cached or synthesize
     ctx.setBusy(true);
     try {
-      const result = await loadOrSynthesizeConventions(ctx.provider, plannerModel);
-      if (!result) {
-        append(
-          "No convention files found.\n\nSupported: `CLAUDE.md`, `.claude/rules/*.md`, `.cursorrules`, `.cursor/rules/*.mdc`, `.windsurfrules`, `.github/copilot-instructions.md`, `.clinerules`, `AGENTS.md`, `CONVENTIONS.md`",
-        );
-      } else {
-        const source = result.fromCache ? "cached" : "freshly synthesized";
-        append(
-          `**Project conventions** (${source} · ${result.fileCount} files · ~${result.tokenCount} tokens)\n\n${result.content}\n\n---\n_/conventions refresh — re-synthesize from source files_`,
-        );
+      let cached = await getCachedContext();
+      const hasCache = cached.conventions || cached.rules || cached.skills;
+
+      if (!hasCache) {
+        append("No cache found. Synthesizing now (running 3 streams in parallel)…");
+        const result = await loadOrSynthesizeAll(ctx.provider, plannerModel);
+        if (!result) {
+          append("No convention/rule/skill files found in workspace.");
+          ctx.setBusy(false);
+          return;
+        }
+        cached = result;
       }
+
+      const parts: string[] = [];
+      if (cached.conventions) parts.push(`### Conventions\n${cached.conventions}`);
+      if (cached.rules) parts.push(`### Rules\n${cached.rules}`);
+      if (cached.skills) parts.push(`### Skills & Workflows\n${cached.skills}`);
+
+      append(`**Project context** (3 synthesized files)\n\n${parts.join("\n\n---\n\n")}\n\n---\n_/conventions refresh — re-synthesize from source files_`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }

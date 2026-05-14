@@ -7,7 +7,7 @@ export const C_GREEN = fg(34, 197, 94);
 export const C_YELLOW = fg(250, 204, 21);
 export const C_RED = fg(248, 113, 113);
 
-export const SPINNER = ["|", "/", "-", "\\"] as const;
+export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
 export const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1006h";
 export const DISABLE_MOUSE_TRACKING = "\x1b[?1000l\x1b[?1006l";
