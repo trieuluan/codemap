@@ -48,8 +48,7 @@ export async function loadGatewayConfig(
   const defaultProfile =
     fileConfig.value?.defaultProfile ??
     process.env.CODEMAP_LLM_GATEWAY_DEFAULT_PROFILE ??
-    profiles[0]?.id ??
-    "fast";
+    "coder";
 
   return {
     baseUrl: trimTrailingSlash(baseUrl),
@@ -100,7 +99,7 @@ export function buildDefaultGatewayFile(
   return {
     baseUrl: trimTrailingSlash(overrides.baseUrl ?? DEFAULT_BASE_URL),
     mode: overrides.mode ?? DEFAULT_MODE,
-    defaultProfile: "fast",
+    defaultProfile: "coder",
     profiles: buildDefaultProfiles(),
   };
 }
@@ -108,25 +107,36 @@ export function buildDefaultGatewayFile(
 export function buildDefaultProfiles(): ModelProfile[] {
   return [
     {
-      id: "fast",
-      label: "Fast coding model",
+      id: "planner",
+      label: "Planner model (task breakdown)",
       provider: "9router",
       model:
-        process.env.CODEMAP_LLM_GATEWAY_FAST_MODEL ??
+        process.env.CODEMAP_LLM_GATEWAY_PLANNER_MODEL ??
         process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "auto.fast",
-      tier: "fast",
+        "planner",
+      tier: "planner",
       local: false,
     },
     {
-      id: "strong",
-      label: "Strong coding model",
+      id: "coder",
+      label: "Coder model (implementation)",
       provider: "9router",
       model:
-        process.env.CODEMAP_LLM_GATEWAY_STRONG_MODEL ??
+        process.env.CODEMAP_LLM_GATEWAY_CODER_MODEL ??
         process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "auto.strong",
-      tier: "strong",
+        "coder",
+      tier: "coder",
+      local: false,
+    },
+    {
+      id: "reviewer",
+      label: "Reviewer model (code review & test)",
+      provider: "9router",
+      model:
+        process.env.CODEMAP_LLM_GATEWAY_REVIEWER_MODEL ??
+        process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
+        "reviewer",
+      tier: "reviewer",
       local: false,
     },
     {
@@ -194,8 +204,9 @@ function hasEnvironmentConfig(): boolean {
     "CODEMAP_LLM_GATEWAY_MODE",
     "CODEMAP_LLM_GATEWAY_DEFAULT_PROFILE",
     "CODEMAP_LLM_GATEWAY_DEFAULT_MODEL",
-    "CODEMAP_LLM_GATEWAY_FAST_MODEL",
-    "CODEMAP_LLM_GATEWAY_STRONG_MODEL",
+    "CODEMAP_LLM_GATEWAY_PLANNER_MODEL",
+    "CODEMAP_LLM_GATEWAY_CODER_MODEL",
+    "CODEMAP_LLM_GATEWAY_REVIEWER_MODEL",
     "CODEMAP_LLM_GATEWAY_LOCAL_MODEL",
   ].some((key) => process.env[key]);
 }

@@ -1,10 +1,13 @@
 import type { GatewayMode, ChatMessage } from "../../types.js";
 import type { ChatEntry } from "../ui/chat-terminal.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
+import type { NineRouterProvider } from "../../provider.js";
 
 export interface CommandContext {
   currentModel: string;
   currentMode: GatewayMode;
+  provider: NineRouterProvider;
+  reviewerModel: string;
   profileId: string;
   history: ChatMessage[];
   availableModels?: string[];
@@ -22,6 +25,9 @@ export interface CommandContext {
   compactHistory: () => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean }>;
   resend: () => void;
   exit: () => void;
+  currentSessionId?: string;
+  newSession?: () => void;
+  loadSessionById?: (sessionId: string) => void;
 }
 
 export interface Command {

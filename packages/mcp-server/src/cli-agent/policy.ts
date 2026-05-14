@@ -73,14 +73,11 @@ function chooseTier(
   mode: GatewayMode,
 ): ModelProfile["tier"] {
   if (mode === "local-only") return "local";
-  if (risk === "high") return "strong";
-  if (taskType === "review" || taskType === "debugging" || taskType === "refactor") {
-    return "strong";
-  }
-  if (taskType === "research" || taskType === "test" || taskType === "general") {
-    return "fast";
-  }
-  return risk === "medium" ? "strong" : "fast";
+  if (taskType === "review" || taskType === "debugging") return "reviewer";
+  if (taskType === "refactor") return risk === "high" ? "coder" : "reviewer";
+  if (taskType === "feature" || taskType === "bugfix") return risk === "low" ? "planner" : "coder";
+  if (taskType === "research" || taskType === "test" || taskType === "general") return "planner";
+  return risk === "high" ? "coder" : "planner";
 }
 
 function chooseFallbackProfile(
@@ -89,7 +86,7 @@ function chooseFallbackProfile(
   mode: GatewayMode,
 ): ModelProfile | undefined {
   if (mode === "local-only") return undefined;
-  return profiles.find((profile) => profile.id !== selected.id && profile.tier === "fast") ??
+  return profiles.find((profile) => profile.id !== selected.id && profile.tier === "planner") ??
     profiles.find((profile) => profile.id !== selected.id);
 }
 
@@ -101,8 +98,9 @@ function buildReasons(
 ): string[] {
   const reasons = [`classified as ${taskType}`, `risk is ${risk}`];
   if (mode === "local-only") reasons.push("local-only mode requires local profile");
-  if (profile.tier === "strong") reasons.push("selected strong profile for reasoning-heavy work");
-  if (profile.tier === "fast") reasons.push("selected fast profile for low-latency work");
+  if (profile.tier === "coder") reasons.push("selected coder profile for implementation work");
+  if (profile.tier === "reviewer") reasons.push("selected reviewer profile for review/debug work");
+  if (profile.tier === "planner") reasons.push("selected planner profile for fast low-risk work");
   if (profile.tier === "local") reasons.push("selected local profile for privacy/offline preference");
   return reasons;
 }

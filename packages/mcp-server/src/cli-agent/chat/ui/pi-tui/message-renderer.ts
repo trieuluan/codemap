@@ -105,7 +105,7 @@ export function messageLines(messages: Message[], width: number): string[] {
       const toolName = truncate(msg.toolName ?? "tool", 20);
       const prefixW = Math.min(9 + toolName.length + 1, 32);
       const bodyW = Math.max(20, width - prefixW);
-      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW);
+      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW, { noHighlight: true });
       const limit = toolLineLimit(msg);
       const lines = rawLines.length > limit
         ? [...rawLines.slice(0, limit), `${C_GRAY}... ${rawLines.length - limit} more lines${RESET}`]

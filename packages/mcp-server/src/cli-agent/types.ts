@@ -1,4 +1,4 @@
-export type ModelTier = "fast" | "strong" | "local";
+export type ModelTier = "planner" | "coder" | "reviewer" | "local";
 
 export type GatewayMode =
   | "hybrid"

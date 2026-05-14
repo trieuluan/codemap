@@ -19,7 +19,8 @@ import { fitLine } from "./pi-tui/text.js";
 import { getModeDisplay } from "../commands/route-policy.js";
 
 function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
-  return phase === "thinking" || phase === "tool" || phase === "streaming";
+  return phase === "thinking" || phase === "tool" || phase === "streaming"
+    || phase === "planning" || phase === "executing" || phase === "reviewing";
 }
 
 export { isActiveTaskPhase };
@@ -34,7 +35,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── render state ──────────────────────────────────────────────────────────
   let stopped = false;
-  let bottomHeight = 0;         // lines currently in the bottom panel
+  // Total lines owned by the last doRefresh (streaming content + panel).
+  // Single source of truth for the erase-and-redraw cycle — replaces the
+  // old separate bottomHeight + streamingLinesInScrollback pair that could
+  // drift out of sync when doEditorRefresh changed the panel size between
+  // full refreshes, causing duplicate messages in the scrollback.
+  let lastManagedLines = 0;
+  // Current panel height (may be updated by doEditorRefresh when autocomplete
+  // opens/closes). doEditorRefresh keeps lastManagedLines in sync via delta.
+  let currentBottomHeight = 0;
   let printedMsgCount = 0;      // messages committed to scrollback
   let frame = 0;                // spinner frame index
   // How many lines the hardware cursor is ABOVE the "below-panel" row.
@@ -45,10 +54,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // Where the editor starts within the bottom panel (lines from panel top).
   // Tracked so doEditorRefresh() can skip re-rendering the static upper part.
   let editorStartInPanel = 0;
-  // Lines of the active streaming message currently written into the scrollback.
-  // On each doRefresh these are erased together with the panel and rewritten,
-  // giving a smooth in-place update instead of a flash-then-commit effect.
-  let streamingLinesInScrollback = 0;
   // Debounce: coalesce rapid full-refresh calls into one microtask flush.
   let refreshQueued = false;
   let confirmSelection = 0;
@@ -123,14 +128,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       linesFromCursorToEnd = 0;
     }
 
-    // Erase panel + streaming content that was written to scrollback last frame.
-    // Both are erased together so there is no gap between the two areas.
-    const totalErase = bottomHeight + streamingLinesInScrollback;
-    if (totalErase > 0) {
-      buf += `\x1b[${totalErase}A\x1b[J`;
+    // Erase everything owned by the previous render in one shot.
+    if (lastManagedLines > 0) {
+      buf += `\x1b[${lastManagedLines}A\x1b[J`;
     }
-    bottomHeight = 0;
-    streamingLinesInScrollback = 0;
+    lastManagedLines = 0;
+    currentBottomHeight = 0;
 
     // /clear resets the message array — print a visual divider and reset counter.
     if (state.messages.length < printedMsgCount) {
@@ -150,28 +153,30 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       printedMsgCount = commitUntil;
     }
 
-    // Write the active streaming message directly into the scrollback so it
+    // Write the active streaming message into the managed area so it
     // grows smoothly with each token — no flash when streaming ends.
+    let streamingLines = 0;
     if (streaming && state.messages.length > 0) {
       const streamingMsg = state.messages[state.messages.length - 1]!;
       const sLines = messageLines([streamingMsg], w - 2);
       buf += sLines.join("\r\n") + "\r\n";
-      streamingLinesInScrollback = sLines.length;
+      streamingLines = sLines.length;
     }
 
-    // Draw the bottom panel (no streaming preview — content is in scrollback).
+    // Draw the bottom panel.
     const { lines: bottom, cursorRow, cursorCol, editorStart } = buildBottom(state, w);
     editorStartInPanel = editorStart;
     buf += bottom.join("\r\n") + "\r\n";
-    bottomHeight = bottom.length;
+    currentBottomHeight = bottom.length;
+    lastManagedLines = streamingLines + currentBottomHeight;
 
     // Reposition hardware cursor inside the editor for macOS IME support.
     // CUU (cursor up) is relative — safe across scrollback shifts.
     if (cursorRow >= 0) {
-      const upLines = bottomHeight - cursorRow; // lines from below-panel to editor row
+      const upLines = currentBottomHeight - cursorRow;
       if (upLines > 0) buf += `\x1b[${upLines}A`;
-      buf += `\x1b[${cursorCol + 1}G`; // column is 1-indexed
-      linesFromCursorToEnd = upLines;   // remember offset for next doRefresh
+      buf += `\x1b[${cursorCol + 1}G`;
+      linesFromCursorToEnd = upLines;
     } else {
       linesFromCursorToEnd = 0;
     }
@@ -226,7 +231,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     const { lines: editorLines, cursorRow, cursorCol } = renderEditor(w, editorStartInPanel);
     const newEditorAndBelow = editorLines.length + 1; // +1 for status bar
-    const oldEditorAndBelow = bottomHeight - editorStartInPanel;
+    const oldEditorAndBelow = currentBottomHeight - editorStartInPanel;
 
     // Synchronized output: terminal buffers all rendering until the closing
     // sequence, then paints everything at once — eliminates text/cursor flicker.
@@ -249,11 +254,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     // If the panel shrank (autocomplete closed), clear the orphaned tail lines.
     if (newEditorAndBelow < oldEditorAndBelow) buf += "\x1b[J";
 
-    bottomHeight = editorStartInPanel + newEditorAndBelow;
+    // Keep lastManagedLines in sync so the next doRefresh erases the correct
+    // amount regardless of how many times autocomplete grew or shrank here.
+    const delta = newEditorAndBelow - oldEditorAndBelow;
+    currentBottomHeight = editorStartInPanel + newEditorAndBelow;
+    lastManagedLines += delta;
 
     // Reposition hardware cursor inside the editor for IME, then show it again.
     if (cursorRow >= 0) {
-      const upLines = bottomHeight - cursorRow;
+      const upLines = currentBottomHeight - cursorRow;
       if (upLines > 0) buf += `\x1b[${upLines}A`;
       buf += `\x1b[${cursorCol + 1}G`;
       linesFromCursorToEnd = upLines;
@@ -312,11 +321,22 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
           ? ` · t ${formatTokenCount(turnTok)} · s ${formatTokenCount(sessTok)} tok`
           : "";
       const tool = state.task.toolName ? ` · ${state.task.toolName}` : "";
+      const model = state.task.model ? ` ${C_GRAY}${truncate(state.task.model, 28)}${RESET}` : "";
+      const phaseLabel: Record<string, string> = {
+        planning: "planning...",
+        executing: "executing...",
+        reviewing: "reviewing...",
+        thinking: "thinking",
+        streaming: "streaming",
+        tool: "tool",
+        done: "done",
+      };
+      const label = phaseLabel[state.task.phase] ?? state.task.phase;
       const marker =
         state.task.phase === "done"
           ? `${C_GREEN}✓${RESET}`
           : `${C_CYAN}${SPINNER[frame]}${RESET}`;
-      out.push(fitLine(` ${marker} ${state.task.phase}${tool} · ${elapsed}${usage}`, w));
+      out.push(fitLine(` ${marker} ${label}${model}${tool} · ${elapsed}${usage}`, w));
     }
 
     // Hint bar.
@@ -445,12 +465,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       process.stdout.write(`\x1b[${linesFromCursorToEnd}B\r`);
       linesFromCursorToEnd = 0;
     }
-    const totalErase = bottomHeight + streamingLinesInScrollback;
-    if (totalErase > 0) {
-      process.stdout.write(`\x1b[${totalErase}A\x1b[J`);
+    if (lastManagedLines > 0) {
+      process.stdout.write(`\x1b[${lastManagedLines}A\x1b[J`);
     }
-    bottomHeight = 0;
-    streamingLinesInScrollback = 0;
+    lastManagedLines = 0;
+    currentBottomHeight = 0;
     doRefresh();
   }
 

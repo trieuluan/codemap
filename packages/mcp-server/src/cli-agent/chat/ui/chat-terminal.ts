@@ -1,7 +1,8 @@
 import type { NineRouterProvider } from "../../provider.js";
-import type { ChatMessage, GatewayMode, TokenUsage } from "../../types.js";
+import type { ChatMessage, GatewayMode, ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { runAgentLoop, type ConfirmEditFn } from "../agent/agent-loop.js";
+import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
 import { executeCommand } from "../commands/index.js";
@@ -11,6 +12,12 @@ import {
 } from "../commands/route-policy.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../file-search.js";
+import {
+  createSession,
+  saveSession,
+  loadSession,
+  findLastSession,
+} from "../session-store.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
@@ -73,6 +80,7 @@ interface ChatTerminalOptions {
   toolClient: CodeMapMcpToolClient;
   profileId: string;
   mode: GatewayMode;
+  profiles?: ModelProfile[];
   availableModels?: string[];
   apiToken?: string; // from McpServerConfig — used to detect unauthenticated state
   mcpConfig?: import("../../../config.js").McpServerConfig;
@@ -90,6 +98,8 @@ export class ChatTerminal {
   private logger: DebugLogger | null = null;
   private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
+  private _sessionId: string | null = null;
+  private _gitMeta: { repo: string; branch: string } = { repo: "", branch: "" };
 
   constructor(options: ChatTerminalOptions) {
     this.options = options;
@@ -185,15 +195,100 @@ export class ChatTerminal {
     // Warm up file search index so @ mention is instant on first use
     await warmupFileSearch();
 
-    // Git workspace info (non-blocking)
-    tryGetCurrentWorkspaceInfo()
-      .then((info) => {
-        if (info) this.store.dispatch({ workspace: { repoName: info.repoName, branch: info.branch } });
-      })
-      .catch(() => {});
+    // Git workspace info + session init
+    try {
+      const info = await tryGetCurrentWorkspaceInfo();
+      if (info) {
+        this.store.dispatch({ workspace: { repoName: info.repoName, branch: info.branch } });
+        this._gitMeta = { repo: info.repoName ?? "", branch: info.branch ?? "" };
+      }
+    } catch { /* non-blocking */ }
+
+    await this.initSession();
 
     const { startPiTuiApp } = await import("./pi-tui-app.js");
     await startPiTuiApp(this);
+  }
+
+  // ─── Session management ───────────────────────────────────
+
+  private async initSession(): Promise<void> {
+    const { repo, branch } = this._gitMeta;
+    const model = this.store.getState().config.model;
+    try {
+      const last = findLastSession(repo, branch);
+      if (last) {
+        const loaded = loadSession(last.id);
+        if (loaded && loaded.agentHistory.length > 0) {
+          this._sessionId = last.id;
+          this.store.dispatch({
+            agentHistory: loaded.agentHistory,
+            messages: [
+              ...loaded.uiMessages,
+              {
+                role: "system",
+                content: `_Session resumed · ${loaded.agentHistory.length} messages · ${last.name}_`,
+              },
+            ],
+          });
+          return;
+        }
+      }
+    } catch { /* fallback to new session */ }
+    this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
+  }
+
+  private persistSession(): void {
+    if (!this._sessionId) return;
+    const s = this.store.getState();
+    const tokenCount = s.sessionUsage.totalTokens;
+    const model = s.task.model ?? s.config.model;
+    try {
+      saveSession(
+        this._sessionId,
+        s.agentHistory as ChatMessage[],
+        s.messages,
+        tokenCount,
+        model,
+      );
+    } catch { /* non-blocking */ }
+  }
+
+  startNewSession(): void {
+    const { repo, branch } = this._gitMeta;
+    const model = this.store.getState().config.model;
+    try {
+      this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
+    } catch { /* ignore */ }
+    this.store.dispatch({
+      agentHistory: [],
+      messages: [],
+      sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+  }
+
+  loadSessionById(sessionId: string): void {
+    try {
+      const loaded = loadSession(sessionId);
+      if (!loaded) {
+        this.appendMessage({ role: "system", content: "Session not found." });
+        return;
+      }
+      this._sessionId = sessionId;
+      this.store.dispatch({
+        agentHistory: loaded.agentHistory,
+        messages: [
+          ...loaded.uiMessages,
+          {
+            role: "system",
+            content: `_Session loaded · ${loaded.agentHistory.length} messages · ${loaded.session.name}_`,
+          },
+        ],
+        sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      });
+    } catch (err) {
+      this.appendMessage({ role: "system", content: `Failed to load session: ${err}` });
+    }
   }
 
   // ─── Submit ──────────────────────────────────────────────
@@ -202,9 +297,16 @@ export class ChatTerminal {
     await this.handleSubmitWithContent(text, text);
   }
 
-  async handleSubmitWithContent(displayText: string, contentText: string): Promise<void> {
+  async handleSubmitWithContent(displayText: string, contentText: string, forceMultiPhase = false): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;
+
+    // /plan <message> — strip prefix, run multi-phase
+    if (/^\/plan\s+/i.test(displayText)) {
+      const taskText = displayText.replace(/^\/plan\s+/i, "").trim();
+      await this.handleSubmitWithContent(taskText, taskText, true);
+      return;
+    }
 
     // Command dispatch
     if (displayText.startsWith("/")) {
@@ -242,6 +344,76 @@ export class ChatTerminal {
     let hasStreamingEntry = false;
     let lastTurnUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
+    const resetStreaming = () => { streamingContent = ""; hasStreamingEntry = false; };
+
+    const sharedCallbacks = {
+      onToken: (token: string) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        const s = this.store.getState();
+        if (!s.task || s.task.phase === "idle") return;
+        streamingContent += token;
+        if (!hasStreamingEntry) {
+          hasStreamingEntry = true;
+          this.appendMessage({ role: "assistant", content: streamingContent });
+        } else {
+          this.updateLastAssistantMessage(streamingContent);
+        }
+        this.store.dispatch({ task: { ...s.task, phase: "streaming" } });
+        this.bus.scheduleRefresh();
+      },
+      onModel: (model: string) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.store.dispatch({ task: { ...this.store.getState().task, model } });
+      },
+      onUsage: (usage: TokenUsage) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        const delta = subtractUsage(usage, lastTurnUsage);
+        lastTurnUsage = usage;
+        this.store.dispatch((prev) => ({
+          task: { ...prev.task, usage },
+          sessionUsage: addUsage(prev.sessionUsage, delta),
+        }));
+      },
+      onToolStart: (name: string, args: string, id: string) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.logger?.logToolStart(name, args, id);
+        resetStreaming();
+        const s = this.store.getState();
+        this.store.dispatch({
+          task: { ...s.task, phase: "tool", toolName: name, toolArgs: args, toolsCalled: s.task.toolsCalled + 1 },
+        });
+        this.appendMessage({
+          role: "tool",
+          content: `Calling: ${name}(${args.length > 200 ? args.slice(0, 200) + "..." : args})`,
+          toolName: name,
+        });
+      },
+      onToolResult: (name: string, resultText: string) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.logger?.logToolResult(name, resultText);
+        resetStreaming();
+        this.store.dispatch({
+          task: { ...this.store.getState().task, phase: "executing", toolName: undefined, toolArgs: undefined },
+        });
+        this.appendMessage({ role: "tool", content: resultText, toolName: `${name} result` });
+      },
+      onDebug: (info: Record<string, unknown>) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        if (!this.store.getState().debug) return;
+        if (info.event === "stream_request") {
+          this.logger?.logStreamRequest({
+            model: String(info.model ?? ""),
+            messageCount: Number(info.messageCount ?? 0),
+            toolCount: Number(info.toolCount ?? 0),
+            hasSystem: Boolean(info.hasSystem),
+            toolsCalled: this.store.getState().task.toolsCalled,
+          });
+        } else if (info.event === "tool_fallback") {
+          this.logger?.logToolFallback(String(info.reason ?? ""));
+        }
+      },
+    };
+
     try {
       const mentionContext = await hydrateMentionContext(contentText);
       if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -249,82 +421,52 @@ export class ChatTerminal {
         this.appendMessage({ role: "system", content: `⚠ ${warning}` });
       }
 
-      const result = await runAgentLoop({
-        provider: this.options.provider,
-        model: this.store.getState().config.model,
-        history: this.store.getState().agentHistory as ChatMessage[],
-        userMessage: { role: "user", content: mentionContext.content },
-        toolClient: this.options.toolClient,
-        debug: this.store.getState().debug,
-        signal: taskAbort.signal,
-        compactor: this.compactor,
-        confirmEdit: this.makeConfirmEdit(),
-        onToken: (token) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          const s = this.store.getState();
-          if (!s.task || s.task.phase === "idle") return;
-          streamingContent += token;
-          if (!hasStreamingEntry) {
-            hasStreamingEntry = true;
-            this.appendMessage({ role: "assistant", content: streamingContent });
-          } else {
-            this.updateLastAssistantMessage(streamingContent);
-          }
-          this.store.dispatch({ task: { ...s.task, phase: "streaming" } });
-          this.bus.scheduleRefresh();
-        },
-        onModel: (model) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          this.store.dispatch({ task: { ...this.store.getState().task, model } });
-        },
-        onUsage: (usage) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          const delta = subtractUsage(usage, lastTurnUsage);
-          lastTurnUsage = usage;
-          this.store.dispatch((prev) => ({
-            task: { ...prev.task, usage },
-            sessionUsage: addUsage(prev.sessionUsage, delta),
-          }));
-        },
-        onToolStart: (name, args, id) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          this.logger?.logToolStart(name, args, id);
-          streamingContent = ""; hasStreamingEntry = false;
-          const s = this.store.getState();
-          this.store.dispatch({
-            task: { ...s.task, phase: "tool", toolName: name, toolArgs: args, toolsCalled: s.task.toolsCalled + 1 },
+      const profiles = this.options.profiles ?? [];
+      const plannerProfile = profiles.find((p) => p.id === "planner");
+      const coderProfile = profiles.find((p) => p.id === "coder");
+      const reviewerProfile = profiles.find((p) => p.id === "reviewer");
+      const useMultiPhase = !!(plannerProfile && coderProfile && reviewerProfile)
+        && (forceMultiPhase || isPlanRequest(contentText));
+
+      const result = useMultiPhase
+        ? await runMultiPhaseAgentLoop({
+            provider: this.options.provider,
+            plannerModel: plannerProfile!.model,
+            coderModel: coderProfile!.model,
+            reviewerModel: reviewerProfile!.model,
+            history: this.store.getState().agentHistory as ChatMessage[],
+            userMessage: { role: "user", content: mentionContext.content },
+            toolClient: this.options.toolClient,
+            debug: this.store.getState().debug,
+            signal: taskAbort.signal,
+            compactor: this.compactor,
+            confirmEdit: this.makeConfirmEdit(),
+            onPhaseStart: (phase, model) => {
+              if (!this.isActiveTask(taskId, taskAbort)) return;
+              resetStreaming();
+              this.store.dispatch({ task: { ...this.store.getState().task, phase, model } });
+              this.bus.scheduleRefresh();
+            },
+            onPlanReady: (plan) => {
+              if (!this.isActiveTask(taskId, taskAbort)) return;
+              resetStreaming();
+              this.appendMessage({ role: "tool", content: plan, toolName: "plan" });
+              this.bus.scheduleRefresh();
+            },
+            ...sharedCallbacks,
+          })
+        : await runAgentLoop({
+            provider: this.options.provider,
+            model: this.store.getState().config.model,
+            history: this.store.getState().agentHistory as ChatMessage[],
+            userMessage: { role: "user", content: mentionContext.content },
+            toolClient: this.options.toolClient,
+            debug: this.store.getState().debug,
+            signal: taskAbort.signal,
+            compactor: this.compactor,
+            confirmEdit: this.makeConfirmEdit(),
+            ...sharedCallbacks,
           });
-          this.appendMessage({
-            role: "tool",
-            content: `Calling: ${name}(${args.length > 200 ? args.slice(0, 200) + "..." : args})`,
-            toolName: name,
-          });
-        },
-        onToolResult: (name, resultText) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          this.logger?.logToolResult(name, resultText);
-          streamingContent = ""; hasStreamingEntry = false;
-          this.store.dispatch({
-            task: { ...this.store.getState().task, phase: "thinking", toolName: undefined, toolArgs: undefined },
-          });
-          this.appendMessage({ role: "tool", content: resultText, toolName: `${name} result` });
-        },
-        onDebug: (info) => {
-          if (!this.isActiveTask(taskId, taskAbort)) return;
-          if (!this.store.getState().debug) return;
-          if (info.event === "stream_request") {
-            this.logger?.logStreamRequest({
-              model: String(info.model ?? ""),
-              messageCount: Number(info.messageCount ?? 0),
-              toolCount: Number(info.toolCount ?? 0),
-              hasSystem: Boolean(info.hasSystem),
-              toolsCalled: this.store.getState().task.toolsCalled,
-            });
-          } else if (info.event === "tool_fallback") {
-            this.logger?.logToolFallback(String(info.reason ?? ""));
-          }
-        },
-      });
 
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const s = this.store.getState();
@@ -361,6 +503,7 @@ export class ChatTerminal {
       this.store.dispatch((prev) => ({
         agentHistory: [...(prev.agentHistory as ChatMessage[]), ...result.messages],
       }));
+      this.persistSession();
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
@@ -518,9 +661,16 @@ export class ChatTerminal {
 
   private buildCommandContext() {
     const s = this.store.getState();
+    const profiles = this.options.profiles ?? [];
+    const reviewerModel =
+      profiles.find((p) => p.id === "reviewer")?.model ??
+      profiles.find((p) => p.id === "coder")?.model ??
+      s.config.model;
     return {
       currentModel: s.config.model,
       currentMode: s.config.mode,
+      provider: this.options.provider,
+      reviewerModel,
       profileId: s.config.profile,
       history: s.agentHistory as ChatMessage[],
       availableModels: s.config.availableModels,
@@ -572,6 +722,16 @@ export class ChatTerminal {
         process.stdout.write("\x1b[?1000l\x1b[?1006l");
         process.exit(0);
       },
+      currentSessionId: this._sessionId ?? undefined,
+      newSession: () => this.startNewSession(),
+      loadSessionById: (id: string) => this.loadSessionById(id),
     };
   }
+}
+
+const PLAN_KEYWORDS =
+  /\b(lên plan|plan trước|plan đi|make a plan|create a plan|plan first|plan this|draw up a plan)\b/i;
+
+function isPlanRequest(text: string): boolean {
+  return PLAN_KEYWORDS.test(text);
 }

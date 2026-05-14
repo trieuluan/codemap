@@ -12,6 +12,10 @@ import { debugCommand } from "./debug.js";
 import { retryCommand } from "./retry.js";
 import { mcpCommand } from "./mcp.js";
 import { compactCommand } from "./compact.js";
+import { gitCommitCommand } from "./git-commit.js";
+import { gitPushCommand } from "./git-push.js";
+import { gitPrCommand } from "./git-pr.js";
+import { sessionsCommand } from "./sessions.js";
 
 import type { CommandContext, Command } from "./types.js";
 
@@ -23,6 +27,10 @@ const commands: Command[] = [
   modeCommand,
   toolsCommand,
   diffCommand,
+  gitCommitCommand,
+  gitPushCommand,
+  gitPrCommand,
+  sessionsCommand,
   clearCommand,
   historyCommand,
   debugCommand,

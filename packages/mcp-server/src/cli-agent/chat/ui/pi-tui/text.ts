@@ -137,7 +137,7 @@ function highlightCodeLine(raw: string, lang: string): string {
   return raw;
 }
 
-export function renderMarkdownish(text: string, width: number): string[] {
+export function renderMarkdownish(text: string, width: number, options?: { noHighlight?: boolean }): string[] {
   const out: string[] = [];
   let inCode = false;
   let codeLang = "";
@@ -154,7 +154,7 @@ export function renderMarkdownish(text: string, width: number): string[] {
 
     if (inCode) {
       const line = raw.length === 0 ? " " : raw;
-      const highlighted = highlightCodeLine(line, codeLang);
+      const highlighted = options?.noHighlight ? line : highlightCodeLine(line, codeLang);
       for (const wrapped of wrapPlain(highlighted, Math.max(8, width - 4))) {
         out.push(`${C_GRAY}    ${wrapped}${RESET}`);
       }

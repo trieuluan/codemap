@@ -26,6 +26,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       toolClient,
       profileId: profile.id,
       mode: mode ?? ctx.config.mode,
+      profiles: ctx.config.profiles,
       availableModels,
       apiToken: mcpConfig.apiToken ?? undefined,
       mcpConfig,
