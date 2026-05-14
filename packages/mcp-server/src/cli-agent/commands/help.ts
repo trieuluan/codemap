@@ -8,14 +8,14 @@ Usage:
   codemap init-gateway [--project] [--force] [--base-url http://localhost:4000/v1]
   codemap doctor
   codemap models
-  codemap route "fix a failing migration" [--mode hybrid|local-only|cloud-ok|ask-before-cloud]
+  codemap route "fix a failing migration" [--mode local-only|cloud-ok]
   codemap ask "Say hi" [--model fast|strong|local]
-  codemap chat [--model fast|strong|local] [--mode hybrid|local-only|cloud-ok|ask-before-cloud] [--no-stream]
+  codemap chat [--model fast|strong|local] [--mode local-only|cloud-ok] [--no-stream]
 
 Environment:
   CODEMAP_LLM_GATEWAY_BASE_URL       OpenAI-compatible base URL. Default: http://localhost:4000/v1
   CODEMAP_LLM_GATEWAY_API_KEY        Optional bearer token.
-  CODEMAP_LLM_GATEWAY_MODE           hybrid | local-only | cloud-ok | ask-before-cloud.
+  CODEMAP_LLM_GATEWAY_MODE           local-only | cloud-ok.
   CODEMAP_LLM_GATEWAY_DEFAULT_MODEL  Default model fallback.
   CODEMAP_LLM_GATEWAY_FAST_MODEL     Fast profile model.
   CODEMAP_LLM_GATEWAY_STRONG_MODEL   Strong profile model.

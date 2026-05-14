@@ -1,14 +1,24 @@
 import cfonts from "cfonts";
 import type { Message, UIState } from "../store.js";
 import { formatTime, gradientStr, truncate } from "../ink-utils.js";
-import { getModeDisplay } from "../../commands/route-policy.js";
-import { BOLD, RESET, C_CYAN, C_GRAY, C_GREEN, C_WHITE, C_YELLOW } from "./theme.js";
+import {
+  BG_USER,
+  BOLD,
+  C_ACTION,
+  C_AI,
+  C_ARCH,
+  C_GRAY,
+  C_MUTED,
+  C_WARNING,
+  C_WHITE,
+  RESET,
+} from "./theme.js";
 import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
 
 function generateBanner(): string[] {
   const result = cfonts.render("CODEMAP", {
     font: "simple3d",
-    gradient: ["cyan", "magenta"],
+    gradient: ["cyan", "blue", "magenta"],
     env: "node",
   });
   const raw = (result as { string?: string }).string ?? "";
@@ -40,12 +50,11 @@ function toolLineLimit(msg: Message): number {
 }
 
 export function headerLines(state: UIState): string[] {
-  const modeInfo = getModeDisplay(state.config.mode);
   const workspace = state.workspace?.repoName ?? state.config.profile;
   if (state.messages.length > 0) {
     return [
-      `${C_CYAN}${BOLD}codemap${RESET} ${C_GRAY}${workspace}${RESET} ${C_GRAY}|${RESET} ${C_WHITE}${truncate(state.config.model, 22)}${RESET} ${C_GRAY}|${RESET} ${C_GREEN}${modeInfo.label}${RESET} ${C_GRAY}|${RESET} ${C_CYAN}MCP connected${RESET}`,
-      `${C_GRAY}${"-".repeat(72)}${RESET}`,
+      `${C_ACTION}${BOLD}codemap${RESET} ${C_GRAY}${workspace}${RESET} ${C_MUTED}|${RESET} ${C_WHITE}${truncate(state.config.model, 28)}${RESET} ${C_MUTED}|${RESET} ${C_ACTION}MCP connected${RESET}`,
+      `${C_MUTED}${"-".repeat(72)}${RESET}`,
     ];
   }
   return [
@@ -53,19 +62,18 @@ export function headerLines(state: UIState): string[] {
     ...BANNER_LINES,
     gradientStr(
       "  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM",
-      { r: 34, g: 211, b: 238 },
-      { r: 168, g: 85, b: 247 },
+      { r: 88, g: 213, b: 247 },
+      { r: 244, g: 114, b: 182 },
       false,
     ),
     "",
     [
-      `${C_CYAN}o${RESET} ${C_WHITE}v0.1.0${RESET}`,
-      `${C_CYAN}@${RESET} ${C_WHITE}${truncate(workspace, 20)}${RESET}`,
-      `${C_CYAN}*${RESET} ${C_WHITE}${truncate(state.config.model, 24)}${RESET}`,
-      `${C_CYAN}~${RESET} ${C_GREEN}${modeInfo.label}${RESET}`,
-      `${C_CYAN}#${RESET} ${C_CYAN}Connected${RESET}`,
-    ].join(`  ${C_GRAY}|${RESET}  `).padStart(2),
-    `  ${C_CYAN}${BOLD}> Quick Start:${RESET} ${C_GRAY}/help for commands  .  @ for files  .  Tab for suggestions  .  Ctrl+C cancel${RESET}`,
+      `${C_ARCH}o${RESET} ${C_WHITE}v0.1.0${RESET}`,
+      `${C_ACTION}@${RESET} ${C_WHITE}${truncate(workspace, 20)}${RESET}`,
+      `${C_AI}*${RESET} ${C_WHITE}${truncate(state.config.model, 28)}${RESET}`,
+      `${C_ACTION}#${RESET} ${C_ACTION}Connected${RESET}`,
+    ].join(`  ${C_MUTED}|${RESET}  `).padStart(2),
+    `  ${C_ACTION}${BOLD}> Quick Start:${RESET} ${C_GRAY}/help for commands  .  @ for files  .  Tab for suggestions  .  Ctrl+C cancel${RESET}`,
     "",
   ];
 }
@@ -73,7 +81,7 @@ export function headerLines(state: UIState): string[] {
 export function messageLines(messages: Message[], width: number): string[] {
   if (messages.length === 0) {
     return [
-      `${C_CYAN}${BOLD}Welcome to CodeMap Agent${RESET}`,
+      `${C_ACTION}${BOLD}Welcome to CodeMap Agent${RESET}`,
       `${C_GRAY}Ask a question, mention files with @, or type /help.${RESET}`,
       "",
     ];
@@ -86,14 +94,13 @@ export function messageLines(messages: Message[], width: number): string[] {
   // tool:      "HH:MM:SS toolname: "  = 9 + name (capped)
   // system:    "HH:MM:SS system: "    = 17
   for (const msg of messages) {
-    const time = `${C_GRAY}${formatTime(msg.timestamp)}${RESET}`;
+    const time = `${C_MUTED}${formatTime(msg.timestamp)}${RESET}`;
     if (msg.role === "user") {
-      const BG = "\x1b[48;2;40;44;52m";
-      const bg = (raw: string) => BG + padToWidth(raw, width).replace(/\x1b\[0m/g, `\x1b[0m${BG}`) + RESET;
+      const bg = (raw: string) => BG_USER + padToWidth(raw, width).replace(/\x1b\[0m/g, `\x1b[0m${BG_USER}`) + RESET;
       const prefixW = 11;
       const bodyW = Math.max(20, width - prefixW - 2);
       const lines = renderMarkdownish(msg.content, bodyW);
-      out.push(bg(`${time} ${C_GREEN}>${RESET} ${lines[0] ?? ""}`));
+      out.push(bg(`${time} ${C_ACTION}>${RESET} ${lines[0] ?? ""}`));
       for (const line of lines.slice(1)) out.push(bg(`${" ".repeat(prefixW)}${line}`));
     } else if (msg.role === "assistant") {
       const prefixW = 9;
@@ -110,15 +117,16 @@ export function messageLines(messages: Message[], width: number): string[] {
       const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW, { noHighlight: !isPreview });
       const limit = toolLineLimit(msg);
       const lines = rawLines.length > limit
-        ? [...rawLines.slice(0, limit), `${C_GRAY}... ${rawLines.length - limit} more lines${RESET}`]
+        ? [...rawLines.slice(0, limit), `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`]
         : rawLines;
-      out.push(`${time} ${C_YELLOW}${toolName}:${RESET} ${C_GRAY}${lines[0] ?? ""}${RESET}`);
+      const toolColor = msg.toolName === "plan" || toolName.includes("plan") ? C_AI : C_WARNING;
+      out.push(`${time} ${toolColor}${toolName}:${RESET} ${C_GRAY}${lines[0] ?? ""}${RESET}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${isPreview ? "" : C_GRAY}${line}${RESET}`);
     } else if (msg.role === "system") {
       const prefixW = 17;
       const bodyW = Math.max(20, width - prefixW);
       const lines = renderMarkdownish(msg.content, bodyW);
-      out.push(`${time} ${C_GRAY}system:${RESET} ${lines[0] ?? ""}`);
+      out.push(`${time} ${C_MUTED}system:${RESET} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${line}`);
     } else {
       out.push(...renderMarkdownish(msg.content, width));

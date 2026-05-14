@@ -2,12 +2,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 
-import type { GatewayConfig, GatewayMode, ModelProfile } from "./types.js";
+import type { GatewayConfig, ModelProfile } from "./types.js";
 
 export interface FileGatewayConfig {
   baseUrl?: string;
   apiKey?: string;
-  mode?: GatewayMode;
   defaultProfile?: string;
   profiles?: ModelProfile[];
 }
@@ -19,11 +18,9 @@ export interface WriteGatewayConfigOptions {
   cwd?: string;
   force?: boolean;
   baseUrl?: string;
-  mode?: GatewayMode;
 }
 
 export const DEFAULT_BASE_URL = "http://localhost:4000/v1";
-const DEFAULT_MODE: GatewayMode = "hybrid";
 
 export async function loadGatewayConfig(
   cwd = process.cwd(),
@@ -38,10 +35,6 @@ export async function loadGatewayConfig(
     DEFAULT_BASE_URL;
   const apiKey =
     process.env.CODEMAP_LLM_GATEWAY_API_KEY ?? fileConfig.value?.apiKey;
-  const mode =
-    fileConfig.value?.mode ??
-    parseMode(process.env.CODEMAP_LLM_GATEWAY_MODE) ??
-    DEFAULT_MODE;
   const profiles = fileConfig.value?.profiles?.length
     ? fileConfig.value.profiles
     : buildDefaultProfiles();
@@ -53,7 +46,6 @@ export async function loadGatewayConfig(
   return {
     baseUrl: trimTrailingSlash(baseUrl),
     apiKey,
-    mode,
     defaultProfile,
     profiles,
     configSource: fileConfig.source ?? (hasEnvironmentConfig() ? "environment" : "built-in defaults"),
@@ -64,10 +56,7 @@ export async function writeGatewayConfig(
   options: WriteGatewayConfigOptions,
 ): Promise<{ path: string; created: boolean }> {
   const configPath = getGatewayConfigPath(options.scope, options.cwd ?? process.cwd());
-  const config = buildDefaultGatewayFile({
-    baseUrl: options.baseUrl,
-    mode: options.mode,
-  });
+  const config = buildDefaultGatewayFile({ baseUrl: options.baseUrl });
 
   try {
     await mkdir(path.dirname(configPath), { recursive: true });
@@ -94,11 +83,10 @@ export function getGatewayConfigPath(scope: GatewayConfigScope, cwd = process.cw
 }
 
 export function buildDefaultGatewayFile(
-  overrides: Pick<FileGatewayConfig, "baseUrl" | "mode"> = {},
+  overrides: Pick<FileGatewayConfig, "baseUrl"> = {},
 ): FileGatewayConfig {
   return {
     baseUrl: trimTrailingSlash(overrides.baseUrl ?? DEFAULT_BASE_URL),
-    mode: overrides.mode ?? DEFAULT_MODE,
     defaultProfile: "coder",
     profiles: buildDefaultProfiles(),
   };
@@ -153,10 +141,6 @@ export function buildDefaultProfiles(): ModelProfile[] {
   ];
 }
 
-export function parseGatewayMode(value: string | undefined): GatewayMode | undefined {
-  return parseMode(value);
-}
-
 async function readFirstJsonConfig(paths: string[]): Promise<{
   source?: string;
   value?: FileGatewayConfig;
@@ -179,18 +163,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function parseMode(value: string | undefined): GatewayMode | undefined {
-  if (
-    value === "hybrid" ||
-    value === "local-only" ||
-    value === "cloud-ok" ||
-    value === "ask-before-cloud"
-  ) {
-    return value;
-  }
-  return undefined;
 }
 
 function trimTrailingSlash(value: string): string {

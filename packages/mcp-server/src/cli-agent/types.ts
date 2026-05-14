@@ -1,11 +1,5 @@
 export type ModelTier = "planner" | "coder" | "reviewer" | "local";
 
-export type GatewayMode =
-  | "hybrid"
-  | "local-only"
-  | "cloud-ok"
-  | "ask-before-cloud";
-
 export type TaskType =
   | "feature"
   | "bugfix"
@@ -30,7 +24,6 @@ export interface ModelProfile {
 export interface GatewayConfig {
   baseUrl: string;
   apiKey?: string;
-  mode: GatewayMode;
   defaultProfile: string;
   profiles: ModelProfile[];
   configSource: string;
@@ -119,13 +112,11 @@ export interface GatewayProvider {
 
 export interface RouteRequest {
   task: string;
-  mode?: GatewayMode;
 }
 
 export interface RouteRecommendation {
   taskType: TaskType;
   risk: RiskLevel;
-  mode: GatewayMode;
   profile: ModelProfile;
   fallbackProfile?: ModelProfile;
   reasons: string[];

@@ -1,5 +1,5 @@
 import { CURSOR_MARKER, type Editor, visibleWidth } from "@earendil-works/pi-tui";
-import { C_GRAY, C_GREEN, C_RED, RESET } from "./theme.js";
+import { C_ACTION, C_ERROR, C_SUCCESS, RESET } from "./theme.js";
 
 export const PROMPT_W = 2;
 
@@ -31,10 +31,10 @@ export function renderEditor(
   debugMode: boolean,
 ): { lines: string[]; cursorRow: number; cursorCol: number } {
   const promptFirst = shellMode
-    ? `${C_GREEN}!${RESET} `
+    ? `${C_SUCCESS}!${RESET} `
     : debugMode
-      ? `${C_RED}>${RESET} `
-      : `${C_GRAY}>${RESET} `;
+      ? `${C_ERROR}>${RESET} `
+      : `${C_ACTION}>${RESET} `;
   const promptCont = " ".repeat(PROMPT_W);
 
   const lines: string[] = [];

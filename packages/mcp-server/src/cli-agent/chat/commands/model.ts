@@ -1,12 +1,10 @@
-import { checkModelPolicy } from "./route-policy.js";
 import type { Command } from "./types.js";
 
 export const modelCommand: Command = {
   name: "model",
-  description: "Switch model (respects mode policy)",
+  description: "Switch model",
   execute: (args, ctx) => {
-    const confirmed = args.endsWith("--yes");
-    const newName = args.replace(/\s*--yes\s*$/, "").trim();
+    const newName = args.trim();
     if (!newName) {
       ctx.setMessages((prev) => [
         ...prev,
@@ -27,24 +25,6 @@ export const modelCommand: Command = {
         {
           role: "system",
           content: `Model "${newName}" not found in gateway. Use /models to see available models.`,
-        },
-      ]);
-      return;
-    }
-    const policy = checkModelPolicy(newName, ctx.currentMode);
-    if (!policy.allowed) {
-      ctx.setMessages((prev) => [
-        ...prev,
-        { role: "system", content: `Blocked: ${policy.reason}` },
-      ]);
-      return;
-    }
-    if (policy.requireConfirm && !confirmed) {
-      ctx.setMessages((prev) => [
-        ...prev,
-        {
-          role: "system",
-          content: `${policy.reason}\nRun /model ${newName} --yes to confirm.`,
         },
       ]);
       return;

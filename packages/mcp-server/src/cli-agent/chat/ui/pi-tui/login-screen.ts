@@ -11,12 +11,21 @@ import {
 import cfonts from "cfonts";
 import type { McpServerConfig } from "../../../../config.js";
 import { runLoginFlow } from "../../../../lib/mcp-auth.js";
+import {
+  BOLD,
+  C_ACTION,
+  C_ERROR,
+  C_GRAY,
+  C_SUCCESS,
+  C_WHITE,
+  RESET,
+} from "./theme.js";
 
 function buildBannerLines(): string[] {
   try {
     const result = cfonts.render("CODEMAP", {
       font: "simple3d",
-      gradient: ["cyan", "magenta"],
+      gradient: ["cyan", "blue", "magenta"],
       env: "node",
     });
     const raw: string = (result as { string: string }).string ?? "";
@@ -49,11 +58,11 @@ const ITEMS: SelectItem[] = [
 ];
 
 const SELECT_THEME = {
-  selectedPrefix: (t: string) => `\x1b[36m❯ ${t}\x1b[0m`,
-  selectedText:   (t: string) => `\x1b[1;37m${t}\x1b[0m`,
-  description:    (t: string) => `  \x1b[2m${t}\x1b[0m`,
-  scrollInfo:     (t: string) => `\x1b[2m${t}\x1b[0m`,
-  noMatch:        (t: string) => `\x1b[2m${t}\x1b[0m`,
+  selectedPrefix: (t: string) => `${C_ACTION}❯ ${t}${RESET}`,
+  selectedText:   (t: string) => `${C_WHITE}${BOLD}${t}${RESET}`,
+  description:    (t: string) => `  ${C_GRAY}${t}${RESET}`,
+  scrollInfo:     (t: string) => `${C_GRAY}${t}${RESET}`,
+  noMatch:        (t: string) => `${C_GRAY}${t}${RESET}`,
 };
 
 /** Shows the login screen and returns true if the user is now authenticated (login success or skip). */
@@ -66,11 +75,9 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
     const bannerLines = buildBannerLines();
     const banner = new Text(bannerLines.join("\n"));
 
-    const subtitle = new Text(
-      "\x1b[2m  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM\x1b[0m\n",
-    );
+    const subtitle = new Text(`${C_GRAY}  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM${RESET}\n`);
 
-    const heading = new Text("\x1b[1;37m  Welcome — you are not logged in.\x1b[0m\n");
+    const heading = new Text(`${C_WHITE}${BOLD}  Welcome — you are not logged in.${RESET}\n`);
 
     const select = new SelectList(ITEMS, ITEMS.length, SELECT_THEME);
 
@@ -89,7 +96,7 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
 
       // Login selected — show status and run auth flow
       root.removeChild(select);
-      const status = new Text("\x1b[36m  Opening browser for CodeMap login...\x1b[0m");
+      const status = new Text(`${C_ACTION}  Opening browser for CodeMap login...${RESET}`);
       root.addChild(status);
       tui.requestRender();
 
@@ -97,13 +104,13 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
         const result = await runLoginFlow(config);
         tui.stop();
         const name = result.user?.name ?? result.user?.email ?? "user";
-        process.stdout.write(`\n\x1b[32m  ✓ Logged in as ${name}\x1b[0m\n\n`);
+        process.stdout.write(`\n${C_SUCCESS}  ✓ Logged in as ${name}${RESET}\n\n`);
         resolve("loggedin");
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         root.removeChild(status);
-        root.addChild(new Text(`\x1b[31m  Login failed: ${msg}\x1b[0m\n`));
-        root.addChild(new Text("\x1b[2m  Press any key to continue without login...\x1b[0m"));
+        root.addChild(new Text(`${C_ERROR}  Login failed: ${msg}${RESET}\n`));
+        root.addChild(new Text(`${C_GRAY}  Press any key to continue without login...${RESET}`));
         tui.requestRender();
 
         tui.addInputListener(() => {

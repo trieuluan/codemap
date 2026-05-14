@@ -1,4 +1,3 @@
-import type { GatewayMode } from "../../types.js";
 import type { EventBus, TaskPhase, UsageStats } from "./event-bus.js";
 
 // ─── Message Types ───────────────────────────────────────
@@ -14,8 +13,6 @@ export interface Message {
 
 export interface WelcomeData {
   model: string;
-  mode: GatewayMode;
-  profile: string;
   modelCount?: number;
 }
 
@@ -77,7 +74,6 @@ export interface UIState {
   // Session config
   config: {
     model: string;
-    mode: GatewayMode;
     profile: string;
     debug: boolean;
     availableModels: string[];
@@ -95,6 +91,9 @@ export interface UIState {
   // Background synthesis status
   synthRunning: boolean;
 
+  // Plan mode: when on, all messages go through multi-phase (planner→coder→reviewer)
+  planMode: boolean;
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -104,7 +103,6 @@ export interface UIState {
 
 export function createInitialState(opts: {
   model: string;
-  mode: GatewayMode;
   profile: string;
   availableModels?: string[];
   debug?: boolean;
@@ -144,13 +142,13 @@ export function createInitialState(opts: {
     },
     config: {
       model: opts.model,
-      mode: opts.mode,
       profile: opts.profile,
       debug: opts.debug ?? false,
       availableModels: opts.availableModels ?? [],
     },
     agentHistory: [],
     synthRunning: false,
+    planMode: false,
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

@@ -1,4 +1,3 @@
-import type { GatewayMode } from "./types.js";
 
 export type Command =
   | "help"
@@ -25,18 +24,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
   };
 }
 
-export function parseModeFlag(value: string | undefined): GatewayMode | undefined {
-  if (
-    value === "hybrid" ||
-    value === "local-only" ||
-    value === "cloud-ok" ||
-    value === "ask-before-cloud"
-  ) {
-    return value;
-  }
-  if (value) throw new Error(`Invalid --mode "${value}".`);
-  return undefined;
-}
 
 export function hasFlag(flags: Flags, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(flags, key);

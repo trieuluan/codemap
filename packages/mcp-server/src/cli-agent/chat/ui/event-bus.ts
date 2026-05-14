@@ -30,7 +30,7 @@ export interface UsageStats {
   totalTokens: number;
 }
 
-export type TaskPhase = "idle" | "thinking" | "tool" | "streaming" | "done" | "planning" | "executing" | "reviewing";
+export type TaskPhase = "idle" | "thinking" | "tool" | "streaming" | "done" | "classifying" | "planning" | "executing" | "reviewing";
 
 type Listener<T extends UIEvent = UIEvent> = (event: T) => void;
 

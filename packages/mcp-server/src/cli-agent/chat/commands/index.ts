@@ -4,12 +4,10 @@ import { exitCommand } from "./exit.js";
 import { statusCommand } from "./status.js";
 import { modelsCommand } from "./models.js";
 import { modelCommand } from "./model.js";
-import { modeCommand } from "./mode.js";
 import { toolsCommand } from "./tools.js";
 import { diffCommand } from "./diff.js";
 import { historyCommand } from "./history.js";
 import { debugCommand } from "./debug.js";
-import { retryCommand } from "./retry.js";
 import { mcpCommand } from "./mcp.js";
 import { compactCommand } from "./compact.js";
 import { gitCommitCommand } from "./git-commit.js";
@@ -25,7 +23,6 @@ const commands: Command[] = [
   statusCommand,
   modelsCommand,
   modelCommand,
-  modeCommand,
   toolsCommand,
   diffCommand,
   gitCommitCommand,
@@ -37,7 +34,6 @@ const commands: Command[] = [
   historyCommand,
   debugCommand,
   compactCommand,
-  retryCommand,
   mcpCommand,
   exitCommand,
 ];

@@ -1,26 +1,29 @@
 import type { Editor } from "@earendil-works/pi-tui";
 import type { UIState } from "../store.js";
 import { formatElapsed, formatTokenCount, truncate } from "../ink-utils.js";
-import { getModeDisplay } from "../../commands/route-policy.js";
+import { getCommandList } from "../../commands/index.js";
 import { renderEditor } from "./editor-renderer.js";
 import {
   BOLD,
-  C_CYAN,
+  C_ACTION,
+  C_AI,
   C_GRAY,
-  C_GREEN,
-  C_RED,
+  C_MUTED,
+  C_SUCCESS,
+  C_WARNING,
+  C_ERROR,
   C_WHITE,
-  C_YELLOW,
   RESET,
   SPINNER,
 } from "./theme.js";
-import { fitLine } from "./text.js";
+import { fitLine, padToWidth } from "./text.js";
 
 export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return (
     phase === "thinking" ||
     phase === "tool" ||
     phase === "streaming" ||
+    phase === "classifying" ||
     phase === "planning" ||
     phase === "executing" ||
     phase === "reviewing"
@@ -56,16 +59,16 @@ export function buildStatusBar(
 ): string {
   const workspace = state.workspace?.repoName ?? state.config.profile;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
-  const modeInfo = getModeDisplay(state.config.mode);
   const right = copyMode
-    ? `${C_YELLOW}✎ COPY MODE${RESET}${C_GRAY} · Ctrl+T to scroll${RESET}`
-    : debugMode
-      ? `${C_RED}⏺ DEBUG${RESET}${C_GRAY} · /debug to stop${RESET}`
-      : `${C_CYAN}MCP connected${RESET}`;
+    ? `${C_WARNING}✎ COPY MODE${RESET}${C_MUTED} · Ctrl+T to scroll${RESET}`
+    : state.planMode
+      ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
+      : debugMode
+        ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
+        : `${C_ACTION}MCP connected${RESET}`;
   return fitLine(
-    `${C_WHITE}${workspace}${RESET}${C_GRAY}${branch} · ${RESET}` +
-      `${C_WHITE}${truncate(state.config.model, 24)}${RESET}${C_GRAY} · ${RESET}` +
-      `${C_GREEN}${modeInfo.label}${RESET}${C_GRAY} · ${RESET}` +
+    `${C_WHITE}${workspace}${RESET}${C_MUTED}${branch} · ${RESET}` +
+      `${C_WHITE}${truncate(state.config.model, 28)}${RESET}${C_MUTED} · ${RESET}` +
       right,
     w,
   );
@@ -90,25 +93,47 @@ export function buildPanel(
   let cursorRow = -1;
   let cursorCol = 0;
 
-  // /help overlay.
+  // /help overlay — generated dynamically so it's always in sync with registered commands.
   if (state.screen === "help") {
+    const cmds = getCommandList();
+    const half = Math.ceil(cmds.length / 2);
+    // Each column gets equal space; 4 chars reserved for margins ("  " on each side).
+    const colW = Math.max(24, Math.floor((w - 4) / 2));
+    // Longest command name is "conventions" (11) + "/" = 12 → pad to 13.
+    const NAME_W = 13;
+    const descW = Math.max(4, colW - NAME_W - 1);
+
+    // Render one column cell padded to exactly colW visible chars.
+    const fmtCol = (c: (typeof cmds)[0] | undefined): string => {
+      if (!c) return " ".repeat(colW);
+      const namePart = `${C_ACTION}/${c.name.padEnd(NAME_W - 1)}${RESET} `;
+      const descPart = `${C_GRAY}${truncate(c.description, descW)}${RESET}`;
+      return padToWidth(namePart + descPart, colW);
+    };
+
+    out.push(fitLine(`${C_ACTION}${BOLD} Commands${RESET}`, w));
+
+    for (let i = 0; i < half; i++) {
+      out.push(fitLine(`  ${fmtCol(cmds[i])}  ${fmtCol(cmds[i + half])}`, w));
+    }
+
     out.push(
-      fitLine(`${C_CYAN}${BOLD}Commands${RESET}`, w),
-      fitLine("  /help       Show this help", w),
-      fitLine("  /model      Switch model", w),
-      fitLine("  /mode       Switch gateway mode", w),
-      fitLine("  /clear      Clear conversation", w),
-      fitLine("  /compact    Compact agent context", w),
-      fitLine("  /retry      Retry last message", w),
-      fitLine("  !<cmd>      Run shell command", w),
-      fitLine(`  ${C_GRAY}Esc to close${RESET}`, w),
+      fitLine("", w),
+      fitLine(
+        `  ${C_ACTION}@${RESET} ${C_GRAY}mention file${RESET}  ` +
+          `${C_ACTION}!<cmd>${RESET} ${C_GRAY}shell${RESET}  ` +
+          `${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy mode${RESET}  ` +
+          `${C_ACTION}PgUp/Dn${RESET} ${C_GRAY}scroll${RESET}`,
+        w,
+      ),
+      fitLine(`  ${C_ACTION}Esc${RESET} ${C_GRAY}to close${RESET}`, w),
       fitLine("", w),
     );
   }
 
   // Subprocess log.
   if (state.subprocess.active) {
-    out.push(fitLine(`${C_YELLOW}Running:${RESET} ${state.subprocess.command}`, w));
+    out.push(fitLine(`${C_WARNING}Running:${RESET} ${state.subprocess.command}`, w));
     for (const l of state.subprocess.logLines.slice(-4)) {
       out.push(fitLine(`${C_GRAY}${l}${RESET}`, w));
     }
@@ -132,6 +157,7 @@ export function buildPanel(
       ? ` ${C_GRAY}${truncate(state.task.model, 28)}${RESET}`
       : "";
     const phaseLabel: Record<string, string> = {
+      classifying: "classifying...",
       planning: "planning...",
       executing: "executing...",
       reviewing: "reviewing...",
@@ -141,30 +167,39 @@ export function buildPanel(
       done: "done",
     };
     const label = phaseLabel[state.task.phase] ?? state.task.phase;
+    const phaseColor =
+      state.task.phase === "done"
+        ? C_SUCCESS
+        : state.task.phase === "classifying" ||
+            state.task.phase === "planning" ||
+            state.task.phase === "reviewing" ||
+            state.task.phase === "thinking"
+          ? C_AI
+          : C_ACTION;
     const marker =
       state.task.phase === "done"
-        ? `${C_GREEN}✓${RESET}`
-        : `${C_CYAN}${SPINNER[frame]}${RESET}`;
-    out.push(fitLine(` ${marker} ${label}${model}${tool} · ${elapsed}${usage}`, w));
+        ? `${C_SUCCESS}✓${RESET}`
+        : `${phaseColor}${SPINNER[frame]}${RESET}`;
+    out.push(fitLine(` ${marker} ${phaseColor}${label}${RESET}${model}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`, w));
   }
 
   // Background synthesis indicator.
   if (state.synthRunning) {
     out.push(fitLine(
-      ` ${C_GRAY}${SPINNER[frame]} synthesizing context (conventions · rules · skills)…${RESET}`,
+      ` ${C_AI}${SPINNER[frame]}${RESET} ${C_GRAY}synthesizing context ${C_MUTED}(conventions · rules · skills)…${RESET}`,
       w,
     ));
   }
 
   // Hint bar.
   out.push(fitLine(
-    `  ${C_CYAN}Tab${RESET} ${C_GRAY}complete${RESET}` +
-      `  ${C_CYAN}↑↓${RESET} ${C_GRAY}history${RESET}` +
-      `  ${C_CYAN}@${RESET} ${C_GRAY}files${RESET}` +
-      `  ${C_CYAN}!${RESET} ${C_GRAY}shell${RESET}` +
-      `  ${C_CYAN}/help${RESET} ${C_GRAY}commands${RESET}` +
-      `  ${C_CYAN}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
-      `  ${C_CYAN}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
+    `  ${C_ACTION}Tab${RESET} ${C_GRAY}complete${RESET}` +
+      `  ${C_ACTION}↑↓${RESET} ${C_GRAY}history${RESET}` +
+      `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
+      `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
+      `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
+      `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
+      `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
     w,
   ));
 
@@ -187,8 +222,8 @@ export function buildPanel(
       confirmSelection = 0;
     }
     out.push(
-      fitLine(`${C_YELLOW}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
-      fitLine(`${C_GRAY}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
+      fitLine(`${C_WARNING}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
+      fitLine(`${C_MUTED}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
     );
     const options = [
       { label: "Apply", desc: "Apply this change" },
@@ -197,10 +232,11 @@ export function buildPanel(
     ];
     for (const [idx, option] of options.entries()) {
       const selected = idx === confirmSelection;
-      const prefix = selected ? `${C_CYAN}>${RESET}` : " ";
+      const isReject = option.label === "Reject";
+      const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
       const label = selected
-        ? `${C_WHITE}${BOLD}${option.label}${RESET}`
-        : `${C_WHITE}${option.label}${RESET}`;
+        ? `${isReject ? C_ERROR : C_WHITE}${BOLD}${option.label}${RESET}`
+        : `${isReject ? C_ERROR : C_WHITE}${option.label}${RESET}`;
       out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w));
     }
   }

@@ -1,5 +1,15 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { C_CYAN, C_GRAY, C_GREEN, C_RED, C_WHITE, C_YELLOW, BOLD, RESET } from "./theme.js";
+import {
+  BOLD,
+  C_ACTION,
+  C_AI,
+  C_GRAY,
+  C_MUTED,
+  C_SUCCESS,
+  C_ERROR,
+  C_WARNING,
+  RESET,
+} from "./theme.js";
 import { highlightBlock, isShikiReady } from "./shiki-highlight.js";
 
 export function stripAnsi(s: string): string {
@@ -69,7 +79,7 @@ export function renderInlineMarkdown(text: string): string {
   return text
     .replace(/\*\*([^*\n]+)\*\*/g, `${BOLD}$1${RESET}`)
     .replace(/__([^_\n]+)__/g, `${BOLD}$1${RESET}`)
-    .replace(/`([^`\n]+)`/g, `${C_CYAN}$1${RESET}`);
+    .replace(/`([^`\n]+)`/g, `${C_ACTION}$1${RESET}`);
 }
 
 const CODE_LANG_ALIASES: Record<string, string> = {
@@ -98,22 +108,22 @@ function normalizeLang(lang: string): string {
 function highlightCodeLine(raw: string, lang: string): string {
   const normalized = normalizeLang(lang);
   if (normalized === "diff") {
-    if (raw.startsWith("+") && !raw.startsWith("+++")) return `${C_GREEN}${raw}${RESET}`;
-    if (raw.startsWith("-") && !raw.startsWith("---")) return `${C_RED}${raw}${RESET}`;
-    if (raw.startsWith("@@")) return `${C_CYAN}${raw}${RESET}`;
+    if (raw.startsWith("+") && !raw.startsWith("+++")) return `${C_SUCCESS}${raw}${RESET}`;
+    if (raw.startsWith("-") && !raw.startsWith("---")) return `${C_ERROR}${raw}${RESET}`;
+    if (raw.startsWith("@@")) return `${C_ACTION}${raw}${RESET}`;
     if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("---") || raw.startsWith("+++")) {
-      return `${C_YELLOW}${raw}${RESET}`;
+      return `${C_WARNING}${raw}${RESET}`;
     }
-    return `${C_GRAY}${raw}${RESET}`;
+    return `${C_MUTED}${raw}${RESET}`;
   }
 
   if (normalized === "json") {
     return raw
       .replace(/("(?:[^"\\]|\\.)*")(\s*:)?/g, (_m, key: string, colon: string | undefined) =>
-        colon ? `${C_CYAN}${key}${RESET}${colon}` : `${C_GREEN}${key}${RESET}`,
+        colon ? `${C_ACTION}${key}${RESET}${colon}` : `${C_SUCCESS}${key}${RESET}`,
       )
-      .replace(/\b(true|false|null)\b/g, `${C_YELLOW}$1${RESET}`)
-      .replace(NUMBER_RE, `${C_YELLOW}$1${RESET}`);
+      .replace(/\b(true|false|null)\b/g, `${C_WARNING}$1${RESET}`)
+      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`);
   }
 
   if (normalized === "sh") {
@@ -121,8 +131,9 @@ function highlightCodeLine(raw: string, lang: string): string {
     const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
     const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
     return body
-      .replace(/\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g, `${C_CYAN}$1${RESET}`)
-      .replace(STRING_RE, `${C_GREEN}$1${RESET}`) + suffix;
+      .replace(/\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g, `${C_ACTION}$1${RESET}`)
+      .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
+      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix;
   }
 
   if (KEYWORD_LANGS.has(normalized)) {
@@ -130,9 +141,9 @@ function highlightCodeLine(raw: string, lang: string): string {
     const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
     const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
     return body
-      .replace(STRING_RE, `${C_GREEN}$1${RESET}`)
-      .replace(KEYWORDS, `${C_CYAN}$1${RESET}`)
-      .replace(NUMBER_RE, `${C_YELLOW}$1${RESET}`) + suffix;
+      .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
+      .replace(KEYWORDS, `${C_ACTION}$1${RESET}`)
+      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix;
   }
 
   return raw;
@@ -171,7 +182,7 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
         codeLang = "";
       }
       const label = inCode ? ` code${codeLang ? `:${codeLang}` : ""} ` : " end ";
-      out.push(`${C_GRAY}${"-".repeat(Math.min(width, Math.max(12, label.length + 8)))}${RESET}`);
+      out.push(`${C_MUTED}${"-".repeat(Math.min(width, Math.max(12, label.length + 8)))}${RESET}`);
       continue;
     }
 
@@ -183,7 +194,7 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
     const heading = raw.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
     if (heading) {
       const text = cleanInlineMarkdown(heading[2] ?? "");
-      const marker = heading[1]!.length <= 2 ? C_CYAN : C_WHITE;
+      const marker = heading[1]!.length <= 2 ? C_AI : C_ACTION;
       for (const [i, line] of wrapPlain(text, Math.max(8, width - 2)).entries()) {
         out.push(i === 0 ? `${marker}${BOLD}${line}${RESET}` : `  ${line}`);
       }
@@ -193,7 +204,7 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
     const bullet = raw.match(/^\s*[-*]\s+(.+)$/);
     if (bullet) {
       const lines = wrapPlain(bullet[1] ?? "", Math.max(8, width - 2));
-      out.push(`${C_CYAN}-${RESET} ${renderInlineMarkdown(lines[0] ?? "")}`);
+      out.push(`${C_ACTION}-${RESET} ${renderInlineMarkdown(lines[0] ?? "")}`);
       for (const line of lines.slice(1)) out.push(`  ${renderInlineMarkdown(line)}`);
       continue;
     }
@@ -202,7 +213,7 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
     if (numbered) {
       const prefix = `${numbered[1]}. `;
       const lines = wrapPlain(numbered[2] ?? "", Math.max(8, width - visibleWidth(prefix)));
-      out.push(`${C_CYAN}${prefix}${RESET}${renderInlineMarkdown(lines[0] ?? "")}`);
+      out.push(`${C_ACTION}${prefix}${RESET}${renderInlineMarkdown(lines[0] ?? "")}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(visibleWidth(prefix))}${renderInlineMarkdown(line)}`);
       continue;
     }

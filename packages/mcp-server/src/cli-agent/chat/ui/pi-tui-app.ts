@@ -15,6 +15,7 @@ import {
   C_CYAN,
   C_GRAY,
   C_GREEN,
+  C_PURPLE,
   C_RED,
   C_YELLOW,
   DISABLE_MOUSE_TRACKING,
@@ -50,6 +51,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let copyMode = false;
   let shellMode = false;
   let debugMode = false;
+  let planMode = false;
   let frame = 0;
   let refreshQueued = false;
   let confirmSelection = 0;
@@ -67,6 +69,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   const editorTheme: EditorTheme = {
     borderColor: (str) => {
       if (shellMode) return `${C_GREEN}${str}${RESET}`;
+      if (planMode) return `${C_PURPLE}${str}${RESET}`;
       if (debugMode) return `${C_RED}${str}${RESET}`;
       return `${C_GRAY}${str}${RESET}`;
     },
@@ -129,6 +132,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     if (stopped) return;
     const state = chatTerminal.store.getState();
     debugMode = state.debug;
+    planMode = state.planMode;
 
     const w = W();
     const h = R();
@@ -231,6 +235,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     if (stopped || currentBottomHeight === 0) return;
     const state = chatTerminal.store.getState();
     debugMode = state.debug;
+    planMode = state.planMode;
     const h = R();
     const iw = innerWidth();
 

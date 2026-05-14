@@ -1,6 +1,5 @@
 import type {
   GatewayConfig,
-  GatewayMode,
   ModelProfile,
   RiskLevel,
   RouteRecommendation,
@@ -24,21 +23,19 @@ export function recommendRoute(
 ): RouteRecommendation {
   const taskType = classifyTask(request.task);
   const risk = classifyRisk(request.task, taskType);
-  const mode = request.mode ?? config.mode;
-  const preferredTier = chooseTier(taskType, risk, mode);
+  const preferredTier = chooseTier(taskType, risk);
   const profile = findProfile(config.profiles, preferredTier) ?? config.profiles[0];
   if (!profile) {
     throw new Error("No model profiles configured for LLM Gateway.");
   }
 
-  const fallbackProfile = chooseFallbackProfile(config.profiles, profile, mode);
+  const fallbackProfile = chooseFallbackProfile(config.profiles, profile);
   return {
     taskType,
     risk,
-    mode,
     profile,
     fallbackProfile,
-    reasons: buildReasons(taskType, risk, mode, profile),
+    reasons: buildReasons(taskType, risk, profile),
   };
 }
 
@@ -70,9 +67,7 @@ function classifyRisk(task: string, taskType: TaskType): RiskLevel {
 function chooseTier(
   taskType: TaskType,
   risk: RiskLevel,
-  mode: GatewayMode,
 ): ModelProfile["tier"] {
-  if (mode === "local-only") return "local";
   if (taskType === "review" || taskType === "debugging") return "reviewer";
   if (taskType === "refactor") return risk === "high" ? "coder" : "reviewer";
   if (taskType === "feature" || taskType === "bugfix") return risk === "low" ? "planner" : "coder";
@@ -83,9 +78,7 @@ function chooseTier(
 function chooseFallbackProfile(
   profiles: ModelProfile[],
   selected: ModelProfile,
-  mode: GatewayMode,
 ): ModelProfile | undefined {
-  if (mode === "local-only") return undefined;
   return profiles.find((profile) => profile.id !== selected.id && profile.tier === "planner") ??
     profiles.find((profile) => profile.id !== selected.id);
 }
@@ -93,11 +86,9 @@ function chooseFallbackProfile(
 function buildReasons(
   taskType: TaskType,
   risk: RiskLevel,
-  mode: GatewayMode,
   profile: ModelProfile,
 ): string[] {
   const reasons = [`classified as ${taskType}`, `risk is ${risk}`];
-  if (mode === "local-only") reasons.push("local-only mode requires local profile");
   if (profile.tier === "coder") reasons.push("selected coder profile for implementation work");
   if (profile.tier === "reviewer") reasons.push("selected reviewer profile for review/debug work");
   if (profile.tier === "planner") reasons.push("selected planner profile for fast low-risk work");

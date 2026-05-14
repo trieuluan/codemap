@@ -1,15 +1,13 @@
 import type { NineRouterProvider } from "../../provider.js";
-import type { ChatMessage, GatewayMode, ModelProfile, TokenUsage } from "../../types.js";
+import type { ChatMessage, ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { runAgentLoop, type ConfirmEditFn } from "../agent/agent-loop.js";
 import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
+import { classifyTask, type TaskClassification } from "../agent/task-classifier.js";
 import { executeCommand } from "../commands/index.js";
-import {
-  selectModelForMode,
-  getRecommendedMode,
-} from "../commands/route-policy.js";
+import { isStrongModel } from "../commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../file-search.js";
 import {
@@ -80,7 +78,6 @@ interface ChatTerminalOptions {
   model: string;
   toolClient: CodeMapMcpToolClient;
   profileId: string;
-  mode: GatewayMode;
   profiles?: ModelProfile[];
   availableModels?: string[];
   apiToken?: string; // from McpServerConfig — used to detect unauthenticated state
@@ -111,7 +108,6 @@ export class ChatTerminal {
     this.store = new Store(
       createInitialState({
         model: options.model,
-        mode: options.mode,
         profile: options.profileId,
         availableModels: options.availableModels,
         debug,
@@ -317,10 +313,24 @@ export class ChatTerminal {
     const state = this.store.getState();
     if (state.input.busy) return;
 
-    // /plan <message> — strip prefix, run multi-phase
-    if (/^\/plan\s+/i.test(displayText)) {
-      const taskText = displayText.replace(/^\/plan\s+/i, "").trim();
-      await this.handleSubmitWithContent(taskText, taskText, true);
+    // /plan — toggle plan mode on/off (like Claude Code's /plan)
+    // /plan <message> — force multi-phase for this single message (prefix shortcut)
+    if (/^\/plan(\s|$)/i.test(displayText)) {
+      const taskText = displayText.replace(/^\/plan\s*/i, "").trim();
+      if (taskText) {
+        // Has message → force multi-phase for this message only
+        await this.handleSubmitWithContent(taskText, taskText, true);
+      } else {
+        // No message → toggle plan mode
+        const current = this.store.getState().planMode;
+        this.store.dispatch({ planMode: !current });
+        this.appendMessage({
+          role: "system",
+          content: !current
+            ? "Plan mode ON — all messages will go through planner → coder → reviewer.\nType /plan again to exit."
+            : "Plan mode OFF — back to normal routing.",
+        });
+      }
       return;
     }
 
@@ -441,8 +451,37 @@ export class ChatTerminal {
       const plannerProfile = profiles.find((p) => p.id === "planner");
       const coderProfile = profiles.find((p) => p.id === "coder");
       const reviewerProfile = profiles.find((p) => p.id === "reviewer");
-      const useMultiPhase = !!(plannerProfile && coderProfile && reviewerProfile)
-        && (forceMultiPhase || isPlanRequest(contentText));
+      const hasAllProfiles = !!(plannerProfile && coderProfile && reviewerProfile);
+      let classification: TaskClassification = {
+        phase: "single",
+        tier: "coder",
+        taskType: "general",
+        reason: "",
+      };
+
+      const planMode = this.store.getState().planMode;
+
+      if (!forceMultiPhase && !planMode && hasAllProfiles) {
+        this.store.dispatch({
+          task: { ...this.store.getState().task, phase: "classifying", model: plannerProfile.model },
+        });
+        this.bus.scheduleRefresh();
+
+        classification = await classifyTask(
+          contentText,
+          this.options.provider,
+          plannerProfile.model,
+          taskAbort.signal,
+        );
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+      }
+
+      const useMultiPhase = forceMultiPhase || planMode || (hasAllProfiles && classification.phase === "multi");
+      const singlePhaseModel = (() => {
+        if (classification.tier === "planner") return plannerProfile?.model;
+        if (classification.tier === "reviewer") return reviewerProfile?.model;
+        return coderProfile?.model;
+      })() ?? this.store.getState().config.model;
 
       const result = useMultiPhase
         ? await runMultiPhaseAgentLoop({
@@ -473,7 +512,7 @@ export class ChatTerminal {
           })
         : await runAgentLoop({
             provider: this.options.provider,
-            model: this.store.getState().config.model,
+            model: singlePhaseModel,
             history: this.store.getState().agentHistory as ChatMessage[],
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
@@ -487,6 +526,11 @@ export class ChatTerminal {
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const s = this.store.getState();
       this.store.dispatch({ task: { ...s.task, phase: "done", endTime: Date.now() } });
+
+      // Auto-exit plan mode after one multi-phase run.
+      if (useMultiPhase && planMode && !forceMultiPhase) {
+        this.store.dispatch({ planMode: false });
+      }
 
       if (this.logger) {
         const toolCallsList = result.messages
@@ -530,18 +574,15 @@ export class ChatTerminal {
       const cs = this.store.getState().config;
 
       if (isModelBroken && cs.availableModels.length > 1) {
-        let newModel: string | null = null;
-        let newMode = cs.mode;
-        for (const m of getRecommendedMode(cs.model, cs.model)) {
-          const candidate = selectModelForMode(cs.availableModels, m, cs.model);
-          if (candidate) { newModel = candidate; newMode = m; break; }
-        }
-        if (!newModel) newModel = cs.availableModels.find((m) => m !== cs.model) ?? null;
+        const strong = cs.availableModels.filter(m => m !== cs.model && isStrongModel(m));
+        const newModel = strong[0]
+          ?? cs.availableModels.find((m) => m !== cs.model)
+          ?? null;
         if (newModel) {
-          this.store.dispatch({ config: { ...cs, model: newModel, mode: newMode } });
+          this.store.dispatch({ config: { ...cs, model: newModel } });
           this.appendMessage({
             role: "system",
-            content: `Model "${cs.model}" failed. Auto-switched to "${newModel}"${newMode !== cs.mode ? ` (mode: ${newMode})` : ""}.\nType /retry to resend your message.`,
+            content: `Model "${cs.model}" failed. Auto-switched to "${newModel}". Resend your message to retry.`,
           });
         } else {
           this.appendMessage({ role: "system", content: `Model "${cs.model}" failed and no alternative found.` });
@@ -684,10 +725,8 @@ export class ChatTerminal {
       s.config.model;
     return {
       currentModel: s.config.model,
-      currentMode: s.config.mode,
       provider: this.options.provider,
       reviewerModel,
-      profileId: s.config.profile,
       history: s.agentHistory as ChatMessage[],
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,
@@ -714,9 +753,6 @@ export class ChatTerminal {
       },
       setCurrentModel: (m: string) => {
         this.store.dispatch((prev) => ({ config: { ...prev.config, model: m } }));
-      },
-      setCurrentMode: (m: GatewayMode) => {
-        this.store.dispatch((prev) => ({ config: { ...prev.config, mode: m } }));
       },
       setBusy: (b: boolean) => {
         this.store.dispatch((prev) => ({ input: { ...prev.input, busy: b } }));
@@ -754,11 +790,4 @@ export class ChatTerminal {
       },
     };
   }
-}
-
-const PLAN_KEYWORDS =
-  /\b(lên plan|plan trước|plan đi|make a plan|create a plan|plan first|plan this|draw up a plan)\b/i;
-
-function isPlanRequest(text: string): boolean {
-  return PLAN_KEYWORDS.test(text);
 }

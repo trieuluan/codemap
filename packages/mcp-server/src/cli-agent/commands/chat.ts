@@ -1,4 +1,3 @@
-import { parseModeFlag } from "../args.js";
 import type { GatewayCommandContext } from "../command-context.js";
 import { CodeMapMcpToolClient } from "../chat/mcp/mcp-tool-client.js";
 import { selectChatProfile } from "../chat/commands/profiles.js";
@@ -8,13 +7,11 @@ import { printGatewayHint } from "./gateway-hint.js";
 import { loadConfig } from "../../config.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
-  const mode = parseModeFlag(ctx.flags.mode);
   const provider = new NineRouterProvider(ctx.config.baseUrl, ctx.config.apiKey);
   const availableModels = await loadGatewayModels(ctx.config, provider);
-  const profile = selectChatProfile(ctx.config, ctx.flags.model, mode);
+  const profile = selectChatProfile(ctx.config, ctx.flags.model);
   const toolClient = new CodeMapMcpToolClient();
 
-  // Connect external MCP servers from .codemap/mcp.json (best-effort)
   await toolClient.connectExtras();
 
   try {
@@ -25,7 +22,6 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       model: profile.model,
       toolClient,
       profileId: profile.id,
-      mode: mode ?? ctx.config.mode,
       profiles: ctx.config.profiles,
       availableModels,
       apiToken: mcpConfig.apiToken ?? undefined,
