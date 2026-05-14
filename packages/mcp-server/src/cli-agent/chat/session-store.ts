@@ -1,15 +1,22 @@
 import { DatabaseSync } from "node:sqlite";
-import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ChatMessage } from "../types.js";
 import type { Message } from "./ui/store.js";
 
-const DB_DIR = path.join(homedir(), ".codemap");
-const DB_PATH = path.join(DB_DIR, "sessions.db");
+function resolveDbPath(): string {
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    cwd: process.cwd(),
+  });
+  const root = result.stdout?.trim();
+  const base = root || process.cwd();
+  return path.join(base, ".codemap", "sessions.db");
+}
 
-const UI_MSG_TRUNCATE = 500;
+const DB_PATH = resolveDbPath();
 const TOOL_RESULT_TRUNCATE = 3000;
 
 export interface SessionMeta {
@@ -25,7 +32,7 @@ export interface SessionMeta {
 }
 
 function openDb(): DatabaseSync {
-  mkdirSync(DB_DIR, { recursive: true });
+  mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const db = new DatabaseSync(DB_PATH);
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -39,24 +46,22 @@ function openDb(): DatabaseSync {
       updated_at  INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS session_messages (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id  TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      idx         INTEGER NOT NULL,
-      is_ui       INTEGER NOT NULL DEFAULT 0,
-      role        TEXT    NOT NULL,
-      content     TEXT    NOT NULL,
-      tool_calls  TEXT,
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id   TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      idx          INTEGER NOT NULL,
+      role         TEXT    NOT NULL,
+      content      TEXT    NOT NULL,
+      tool_calls   TEXT,
       tool_call_id TEXT,
-      msg_name    TEXT,
-      tool_name   TEXT
+      msg_name     TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_session_messages_session
-      ON session_messages(session_id, is_ui, idx);
+      ON session_messages(session_id, idx);
   `);
   return db;
 }
 
-// ─── Truncation helpers ───────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────
 
 function truncateAgentHistory(history: ChatMessage[]): ChatMessage[] {
   return history.map((msg) => {
@@ -67,14 +72,21 @@ function truncateAgentHistory(history: ChatMessage[]): ChatMessage[] {
   });
 }
 
-function truncateUiMessages(messages: Message[]): Message[] {
-  return messages.map((msg) => {
-    if (msg.role === "welcome") return msg;
-    if (msg.content.length > UI_MSG_TRUNCATE) {
-      return { ...msg, content: msg.content.slice(0, UI_MSG_TRUNCATE) + "…" };
-    }
-    return msg;
-  });
+function agentHistoryToUiMessages(history: ChatMessage[]): Message[] {
+  return history.map((msg) => ({
+    role: msg.role as Message["role"],
+    content: msg.content,
+    ...(msg.name ? { toolName: msg.name } : {}),
+    ...(msg.toolCalls
+      ? {
+          toolCalls: msg.toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.function.name,
+            arguments: tc.function.arguments,
+          })),
+        }
+      : {}),
+  }));
 }
 
 // ─── Public API ───────────────────────────────────────────
@@ -101,44 +113,28 @@ export function createSession(opts: {
 export function saveSession(
   sessionId: string,
   agentHistory: ChatMessage[],
-  uiMessages: Message[],
   tokenCount: number,
   model: string,
 ): void {
   const db = openDb();
   const now = Date.now();
 
-  // Delete existing messages and re-insert (replace strategy)
   db.prepare("DELETE FROM session_messages WHERE session_id = ?").run(sessionId);
 
-  const insertMsg = db.prepare(
-    `INSERT INTO session_messages
-       (session_id, idx, is_ui, role, content, tool_calls, tool_call_id, msg_name, tool_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  const insert = db.prepare(
+    `INSERT INTO session_messages (session_id, idx, role, content, tool_calls, tool_call_id, msg_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
 
-  const truncatedHistory = truncateAgentHistory(agentHistory);
-  for (let i = 0; i < truncatedHistory.length; i++) {
-    const m = truncatedHistory[i]!;
-    insertMsg.run(
-      sessionId, i, 0,
+  const truncated = truncateAgentHistory(agentHistory);
+  for (let i = 0; i < truncated.length; i++) {
+    const m = truncated[i]!;
+    insert.run(
+      sessionId, i,
       m.role, m.content,
       m.toolCalls ? JSON.stringify(m.toolCalls) : null,
       m.toolCallId ?? null,
       m.name ?? null,
-      null,
-    );
-  }
-
-  const truncatedUi = truncateUiMessages(uiMessages.filter((m) => m.role !== "welcome"));
-  for (let i = 0; i < truncatedUi.length; i++) {
-    const m = truncatedUi[i]!;
-    insertMsg.run(
-      sessionId, i, 1,
-      m.role, m.content,
-      m.toolCalls ? JSON.stringify(m.toolCalls) : null,
-      null, null,
-      m.toolName ?? null,
     );
   }
 
@@ -158,37 +154,25 @@ export function loadSession(sessionId: string): {
   const row = db.prepare(
     `SELECT s.*, COUNT(sm.id) as message_count
      FROM sessions s
-     LEFT JOIN session_messages sm ON sm.session_id = s.id AND sm.is_ui = 0
+     LEFT JOIN session_messages sm ON sm.session_id = s.id
      WHERE s.id = ?
      GROUP BY s.id`,
-  ).get(sessionId) as (Record<string, unknown>) | undefined;
+  ).get(sessionId) as Record<string, unknown> | undefined;
 
   if (!row) { db.close(); return null; }
 
-  const agentRows = db.prepare(
-    `SELECT * FROM session_messages WHERE session_id = ? AND is_ui = 0 ORDER BY idx`,
-  ).all(sessionId) as Record<string, unknown>[];
-
-  const uiRows = db.prepare(
-    `SELECT * FROM session_messages WHERE session_id = ? AND is_ui = 1 ORDER BY idx`,
+  const rows = db.prepare(
+    `SELECT * FROM session_messages WHERE session_id = ? ORDER BY idx`,
   ).all(sessionId) as Record<string, unknown>[];
 
   db.close();
 
-  const agentHistory: ChatMessage[] = agentRows.map((r) => ({
+  const agentHistory: ChatMessage[] = rows.map((r) => ({
     role: r.role as ChatMessage["role"],
     content: String(r.content),
     ...(r.tool_calls ? { toolCalls: JSON.parse(String(r.tool_calls)) } : {}),
     ...(r.tool_call_id ? { toolCallId: String(r.tool_call_id) } : {}),
     ...(r.msg_name ? { name: String(r.msg_name) } : {}),
-  }));
-
-  const uiMessages: Message[] = uiRows.map((r) => ({
-    role: r.role as Message["role"],
-    content: String(r.content),
-    ...(r.tool_name ? { toolName: String(r.tool_name) } : {}),
-    ...(r.tool_calls ? { toolCalls: JSON.parse(String(r.tool_calls)) } : {}),
-    timestamp: undefined,
   }));
 
   return {
@@ -204,7 +188,7 @@ export function loadSession(sessionId: string): {
       messageCount: Number(row.message_count),
     },
     agentHistory,
-    uiMessages,
+    uiMessages: agentHistoryToUiMessages(agentHistory),
   };
 }
 
@@ -213,7 +197,7 @@ export function findLastSession(gitRepo: string, gitBranch: string): SessionMeta
   const row = db.prepare(
     `SELECT s.*, COUNT(sm.id) as message_count
      FROM sessions s
-     LEFT JOIN session_messages sm ON sm.session_id = s.id AND sm.is_ui = 0
+     LEFT JOIN session_messages sm ON sm.session_id = s.id
      WHERE s.git_repo = ? AND s.git_branch = ?
      GROUP BY s.id
      ORDER BY s.updated_at DESC LIMIT 1`,
@@ -238,7 +222,7 @@ export function listSessions(limit = 10): SessionMeta[] {
   const rows = db.prepare(
     `SELECT s.*, COUNT(sm.id) as message_count
      FROM sessions s
-     LEFT JOIN session_messages sm ON sm.session_id = s.id AND sm.is_ui = 0
+     LEFT JOIN session_messages sm ON sm.session_id = s.id
      GROUP BY s.id
      ORDER BY s.updated_at DESC LIMIT ?`,
   ).all(limit) as Record<string, unknown>[];

@@ -4,6 +4,7 @@ import type { UIState } from "./store.js";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
+import { getCommandList } from "../commands/index.js";
 import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
 import {
   BOLD,
@@ -81,7 +82,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   const editor = new Editor(tuiStub, editorTheme);
   editor.focused = true;
-  editor.setAutocompleteProvider(new MentionAutocompleteProvider());
+  const slashCommands: { value: string; description: string }[] = [
+    { value: "/plan", description: "Plan then implement: planner → coder → reviewer" },
+    ...getCommandList().map((c) => ({ value: `/${c.name}`, description: c.description })),
+  ].sort((a, b) => a.value.localeCompare(b.value));
+  editor.setAutocompleteProvider(new MentionAutocompleteProvider(slashCommands));
 
   editor.onSubmit = (value) => {
     const trimmed = value.trim();

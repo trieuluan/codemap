@@ -247,7 +247,6 @@ export class ChatTerminal {
       saveSession(
         this._sessionId,
         s.agentHistory as ChatMessage[],
-        s.messages,
         tokenCount,
         model,
       );
