@@ -93,7 +93,7 @@ export function createCodeMapClient(config: McpServerConfig) {
       response = await fetch(url.toString(), {
         method: "POST",
         headers,
-        body: buffer,
+        body: Buffer.from(buffer),
       });
     } catch (error) {
       throw new Error(

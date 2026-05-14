@@ -1,4 +1,5 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
+import { DiffLineType, DiffParser, type DiffHunk, type DiffLine } from "@git-diff-view/core";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
 import {
@@ -40,6 +41,9 @@ const RENDERER_METHODS = [
   "strong",
   "text",
 ] as const;
+
+const BG_DIFF_DELETE = "\x1b[48;2;69;10;10m";
+const BG_DIFF_ADD = "\x1b[48;2;0;55;18m";
 
 export function stripAnsi(s: string): string {
   return s
@@ -127,6 +131,31 @@ function normalizeLang(lang: string): string {
   return CODE_LANG_ALIASES[lower] ?? lower;
 }
 
+function langFromPath(path: string): string {
+  const clean = path.replace(/^[ab]\//, "").split("?")[0] ?? "";
+  const ext = clean.split(".").pop()?.toLowerCase() ?? "";
+  const byExt: Record<string, string> = {
+    bash: "sh",
+    cjs: "js",
+    css: "css",
+    dart: "dart",
+    java: "java",
+    js: "js",
+    json: "json",
+    jsonc: "json",
+    jsx: "js",
+    kt: "kt",
+    kts: "kt",
+    mjs: "js",
+    php: "php",
+    py: "python",
+    sh: "sh",
+    ts: "ts",
+    tsx: "ts",
+  };
+  return byExt[ext] ?? "";
+}
+
 function highlightCodeLineFallback(raw: string, lang: string): string {
   const normalized = normalizeLang(lang);
   if (normalized === "diff") {
@@ -188,6 +217,80 @@ function stripTrailingBlankLines(lines: string[]): string[] {
   return lines;
 }
 
+function reapplyBackground(line: string, bg: string): string {
+  return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + RESET;
+}
+
+function hunkLineNumberWidth(hunks: readonly DiffHunk[]): number {
+  let max = 0;
+  for (const hunk of hunks) {
+    max = Math.max(max, hunk.header.oldStartLine + hunk.header.oldLineCount);
+    max = Math.max(max, hunk.header.newStartLine + hunk.header.newLineCount);
+  }
+  return Math.max(2, String(max).length);
+}
+
+function parseDiffFilePath(header: string): string {
+  const plus = header.split("\n").find((line) => line.startsWith("+++ "));
+  const minus = header.split("\n").find((line) => line.startsWith("--- "));
+  const raw = (plus ?? minus ?? "").replace(/^[+-]{3}\s+/, "").trim();
+  if (!raw || raw === "/dev/null") return "";
+  return raw.replace(/^[ab]\//, "");
+}
+
+function renderDiffLineContent(line: DiffLine, language: string, noHighlight: boolean): string {
+  const text = line.text.replace(/\n$/, "");
+  if (noHighlight) return text;
+  if (isShikiReady() && language) {
+    const [highlighted] = highlightBlock(text, language);
+    return highlighted ?? text;
+  }
+  return highlightCodeLineFallback(text.length === 0 ? " " : text, language);
+}
+
+function renderUnifiedDiff(source: string, width: number, noHighlight: boolean): string[] | null {
+  let parsed: ReturnType<DiffParser["parse"]>;
+  try {
+    parsed = new DiffParser().parse(source);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hunks.length === 0) return null;
+
+  const filePath = parseDiffFilePath(parsed.header);
+  const language = langFromPath(filePath);
+  const gutterWidth = 2;
+  const codeWidth = Math.max(8, width - gutterWidth);
+  const out: string[] = [];
+
+  if (filePath) out.push(`${C_GRAY}${filePath}${RESET}`);
+
+  for (const hunk of parsed.hunks) {
+    out.push(`${C_ACTION}${hunk.lines[0]?.text ?? ""}${RESET}`);
+    for (const line of hunk.lines.slice(1)) {
+      const isAdd = line.type === DiffLineType.Add;
+      const isDelete = line.type === DiffLineType.Delete;
+      const number = String(line.newLineNumber ?? line.oldLineNumber ?? "").padStart(numberWidth);
+      const marker = isAdd ? "+" : isDelete ? "-" : " ";
+      const markerColor = isAdd ? C_SUCCESS : isDelete ? C_ERROR : C_MUTED;
+      const highlighted = renderDiffLineContent(line, language, noHighlight);
+      const wrapped = wrapPlain(highlighted, codeWidth);
+      const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
+
+      for (const [index, segment] of wrapped.entries()) {
+        const gutter = index === 0
+          ? `${C_MUTED}${number}${RESET} ${markerColor}${marker}${RESET} `
+          : `${" ".repeat(numberWidth)}   `;
+        const rendered = `${gutter}${segment}${RESET}`;
+        out.push(bg ? reapplyBackground(padToWidth(rendered, width), bg) : rendered);
+      }
+    }
+  }
+
+  return out;
+}
+
 class CodeMapTerminalRenderer extends TerminalRenderer {
   constructor(
     private readonly width: number,
@@ -203,6 +306,11 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
   code(code: unknown, lang?: string): string {
     const source = isToken(code) ? tokenText(code) : String(code ?? "");
     const language = isToken(code) && typeof code.lang === "string" ? code.lang : lang ?? "";
+    if (normalizeLang(language) === "diff") {
+      const diffLines = renderUnifiedDiff(source, this.width, this.noHighlight);
+      if (diffLines) return diffLines.join("\n") + "\n";
+    }
+
     const separator = `${C_MUTED}${"-".repeat(Math.min(this.width, 40))}${RESET}`;
     const useShiki = !this.noHighlight && isShikiReady() && normalizeLang(language) !== "diff";
     const highlighted = useShiki
