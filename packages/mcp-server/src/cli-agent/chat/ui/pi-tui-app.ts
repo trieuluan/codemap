@@ -140,9 +140,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     lastManagedLines = 0;
     currentBottomHeight = 0;
 
-    // /clear resets the message array — print a visual divider and reset counter.
+    // /clear resets the message array — wipe visible screen + scrollback and redraw.
     if (state.messages.length < printedMsgCount) {
-      buf += `${C_GRAY}${"─".repeat(Math.max(0, w - 1))}${RESET}\r\n`;
+      buf += "\x1b[3J\x1b[2J\x1b[H"; // clear scrollback + screen, cursor to top
+      lastManagedLines = 0;
+      currentBottomHeight = 0;
       printedMsgCount = 0;
     }
 
@@ -400,6 +402,17 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // ── input ─────────────────────────────────────────────────────────────────
 
   function onInput(data: string): void {
+    // Drop mouse scroll events before they reach the editor.
+    // Scroll wheel sends button 64 (up) / 65 (down) via SGR (\x1b[<64;...M)
+    // or X10 (\x1b[M + encoded byte). Passing them to editor.handleInput()
+    // triggers spurious doEditorRefresh() calls that corrupt lastManagedLines
+    // during streaming, causing rapid duplicate redraws in the scrollback.
+    if (/^\x1b\[<6[45];/.test(data)) return;
+    if (data.startsWith("\x1b[M") && data.length >= 6) {
+      const btn = data.charCodeAt(3) - 32;
+      if (btn === 64 || btn === 65) return;
+    }
+
     const state = chatTerminal.store.getState();
 
     if (matchesKey(data, Key.ctrl("c"))) {

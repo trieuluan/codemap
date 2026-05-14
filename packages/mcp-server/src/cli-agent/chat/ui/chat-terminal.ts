@@ -18,6 +18,7 @@ import {
   loadSession,
   findLastSession,
 } from "../session-store.js";
+import { loadOrSynthesizeConventions } from "../../convention-synthesizer.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
@@ -206,6 +207,14 @@ export class ChatTerminal {
 
     await this.initSession();
 
+    // Synthesize project conventions in background (non-blocking)
+    const profiles = this.options.profiles ?? [];
+    const plannerModel =
+      profiles.find((p) => p.id === "planner")?.model ??
+      profiles.find((p) => p.id === "coder")?.model ??
+      this.store.getState().config.model;
+    loadOrSynthesizeConventions(this.options.provider, plannerModel).catch(() => {});
+
     const { startPiTuiApp } = await import("./pi-tui-app.js");
     await startPiTuiApp(this);
   }
@@ -259,11 +268,12 @@ export class ChatTerminal {
     try {
       this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
     } catch { /* ignore */ }
-    this.store.dispatch({
+    this.store.dispatch((prev) => ({
       agentHistory: [],
       messages: [],
       sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-    });
+      input: { ...prev.input, history: [] },
+    }));
   }
 
   loadSessionById(sessionId: string): void {

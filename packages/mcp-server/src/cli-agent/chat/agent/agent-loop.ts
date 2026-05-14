@@ -1,6 +1,7 @@
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
 import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
+import { getCachedConventions } from "../../convention-synthesizer.js";
 import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
@@ -75,9 +76,17 @@ export async function runAgentLoop(input: {
   }
   throwIfAborted(input.signal);
 
-  const systemPrompt = resourceContext
-    ? AGENT_SYSTEM_PROMPT + "\n\n" + resourceContext
-    : AGENT_SYSTEM_PROMPT;
+  // Inject synthesized project conventions (read from cache — synthesis happens at startup)
+  let conventionContext: string | null = null;
+  try {
+    conventionContext = await getCachedConventions();
+  } catch { /* non-blocking */ }
+
+  const systemPrompt = [
+    AGENT_SYSTEM_PROMPT,
+    resourceContext,
+    conventionContext ? `## Project Conventions\n\n${conventionContext}` : null,
+  ].filter(Boolean).join("\n\n");
 
   let allMessages: ChatMessage[] = [...input.history, input.userMessage].map((msg) =>
     msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
