@@ -26,9 +26,20 @@ export const C_DIM = DIM;
 
 export const BG_SURFACE = bg(17, 24, 39);
 export const BG_SURFACE_SOFT = bg(22, 27, 46);
-export const BG_USER = bg(11, 16, 32);
+export const BG_USER = bg(55, 65, 81);
 
-export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+export const SPINNER = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+] as const;
 
 export const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1006h";
 export const DISABLE_MOUSE_TRACKING = "\x1b[?1000l\x1b[?1006l";

@@ -1,4 +1,6 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
+import { Marked } from "marked";
+import TerminalRenderer from "marked-terminal";
 import {
   BOLD,
   C_ACTION,
@@ -11,6 +13,33 @@ import {
   RESET,
 } from "./theme.js";
 import { highlightBlock, isShikiReady } from "./shiki-highlight.js";
+
+type MarkdownToken = Record<string, unknown>;
+type ListItemToken = MarkdownToken & {
+  checked?: boolean;
+  loose?: boolean;
+  task?: boolean;
+  tokens?: unknown[];
+};
+
+const RENDERER_METHODS = [
+  "blockquote",
+  "br",
+  "code",
+  "codespan",
+  "del",
+  "em",
+  "heading",
+  "hr",
+  "html",
+  "image",
+  "link",
+  "list",
+  "listitem",
+  "paragraph",
+  "strong",
+  "text",
+] as const;
 
 export function stripAnsi(s: string): string {
   return s
@@ -68,13 +97,6 @@ export function wrapPlain(text: string, width: number): string[] {
   return out;
 }
 
-function cleanInlineMarkdown(text: string): string {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1");
-}
-
 export function renderInlineMarkdown(text: string): string {
   return text
     .replace(/\*\*([^*\n]+)\*\*/g, `${BOLD}$1${RESET}`)
@@ -105,7 +127,7 @@ function normalizeLang(lang: string): string {
   return CODE_LANG_ALIASES[lower] ?? lower;
 }
 
-function highlightCodeLine(raw: string, lang: string): string {
+function highlightCodeLineFallback(raw: string, lang: string): string {
   const normalized = normalizeLang(lang);
   if (normalized === "diff") {
     if (raw.startsWith("+") && !raw.startsWith("+++")) return `${C_SUCCESS}${raw}${RESET}`;
@@ -149,77 +171,228 @@ function highlightCodeLine(raw: string, lang: string): string {
   return raw;
 }
 
-export function renderMarkdownish(text: string, width: number, options?: { noHighlight?: boolean }): string[] {
-  const out: string[] = [];
-  let inCode = false;
-  let codeLang = "";
-  let codeLines: string[] = [];
+function isToken(value: unknown): value is MarkdownToken {
+  return typeof value === "object" && value !== null;
+}
 
-  const flushCodeBlock = () => {
-    const code = codeLines.join("\n");
-    const useShiki = !options?.noHighlight && isShikiReady() && codeLang !== "diff";
-    const hlLines = useShiki
-      ? highlightBlock(code, codeLang)
-      : codeLines.map((l) => options?.noHighlight ? l : highlightCodeLine(l.length === 0 ? " " : l, codeLang));
-    for (const hl of hlLines) {
-      for (const wrapped of wrapPlain(hl, Math.max(8, width - 4))) {
-        out.push(`    ${wrapped}${RESET}`);
-      }
-    }
-    codeLines = [];
-  };
+function tokenText(value: unknown): string {
+  if (!isToken(value)) return String(value ?? "");
+  const text = value.text;
+  if (typeof text === "string") return text;
+  const raw = value.raw;
+  return typeof raw === "string" ? raw : "";
+}
 
-  for (const raw of text.split("\n")) {
-    const fence = raw.match(/^\s*```(\S*)?/);
-    if (fence) {
-      if (!inCode) {
-        inCode = true;
-        codeLang = fence[1] ?? "";
-        codeLines = [];
-      } else {
-        flushCodeBlock();
-        inCode = false;
-        codeLang = "";
-      }
-      const label = inCode ? ` code${codeLang ? `:${codeLang}` : ""} ` : " end ";
-      out.push(`${C_MUTED}${"-".repeat(Math.min(width, Math.max(12, label.length + 8)))}${RESET}`);
-      continue;
-    }
+function stripTrailingBlankLines(lines: string[]): string[] {
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
 
-    if (inCode) {
-      codeLines.push(raw);
-      continue;
-    }
-
-    const heading = raw.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
-    if (heading) {
-      const text = cleanInlineMarkdown(heading[2] ?? "");
-      const marker = heading[1]!.length <= 2 ? C_AI : C_ACTION;
-      for (const [i, line] of wrapPlain(text, Math.max(8, width - 2)).entries()) {
-        out.push(i === 0 ? `${marker}${BOLD}${line}${RESET}` : `  ${line}`);
-      }
-      continue;
-    }
-
-    const bullet = raw.match(/^\s*[-*]\s+(.+)$/);
-    if (bullet) {
-      const lines = wrapPlain(bullet[1] ?? "", Math.max(8, width - 2));
-      out.push(`${C_ACTION}-${RESET} ${renderInlineMarkdown(lines[0] ?? "")}`);
-      for (const line of lines.slice(1)) out.push(`  ${renderInlineMarkdown(line)}`);
-      continue;
-    }
-
-    const numbered = raw.match(/^\s*(\d+)[.)]\s+(.+)$/);
-    if (numbered) {
-      const prefix = `${numbered[1]}. `;
-      const lines = wrapPlain(numbered[2] ?? "", Math.max(8, width - visibleWidth(prefix)));
-      out.push(`${C_ACTION}${prefix}${RESET}${renderInlineMarkdown(lines[0] ?? "")}`);
-      for (const line of lines.slice(1)) out.push(`${" ".repeat(visibleWidth(prefix))}${renderInlineMarkdown(line)}`);
-      continue;
-    }
-
-    for (const line of wrapPlain(raw, width)) out.push(renderInlineMarkdown(line));
+class CodeMapTerminalRenderer extends TerminalRenderer {
+  constructor(
+    private readonly width: number,
+    private readonly noHighlight: boolean,
+  ) {
+    super({
+      reflowText: false,
+      showSectionPrefix: false,
+      width,
+    });
   }
 
-  return out;
+  code(code: unknown, lang?: string): string {
+    const source = isToken(code) ? tokenText(code) : String(code ?? "");
+    const language = isToken(code) && typeof code.lang === "string" ? code.lang : lang ?? "";
+    const separator = `${C_MUTED}${"-".repeat(Math.min(this.width, 40))}${RESET}`;
+    const useShiki = !this.noHighlight && isShikiReady() && normalizeLang(language) !== "diff";
+    const highlighted = useShiki
+      ? highlightBlock(source, language)
+      : source.split("\n").map((line) =>
+          this.noHighlight ? line : highlightCodeLineFallback(line.length === 0 ? " " : line, language),
+        );
+    const codeWidth = Math.max(8, this.width - 4);
+    const body = highlighted.flatMap((line) =>
+      wrapPlain(line, codeWidth).map((wrapped) => `    ${wrapped}${RESET}`),
+    );
+
+    return [separator, ...body, separator].join("\n") + "\n";
+  }
+
+  heading(heading: unknown, level?: number): string {
+    const depth = isToken(heading) && typeof heading.depth === "number" ? heading.depth : level ?? 1;
+    const text = this.inlineFrom(heading);
+    const color = depth <= 2 ? `${C_ACTION}${BOLD}` : `${C_AI}${BOLD}`;
+    const lines = wrapPlain(text, Math.max(8, this.width - 2));
+    return lines.map((line, index) =>
+      index === 0 ? `${color}${line}${RESET}` : `  ${line}`,
+    ).join("\n") + "\n";
+  }
+
+  paragraph(paragraph: unknown): string {
+    const text = this.inlineFrom(paragraph);
+    return wrapPlain(text, this.width).join("\n") + "\n";
+  }
+
+  list(list: unknown, ordered?: boolean): string {
+    if (isToken(list) && Array.isArray(list.items)) {
+      const isOrdered = Boolean(list.ordered);
+      const start = typeof list.start === "number" ? list.start : 1;
+      const rendered = list.items.map((item, index) => {
+        const marker = isOrdered ? `${start + index}. ` : "- ";
+        return this.formatListItem(marker, item as ListItemToken);
+      });
+      return rendered.join("\n") + "\n";
+    }
+
+    const body = String(list ?? "").trim();
+    if (!body) return "";
+    return body.split("\n").map((line, index) => {
+      const marker = ordered ? `${index + 1}. ` : "- ";
+      return this.formatListLine(marker, line);
+    }).join("\n") + "\n";
+  }
+
+  listitem(item: unknown): string {
+    return this.formatListItem("- ", item as ListItemToken);
+  }
+
+  blockquote(quote: unknown): string {
+    const text = isToken(quote) && Array.isArray(quote.tokens)
+      ? this.parser.parse(quote.tokens).trim()
+      : String(quote ?? "").trim();
+    if (!text) return "";
+    return text.split("\n").flatMap((line) =>
+      wrapPlain(line.trimStart(), Math.max(8, this.width - 2)).map((wrapped) =>
+        wrapped ? `${C_MUTED}│${RESET} ${C_GRAY}${wrapped}${RESET}` : "",
+      ),
+    ).join("\n") + "\n";
+  }
+
+  hr(): string {
+    return `${C_MUTED}${"─".repeat(Math.min(this.width, 60))}${RESET}\n`;
+  }
+
+  codespan(code: unknown): string {
+    return `${C_ACTION}${tokenText(code)}${RESET}`;
+  }
+
+  strong(strong: unknown): string {
+    return `${BOLD}${this.inlineFrom(strong)}${RESET}`;
+  }
+
+  em(emphasis: unknown): string {
+    return this.inlineFrom(emphasis);
+  }
+
+  del(deleted: unknown): string {
+    return this.inlineFrom(deleted);
+  }
+
+  link(hrefOrToken: unknown, _title?: string | null, text?: string): string {
+    const href = isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
+      ? hrefOrToken.href
+      : String(hrefOrToken ?? "");
+    const label = isToken(hrefOrToken) ? this.inlineFrom(hrefOrToken) : text ?? href;
+    if (!href || label === href) return `${C_GRAY}${label || href}${RESET}`;
+    return `${label} ${C_MUTED}(${href})${RESET}`;
+  }
+
+  image(hrefOrToken: unknown, title?: string | null, text?: string): string {
+    const href = isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
+      ? hrefOrToken.href
+      : String(hrefOrToken ?? "");
+    const label = isToken(hrefOrToken) ? tokenText(hrefOrToken) : text ?? "image";
+    const suffix = title ? ` - ${title}` : "";
+    return `${C_GRAY}![${label}${suffix}]${RESET}${href ? ` ${C_MUTED}(${href})${RESET}` : ""}`;
+  }
+
+  text(text: unknown): string {
+    return tokenText(text);
+  }
+
+  br(): string {
+    return "\n";
+  }
+
+  html(): string {
+    return "";
+  }
+
+  private inlineFrom(value: unknown): string {
+    if (isToken(value) && Array.isArray(value.tokens)) {
+      return this.parser.parseInline(value.tokens);
+    }
+    return tokenText(value);
+  }
+
+  private formatListItem(marker: string, item: ListItemToken): string {
+    const checkbox = item.task ? `[${item.checked ? "x" : " "}] ` : "";
+    const text = this.listItemText(item);
+    return this.formatListLine(marker, `${checkbox}${text}`);
+  }
+
+  private listItemText(item: ListItemToken): string {
+    if (!Array.isArray(item.tokens)) return tokenText(item);
+
+    const inlineLines = item.tokens.map((token) => {
+      if (!isToken(token) || token.type !== "text") return null;
+      return Array.isArray(token.tokens)
+        ? this.parser.parseInline(token.tokens)
+        : tokenText(token);
+    });
+    if (inlineLines.every((line) => line !== null)) {
+      return inlineLines.join("\n");
+    }
+
+    return this.parser.parse(item.tokens, Boolean(item.loose)).trim();
+  }
+
+  private formatListLine(marker: string, text: string): string {
+    const markerWidth = visibleWidth(marker);
+    const markerColor = marker.trim() === "-" ? `${C_ACTION}-${RESET} ` : `${C_ACTION}${marker}${RESET}`;
+    const continuation = " ".repeat(markerWidth);
+    const bodyWidth = Math.max(8, this.width - markerWidth);
+    const lines = stripTrailingBlankLines(text.split("\n"));
+    const out: string[] = [];
+
+    for (const [lineIndex, line] of lines.entries()) {
+      const wrapped = wrapPlain(line, bodyWidth);
+      for (const [wrapIndex, wrappedLine] of wrapped.entries()) {
+        if (lineIndex === 0 && wrapIndex === 0) {
+          out.push(`${markerColor}${wrappedLine}`);
+        } else {
+          out.push(`${continuation}${wrappedLine}`);
+        }
+      }
+    }
+
+    return out.join("\n");
+  }
+}
+
+export function renderMarkdownish(text: string, width: number, options?: { noHighlight?: boolean }): string[] {
+  const renderer = new CodeMapTerminalRenderer(width, options?.noHighlight ?? false);
+  const rendererMethods: Record<string, (...args: unknown[]) => string> = {};
+  for (const method of RENDERER_METHODS) {
+    rendererMethods[method] = function (this: { options: Record<string, unknown>; parser: CodeMapTerminalRenderer["parser"] }, ...args: unknown[]) {
+      renderer.options = this.options;
+      renderer.parser = this.parser;
+      const fn = (renderer as unknown as Record<string, unknown>)[method];
+      return typeof fn === "function" ? fn.apply(renderer, args) as string : "";
+    };
+  }
+  const parser = new Marked({
+    async: false,
+    breaks: false,
+    gfm: true,
+  });
+  parser.use({ renderer: rendererMethods, useNewRenderer: true } as Parameters<Marked["use"]>[0]);
+  const rendered = parser.parse(text) as string;
+  const lines = stripTrailingBlankLines(rendered.split("\n"));
+
+  return lines.reduce<string[]>((acc, line) => {
+    if (line === "" && acc[acc.length - 1] === "") return acc;
+    acc.push(line);
+    return acc;
+  }, []);
 }
