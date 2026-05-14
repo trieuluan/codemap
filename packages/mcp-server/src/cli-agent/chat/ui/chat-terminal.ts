@@ -569,11 +569,20 @@ export class ChatTerminal {
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
       this.logger?.logError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
+      const isContextFull =
+        errMsg.includes("context window") || errMsg.includes("context length") ||
+        errMsg.includes("maximum context") || errMsg.includes("token limit") ||
+        errMsg.includes("too long") || errMsg.includes("exceeds");
       const isModelBroken =
         errMsg.includes("zero-length") || errMsg.includes("empty document") || errMsg.includes("429");
       const cs = this.store.getState().config;
 
-      if (isModelBroken && cs.availableModels.length > 1) {
+      if (isContextFull) {
+        this.appendMessage({
+          role: "system",
+          content: "Context window full. Run `/compact` to summarize history, then retry.",
+        });
+      } else if (isModelBroken && cs.availableModels.length > 1) {
         const strong = cs.availableModels.filter(m => m !== cs.model && isStrongModel(m));
         const newModel = strong[0]
           ?? cs.availableModels.find((m) => m !== cs.model)

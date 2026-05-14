@@ -18,7 +18,7 @@ import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
 function generateBanner(): string[] {
   const result = cfonts.render("CODEMAP", {
     font: "simple3d",
-    gradient: ["cyan", "blue", "magenta"],
+    gradient: ["cyan", "magenta"],
     env: "node",
   });
   const raw = (result as { string?: string }).string ?? "";
@@ -78,6 +78,25 @@ export function headerLines(state: UIState): string[] {
   ];
 }
 
+// Replace inline base64 image data with a short placeholder before rendering.
+// Without this, marked tries to tokenize multi-MB base64 strings and freezes.
+function stripBase64Images(text: string): string {
+  return text.replace(
+    /!\[([^\]]*)\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=\s]+\)/g,
+    (_match, alt) => `[image${alt ? `: ${alt}` : ""}]`,
+  );
+}
+
+// Safe wrapper: if renderMarkdownish throws (e.g. broken markdown from a
+// truncated tool result), fall back to plain line-split to avoid crashing doRefresh.
+function safeRender(content: string, width: number, opts?: { noHighlight?: boolean }): string[] {
+  try {
+    return renderMarkdownish(stripBase64Images(content), width, opts);
+  } catch {
+    return stripBase64Images(content).split("\n").flatMap((l) => wrapPlain(l, width));
+  }
+}
+
 export function messageLines(messages: Message[], width: number): string[] {
   if (messages.length === 0) {
     return [
@@ -88,33 +107,27 @@ export function messageLines(messages: Message[], width: number): string[] {
   }
 
   const out: string[] = [];
-  // Prefix visible widths (used to compute matching body wrap width and continuation indent):
-  // user:      "HH:MM:SS > "          = 11
-  // assistant: "HH:MM:SS assistant: " = 20
-  // tool:      "HH:MM:SS toolname: "  = 9 + name (capped)
-  // system:    "HH:MM:SS system: "    = 17
   for (const msg of messages) {
     const time = `${C_MUTED}${formatTime(msg.timestamp)}${RESET}`;
     if (msg.role === "user") {
       const bg = (raw: string) => BG_USER + padToWidth(raw, width).replace(/\x1b\[0m/g, `\x1b[0m${BG_USER}`) + RESET;
       const prefixW = 11;
       const bodyW = Math.max(20, width - prefixW - 2);
-      const lines = renderMarkdownish(msg.content, bodyW);
+      const lines = safeRender(msg.content, bodyW);
       out.push(bg(`${time} ${C_ACTION}>${RESET} ${lines[0] ?? ""}`));
       for (const line of lines.slice(1)) out.push(bg(`${" ".repeat(prefixW)}${line}`));
     } else if (msg.role === "assistant") {
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
-      const lines = renderMarkdownish(stripAnsi(msg.content), bodyW);
+      const lines = safeRender(stripAnsi(msg.content), bodyW);
       out.push(`${time} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${line}`);
     } else if (msg.role === "tool") {
       const toolName = truncate(msg.toolName ?? "tool", 20);
       const prefixW = Math.min(9 + toolName.length + 1, 32);
       const bodyW = Math.max(20, width - prefixW);
-      // Preview messages (dry-run diff) get diff highlighting; other tool results stay plain
       const isPreview = (msg.toolName ?? "").endsWith(" preview") || msg.toolName === "plan";
-      const rawLines = renderMarkdownish(stripAnsi(msg.content), bodyW, { noHighlight: !isPreview });
+      const rawLines = safeRender(stripAnsi(msg.content), bodyW, { noHighlight: !isPreview });
       const limit = toolLineLimit(msg);
       const lines = rawLines.length > limit
         ? [...rawLines.slice(0, limit), `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`]
@@ -125,11 +138,11 @@ export function messageLines(messages: Message[], width: number): string[] {
     } else if (msg.role === "system") {
       const prefixW = 17;
       const bodyW = Math.max(20, width - prefixW);
-      const lines = renderMarkdownish(msg.content, bodyW);
+      const lines = safeRender(msg.content, bodyW);
       out.push(`${time} ${C_MUTED}system:${RESET} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1)) out.push(`${" ".repeat(prefixW)}${line}`);
     } else {
-      out.push(...renderMarkdownish(msg.content, width));
+      out.push(...safeRender(msg.content, width));
     }
     out.push("");
   }

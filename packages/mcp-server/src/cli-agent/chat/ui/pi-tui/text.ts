@@ -1,5 +1,5 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { DiffLineType, DiffParser, type DiffHunk, type DiffLine } from "@git-diff-view/core";
+import { DiffLineType, DiffParser } from "@git-diff-view/core";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
 import {
@@ -221,14 +221,6 @@ function reapplyBackground(line: string, bg: string): string {
   return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + RESET;
 }
 
-function hunkLineNumberWidth(hunks: readonly DiffHunk[]): number {
-  let max = 0;
-  for (const hunk of hunks) {
-    max = Math.max(max, hunk.header.oldStartLine + hunk.header.oldLineCount);
-    max = Math.max(max, hunk.header.newStartLine + hunk.header.newLineCount);
-  }
-  return Math.max(2, String(max).length);
-}
 
 function parseDiffFilePath(header: string): string {
   const plus = header.split("\n").find((line) => line.startsWith("+++ "));
@@ -238,14 +230,10 @@ function parseDiffFilePath(header: string): string {
   return raw.replace(/^[ab]\//, "");
 }
 
-function renderDiffLineContent(line: DiffLine, language: string, noHighlight: boolean): string {
-  const text = line.text.replace(/\n$/, "");
-  if (noHighlight) return text;
-  if (isShikiReady() && language) {
-    const [highlighted] = highlightBlock(text, language);
-    return highlighted ?? text;
-  }
-  return highlightCodeLineFallback(text.length === 0 ? " " : text, language);
+// edit_file preview puts the path in the hunk header: "@@ -1,4 +1,4 @@ /path/file.ts:1-10"
+function langFromHunkHeader(hunkText: string): string {
+  const match = hunkText.match(/@@ .+? @@ (.+?)(?::\d+(?:-\d+)?)?$/);
+  return match?.[1] ? langFromPath(match[1].trim()) : "";
 }
 
 function renderUnifiedDiff(source: string, width: number, noHighlight: boolean): string[] | null {
@@ -259,29 +247,52 @@ function renderUnifiedDiff(source: string, width: number, noHighlight: boolean):
   if (parsed.hunks.length === 0) return null;
 
   const filePath = parseDiffFilePath(parsed.header);
-  const language = langFromPath(filePath);
-  const gutterWidth = 2;
+  // Fallback: edit_file preview embeds the path in the hunk @@ header line.
+  const language = langFromPath(filePath)
+    || langFromHunkHeader(parsed.hunks[0]?.lines[0]?.text ?? "");
+
+  // Collect every content line text (strips trailing newline only).
+  // We pass all lines as one block to Shiki so it has full context for
+  // accurate tokenization — per-line calls would break multi-line constructs.
+  const contentTexts: string[] = [];
+  for (const hunk of parsed.hunks) {
+    for (const line of hunk.lines.slice(1)) {
+      contentTexts.push(line.text.replace(/\n$/, ""));
+    }
+  }
+
+  // Pre-highlight the whole block once.
+  let preHighlighted: string[];
+  if (!noHighlight && isShikiReady() && language) {
+    preHighlighted = highlightBlock(contentTexts.join("\n"), language);
+  } else if (!noHighlight) {
+    preHighlighted = contentTexts.map((t) =>
+      highlightCodeLineFallback(t.length === 0 ? " " : t, language),
+    );
+  } else {
+    preHighlighted = contentTexts;
+  }
+
+  const gutterWidth = 2; // marker + space only
   const codeWidth = Math.max(8, width - gutterWidth);
   const out: string[] = [];
 
   if (filePath) out.push(`${C_GRAY}${filePath}${RESET}`);
 
+  let lineIdx = 0;
   for (const hunk of parsed.hunks) {
     out.push(`${C_ACTION}${hunk.lines[0]?.text ?? ""}${RESET}`);
     for (const line of hunk.lines.slice(1)) {
       const isAdd = line.type === DiffLineType.Add;
       const isDelete = line.type === DiffLineType.Delete;
-      const number = String(line.newLineNumber ?? line.oldLineNumber ?? "").padStart(numberWidth);
       const marker = isAdd ? "+" : isDelete ? "-" : " ";
       const markerColor = isAdd ? C_SUCCESS : isDelete ? C_ERROR : C_MUTED;
-      const highlighted = renderDiffLineContent(line, language, noHighlight);
+      const highlighted = preHighlighted[lineIdx++] ?? "";
       const wrapped = wrapPlain(highlighted, codeWidth);
       const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
 
       for (const [index, segment] of wrapped.entries()) {
-        const gutter = index === 0
-          ? `${C_MUTED}${number}${RESET} ${markerColor}${marker}${RESET} `
-          : `${" ".repeat(numberWidth)}   `;
+        const gutter = index === 0 ? `${markerColor}${marker}${RESET} ` : `  `;
         const rendered = `${gutter}${segment}${RESET}`;
         out.push(bg ? reapplyBackground(padToWidth(rendered, width), bg) : rendered);
       }

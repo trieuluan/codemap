@@ -15,9 +15,9 @@ function formatAge(ts: number): string {
 }
 
 function formatSession(i: number, s: SessionMeta, current: boolean): string {
-  const marker = current ? "●" : " ";
   const tok = s.tokenCount > 0 ? ` · ${Math.round(s.tokenCount / 1000)}k tok` : "";
-  return `${marker} ${i + 1}. ${s.name}  [${s.messageCount} msgs${tok}]  ${formatAge(s.updatedAt)}`;
+  const bullet = current ? " ●" : "";
+  return `${i + 1}.${bullet} ${s.name}  [${s.messageCount} msgs${tok}]  ${formatAge(s.updatedAt)}`;
 }
 
 export const sessionsCommand: Command = {

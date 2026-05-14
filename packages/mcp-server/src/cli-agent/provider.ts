@@ -265,6 +265,39 @@ export class NineRouterProvider implements GatewayProvider {
   }
 }
 
+// Pattern for inline base64 images: ![alt](data:image/type;base64,data)
+const INLINE_IMAGE_RE = /!\[([^\]]*)\]\((data:image\/([^;]+);base64,([a-zA-Z0-9+/=\s]+))\)/g;
+
+// Convert a message content string that may contain inline base64 images into
+// an OpenAI-compatible multimodal content array. If no images are found the
+// original string is returned so non-vision models are unaffected.
+function toMultimodalContent(text: string): string | unknown[] {
+  const parts: unknown[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+
+  INLINE_IMAGE_RE.lastIndex = 0;
+  while ((match = INLINE_IMAGE_RE.exec(text)) !== null) {
+    const before = text.slice(last, match.index).trim();
+    if (before) parts.push({ type: "text", text: before });
+
+    const mimeType = `image/${match[3]}`;
+    const base64 = match[4]!.replace(/\s+/g, "");
+    parts.push({
+      type: "image_url",
+      image_url: { url: `data:${mimeType};base64,${base64}`, detail: "auto" },
+    });
+
+    last = match.index + match[0].length;
+  }
+
+  if (parts.length === 0) return text; // no images — keep as string
+
+  const remaining = text.slice(last).trim();
+  if (remaining) parts.push({ type: "text", text: remaining });
+  return parts;
+}
+
 function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
   const messages: ChatMessage[] = request.system
     ? [{ role: "system", content: request.system }, ...request.messages]
@@ -281,7 +314,7 @@ function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
 
     return {
       role: message.role,
-      content: message.content,
+      content: toMultimodalContent(message.content),
       ...(message.toolCalls && message.toolCalls.length > 0
         ? { tool_calls: message.toolCalls }
         : {}),

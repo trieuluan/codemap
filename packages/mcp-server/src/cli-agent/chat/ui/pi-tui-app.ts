@@ -125,7 +125,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   function scheduleRefresh(): void {
     if (refreshQueued || stopped) return;
     refreshQueued = true;
-    queueMicrotask(() => { refreshQueued = false; doRefresh(); });
+    queueMicrotask(() => {
+      refreshQueued = false;
+      try { doRefresh(); } catch (e) {
+        process.stderr.write(`[doRefresh error] ${e instanceof Error ? e.stack ?? e.message : String(e)}\n`);
+      }
+    });
   }
 
   function doRefresh(): void {

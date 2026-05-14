@@ -457,7 +457,7 @@ function isFileWriteTool(name: string): boolean {
   return name === "edit_file" || name === "write_file";
 }
 
-function formatToolUiResult(name: string, result: string): string {
+export function formatToolUiResult(name: string, result: string): string {
   if (!isFileWriteTool(name)) return result;
   if (!result.includes("After apply:")) return result;
 
