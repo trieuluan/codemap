@@ -13,40 +13,37 @@ export const gitCommitCommand: Command = {
   description: "AI-generated commit message and commit staged/unstaged changes",
   execute: async (args, ctx) => {
     ctx.setBusy(true);
+    ctx.startSubprocess("git commit");
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
     try {
-      // If user provided a message, skip AI generation
       const manualMsg = args.trim();
       if (manualMsg) {
+        ctx.logSubprocess("Committing with provided message…");
         const result = await ctx.toolClient.callTool("bash", {
           command: `git add -A && git commit -m ${JSON.stringify(manualMsg)}`,
         });
         append(result.content || "Committed.");
-        ctx.setBusy(false);
         return;
       }
 
-      // Check if there's anything to commit
+      ctx.logSubprocess("Checking status…");
       const statusResult = await ctx.toolClient.callTool("bash", {
         command: "git status --short",
       });
       if (!statusResult.content.trim()) {
         append("Nothing to commit — working tree clean.");
-        ctx.setBusy(false);
         return;
       }
 
-      // Get diff for AI to analyze
+      ctx.logSubprocess("Reading diff…");
       const diffResult = await ctx.toolClient.callTool("bash", {
         command: "git diff HEAD --stat && echo '---' && git diff HEAD -- . ':(exclude)package-lock.json' ':(exclude)*.lock'",
       });
-      const diff = diffResult.content.slice(0, 6000); // cap to avoid token overload
+      const diff = diffResult.content.slice(0, 6000);
 
-      append("Generating commit message…");
-
-      // Generate commit message using reviewer model
+      ctx.logSubprocess("Generating commit message…");
       let commitMsg = "";
       for await (const chunk of ctx.provider.stream({
         model: ctx.reviewerModel,
@@ -59,11 +56,10 @@ export const gitCommitCommand: Command = {
 
       if (!commitMsg) {
         append("Failed to generate commit message. Use `/commit <message>` instead.");
-        ctx.setBusy(false);
         return;
       }
 
-      // Commit
+      ctx.logSubprocess(`→ ${commitMsg.split("\n")[0]}`);
       const commitResult = await ctx.toolClient.callTool("bash", {
         command: `git add -A && git commit -m ${JSON.stringify(commitMsg)}`,
       });
@@ -71,8 +67,9 @@ export const gitCommitCommand: Command = {
       append(`\`\`\`\n${commitMsg}\n\`\`\`\n${commitResult.content}\n\n_Undo: \`git reset --soft HEAD~1\`_`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      ctx.endSubprocess();
+      ctx.setBusy(false);
     }
-
-    ctx.setBusy(false);
   },
 };

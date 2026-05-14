@@ -741,6 +741,17 @@ export class ChatTerminal {
       currentSessionId: this._sessionId ?? undefined,
       newSession: () => this.startNewSession(),
       loadSessionById: (id: string) => this.loadSessionById(id),
+      startSubprocess: (command: string) => {
+        this.store.dispatch({ subprocess: { active: true, command, logLines: [] } });
+      },
+      logSubprocess: (line: string) => {
+        this.store.dispatch((prev) => ({
+          subprocess: { ...prev.subprocess, logLines: [...prev.subprocess.logLines, line] },
+        }));
+      },
+      endSubprocess: () => {
+        this.store.dispatch({ subprocess: { active: false, command: "", logLines: [] } });
+      },
     };
   }
 }

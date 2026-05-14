@@ -25,48 +25,42 @@ export const gitPrCommand: Command = {
   description: "Create a pull request with AI-generated title and description",
   execute: async (args, ctx) => {
     ctx.setBusy(true);
+    ctx.startSubprocess("gh pr create");
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
     try {
-      // Check gh is installed
+      ctx.logSubprocess("Checking gh CLI…");
       const ghCheck = await ctx.toolClient.callTool("bash", {
         command: "which gh 2>&1",
       });
       if (!ghCheck.content.trim().startsWith("/")) {
         append("`gh` CLI not found. Install it from https://cli.github.com then run `/pr` again.");
-        ctx.setBusy(false);
         return;
       }
 
-      // Get base branch (main or master)
+      ctx.logSubprocess("Reading commits…");
       const baseResult = await ctx.toolClient.callTool("bash", {
         command: "git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}' || echo 'main'",
       });
       const base = baseResult.content.trim() || "main";
 
-      // Get commits since base
       const logResult = await ctx.toolClient.callTool("bash", {
         command: `git log ${base}..HEAD --oneline 2>/dev/null | head -30`,
       });
       if (!logResult.content.trim()) {
         append(`No commits ahead of \`${base}\`. Nothing to PR.`);
-        ctx.setBusy(false);
         return;
       }
 
-      // Get diff stat
       const diffStat = await ctx.toolClient.callTool("bash", {
         command: `git diff ${base}..HEAD --stat 2>/dev/null | tail -20`,
       });
 
       const context = `Commits:\n${logResult.content}\n\nChanged files:\n${diffStat.content}`;
-
-      // Allow user to pass extra instructions
       const extra = args.trim() ? `\nExtra context: ${args}` : "";
 
-      append("Generating PR description…");
-
+      ctx.logSubprocess("Generating PR description…");
       let raw = "";
       for await (const chunk of ctx.provider.stream({
         model: ctx.reviewerModel,
@@ -77,27 +71,29 @@ export const gitPrCommand: Command = {
       }
       raw = raw.trim();
 
-      // Parse TITLE: line
       const titleMatch = raw.match(/^TITLE:\s*(.+)/m);
       const title = titleMatch?.[1]?.trim() ?? "Update";
       const body = raw.replace(/^TITLE:.*\n?/m, "").trim();
 
       if (!title) {
         append("Failed to generate PR description.");
-        ctx.setBusy(false);
         return;
       }
 
-      // Create PR
+      ctx.logSubprocess(`→ ${title}`);
+      ctx.logSubprocess("Creating PR…");
       const prResult = await ctx.toolClient.callTool("bash", {
         command: `gh pr create --base ${base} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)} 2>&1`,
       });
 
+      const prUrl = prResult.content.match(/https:\/\/github\.com\/\S+/)?.[0] ?? "";
+      if (prUrl) ctx.logSubprocess(prUrl);
       append(`**PR created**\n\n**${title}**\n\n${body}\n\n---\n${prResult.content}`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      ctx.endSubprocess();
+      ctx.setBusy(false);
     }
-
-    ctx.setBusy(false);
   },
 };

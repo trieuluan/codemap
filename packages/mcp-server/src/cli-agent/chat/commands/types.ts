@@ -28,6 +28,12 @@ export interface CommandContext {
   currentSessionId?: string;
   newSession?: () => void;
   loadSessionById?: (sessionId: string) => void;
+  /** Show a running indicator in the panel while a shell command is in progress. */
+  startSubprocess: (command: string) => void;
+  /** Append a log line to the running subprocess indicator. */
+  logSubprocess: (line: string) => void;
+  /** Clear the subprocess indicator when the command finishes. */
+  endSubprocess: () => void;
 }
 
 export interface Command {
