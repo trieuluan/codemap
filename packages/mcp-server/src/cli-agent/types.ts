@@ -32,6 +32,8 @@ export interface GatewayConfig {
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Preserved reasoning/thinking content from thinking-mode models (e.g. DeepSeek-R1, mimo). */
+  reasoning_content?: string;
   name?: string;
   toolCallId?: string;
   toolCalls?: ChatToolCall[];
@@ -84,6 +86,7 @@ export interface TokenUsage {
 
 export interface CompletionStreamChunk {
   text: string;
+  reasoning?: string;
   model?: string;
   provider: string;
   toolCalls?: ChatToolCall[];

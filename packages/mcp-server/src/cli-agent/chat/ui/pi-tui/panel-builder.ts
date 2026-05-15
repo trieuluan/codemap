@@ -59,13 +59,22 @@ export function buildStatusBar(
 ): string {
   const workspace = state.workspace?.repoName ?? state.config.profile;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
+
+  const pct = state.compaction?.usagePercent ?? 0;
+  const count = state.compaction?.compactedCount ?? 0;
+  const ctxColor = pct >= 80 ? C_ERROR : pct >= 60 ? C_WARNING : C_MUTED;
+  const ctxStr = pct > 0
+    ? `${ctxColor}ctx ${pct}%${RESET}${count > 0 ? `${C_MUTED} ${count}x${RESET}` : ""}`
+    : "";
+
   const right = copyMode
     ? `${C_WARNING}✎ COPY MODE${RESET}${C_MUTED} · Ctrl+T to scroll${RESET}`
     : state.planMode
       ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
       : debugMode
         ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
-        : `${C_ACTION}MCP connected${RESET}`;
+        : ctxStr || `${C_ACTION}MCP connected${RESET}`;
+
   return fitLine(
     `${C_WHITE}${workspace}${RESET}${C_MUTED}${branch} · ${RESET}` +
       `${C_WHITE}${truncate(state.config.model, 28)}${RESET}${C_MUTED} · ${RESET}` +

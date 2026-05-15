@@ -24,6 +24,13 @@ import { Store, createInitialState, type Message } from "./store.js";
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
 
+function stripImagesFromContent(text: string): string {
+  return text.replace(
+    /!\[([^\]]*)\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=\s]+\)/g,
+    (_match, alt) => `[image${alt ? `: ${alt}` : ""}]`,
+  );
+}
+
 function subtractUsage(next: TokenUsage, prev: TokenUsage): TokenUsage {
   return {
     promptTokens: Math.max(0, next.promptTokens - prev.promptTokens),
@@ -459,6 +466,7 @@ export class ChatTerminal {
     };
 
     try {
+      this.compactor.beginTurn();
       const mentionContext = await hydrateMentionContext(contentText);
       if (!this.isActiveTask(taskId, taskAbort)) return;
       for (const warning of mentionContext.warnings) {
@@ -590,9 +598,22 @@ export class ChatTerminal {
       // they cause the next coder turn to mimic the same "re-plan and apologize" pattern.
       const shouldAddToHistory = !useMultiPhase || result.usedTools || result.unsupportedToolCalling;
       if (shouldAddToHistory) {
-        this.store.dispatch((prev) => ({
-          agentHistory: [...(prev.agentHistory as ChatMessage[]), ...result.messages],
+        // result.messages already starts with the user message (see agent-loop resultMessages init).
+        // Strip base64 images to avoid sending vision content to non-vision models in future turns.
+        const historyMessages = result.messages.map((m) => ({
+          ...m,
+          content: stripImagesFromContent(m.content),
         }));
+        const nextHistory = [...(this.store.getState().agentHistory as ChatMessage[]), ...historyMessages];
+        const cs = this.compactor.getState(nextHistory);
+        this.store.dispatch({
+          agentHistory: nextHistory,
+          compaction: {
+            usagePercent: cs.usagePercent,
+            compactedCount: cs.compactedCount,
+            lastStrategy: cs.lastStrategy,
+          },
+        });
       }
       this.persistSession();
     } catch (err) {

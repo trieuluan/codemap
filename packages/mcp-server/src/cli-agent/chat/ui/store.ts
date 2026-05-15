@@ -97,6 +97,13 @@ export interface UIState {
   // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
   planReview: { active: boolean; selection: number };
 
+  // Context compaction status
+  compaction: {
+    usagePercent: number;
+    compactedCount: number;
+    lastStrategy?: string;
+  };
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -153,6 +160,7 @@ export function createInitialState(opts: {
     synthRunning: false,
     planMode: false,
     planReview: { active: false, selection: 0 },
+    compaction: { usagePercent: 0, compactedCount: 0 },
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

@@ -17,12 +17,19 @@ function stripAnsi(s: string): string {
 // resource context (codemap://project/context + codemap://rules/agent-workflow)
 // which is appended below. This prompt only covers things not in the resource:
 // identity, non-CodeMap tools, and hard safety rules.
-const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistant.
+const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistant that implements tasks using tools.
 
-## Editing safety
-Use edit_file(path, old_string, new_string) for targeted replacements — include enough surrounding context in old_string to make it unique. Use write_file for new files or full rewrites. Never claim a file changed until the tool confirms it was applied.
+## Tool priority for file operations
+1. edit_file — ALWAYS use for modifying existing files. Provide enough surrounding context in old_string to make it unique.
+2. write_file — ONLY for creating new files or complete rewrites when edit_file cannot apply a diff cleanly.
+3. bash — ONLY for running commands (build, test, grep, find). NEVER use bash/sed/python to modify file content when edit_file is available.
 
-Keep answers concise. Include verification steps and remaining risk.`;
+Never claim a file changed until the tool confirms it was applied.
+
+## When given an approved plan
+Execute it directly using tools. Do NOT restate the plan, explain steps, or ask for confirmation — just implement.
+
+Keep responses concise. State what changed and any remaining risk.`;
 
 export interface AgentLoopResult {
   text: string;
@@ -132,6 +139,7 @@ export async function runAgentLoop(input: {
     };
 
     let accumulated = "";
+    let accumulatedReasoning = "";
     let streamToolCalls: ChatToolCall[] | undefined;
     try {
       input.onDebug?.({
@@ -167,6 +175,9 @@ export async function runAgentLoop(input: {
           accumulated += chunk.text;
           input.onToken?.(chunk.text);
         }
+        if (chunk.reasoning) {
+          accumulatedReasoning += chunk.reasoning;
+        }
         if (chunk.toolCalls && chunk.toolCalls.length > 0) {
           streamToolCalls = chunk.toolCalls;
         }
@@ -190,9 +201,13 @@ export async function runAgentLoop(input: {
     finalText = accumulated;
     throwIfAborted(input.signal);
 
+    const reasoningField = accumulatedReasoning
+      ? { reasoning_content: accumulatedReasoning }
+      : {};
+
     if (!streamToolCalls || streamToolCalls.length === 0) {
       // No tool calls — final text response, done streaming
-      resultMessages.push({ role: "assistant", content: finalText });
+      resultMessages.push({ role: "assistant", content: finalText, ...reasoningField });
       return {
         text: finalText,
         messages: resultMessages,
@@ -207,11 +222,13 @@ export async function runAgentLoop(input: {
     allMessages.push({
       role: "assistant",
       content: accumulated,
+      ...reasoningField,
       toolCalls: streamToolCalls,
     });
     resultMessages.push({
       role: "assistant",
       content: accumulated,
+      ...reasoningField,
       toolCalls: streamToolCalls,
     });
 

@@ -148,10 +148,13 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
       role: "system",
       content:
         `[APPROVED PLAN — EXECUTE NOW]\n${activePlanText}\n\n` +
-        `The plan above is approved. IMPLEMENT IT NOW using the available file editing tools ` +
-        `(edit_file, write_file, bash, etc.). ` +
-        `Do NOT re-plan, do NOT explain what you will do, do NOT ask for confirmation — ` +
-        `just use the tools and execute each step.`,
+        `The plan above has been reviewed and approved by the user. ` +
+        `IMPLEMENT IT NOW using the available tools:\n` +
+        `- Use edit_file for modifying existing files\n` +
+        `- Use write_file only for new files\n` +
+        `- Use bash only for running commands (build/test), not for editing files\n` +
+        `Do NOT generate another plan. Do NOT explain. Do NOT ask for permission. ` +
+        `Start executing the first step immediately.`,
     },
   ];
 

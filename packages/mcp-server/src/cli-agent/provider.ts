@@ -28,6 +28,7 @@ interface ChatCompletionStreamResponse {
   choices?: Array<{
     delta?: {
       content?: string;
+      reasoning_content?: string;
       tool_calls?: Array<{
         index?: number;
         id?: string;
@@ -105,6 +106,7 @@ export class NineRouterProvider implements GatewayProvider {
     };
     const requestBody = JSON.stringify({
       model: request.model,
+      ...(request.system ? { system: request.system } : {}),
       messages: buildMessages(request),
       temperature: request.temperature ?? 0.2,
       max_tokens: request.maxTokens,
@@ -158,6 +160,7 @@ export class NineRouterProvider implements GatewayProvider {
     };
     const body = JSON.stringify({
       model: request.model,
+      ...(request.system ? { system: request.system } : {}),
       messages: buildMessages(request),
       temperature: request.temperature ?? 0.2,
       max_tokens: request.maxTokens,
@@ -299,9 +302,7 @@ function toMultimodalContent(text: string): string | unknown[] {
 }
 
 function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
-  const messages: ChatMessage[] = request.system
-    ? [{ role: "system", content: request.system }, ...request.messages]
-    : request.messages;
+  const messages = request.messages;
   return messages.map((message) => {
     if (message.role === "tool") {
       return {
@@ -374,13 +375,15 @@ function parseStreamLine(
   }
 
   const text = delta?.content ?? body.choices?.[0]?.text ?? "";
+  const reasoning = delta?.reasoning_content;
   // Usage-only chunk (no text, no tool calls) — still emit it so caller can collect
-  if (!text && usage) {
+  if (!text && !reasoning && usage) {
     return { text: "", model: body.model, provider: "9router", usage };
   }
-  if (!text) return undefined;
+  if (!text && !reasoning) return undefined;
   return {
     text,
+    ...(reasoning ? { reasoning } : {}),
     model: body.model,
     provider: "9router",
     ...(usage ? { usage } : {}),
