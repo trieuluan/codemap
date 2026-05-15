@@ -39,6 +39,7 @@ const RENDERER_METHODS = [
   "listitem",
   "paragraph",
   "strong",
+  "table",
   "text",
 ] as const;
 
@@ -435,6 +436,67 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
 
   html(): string {
     return "";
+  }
+
+  table(token: unknown): string {
+    if (!isToken(token)) return "";
+    const header = Array.isArray(token.header) ? token.header : [];
+    const rows = Array.isArray(token.rows) ? token.rows : [];
+
+    const renderCell = (cell: unknown): string => {
+      if (isToken(cell) && Array.isArray(cell.tokens)) {
+        return this.parser.parseInline(cell.tokens);
+      }
+      return tokenText(cell);
+    };
+
+    const headerTexts = (header as unknown[]).map(renderCell);
+    const bodyTexts = (rows as unknown[][]).map((row) =>
+      (row as unknown[]).map(renderCell),
+    );
+
+    // Compute column widths from visible content (ANSI-aware).
+    const colCount = headerTexts.length;
+    const colWidths = Array.from({ length: colCount }, (_, i) => {
+      const candidates = [
+        visibleWidth(stripAnsi(headerTexts[i] ?? "")),
+        ...bodyTexts.map((row) => visibleWidth(stripAnsi(row[i] ?? ""))),
+      ];
+      return Math.max(3, ...candidates);
+    });
+
+    // Scale columns down if total would exceed terminal width.
+    const totalNeeded = colWidths.reduce((s, w) => s + w + 3, 1);
+    if (totalNeeded > this.width) {
+      const available = Math.max(colCount * 3, this.width - colCount * 3 - 1);
+      const total = colWidths.reduce((s, w) => s + w, 0);
+      for (let i = 0; i < colWidths.length; i++) {
+        colWidths[i] = Math.max(3, Math.floor(((colWidths[i] ?? 3) / total) * available));
+      }
+    }
+
+    const sep = (l: string, m: string, r: string): string =>
+      `${C_MUTED}${l}${colWidths.map((w) => "─".repeat(w + 2)).join(m)}${r}${RESET}`;
+
+    const renderRow = (cells: string[], isHeader: boolean): string => {
+      const rendered = cells.map((text, i) => {
+        const w = colWidths[i] ?? 3;
+        const plain = stripAnsi(text);
+        const display = isHeader ? `${BOLD}${plain}${RESET}` : text;
+        const pad = Math.max(0, w - visibleWidth(plain));
+        return ` ${display}${" ".repeat(pad)} `;
+      });
+      return `${C_MUTED}│${RESET}${rendered.join(`${C_MUTED}│${RESET}`)}${C_MUTED}│${RESET}`;
+    };
+
+    return [
+      sep("┌", "┬", "┐"),
+      renderRow(headerTexts, true),
+      sep("├", "┼", "┤"),
+      ...bodyTexts.map((row) => renderRow(row, false)),
+      sep("└", "┴", "┘"),
+      "",
+    ].join("\n");
   }
 
   private inlineFrom(value: unknown): string {

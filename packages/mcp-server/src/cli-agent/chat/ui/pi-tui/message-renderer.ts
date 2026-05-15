@@ -14,6 +14,7 @@ import {
   RESET,
 } from "./theme.js";
 import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
+import { normalizeHtml } from "../../html-utils.js";
 
 function generateBanner(): string[] {
   const result = cfonts.render("CODEMAP", {
@@ -79,7 +80,6 @@ export function headerLines(state: UIState): string[] {
 }
 
 // Replace inline base64 image data with a short placeholder before rendering.
-// Without this, marked tries to tokenize multi-MB base64 strings and freezes.
 function stripBase64Images(text: string): string {
   return text.replace(
     /!\[([^\]]*)\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=\s]+\)/g,
@@ -90,10 +90,11 @@ function stripBase64Images(text: string): string {
 // Safe wrapper: if renderMarkdownish throws (e.g. broken markdown from a
 // truncated tool result), fall back to plain line-split to avoid crashing doRefresh.
 function safeRender(content: string, width: number, opts?: { noHighlight?: boolean }): string[] {
+  const cleaned = normalizeHtml(stripBase64Images(content));
   try {
-    return renderMarkdownish(stripBase64Images(content), width, opts);
+    return renderMarkdownish(cleaned, width, opts);
   } catch {
-    return stripBase64Images(content).split("\n").flatMap((l) => wrapPlain(l, width));
+    return cleaned.split("\n").flatMap((l) => wrapPlain(l, width));
   }
 }
 

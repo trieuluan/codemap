@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { ChatMessage } from "../types.js";
 import type { Message } from "./ui/store.js";
 import { formatToolUiResult } from "./agent/agent-loop.js";
+import { normalizeHtml } from "./html-utils.js";
 
 function resolveDbPath(): string {
   const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -78,9 +79,11 @@ function agentHistoryToUiMessages(history: ChatMessage[]): Message[] {
     role: msg.role as Message["role"],
     // Apply the same UI formatting as the live path so session-loaded tool
     // messages look identical to what was shown during the original session.
-    content: msg.role === "tool" && msg.name
-      ? formatToolUiResult(msg.name, msg.content)
-      : msg.content,
+    content: normalizeHtml(
+      msg.role === "tool" && msg.name
+        ? formatToolUiResult(msg.name, msg.content)
+        : msg.content,
+    ),
     ...(msg.name ? { toolName: msg.name } : {}),
     ...(msg.toolCalls
       ? {
