@@ -88,3 +88,37 @@ export class MentionAutocompleteProvider implements AutocompleteProvider {
     return { lines: newLines, cursorLine, cursorCol: before.length + replacement.length };
   }
 }
+
+const PLAN_REVIEW_ITEMS = [
+  { value: "implement", label: "implement", description: "Proceed with implementation (planner → coder → reviewer)" },
+  { value: "no",        label: "no",        description: "Cancel — don't implement this plan" },
+];
+
+/** Shown while the multi-phase loop is waiting for plan review. */
+export class PlanReviewAutocompleteProvider implements AutocompleteProvider {
+  async getSuggestions(
+    _lines: string[],
+    _cursorLine: number,
+    _cursorCol: number,
+    _options: { signal: AbortSignal; force?: boolean },
+  ): Promise<AutocompleteSuggestions | null> {
+    // Always show the two options so the user knows what to pick.
+    return { prefix: "", items: PLAN_REVIEW_ITEMS };
+  }
+
+  applyCompletion(
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    item: AutocompleteItem,
+    prefix: string,
+  ): { lines: string[]; cursorLine: number; cursorCol: number } {
+    const line = lines[cursorLine] ?? "";
+    const before = line.slice(0, cursorCol - prefix.length);
+    const after = line.slice(cursorCol);
+    const newLine = before + item.value + after;
+    const newLines = [...lines];
+    newLines[cursorLine] = newLine;
+    return { lines: newLines, cursorLine, cursorCol: before.length + item.value.length };
+  }
+}

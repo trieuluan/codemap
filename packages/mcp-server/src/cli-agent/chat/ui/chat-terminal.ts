@@ -90,6 +90,7 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _confirmResolve: ((accept: boolean) => void) | null = null;
+  private _planReviewResolve: ((action: string) => void) | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
   private _activeTaskId = 0;
@@ -144,6 +145,23 @@ export class ChatTerminal {
     this._confirmResolve?.(accept);
     this._confirmResolve = null;
     this.store.dispatch({ confirm: { active: false, toolName: "", preview: null } });
+  }
+
+  /** Called by the multi-phase loop: pause and wait for user plan review. */
+  waitForPlanReview(): Promise<string> {
+    return new Promise((resolve) => {
+      this._planReviewResolve = resolve;
+      this.store.dispatch({ planReview: { active: true, selection: 0 } });
+      this.bus.scheduleRefresh();
+    });
+  }
+
+  /** Called by the UI when user makes a plan review decision. */
+  resolvePlanReview(action: string): void {
+    this._planReviewResolve?.(action);
+    this._planReviewResolve = null;
+    this.store.dispatch({ planReview: { active: false, selection: 0 } });
+    this.bus.scheduleRefresh();
   }
 
   resolveConfirmAll(): void {
@@ -508,6 +526,7 @@ export class ChatTerminal {
               this.appendMessage({ role: "tool", content: plan, toolName: "plan" });
               this.bus.scheduleRefresh();
             },
+            onPlanWait: () => this.waitForPlanReview(),
             ...sharedCallbacks,
           })
         : await runAgentLoop({
@@ -549,7 +568,14 @@ export class ChatTerminal {
         const cs = this.store.getState().config;
         this.appendMessage({
           role: "system",
-          content: `Model "${cs.model}" does not support tool calling.\nUse /model <name> to switch to a tool-capable model, or /mode to change gateway mode.`,
+          content: `⚠ Model "${cs.model}" does not support tool calling — the coder generated text instead of using tools.\nCheck your coder profile in config and switch to a tool-capable model.`,
+        });
+      }
+
+      if (useMultiPhase && !result.usedTools && !result.unsupportedToolCalling) {
+        this.appendMessage({
+          role: "system",
+          content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nTry /compact to free context, or check your coder profile configuration.`,
         });
       }
 
@@ -560,9 +586,14 @@ export class ChatTerminal {
       }
 
       this.bus.scheduleRefresh();
-      this.store.dispatch((prev) => ({
-        agentHistory: [...(prev.agentHistory as ChatMessage[]), ...result.messages],
-      }));
+      // Don't pollute agentHistory with no-tool-call responses from multi-phase execute —
+      // they cause the next coder turn to mimic the same "re-plan and apologize" pattern.
+      const shouldAddToHistory = !useMultiPhase || result.usedTools || result.unsupportedToolCalling;
+      if (shouldAddToHistory) {
+        this.store.dispatch((prev) => ({
+          agentHistory: [...(prev.agentHistory as ChatMessage[]), ...result.messages],
+        }));
+      }
       this.persistSession();
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
@@ -775,6 +806,10 @@ export class ChatTerminal {
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
       compactHistory: () => this.compactHistory(),
+      getCompactionStatus: () => ({
+        policy: this.compactor.getPolicy(),
+        state: this.compactor.getState(this.store.getState().agentHistory as ChatMessage[]),
+      }),
       resend: () => {
         const cs = this.store.getState();
         if (cs.input.lastUserText && !cs.input.busy) this.handleSubmit(cs.input.lastUserText);

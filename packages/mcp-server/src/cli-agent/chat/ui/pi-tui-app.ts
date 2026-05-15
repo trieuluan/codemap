@@ -92,7 +92,16 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   editor.onSubmit = (value) => {
     const trimmed = value.trim();
-    if (!trimmed || chatTerminal.store.getState().input.busy) return;
+    const state = chatTerminal.store.getState();
+
+    // Plan review: non-empty text is feedback to revise the plan.
+    if (state.planReview?.active && trimmed) {
+      editor.setText("");
+      chatTerminal.resolvePlanReview(trimmed);
+      return;
+    }
+
+    if (!trimmed || state.input.busy) return;
     const imageMarkdown = pendingImages.map((img) => img.markdown);
     const content = imageMarkdown.length > 0
       ? `${trimmed}\n\n${imageMarkdown.join("\n\n")}`
@@ -335,6 +344,30 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
     confirmSignature = "";
     confirmSelection = 0;
+
+    // Plan review inline select (only when editor is empty — otherwise fall through to editor).
+    if (state.planReview?.active && editor.getText().trim() === "") {
+      const PLAN_OPTIONS = ["implement", "no"] as const;
+      const sel = state.planReview.selection ?? 0;
+      if (matchesKey(data, Key.up)) {
+        chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + PLAN_OPTIONS.length - 1) % PLAN_OPTIONS.length } });
+        scheduleRefresh();
+        return;
+      }
+      if (matchesKey(data, Key.down)) {
+        chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + 1) % PLAN_OPTIONS.length } });
+        scheduleRefresh();
+        return;
+      }
+      if (matchesKey(data, Key.enter)) {
+        chatTerminal.resolvePlanReview(PLAN_OPTIONS[sel] ?? "implement");
+        return;
+      }
+      if (matchesKey(data, Key.escape)) {
+        chatTerminal.resolvePlanReview("cancel");
+        return;
+      }
+    }
 
     void handleEditorInput(data);
   }

@@ -94,6 +94,9 @@ export interface UIState {
   // Plan mode: when on, all messages go through multi-phase (planner→coder→reviewer)
   planMode: boolean;
 
+  // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
+  planReview: { active: boolean; selection: number };
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -149,6 +152,7 @@ export function createInitialState(opts: {
     agentHistory: [],
     synthRunning: false,
     planMode: false,
+    planReview: { active: false, selection: 0 },
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

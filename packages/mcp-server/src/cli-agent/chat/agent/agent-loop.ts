@@ -100,21 +100,26 @@ export async function runAgentLoop(input: {
   let lastFailedTool: { name: string; args: string } | null = null;
   let consecutiveFailures = 0;
 
-  // Truncate large tool results in history before first API call
+  // Truncate large tool results and auto-compact history before first API call.
   if (input.compactor) {
     allMessages = input.compactor.truncateToolResults(allMessages);
+    const compacted = await abortable(
+      input.compactor.maybeCompact(allMessages, input.model, { reason: "auto_threshold" }),
+      input.signal,
+    );
+    if (compacted.compacted) allMessages = compacted.messages;
   }
 
   let shouldBreak = false;
   for (let i = 0; i < MAX_AGENT_TOOL_ITERATIONS; i++) {
     throwIfAborted(input.signal);
-    // Compact history if it's growing too large
+    // Compact history if it is still growing too large during tool iterations.
     if (input.compactor && i > 0) {
       const compacted = await abortable(
-        input.compactor.compactIfNeeded(allMessages, input.model),
+        input.compactor.maybeCompact(allMessages, input.model, { reason: "auto_threshold" }),
         input.signal,
       );
-      if (compacted) allMessages = compacted;
+      if (compacted.compacted) allMessages = compacted.messages;
     }
     throwIfAborted(input.signal);
 

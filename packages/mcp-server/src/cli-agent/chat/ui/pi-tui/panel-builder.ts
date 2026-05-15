@@ -191,17 +191,42 @@ export function buildPanel(
     ));
   }
 
-  // Hint bar.
-  out.push(fitLine(
-    `  ${C_ACTION}Tab${RESET} ${C_GRAY}complete${RESET}` +
-      `  ${C_ACTION}↑↓${RESET} ${C_GRAY}history${RESET}` +
-      `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
-      `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
-      `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
-      `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
-      `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
-    w,
-  ));
+  // Hint bar — shows plan review options when waiting for user approval.
+  if (state.planReview?.active) {
+    const sel = state.planReview.selection ?? 0;
+    const PLAN_OPTIONS = [
+      { label: "implement", desc: "Proceed with implementation (planner → coder → reviewer)" },
+      { label: "no",        desc: "Cancel — don't implement this plan" },
+    ];
+    out.push(fitLine(
+      `  ${C_AI}◈ Plan ready${RESET}  ` +
+        `${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}` +
+        `${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}` +
+        `${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to revise${RESET}`,
+      w,
+    ));
+    for (const [idx, opt] of PLAN_OPTIONS.entries()) {
+      const selected = idx === sel;
+      const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
+      const isNo = opt.label === "no";
+      const labelColor = isNo ? C_ERROR : C_WHITE;
+      const label = selected
+        ? `${labelColor}${BOLD}${opt.label}${RESET}`
+        : `${labelColor}${opt.label}${RESET}`;
+      out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w));
+    }
+  } else {
+    out.push(fitLine(
+      `  ${C_ACTION}Tab${RESET} ${C_GRAY}complete${RESET}` +
+        `  ${C_ACTION}↑↓${RESET} ${C_GRAY}history${RESET}` +
+        `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
+        `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
+        `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
+        `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
+        `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
+      w,
+    ));
+  }
 
   // Editor + autocomplete.
   const editorStart = out.length;

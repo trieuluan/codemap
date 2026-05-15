@@ -35,7 +35,7 @@ const BANNER_LINES = generateBanner();
 
 function toolLineLimit(msg: Message): number {
   const name = (msg.toolName ?? "").toLowerCase();
-  if (name.endsWith(" preview")) {
+  if (name.endsWith(" preview") || name === "plan") {
     return Infinity;
   }
   const content = msg.content.toLowerCase();

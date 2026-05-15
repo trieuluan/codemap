@@ -2,6 +2,7 @@ import type { ChatMessage } from "../../types.js";
 import type { ChatEntry } from "../ui/chat-terminal.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { NineRouterProvider } from "../../provider.js";
+import type { AutoCompactPolicy, ContextCompactionState } from "../agent/context-compactor.js";
 
 export interface CommandContext {
   currentModel: string;
@@ -20,6 +21,7 @@ export interface CommandContext {
   debugLogFile: string | null;
   lastUserText: string | null;
   compactHistory: () => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean }>;
+  getCompactionStatus: () => { policy: AutoCompactPolicy; state: ContextCompactionState };
   resend: () => void;
   exit: () => void;
   currentSessionId?: string;

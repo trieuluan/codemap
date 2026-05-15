@@ -33,6 +33,12 @@ Rules: max 8 lines. Be direct and concise.`;
 
 export type AgentPhase = "planning" | "executing" | "reviewing";
 
+// Return value from onPlanWait:
+//   "implement" → proceed to coder
+//   "cancel"    → abort the whole loop
+//   <any string> → feedback to send back to the planner for revision
+export type PlanReviewAction = "implement" | "cancel" | string;
+
 export interface MultiPhaseLoopInput {
   provider: NineRouterProvider;
   plannerModel: string;
@@ -43,6 +49,8 @@ export interface MultiPhaseLoopInput {
   toolClient: CodeMapMcpToolClient;
   onPhaseStart?: (phase: AgentPhase, model: string) => void;
   onPlanReady?: (plan: string) => void;
+  /** Called after plan is shown. Resolves with the user's review action. */
+  onPlanWait?: () => Promise<PlanReviewAction>;
   onToken?: (text: string) => void;
   onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string) => void;
@@ -73,12 +81,78 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
   throwIfAborted(input.signal);
   input.onPlanReady?.(planText);
 
+  // ── Plan review: wait for user to approve, cancel, or provide feedback ────
+  const IMPLEMENT_SYNONYMS = new Set([
+    "implement", "ok", "okay", "yes", "y", "go", "proceed", "sure", "do it", "done",
+    "ừ", "ừm", "đồng ý", "được", "làm đi", "làm luôn", "tiếp tục", "ok luôn",
+  ]);
+  const CANCEL_SYNONYMS = new Set([
+    "cancel", "no", "n", "stop", "abort", "quit", "exit",
+    "không", "thôi", "dừng", "hủy",
+  ]);
+
+  const normalizeAction = (a: string): string => {
+    const lower = a.trim().toLowerCase();
+    if (IMPLEMENT_SYNONYMS.has(lower)) return "implement";
+    if (CANCEL_SYNONYMS.has(lower)) return "cancel";
+    return a;
+  };
+
+  let activePlanText = planText;
+  if (input.onPlanWait) {
+    let action = normalizeAction(await input.onPlanWait());
+    throwIfAborted(input.signal);
+
+    // Re-plan loop: keep revising until user approves or cancels
+    while (action !== "implement" && action !== "cancel") {
+      const feedback = action;
+      input.onPhaseStart?.("planning", input.plannerModel);
+      const revisedPlan = await streamToText(
+        input.provider,
+        input.plannerModel,
+        PLAN_SYSTEM_PROMPT,
+        [
+          ...input.history,
+          input.userMessage,
+          { role: "assistant", content: activePlanText },
+          { role: "user", content: `Feedback on the plan: ${feedback}` },
+        ],
+        input.signal,
+        input.onUsage,
+        undefined,
+        input.onModel,
+      );
+      throwIfAborted(input.signal);
+      activePlanText = revisedPlan;
+      input.onPlanReady?.(revisedPlan);
+      action = normalizeAction(await input.onPlanWait());
+      throwIfAborted(input.signal);
+    }
+
+    if (action === "cancel") {
+      return {
+        text: "Plan cancelled.",
+        messages: [],
+        usedTools: false,
+        unsupportedToolCalling: false,
+      };
+    }
+  }
+
   // ── Phase 2: Execute ──────────────────────────────────────────────────────
   input.onPhaseStart?.("executing", input.coderModel);
 
   const historyWithPlan: ChatMessage[] = [
     ...input.history,
-    { role: "system", content: `[Task Plan]\n${planText}` },
+    {
+      role: "system",
+      content:
+        `[APPROVED PLAN — EXECUTE NOW]\n${activePlanText}\n\n` +
+        `The plan above is approved. IMPLEMENT IT NOW using the available file editing tools ` +
+        `(edit_file, write_file, bash, etc.). ` +
+        `Do NOT re-plan, do NOT explain what you will do, do NOT ask for confirmation — ` +
+        `just use the tools and execute each step.`,
+    },
   ];
 
   const execResult = await runAgentLoop({
@@ -107,7 +181,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
 
   // ── Phase 3: Review ───────────────────────────────────────────────────────
   input.onPhaseStart?.("reviewing", input.reviewerModel);
-  const reviewContext = buildReviewContext(input.userMessage.content, planText, execResult);
+  const reviewContext = buildReviewContext(input.userMessage.content, activePlanText, execResult);
   const reviewText = await streamToText(
     input.provider,
     input.reviewerModel,
