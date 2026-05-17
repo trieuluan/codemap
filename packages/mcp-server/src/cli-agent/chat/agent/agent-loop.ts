@@ -217,15 +217,10 @@ export async function runAgentLoop(input: {
       };
     }
 
-    // Model wants to call tools
+    // Model wants to call tools — push to allMessages (current turn context) only,
+    // not to resultMessages (history for future turns).
     usedTools = true;
     allMessages.push({
-      role: "assistant",
-      content: accumulated,
-      ...reasoningField,
-      toolCalls: streamToolCalls,
-    });
-    resultMessages.push({
       role: "assistant",
       content: accumulated,
       ...reasoningField,
@@ -276,13 +271,8 @@ export async function runAgentLoop(input: {
         consecutiveFailures = 0;
       }
 
+      // Tool results go to allMessages only — not saved to future history.
       allMessages.push({
-        role: "tool",
-        name: toolCall.function.name,
-        toolCallId: toolCall.id,
-        content: result,
-      });
-      resultMessages.push({
         role: "tool",
         name: toolCall.function.name,
         toolCallId: toolCall.id,

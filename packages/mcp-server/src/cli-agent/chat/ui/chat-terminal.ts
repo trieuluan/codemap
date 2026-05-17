@@ -182,6 +182,7 @@ export class ChatTerminal {
     beforeTokens: number;
     afterTokens: number;
     compacted: boolean;
+    summaryText?: string;
   }> {
     const state = this.store.getState();
     const beforeHistory = state.agentHistory as ChatMessage[];
@@ -190,8 +191,22 @@ export class ChatTerminal {
     const nextHistory = compacted ?? beforeHistory;
     const afterTokens = this.compactor.estimateTokens(nextHistory);
 
+    let summaryText: string | undefined;
     if (compacted) {
-      this.store.dispatch({ agentHistory: nextHistory });
+      const summaryMsg = nextHistory.find(
+        (m) => m.role === "system" && m.content.includes("[Previous conversation summary]"),
+      );
+      summaryText = summaryMsg?.content.replace("[Previous conversation summary]\n", "").trim();
+
+      const cs = this.compactor.getState(nextHistory);
+      this.store.dispatch({
+        agentHistory: nextHistory,
+        compaction: {
+          usagePercent: cs.usagePercent,
+          compactedCount: cs.compactedCount,
+          lastStrategy: cs.lastStrategy,
+        },
+      });
     }
 
     return {
@@ -200,6 +215,7 @@ export class ChatTerminal {
       beforeTokens,
       afterTokens,
       compacted: Boolean(compacted),
+      summaryText,
     };
   }
 
@@ -624,7 +640,8 @@ export class ChatTerminal {
       const isContextFull =
         errMsg.includes("context window") || errMsg.includes("context length") ||
         errMsg.includes("maximum context") || errMsg.includes("token limit") ||
-        errMsg.includes("too long") || errMsg.includes("exceeds");
+        errMsg.includes("too long") || errMsg.includes("exceeds") ||
+        errMsg.includes("input is too long") || errMsg.includes("prompt is too long");
       const isModelBroken =
         errMsg.includes("zero-length") || errMsg.includes("empty document") || errMsg.includes("429");
       const cs = this.store.getState().config;

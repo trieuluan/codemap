@@ -91,6 +91,9 @@ import {
   readLocalIndex,
 } from "./lib/local-index.js";
 import { tryGetCurrentWorkspaceInfo } from "./lib/workspace-git.js";
+import { readWorkspaceProjectConfig } from "./lib/workspace-project.js";
+import { getProjectImportHealth } from "./lib/import-health.js";
+import type { ProjectDetail } from "./lib/api-types.js";
 import { buildOnboardingGuide, isOnboardingTarget } from "./lib/onboarding.js";
 import { buildServerInstructions } from "./lib/server-instructions.js";
 import { buildSessionContext } from "./lib/session-context.js";
@@ -333,6 +336,81 @@ async function runWhoAmICommand() {
   }
 }
 
+async function runStatusCommand() {
+  const config = await loadConfig();
+  const workspaceConfig = await readWorkspaceProjectConfig();
+  const gitInfo = await tryGetCurrentWorkspaceInfo(
+    workspaceConfig.workspaceRootPath ?? process.cwd(),
+  );
+  const store = await readLocalIndex();
+  const summary = store?.getSummary();
+  const meta = store?.getMeta();
+  const indexedAgo = meta?.indexedAt ? formatAge(new Date(meta.indexedAt)) : "never";
+  const indexCommit = meta?.commitSha ?? null;
+  const indexFresh = Boolean(
+    store && (!gitInfo?.commitSha || !indexCommit || gitInfo.commitSha === indexCommit),
+  );
+
+  const lines: string[] = ["CodeMap workspace status", ""];
+  lines.push(`Workspace: ${workspaceConfig.workspaceRootPath ?? process.cwd()}`);
+  lines.push(
+    `Git:       ${gitInfo ? `${gitInfo.branch} @ ${gitInfo.commitSha.slice(0, 7)}` : "not available"}`,
+  );
+  lines.push(`Remote:    ${gitInfo?.remoteUrl ?? "none"}`);
+  lines.push("");
+  lines.push(
+    `Local index: ${store ? (indexFresh ? "fresh" : "stale") : "missing"}`,
+  );
+  if (summary) {
+    lines.push(`  Cache:      ${summary.cachePath}`);
+    lines.push(`  Indexed:    ${summary.indexedAt ?? "never"} (${indexedAgo})`);
+    lines.push(`  Commit:     ${indexCommit ? indexCommit.slice(0, 7) : "unknown"}`);
+    lines.push(`  Files:      ${summary.fileCount}`);
+    lines.push(`  Symbols:    ${summary.symbolCount}`);
+  } else {
+    lines.push("  Run `codemap-mcp local-index` to build the local index.");
+  }
+  lines.push("");
+  lines.push(`Auth:      ${config.apiToken ? "authenticated" : "not authenticated"}`);
+  lines.push(`API URL:   ${config.apiUrl}`);
+  if (config.user?.email) lines.push(`User:      ${config.user.email}`);
+  lines.push("");
+  lines.push(
+    `Project:   ${workspaceConfig.projectId ? `linked (${workspaceConfig.projectId})` : "not linked"}`,
+  );
+
+  if (workspaceConfig.projectId && config.apiToken) {
+    const client = createCodeMapClient(config);
+    try {
+      const project = await client.request<ProjectDetail>(
+        `/projects/${encodeURIComponent(workspaceConfig.projectId)}`,
+        { authRequired: true },
+      );
+      const health = await getProjectImportHealth(client, workspaceConfig.projectId, project);
+      const latest = health.latestImport;
+      lines.push(`  Name:       ${project.name}`);
+      lines.push(`  Status:     ${project.status}`);
+      lines.push(`  Branch:     ${latest?.branch ?? project.defaultBranch ?? "unknown"}`);
+      lines.push(
+        `  Cloud:      ${latest ? `${latest.status} / parse ${latest.parseStatus ?? "unknown"}` : "no imports"}`,
+      );
+      if (latest?.createdAt) lines.push(`  Imported:   ${latest.createdAt}`);
+      lines.push(`  Freshness:  ${health.isReady ? "ready" : health.state}${health.isStale ? " (stale)" : ""}`);
+      lines.push(`  Next:       ${health.nextAction}`);
+    } catch (error) {
+      lines.push(
+        `  Cloud:      unavailable (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  } else if (workspaceConfig.projectId) {
+    lines.push("  Cloud:      skipped (not authenticated)");
+  } else {
+    lines.push("  Cloud:      not configured");
+  }
+
+  console.log(lines.join("\n"));
+}
+
 async function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -570,6 +648,9 @@ async function main() {
       return;
     case "whoami":
       await runWhoAmICommand();
+      return;
+    case "status":
+      await runStatusCommand();
       return;
     case "init-agent-pack":
       await runInitAgentPackCommand(process.argv.slice(3));

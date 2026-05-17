@@ -9,6 +9,7 @@ import { runHelp } from "./commands/help.js";
 import { runInitGateway } from "./commands/init-gateway.js";
 import { runModels } from "./commands/models.js";
 import { runRouteCommand } from "./commands/route.js";
+import { runStatus } from "./commands/status.js";
 import { loadGatewayConfig } from "./config.js";
 import { loadDotEnv } from "./env.js";
 
@@ -39,6 +40,10 @@ export async function runCliAgent(argv: string[]): Promise<void> {
   }
   if (parsed.command === "models") {
     await runModels(context);
+    return;
+  }
+  if (parsed.command === "status") {
+    await runStatus();
     return;
   }
   if (parsed.command === "route") {

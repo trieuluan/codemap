@@ -20,15 +20,32 @@ export const compactCommand: Command = {
     ctx.setBusy(true);
     try {
       const result = await ctx.compactHistory();
-      const before = `${result.beforeMessages} messages, ~${result.beforeTokens} tokens`;
-      const after = `${result.afterMessages} messages, ~${result.afterTokens} tokens`;
-      ctx.setMessages((prev) => [
-        ...prev,
+
+      if (!result.compacted) {
+        ctx.setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: `Nothing to compact yet: ${result.beforeMessages} messages, ~${result.beforeTokens} tokens.`,
+            timestamp: Date.now(),
+          },
+        ]);
+        return;
+      }
+
+      const stats =
+        `~${result.beforeTokens} tok · ${result.beforeMessages} msgs` +
+        ` → ~${result.afterTokens} tok · ${result.afterMessages} msgs`;
+
+      // Clear visible transcript and replace with summary.
+      ctx.setMessages([
         {
           role: "system",
-          content: result.compacted
-            ? `Context compacted: ${before} -> ${after}. Visible transcript was not changed.`
-            : `Nothing to compact yet: ${before}.`,
+          content:
+            `Context compacted (${stats}).\n\n` +
+            (result.summaryText
+              ? `**Summary of compacted history:**\n\n${result.summaryText}`
+              : "Earlier messages were dropped to free context."),
           timestamp: Date.now(),
         },
       ]);
@@ -36,11 +53,7 @@ export const compactCommand: Command = {
       const message = err instanceof Error ? err.message : String(err);
       ctx.setMessages((prev) => [
         ...prev,
-        {
-          role: "system",
-          content: `Compact failed: ${message}`,
-          timestamp: Date.now(),
-        },
+        { role: "system", content: `Compact failed: ${message}`, timestamp: Date.now() },
       ]);
     } finally {
       ctx.setBusy(false);

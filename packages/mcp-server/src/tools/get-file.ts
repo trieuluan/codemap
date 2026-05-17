@@ -86,6 +86,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const CONTENT_MAX_LINES = 150;
+
 function buildContentSection(file: FileContent, startLine?: number, endLine?: number): string {
   const parts: string[] = [];
   if (file.language) parts.push(`Language: ${file.language}`);
@@ -94,17 +96,30 @@ function buildContentSection(file: FileContent, startLine?: number, endLine?: nu
 
   switch (file.status) {
     case "ready": {
-      const content = file.content ?? "";
-      const lineCount = content.split("\n").length;
+      const allLines = (file.content ?? "").split("\n");
+      const totalLines = allLines.length;
       const lang = file.extension?.replace(".", "") ?? "";
+
+      // Apply line range, then cap at CONTENT_MAX_LINES if no explicit range given.
+      const from = startLine != null ? startLine - 1 : 0;
+      const to = endLine != null ? endLine : totalLines;
+      let lines = allLines.slice(from, to);
+      let truncatedNote = "";
+      if (startLine == null && endLine == null && lines.length > CONTENT_MAX_LINES) {
+        const omitted = lines.length - CONTENT_MAX_LINES;
+        lines = lines.slice(0, CONTENT_MAX_LINES);
+        truncatedNote = `\n[${omitted} more lines — use start_line/end_line or include=['symbols'] to read specific sections]`;
+      }
+      const content = lines.join("\n");
+      const shownLines = lines.length;
       const rangeLabel = startLine !== undefined || endLine !== undefined
-        ? ` | Lines: ${startLine ?? 1}–${endLine ?? "EOF"}`
-        : ` | Lines: ${lineCount}`;
+        ? ` | Lines: ${startLine ?? 1}–${endLine ?? totalLines}`
+        : ` | Lines: ${shownLines}/${totalLines}`;
       return [
-        meta ? `${meta}${rangeLabel}` : `Lines: ${lineCount}`,
+        meta ? `${meta}${rangeLabel}` : `Lines: ${shownLines}/${totalLines}`,
         "",
         `\`\`\`${lang}`,
-        content,
+        content + truncatedNote,
         "```",
       ].join("\n");
     }
@@ -333,11 +348,12 @@ export function registerGetFileTool(
         include: z
           .array(z.enum(["content", "outline", "blast_radius", "symbols"]))
           .optional()
-          .default(["content", "outline"])
+          .default(["outline"])
           .describe(
-            "Sections to include. Default: [content, outline]. " +
-              "outline = imports/exports/symbols with signatures. " +
-              "symbols = full source body of symbol_names (prefer over content+line range). " +
+            "Sections to include. Default: [outline] — survey structure first, fetch content only when needed. " +
+              "outline = imports/exports/symbols with signatures (low token cost). " +
+              "content = full file text (high token cost — use start_line/end_line to limit range). " +
+              "symbols = full source body of symbol_names (prefer over content — much lower token cost). " +
               "blast_radius = impact analysis (slow, only for change risk assessment).",
           ),
         symbol_names: z

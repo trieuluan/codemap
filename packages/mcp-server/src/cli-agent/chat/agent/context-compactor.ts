@@ -73,19 +73,19 @@ export interface ContextCompactorConfig extends Partial<AutoCompactPolicy> {
 
 export const DEFAULT_POLICY: AutoCompactPolicy = {
   enabled: true,
-  maxContextTokens: 100_000,
-  triggerPercent: 80,
-  targetPercent: 60,
+  maxContextTokens: 40_000,
+  triggerPercent: 70,
+  targetPercent: 40,
   reserveTokens: 0,
   strategy: "summarize",
-  preserveRecentMessages: 10,
+  preserveRecentMessages: 6,
   minMessagesBeforeCompact: 4,
-  truncateToolResultsAt: 3000,
+  truncateToolResultsAt: 800,
   preservePinned: true,
-  maxCompactionsPerTurn: 1,
+  maxCompactionsPerTurn: 3,
   cooldownMs: 0,
-  summarizerMaxMessageChars: 2000,
-  summarizerMaxTokens: 1000,
+  summarizerMaxMessageChars: 1200,
+  summarizerMaxTokens: 600,
 };
 
 export class ContextCompactor {

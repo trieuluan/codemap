@@ -6,6 +6,7 @@ export type Command =
   | "ask"
   | "chat"
   | "models"
+  | "status"
   | "init-gateway";
 
 export type Flags = Record<string, string | undefined>;
@@ -68,6 +69,7 @@ function isCommand(value: string): value is Command {
     value === "ask" ||
     value === "chat" ||
     value === "models" ||
+    value === "status" ||
     value === "init-gateway"
   );
 }

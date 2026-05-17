@@ -7,7 +7,8 @@ import { execa } from "execa";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
-const MAX_OUTPUT_CHARS = 20_000;
+const MAX_OUTPUT_CHARS = 4_000;
+const TAIL_CHARS = 500; // chars to keep from end when truncating
 
 export function registerBashTool(server: McpServer, _config: McpServerConfig) {
   server.registerTool(
@@ -81,9 +82,13 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
       }
 
       const combined = [stdout, stderr].filter(Boolean).join("\n").trim();
-      const truncated = combined.length > MAX_OUTPUT_CHARS
-        ? combined.slice(0, MAX_OUTPUT_CHARS) + `\n... [truncated, ${combined.length - MAX_OUTPUT_CHARS} chars omitted]`
-        : combined;
+      let truncated = combined;
+      if (combined.length > MAX_OUTPUT_CHARS) {
+        const head = combined.slice(0, MAX_OUTPUT_CHARS - TAIL_CHARS);
+        const tail = combined.slice(-TAIL_CHARS);
+        const omitted = combined.length - MAX_OUTPUT_CHARS;
+        truncated = `${head}\n... [${omitted} chars omitted] ...\n${tail}`;
+      }
 
       const summary = exitCode === 0
         ? `$ ${command}\n${truncated || "(no output)"}`

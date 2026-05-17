@@ -8,6 +8,7 @@ Usage:
   codemap init-gateway [--project] [--force] [--base-url http://localhost:4000/v1]
   codemap doctor
   codemap models
+  codemap status
   codemap route "fix a failing migration" [--mode local-only|cloud-ok]
   codemap ask "Say hi" [--model fast|strong|local]
   codemap chat [--model fast|strong|local] [--mode local-only|cloud-ok] [--no-stream]
