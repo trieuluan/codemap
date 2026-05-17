@@ -18,8 +18,15 @@ export const compactCommand: Command = {
     }
 
     ctx.setBusy(true);
+    ctx.startSubprocess("/compact");
     try {
-      const result = await ctx.compactHistory();
+      const { policy } = ctx.getCompactionStatus();
+      ctx.logSubprocess(`Strategy: ${policy.strategy} · target ${policy.targetPercent}%`);
+      ctx.logSubprocess("Analyzing conversation history...");
+
+      const result = await ctx.compactHistory((step) => ctx.logSubprocess(step));
+
+      ctx.endSubprocess();
 
       if (!result.compacted) {
         ctx.setMessages((prev) => [
@@ -33,16 +40,19 @@ export const compactCommand: Command = {
         return;
       }
 
+      const pctBefore = Math.round((result.beforeTokens / policy.maxContextTokens) * 100);
+      const pctAfter  = Math.round((result.afterTokens  / policy.maxContextTokens) * 100);
       const stats =
-        `~${result.beforeTokens} tok · ${result.beforeMessages} msgs` +
-        ` → ~${result.afterTokens} tok · ${result.afterMessages} msgs`;
+        `${pctBefore}% → ${pctAfter}%` +
+        `  (~${result.beforeTokens} tok · ${result.beforeMessages} msgs` +
+        ` → ~${result.afterTokens} tok · ${result.afterMessages} msgs)`;
 
       // Clear visible transcript and replace with summary.
       ctx.setMessages([
         {
           role: "system",
           content:
-            `Context compacted (${stats}).\n\n` +
+            `Context compacted: ${stats}\n\n` +
             (result.summaryText
               ? `**Summary of compacted history:**\n\n${result.summaryText}`
               : "Earlier messages were dropped to free context."),
@@ -50,6 +60,7 @@ export const compactCommand: Command = {
         },
       ]);
     } catch (err) {
+      ctx.endSubprocess();
       const message = err instanceof Error ? err.message : String(err);
       ctx.setMessages((prev) => [
         ...prev,

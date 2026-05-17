@@ -2,7 +2,7 @@ import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { ContextCompactor } from "./context-compactor.js";
-import { runAgentLoop, type AgentLoopResult, type ConfirmEditFn } from "./agent-loop.js";
+import { runAgentLoop, WORKFLOW_TOOLS, type AgentLoopResult, type ConfirmEditFn } from "./agent-loop.js";
 
 const PLAN_SYSTEM_PROMPT = `You are a coding task planner. Analyze the user's request and produce a concise action plan.
 
@@ -149,20 +149,32 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
       content:
         `[APPROVED PLAN — EXECUTE NOW]\n${activePlanText}\n\n` +
         `The plan above has been reviewed and approved by the user. ` +
-        `IMPLEMENT IT NOW using the available tools:\n` +
-        `- Use edit_file for modifying existing files\n` +
-        `- Use write_file only for new files\n` +
-        `- Use bash only for running commands (build/test), not for editing files\n` +
-        `Do NOT generate another plan. Do NOT explain. Do NOT ask for permission. ` +
-        `Start executing the first step immediately.`,
+        `IMPLEMENT IT NOW using file-editing tools:\n` +
+        `- edit_file: modify existing files\n` +
+        `- write_file: create new files only\n` +
+        `- bash: run build/test commands to verify — NOT for editing files\n\n` +
+        `HARD RULES — do NOT do any of these:\n` +
+        `- Do NOT call get_agent_workflow, recommend_agent_workflow, or explore_task\n` +
+        `- Do NOT generate another plan or outline\n` +
+        `- Do NOT explain what you are about to do\n` +
+        `- Do NOT ask for permission or confirmation\n` +
+        `- Do NOT run ls/rg/find to explore — the plan already defines what to change\n\n` +
+        `Start executing step 1 of the plan immediately with edit_file or write_file.`,
     },
   ];
+
+  // Replace the original user message with a clear execute directive so the coder
+  // does not re-plan when the original message contained words like "plan" or "implement".
+  const executeUserMessage: ChatMessage = {
+    role: "user",
+    content: "Execute the approved plan above step by step using edit_file and write_file. Start immediately.",
+  };
 
   const execResult = await runAgentLoop({
     provider: input.provider,
     model: input.coderModel,
     history: historyWithPlan,
-    userMessage: input.userMessage,
+    userMessage: executeUserMessage,
     toolClient: input.toolClient,
     onToken: input.onToken,
     onModel: input.onModel,
@@ -174,6 +186,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     signal: input.signal,
     compactor: input.compactor,
     confirmEdit: input.confirmEdit,
+    excludeTools: WORKFLOW_TOOLS,
   });
   throwIfAborted(input.signal);
 

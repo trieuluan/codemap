@@ -176,7 +176,7 @@ export class ChatTerminal {
     this.resolveConfirm(true);
   }
 
-  async compactHistory(): Promise<{
+  async compactHistory(onProgress?: (step: string) => void): Promise<{
     beforeMessages: number;
     afterMessages: number;
     beforeTokens: number;
@@ -187,6 +187,7 @@ export class ChatTerminal {
     const state = this.store.getState();
     const beforeHistory = state.agentHistory as ChatMessage[];
     const beforeTokens = this.compactor.estimateTokens(beforeHistory);
+    onProgress?.("Calling summarizer model...");
     const compacted = await this.compactor.compactNow(beforeHistory, state.config.model);
     const nextHistory = compacted ?? beforeHistory;
     const afterTokens = this.compactor.estimateTokens(nextHistory);
@@ -548,6 +549,13 @@ export class ChatTerminal {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
               this.appendMessage({ role: "tool", content: plan, toolName: "plan" });
+              // Persist plan in agentHistory so it survives session save/load.
+              this.store.dispatch((prev) => ({
+                agentHistory: [
+                  ...(prev.agentHistory as ChatMessage[]),
+                  { role: "tool" as const, name: "plan", content: plan },
+                ],
+              }));
               this.bus.scheduleRefresh();
             },
             onPlanWait: () => this.waitForPlanReview(),
@@ -616,10 +624,9 @@ export class ChatTerminal {
       if (shouldAddToHistory) {
         // result.messages already starts with the user message (see agent-loop resultMessages init).
         // Strip base64 images to avoid sending vision content to non-vision models in future turns.
-        const historyMessages = result.messages.map((m) => ({
-          ...m,
-          content: stripImagesFromContent(m.content),
-        }));
+        const historyMessages = result.messages
+          .filter((m) => m.role !== "tool")  // tool results must not persist in history
+          .map((m) => ({ ...m, content: stripImagesFromContent(m.content) }));
         const nextHistory = [...(this.store.getState().agentHistory as ChatMessage[]), ...historyMessages];
         const cs = this.compactor.getState(nextHistory);
         this.store.dispatch({
@@ -843,7 +850,7 @@ export class ChatTerminal {
       },
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
-      compactHistory: () => this.compactHistory(),
+      compactHistory: (onProgress) => this.compactHistory(onProgress),
       getCompactionStatus: () => ({
         policy: this.compactor.getPolicy(),
         state: this.compactor.getState(this.store.getState().agentHistory as ChatMessage[]),

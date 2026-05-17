@@ -53,6 +53,14 @@ function addUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {
   };
 }
 
+// Tools that cause the coder to re-plan instead of implement.
+export const WORKFLOW_TOOLS = new Set([
+  "get_agent_workflow",
+  "recommend_agent_workflow",
+  "explore_task",
+  "suggest_edit_locations",
+]);
+
 export async function runAgentLoop(input: {
   provider: NineRouterProvider;
   model: string;
@@ -69,9 +77,13 @@ export async function runAgentLoop(input: {
   signal?: AbortSignal;
   compactor?: ContextCompactor;
   confirmEdit?: ConfirmEditFn;
+  /** Tool names to exclude — used in execute phase to block re-planning. */
+  excludeTools?: Set<string>;
 }): Promise<AgentLoopResult> {
   throwIfAborted(input.signal);
-  let tools = await input.toolClient.listChatTools();
+  let tools = (await input.toolClient.listChatTools()).filter(
+    (t) => !input.excludeTools?.has(t.function.name),
+  );
   throwIfAborted(input.signal);
 
   // Fetch MCP resources once and prepend to system prompt
@@ -96,7 +108,17 @@ export async function runAgentLoop(input: {
     cachedCtx.skills      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}` : null,
   ].filter(Boolean).join("\n\n");
 
-  let allMessages: ChatMessage[] = [...input.history, input.userMessage].map((msg) =>
+  // Strip orphaned tool result messages from history — they cause tool_use_id mismatch errors
+  // across providers (Codex, Claude) when the matching assistant tool_call is absent.
+  // Plan messages (name: "plan") are kept but converted to system role so providers accept them.
+  const cleanHistory = input.history
+    .filter((msg) => msg.role !== "tool" || msg.name === "plan")
+    .map((msg) =>
+      msg.role === "tool" && msg.name === "plan"
+        ? { role: "system" as const, content: `[Plan]\n${msg.content}` }
+        : msg,
+    );
+  let allMessages: ChatMessage[] = [...cleanHistory, input.userMessage].map((msg) =>
     msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
   );
   const resultMessages: ChatMessage[] = [input.userMessage];
@@ -217,8 +239,10 @@ export async function runAgentLoop(input: {
       };
     }
 
-    // Model wants to call tools — push to allMessages (current turn context) only,
-    // not to resultMessages (history for future turns).
+    // Model wants to call tools.
+    // allMessages gets full data for current turn context.
+    // resultMessages gets a single compact assistant message per iteration — no tool role messages,
+    // which avoids tool_use_id / tool_result pairing issues across providers.
     usedTools = true;
     allMessages.push({
       role: "assistant",
@@ -226,6 +250,9 @@ export async function runAgentLoop(input: {
       ...reasoningField,
       toolCalls: streamToolCalls,
     });
+
+    const iterationSummaryParts: string[] = [];
+    if (accumulated.trim()) iterationSummaryParts.push(accumulated.trim());
 
     for (const toolCall of streamToolCalls) {
       throwIfAborted(input.signal);
@@ -244,40 +271,34 @@ export async function runAgentLoop(input: {
         }
       }
 
-      input.onToolStart?.(
-        toolCall.function.name,
-        toolCall.function.arguments,
-        toolCall.id,
-      );
+      input.onToolStart?.(toolCall.function.name, toolCall.function.arguments, toolCall.id);
       const rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
       throwIfAborted(input.signal);
       const result = stripAnsi(rawResult);
       const uiResult = formatToolUiResult(toolCall.function.name, result);
       const uiLimit = isFileWriteTool(toolCall.function.name) ? 1_200 : 500;
-      const truncatedResult =
-        uiResult.length > uiLimit ? uiResult.slice(0, uiLimit) + "\n..." : uiResult;
+      const truncatedResult = uiResult.length > uiLimit ? uiResult.slice(0, uiLimit) + "\n..." : uiResult;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
       // Track consecutive tool failures
-      const isConflict =
-        (result.includes("conflict") || result.includes("FAILED") || result.includes("not_found"));
+      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found");
       if (isConflict) {
-        lastFailedTool = {
-          name: toolCall.function.name,
-          args: toolCall.function.arguments,
-        };
+        lastFailedTool = { name: toolCall.function.name, args: toolCall.function.arguments };
       } else {
         lastFailedTool = null;
         consecutiveFailures = 0;
       }
 
-      // Tool results go to allMessages only — not saved to future history.
-      allMessages.push({
-        role: "tool",
-        name: toolCall.function.name,
-        toolCallId: toolCall.id,
-        content: result,
-      });
+      // allMessages: full result for current turn.
+      allMessages.push({ role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: result });
+
+      // Accumulate compact summary for resultMessages (no tool role — avoids provider pairing issues).
+      const snippet = result.length > 120 ? result.slice(0, 120) + "…" : result;
+      iterationSummaryParts.push(`[${toolCall.function.name} → ${snippet}]`);
+    }
+
+    if (!shouldBreak && iterationSummaryParts.length > 0) {
+      resultMessages.push({ role: "assistant", content: iterationSummaryParts.join("\n") });
     }
     if (shouldBreak) break;
 

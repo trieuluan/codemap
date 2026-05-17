@@ -20,7 +20,7 @@ export interface CommandContext {
   setDebug: (debug: boolean) => void;
   debugLogFile: string | null;
   lastUserText: string | null;
-  compactHistory: () => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean; summaryText?: string }>;
+  compactHistory: (onProgress?: (step: string) => void) => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean; summaryText?: string }>;
   getCompactionStatus: () => { policy: AutoCompactPolicy; state: ContextCompactionState };
   resend: () => void;
   exit: () => void;
