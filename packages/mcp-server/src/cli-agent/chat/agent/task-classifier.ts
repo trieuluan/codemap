@@ -13,11 +13,13 @@ Output format:
 {"phase":"single"|"multi","tier":"planner"|"coder"|"reviewer","taskType":"feature"|"bugfix"|"debugging"|"review"|"refactor"|"research"|"general","reason":"<one line>"}
 
 Rules:
-- phase "multi": complex features, large refactors, tasks needing plan+implement+review
-- phase "single": everything else
-- tier "planner": research, explain, questions, quick tasks
-- tier "coder": implement, fix, write code
+- phase "multi": complex features, large refactors, optimizations, tasks that require planning AND code changes. Use "multi" when the task ultimately requires modifying source files.
+- phase "single": pure Q&A, explain code, quick one-liner fixes, or when user explicitly wants only a plan/doc with no code changes
+- tier "planner": research, explain, questions — NO code changes expected
+- tier "coder": implement, fix, optimize, refactor — code changes expected
 - tier "reviewer": review, debug, investigate, audit
+
+IMPORTANT: "lên plan", "make a plan", "plan for X" where X involves code changes → phase "multi", tier "coder". Creating a markdown plan file alone is NOT a valid deliverable for coding tasks — actual source file changes are required.
 Respond with ONLY the JSON.`;
 
 const FALLBACK: TaskClassification = {

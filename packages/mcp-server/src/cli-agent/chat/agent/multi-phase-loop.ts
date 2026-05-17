@@ -4,7 +4,7 @@ import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { ContextCompactor } from "./context-compactor.js";
 import { runAgentLoop, WORKFLOW_TOOLS, type AgentLoopResult, type ConfirmEditFn } from "./agent-loop.js";
 
-const PLAN_SYSTEM_PROMPT = `You are a coding task planner. Analyze the user's request and produce a concise action plan.
+const PLAN_SYSTEM_PROMPT = `You are a coding task planner. Analyze the user's request and produce a concise action plan for CODE CHANGES.
 
 Output format (markdown):
 ## Task
@@ -20,7 +20,11 @@ Output format (markdown):
 ## Risk
 <low|medium|high> — <brief reason if medium or high>
 
-Rules: max 15 lines. Do NOT implement anything. Do NOT explain — just write the plan.`;
+Rules:
+- Max 15 lines.
+- Steps must describe SOURCE FILE changes only (edit, create, delete code files).
+- Do NOT include steps like "document the approach", "create a plan file", "write a markdown", or "explain the changes".
+- Do NOT implement anything. Do NOT explain — just write the plan.`;
 
 const REVIEW_SYSTEM_PROMPT = `You are a code reviewer for a coding assistant. Given the original task, the plan, and the execution result, write a brief review.
 

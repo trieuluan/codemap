@@ -118,7 +118,7 @@ export function messageLines(messages: Message[], width: number): string[] {
       out.push(bg(`${time} ${C_ACTION}>${RESET} ${lines[0] ?? ""}`));
       for (const line of lines.slice(1)) out.push(bg(`${" ".repeat(prefixW)}${line}`));
     } else if (msg.role === "assistant") {
-      if (!msg.content.trim()) continue;
+      if (!msg.content?.trim()) continue;
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
       const lines = safeRender(stripAnsi(msg.content), bodyW);

@@ -174,7 +174,7 @@ export async function loadConfig(cwd = process.cwd()): Promise<McpServerConfig> 
 
   const toolModeRaw = readOptionalEnv("CODEMAP_TOOL_MODE");
   const toolMode: McpServerConfig["toolMode"] =
-    toolModeRaw === "lite" || toolModeRaw === "standard" ? toolModeRaw : "full";
+    toolModeRaw === "lite" || toolModeRaw === "full" ? toolModeRaw : "standard";
 
   let resolved: McpServerConfig = {
     apiUrl: DEFAULT_API_URL,

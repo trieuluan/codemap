@@ -108,16 +108,11 @@ export async function runAgentLoop(input: {
     cachedCtx.skills      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}` : null,
   ].filter(Boolean).join("\n\n");
 
-  // Strip orphaned tool result messages from history — they cause tool_use_id mismatch errors
-  // across providers (Codex, Claude) when the matching assistant tool_call is absent.
-  // Plan messages (name: "plan") are kept but converted to system role so providers accept them.
-  const cleanHistory = input.history
-    .filter((msg) => msg.role !== "tool" || msg.name === "plan")
-    .map((msg) =>
-      msg.role === "tool" && msg.name === "plan"
-        ? { role: "system" as const, content: `[Plan]\n${msg.content}` }
-        : msg,
-    );
+  // Strip orphaned tool messages from history — they cause tool_use_id mismatch errors
+  // across providers when the matching assistant tool_call is absent.
+  // Plan messages (name: "plan") are also stripped from allMessages — they exist in agentHistory
+  // only for session display, not as context the model needs for the current turn.
+  const cleanHistory = input.history.filter((msg) => msg.role !== "tool");
   let allMessages: ChatMessage[] = [...cleanHistory, input.userMessage].map((msg) =>
     msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
   );
