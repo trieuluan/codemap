@@ -292,7 +292,7 @@ export class ChatTerminal {
     this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
   }
 
-  private persistSession(): void {
+  persistSession(): void {
     if (!this._sessionId) return;
     const s = this.store.getState();
     const tokenCount = s.sessionUsage.totalTokens;
@@ -303,6 +303,7 @@ export class ChatTerminal {
         s.agentHistory as ChatMessage[],
         tokenCount,
         model,
+        s.messages, // save full visible transcript for exact resume
       );
     } catch { /* non-blocking */ }
   }
@@ -731,11 +732,21 @@ export class ChatTerminal {
 
   private makeConfirmEdit(): ConfirmEditFn {
     return async (name, args, preview) => {
-      if (this.store.getState().input.autoAccept) return true;
       if (preview) {
+        // Always show preview so user knows what changed, even in auto-accept mode.
         this.appendMessage({ role: "tool", content: preview, toolName: `${name} preview` });
+        // Also persist preview in agentHistory so it survives session save/load.
+        this.store.dispatch((prev) => ({
+          agentHistory: [
+            ...(prev.agentHistory as ChatMessage[]),
+            { role: "tool" as const, name: `${name} preview`, content: preview },
+          ],
+        }));
         this.bus.scheduleRefresh();
       }
+
+      if (this.store.getState().input.autoAccept) return true;
+
       this.store.dispatch({ confirm: { active: true, toolName: name, preview } });
       const result = await new Promise<boolean>((resolve) => {
         this._confirmResolve = resolve;
@@ -850,7 +861,8 @@ export class ChatTerminal {
       },
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
-      compactHistory: (onProgress) => this.compactHistory(onProgress),
+      compactHistory: (onProgress?: (step: string) => void) => this.compactHistory(onProgress),
+      persistSession: () => this.persistSession(),
       getCompactionStatus: () => ({
         policy: this.compactor.getPolicy(),
         state: this.compactor.getState(this.store.getState().agentHistory as ChatMessage[]),

@@ -59,6 +59,8 @@ export const compactCommand: Command = {
           timestamp: Date.now(),
         },
       ]);
+      // Persist immediately so resume shows compacted state, not old messages.
+      ctx.persistSession();
     } catch (err) {
       ctx.endSubprocess();
       const message = err instanceof Error ? err.message : String(err);

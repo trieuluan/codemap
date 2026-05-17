@@ -39,6 +39,7 @@ export interface PanelContext {
   copyMode: boolean;
   confirmSelection: number;
   confirmSignature: string;
+  statusMessage?: string;
 }
 
 export interface PanelResult {
@@ -56,6 +57,7 @@ export function buildStatusBar(
   w: number,
   copyMode: boolean,
   debugMode: boolean,
+  statusMessage = "",
 ): string {
   const workspace = state.workspace?.repoName ?? state.config.profile;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
@@ -67,13 +69,15 @@ export function buildStatusBar(
     ? `${ctxColor}ctx ${pct}%${RESET}${count > 0 ? `${C_MUTED} ${count}x${RESET}` : ""}`
     : "";
 
-  const right = copyMode
-    ? `${C_WARNING}✎ COPY MODE${RESET}${C_MUTED} · Ctrl+T to scroll${RESET}`
-    : state.planMode
-      ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
-      : debugMode
-        ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
-        : ctxStr || `${C_ACTION}MCP connected${RESET}`;
+  const right = statusMessage
+    ? `${C_WARNING}${statusMessage}${RESET}`
+    : copyMode
+      ? `${C_WARNING}✎ COPY MODE${RESET}${C_MUTED} · Ctrl+T to scroll${RESET}`
+      : state.planMode
+        ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
+        : debugMode
+          ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
+          : ctxStr || `${C_ACTION}MCP connected${RESET}`;
 
   return fitLine(
     `${C_WHITE}${workspace}${RESET}${C_MUTED}${branch} · ${RESET}` +
@@ -94,6 +98,7 @@ export function buildPanel(
     shellMode,
     debugMode,
     copyMode,
+    statusMessage,
   } = ctx;
 
   let { confirmSelection, confirmSignature } = ctx;
@@ -276,7 +281,7 @@ export function buildPanel(
   }
 
   // Status bar.
-  out.push(buildStatusBar(state, w, copyMode, debugMode));
+  out.push(buildStatusBar(state, w, copyMode, debugMode, statusMessage));
 
   return {
     lines: out,

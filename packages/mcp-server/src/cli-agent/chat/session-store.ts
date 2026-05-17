@@ -60,6 +60,12 @@ function openDb(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_session_messages_session
       ON session_messages(session_id, idx);
   `);
+  // Add ui_messages column for storing full visible transcript (migration-safe).
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN ui_messages TEXT`);
+  } catch {
+    // Column already exists — ignore.
+  }
   return db;
 }
 
@@ -123,6 +129,7 @@ export function saveSession(
   agentHistory: ChatMessage[],
   tokenCount: number,
   model: string,
+  uiMessages?: Message[],
 ): void {
   const db = openDb();
   const now = Date.now();
@@ -147,8 +154,8 @@ export function saveSession(
   }
 
   db.prepare(
-    `UPDATE sessions SET updated_at = ?, token_count = ?, model = ? WHERE id = ?`,
-  ).run(now, tokenCount, model, sessionId);
+    `UPDATE sessions SET updated_at = ?, token_count = ?, model = ?, ui_messages = ? WHERE id = ?`,
+  ).run(now, tokenCount, model, uiMessages ? JSON.stringify(uiMessages) : null, sessionId);
   db.close();
 }
 
@@ -183,6 +190,20 @@ export function loadSession(sessionId: string): {
     ...(r.msg_name ? { name: String(r.msg_name) } : {}),
   }));
 
+  // Use stored ui_messages if available (full visible transcript).
+  // Fall back to reconstructing from agentHistory for old sessions.
+  let uiMessages: Message[];
+  const storedUi = row.ui_messages ? String(row.ui_messages) : null;
+  if (storedUi) {
+    try {
+      uiMessages = JSON.parse(storedUi) as Message[];
+    } catch {
+      uiMessages = agentHistoryToUiMessages(agentHistory);
+    }
+  } else {
+    uiMessages = agentHistoryToUiMessages(agentHistory);
+  }
+
   return {
     session: {
       id: String(row.id),
@@ -196,7 +217,7 @@ export function loadSession(sessionId: string): {
       messageCount: Number(row.message_count),
     },
     agentHistory,
-    uiMessages: agentHistoryToUiMessages(agentHistory),
+    uiMessages,
   };
 }
 

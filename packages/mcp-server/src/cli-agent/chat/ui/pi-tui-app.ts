@@ -34,6 +34,7 @@ import {
 export { isActiveTaskPhase };
 
 const SCROLL_SPEED = 3;
+const EXIT_CONFIRM_WINDOW_MS = 2000;
 // Border characters used in copy mode.
 const BDR = { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│", ml: "├", mr: "┤" };
 
@@ -56,6 +57,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let refreshQueued = false;
   let confirmSelection = 0;
   let confirmSignature = "";
+  let lastExitConfirmAt = 0;
+  let exitConfirmTimer: NodeJS.Timeout | undefined;
+  let statusMessage = "";
   const pendingImages: PastedImage[] = [];
 
   // ── TUI stub ──────────────────────────────────────────────────────────────
@@ -131,6 +135,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── rendering ─────────────────────────────────────────────────────────────
 
+  function clearExitConfirm(): void {
+    lastExitConfirmAt = 0;
+    statusMessage = "";
+    if (exitConfirmTimer) {
+      clearTimeout(exitConfirmTimer);
+      exitConfirmTimer = undefined;
+    }
+  }
+
   function scheduleRefresh(): void {
     if (refreshQueued || stopped) return;
     refreshQueued = true;
@@ -158,7 +171,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     const panelResult = buildPanel(state, iw, {
-      editor, frame, shellMode, debugMode, copyMode, confirmSelection, confirmSignature,
+      editor, frame, shellMode, debugMode, copyMode, confirmSelection, confirmSignature, statusMessage,
     });
     confirmSignature = panelResult.confirmSignature;
     confirmSelection = panelResult.confirmSelection;
@@ -269,10 +282,10 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       for (const l of editorLines) {
         buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(l, iw)}${bc}${BDR.v}${RESET}\r\n`;
       }
-      buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(buildStatusBar(state, iw, copyMode, debugMode), iw)}${bc}${BDR.v}${RESET}`;
+      buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(buildStatusBar(state, iw, copyMode, debugMode, statusMessage), iw)}${bc}${BDR.v}${RESET}`;
     } else {
       for (const l of editorLines) buf += `\x1b[2K\r${l}\r\n`;
-      buf += `\x1b[2K\r${buildStatusBar(state, iw, copyMode, debugMode)}`;
+      buf += `\x1b[2K\r${buildStatusBar(state, iw, copyMode, debugMode, statusMessage)}`;
     }
 
     if (newEditorAndBelow < oldEditorAndBelow) buf += "\x1b[J";
@@ -319,9 +332,23 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     if (matchesKey(data, Key.ctrl("c"))) {
       if (state.input.busy) { chatTerminal.cancelTask(); return; }
-      if (editor.getText().length > 0) { editor.setText(""); shellMode = false; doEditorRefresh(); return; }
-      cleanup();
-      process.exit(0);
+      if (editor.getText().length > 0) { editor.setText(""); shellMode = false; clearExitConfirm(); doEditorRefresh(); return; }
+
+      const now = Date.now();
+      if (now - lastExitConfirmAt <= EXIT_CONFIRM_WINDOW_MS) {
+        cleanup();
+        process.exit(0);
+      }
+
+      lastExitConfirmAt = now;
+      statusMessage = "Press Ctrl+C again within 2s to exit";
+      if (exitConfirmTimer) clearTimeout(exitConfirmTimer);
+      exitConfirmTimer = setTimeout(() => {
+        clearExitConfirm();
+        scheduleRefresh();
+      }, EXIT_CONFIRM_WINDOW_MS);
+      scheduleRefresh();
+      return;
     }
 
     if (matchesKey(data, Key.escape) && state.screen === "help") {

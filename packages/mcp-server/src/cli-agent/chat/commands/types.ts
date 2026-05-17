@@ -21,6 +21,7 @@ export interface CommandContext {
   debugLogFile: string | null;
   lastUserText: string | null;
   compactHistory: (onProgress?: (step: string) => void) => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean; summaryText?: string }>;
+  persistSession: () => void;
   getCompactionStatus: () => { policy: AutoCompactPolicy; state: ContextCompactionState };
   resend: () => void;
   exit: () => void;
