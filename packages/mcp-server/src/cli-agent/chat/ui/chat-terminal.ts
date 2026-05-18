@@ -607,6 +607,14 @@ export class ChatTerminal {
             },
             onPlanReady: (plan) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
+              // Remove the streaming assistant message — it contains the same plan content
+              // streamed via onToken. Keeping it would show the plan twice (once as an
+              // assistant message without prefix, once as "plan: ..." below).
+              if (hasStreamingEntry) {
+                this.store.dispatch((prev) => ({
+                  messages: prev.messages.filter((m) => m.role !== "assistant" || m.content !== streamingContent),
+                }));
+              }
               resetStreaming();
               this.appendMessage({ role: "tool", content: plan, toolName: "plan" });
               // Persist plan in agentHistory so it survives session save/load.

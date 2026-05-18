@@ -312,9 +312,13 @@ function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
       };
     }
 
+    const content = toMultimodalContent(message.content);
     return {
       role: message.role,
-      content: toMultimodalContent(message.content),
+      // Omit content when empty and tool_calls are present — some providers (e.g. claude)
+      // drop the assistant message entirely if content is an empty string, creating orphaned
+      // tool results on the next turn.
+      ...(content !== "" && content !== null ? { content } : {}),
       ...(message.toolCalls && message.toolCalls.length > 0
         ? { tool_calls: message.toolCalls }
         : {}),
