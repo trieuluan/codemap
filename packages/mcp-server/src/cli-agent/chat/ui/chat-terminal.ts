@@ -151,7 +151,25 @@ export class ChatTerminal {
 
   }
 
-  private async refreshCloudCommitHint(): Promise<void> {
+  private async refreshWorkspaceCommits(): Promise<void> {
+    try {
+      const info = await tryGetCurrentWorkspaceInfo();
+      if (info) {
+        const current = this.store.getState().workspace;
+        this.store.dispatch({
+          workspace: {
+            repoName: info.repoName,
+            branch: info.branch,
+            localCommit: info.commitSha,
+            cloudCommit: current?.cloudCommit,
+          },
+        });
+        this._gitMeta = { repo: info.repoName ?? "", branch: info.branch ?? "" };
+      }
+    } catch {
+      // Non-blocking: workspaces without git should still start normally.
+    }
+
     try {
       const result = await this.options.toolClient.callTool("get_project", { verbose: false });
       const cloudCommit = extractCloudCommitFromGetProject(result);
@@ -164,6 +182,7 @@ export class ChatTerminal {
         workspace: {
           repoName: current.repoName,
           branch: current.branch,
+          localCommit: current.localCommit,
           cloudCommit,
         },
       });
@@ -280,21 +299,7 @@ export class ChatTerminal {
     await warmupFileSearch();
 
     // Git workspace info + cloud import commit + session init
-    try {
-      const info = await tryGetCurrentWorkspaceInfo();
-      if (info) {
-        this.store.dispatch({
-          workspace: {
-            repoName: info.repoName,
-            branch: info.branch,
-            localCommit: info.commitSha,
-          },
-        });
-        this._gitMeta = { repo: info.repoName ?? "", branch: info.branch ?? "" };
-      }
-    } catch { /* non-blocking */ }
-
-    void this.refreshCloudCommitHint();
+    await this.refreshWorkspaceCommits();
 
     await this.initSession();
 
@@ -963,6 +968,7 @@ export class ChatTerminal {
       endSubprocess: () => {
         this.store.dispatch({ subprocess: { active: false, command: "", logLines: [] } });
       },
+      refreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
     };
   }
 }

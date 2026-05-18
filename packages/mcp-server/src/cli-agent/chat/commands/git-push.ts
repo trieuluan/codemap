@@ -28,6 +28,8 @@ export const gitPushCommand: Command = {
 
       const output = pushResult.content.trim();
       if (output) ctx.logSubprocess(output.split("\n").at(-1) ?? output);
+      ctx.logSubprocess("Refreshing local/cloud commit status…");
+      await ctx.refreshWorkspaceCommits?.();
       append(output || `Pushed \`${branch}\`.`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);

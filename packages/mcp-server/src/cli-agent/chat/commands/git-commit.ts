@@ -17,6 +17,8 @@ export const gitCommitCommand: Command = {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
+    let committed = false;
+
     try {
       const manualMsg = args.trim();
       if (manualMsg) {
@@ -24,6 +26,7 @@ export const gitCommitCommand: Command = {
         const result = await ctx.toolClient.callTool("bash", {
           command: `git add -A && git commit -m ${JSON.stringify(manualMsg)}`,
         });
+        committed = true;
         append(result.content || "Committed.");
         return;
       }
@@ -70,11 +73,16 @@ export const gitCommitCommand: Command = {
       const commitResult = await ctx.toolClient.callTool("bash", {
         command: `git add -A && git commit -m ${JSON.stringify(commitMsg)}`,
       });
+      committed = true;
 
       append(`\`\`\`\n${commitMsg}\n\`\`\`\n${commitResult.content}\n\n_Undo: \`git reset --soft HEAD~1\`_`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      if (committed) {
+        ctx.logSubprocess("Refreshing local/cloud commit status…");
+        await ctx.refreshWorkspaceCommits?.();
+      }
       ctx.endSubprocess();
       ctx.setBusy(false);
     }

@@ -36,6 +36,8 @@ export interface CommandContext {
   logSubprocess: (line: string) => void;
   /** Clear the subprocess indicator when the command finishes. */
   endSubprocess: () => void;
+  /** Refresh local/cloud commit metadata used by the status bar reimport hint. */
+  refreshWorkspaceCommits?: () => Promise<void>;
 }
 
 export interface Command {
