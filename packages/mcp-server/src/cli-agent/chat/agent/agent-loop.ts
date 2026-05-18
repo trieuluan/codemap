@@ -73,6 +73,7 @@ export async function runAgentLoop(input: {
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
+  onRefreshWorkspaceCommits?: () => Promise<void> | void;
   debug?: boolean;
   signal?: AbortSignal;
   compactor?: ContextCompactor;
@@ -289,6 +290,10 @@ export async function runAgentLoop(input: {
       input.onToolStart?.(toolCall.function.name, toolCall.function.arguments, toolCall.id);
       const rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
       throwIfAborted(input.signal);
+      if (shouldRefreshWorkspaceCommitsAfterTool(toolCall.function.name)) {
+        await refreshWorkspaceCommitsAfterCloudImportTool(input.onRefreshWorkspaceCommits, input.signal);
+      }
+      throwIfAborted(input.signal);
       const result = stripAnsi(rawResult);
       const uiResult = formatToolUiResult(toolCall.function.name, result);
       const uiLimit = isFileWriteTool(toolCall.function.name) ? 1_200 : 500;
@@ -337,6 +342,23 @@ export async function runAgentLoop(input: {
     unsupportedToolCalling: false,
     usage: accumulatedUsage,
   };
+}
+
+function shouldRefreshWorkspaceCommitsAfterTool(toolName: string): boolean {
+  return toolName === "trigger_reimport" || toolName === "wait_for_import";
+}
+
+async function refreshWorkspaceCommitsAfterCloudImportTool(
+  refresh: (() => Promise<void> | void) | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!refresh) return;
+  throwIfAborted(signal);
+  try {
+    await refresh();
+  } catch {
+    // Best effort: the tool result should still be delivered even if the status bar refresh fails.
+  }
 }
 
 async function executeToolCall(

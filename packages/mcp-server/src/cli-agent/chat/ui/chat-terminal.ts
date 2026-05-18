@@ -524,6 +524,7 @@ export class ChatTerminal {
         });
         this.appendMessage({ role: "tool", content: resultText, toolName: `${name} result` });
       },
+      onRefreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
       onDebug: (info: Record<string, unknown>) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         if (!this.store.getState().debug) return;

@@ -72,6 +72,7 @@ export interface MultiPhaseLoopInput {
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
+  onRefreshWorkspaceCommits?: () => Promise<void> | void;
   debug?: boolean;
   signal?: AbortSignal;
   compactor?: ContextCompactor;
@@ -114,6 +115,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     onToolResult: input.onToolResult,
     onUsage: input.onUsage,
     onDebug: input.onDebug,
+    onRefreshWorkspaceCommits: input.onRefreshWorkspaceCommits,
     debug: input.debug,
     signal: input.signal,
     compactor: input.compactor,
@@ -231,6 +233,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     onToolResult: input.onToolResult,
     onUsage: input.onUsage,
     onDebug: input.onDebug,
+    onRefreshWorkspaceCommits: input.onRefreshWorkspaceCommits,
     debug: input.debug,
     signal: input.signal,
     compactor: input.compactor,
