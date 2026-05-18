@@ -10,6 +10,36 @@ const MAX_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 4_000;
 const TAIL_CHARS = 500; // chars to keep from end when truncating
 
+const SOURCE_EXTS = /\.(ts|tsx|js|jsx|mjs|cjs|py|json|yaml|yml|md|css|html|xml|sh|toml|rs|go|rb|swift|cs|cpp|c|vue|kt|java|php)$/;
+
+function detectFileWrite(command: string): string | null {
+  // Python pathlib / open write
+  if (/\.write_text\s*\(/.test(command)) return "Detected Python Path.write_text() — file modification via bash is not allowed.";
+  if (/open\s*\([^)]*['"]\s*w\s*['"]/.test(command)) return "Detected Python open(..., 'w') — file modification via bash is not allowed.";
+  if (/\.write\s*\(/.test(command) && /pathlib|Path\(|open\(/.test(command)) return "Detected Python file write — file modification via bash is not allowed.";
+
+  // Node.js fs writes
+  if (/fs\.(writeFile|writeFileSync|appendFile|appendFileSync)\s*\(/.test(command)) return "Detected Node.js fs.writeFile — file modification via bash is not allowed.";
+
+  // awk output redirect to source file
+  if (/\bawk\b.+>\s*\S+/.test(command) && SOURCE_EXTS.test(command)) return "Detected awk redirect to source file — use edit_file instead.";
+
+  // Shell redirect writing to source files: cmd > file.ts or cmd >> file.ts
+  const redirectMatch = command.match(/(?:^|;|\|)\s*[^|>]*>+\s*(\S+)/m);
+  if (redirectMatch) {
+    const target = redirectMatch[1] ?? "";
+    if (SOURCE_EXTS.test(target) && !target.startsWith("/dev/")) {
+      return `Detected shell redirect to source file '${target}' — use edit_file or write_file instead.`;
+    }
+  }
+
+  // tee to source file
+  const teeMatch = command.match(/\btee\s+(\S+)/);
+  if (teeMatch && SOURCE_EXTS.test(teeMatch[1] ?? "")) return `Detected tee to source file '${teeMatch[1]}' — use write_file instead.`;
+
+  return null;
+}
+
 export function registerBashTool(server: McpServer, _config: McpServerConfig) {
   server.registerTool(
     "bash",
@@ -45,6 +75,14 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
       },
     },
     withToolError(async ({ command, timeout_ms, cwd: cwdArg }) => {
+      const fileWriteViolation = detectFileWrite(command);
+      if (fileWriteViolation) {
+        return success(
+          `[BLOCKED] ${fileWriteViolation}\n\nUse edit_file(file_path, old_string, new_string) for targeted edits, or write_file(file_path, content) for new files. Do NOT use bash/python/sed to modify source files.`,
+          { exitCode: 1, stdout: "", stderr: fileWriteViolation, blocked: true },
+        );
+      }
+
       const workspaceRoot = await readWorkspacePath();
       const resolvedCwd = cwdArg
         ? `${workspaceRoot}/${cwdArg.replace(/^\//, "")}`

@@ -4,27 +4,38 @@ import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { ContextCompactor } from "./context-compactor.js";
 import { runAgentLoop, WORKFLOW_TOOLS, type AgentLoopResult, type ConfirmEditFn } from "./agent-loop.js";
 
-const PLAN_SYSTEM_PROMPT = `You are a coding task planner. Analyze the user's request and produce a concise action plan for CODE CHANGES.
+// Tools the planner must never call — write tools + bash (not inherently read-only).
+const PLANNER_BLOCKED_TOOLS = new Set([
+  "edit_file", "write_file", "apply_patch", "move_symbols", "rename_symbol",
+  "bash",
+  ...WORKFLOW_TOOLS,
+]);
 
-Output format (markdown):
+const PLAN_SYSTEM_PROMPT = `You are a coding task planner with access to read-only tools.
+
+Process:
+1. Use tools (get_file, search_codebase, find_related_files, explore_task, find_usages...) to read and understand the relevant code.
+2. After exploring, write a concrete plan based on what you actually found.
+
+Output format (after exploration):
 ## Task
 <1-line summary>
 
 ## Steps
-1. <step>
-2. <step>
+1. <specific file path + what to change>
+2. <specific file path + what to change>
 
 ## Key areas
-- <file, module, or area>
+- <file path or module>
 
 ## Risk
-<low|medium|high> — <brief reason if medium or high>
+<low|medium|high> — <brief reason>
 
 Rules:
-- Max 15 lines.
-- Steps must describe SOURCE FILE changes only (edit, create, delete code files).
-- Do NOT include steps like "document the approach", "create a plan file", "write a markdown", or "explain the changes".
-- Do NOT implement anything. Do NOT explain — just write the plan.`;
+- Steps must name specific source files and describe the exact change.
+- Do NOT create documentation or markdown plan files as deliverables.
+- Do NOT implement anything — explore then plan only.
+- Max 20 lines for the plan.`;
 
 const REVIEW_SYSTEM_PROMPT = `You are a code reviewer for a coding assistant. Given the original task, the plan, and the execution result, write a brief review.
 
@@ -45,7 +56,6 @@ export type PlanReviewAction = "implement" | "cancel" | string;
 
 export interface MultiPhaseLoopInput {
   provider: NineRouterProvider;
-  plannerModel: string;
   coderModel: string;
   reviewerModel: string;
   history: ChatMessage[];
@@ -67,22 +77,50 @@ export interface MultiPhaseLoopInput {
   confirmEdit?: ConfirmEditFn;
 }
 
+/** Strip orphaned tool messages from history before sending to any provider. */
+function cleanHistoryForStream(history: ChatMessage[], userMessage: ChatMessage): ChatMessage[] {
+  return [
+    ...history
+      .filter((m) => m.role !== "tool")
+      .flatMap((m) => {
+        if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+          const { toolCalls: _dropped, ...rest } = m;
+          if (!rest.content?.trim()) return [];
+          return [rest];
+        }
+        return [m];
+      }),
+    userMessage,
+  ];
+}
+
 export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promise<AgentLoopResult> {
   throwIfAborted(input.signal);
 
-  // ── Phase 1: Plan (planner decides mode) ─────────────────────────────────
-  input.onPhaseStart?.("planning", input.plannerModel);
-  const planText = await streamToText(
-    input.provider,
-    input.plannerModel,
-    PLAN_SYSTEM_PROMPT,
-    [...input.history, input.userMessage],
-    input.signal,
-    input.onUsage,
-    undefined,
-    input.onModel,
-  );
+  const cleanedHistory = cleanHistoryForStream(input.history, input.userMessage);
+
+  // ── Phase 1: Plan — explore codebase with read-only tools, then write plan ──
+  input.onPhaseStart?.("planning", input.coderModel);
+  const planResult = await runAgentLoop({
+    provider: input.provider,
+    model: input.coderModel,
+    history: cleanedHistory.slice(0, -1), // history without userMessage
+    userMessage: input.userMessage,
+    toolClient: input.toolClient,
+    onToken: input.onToken,
+    onModel: input.onModel,
+    onToolStart: input.onToolStart,
+    onToolResult: input.onToolResult,
+    onUsage: input.onUsage,
+    onDebug: input.onDebug,
+    debug: input.debug,
+    signal: input.signal,
+    compactor: input.compactor,
+    excludeTools: PLANNER_BLOCKED_TOOLS,
+    systemContext: PLAN_SYSTEM_PROMPT,
+  });
   throwIfAborted(input.signal);
+  const planText = planResult.text;
   input.onPlanReady?.(planText);
 
   // ── Plan review: wait for user to approve, cancel, or provide feedback ────
@@ -110,25 +148,31 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     // Re-plan loop: keep revising until user approves or cancels
     while (action !== "implement" && action !== "cancel") {
       const feedback = action;
-      input.onPhaseStart?.("planning", input.plannerModel);
-      const revisedPlan = await streamToText(
-        input.provider,
-        input.plannerModel,
-        PLAN_SYSTEM_PROMPT,
-        [
-          ...input.history,
-          input.userMessage,
-          { role: "assistant", content: activePlanText },
-          { role: "user", content: `Feedback on the plan: ${feedback}` },
+      input.onPhaseStart?.("planning", input.coderModel);
+      const revisedResult = await runAgentLoop({
+        provider: input.provider,
+        model: input.coderModel,
+        history: [
+          ...cleanedHistory.slice(0, -1),
+          { role: "assistant" as const, content: activePlanText },
         ],
-        input.signal,
-        input.onUsage,
-        undefined,
-        input.onModel,
-      );
+        userMessage: { role: "user", content: `Feedback on the plan: ${feedback}. Revise the plan accordingly.` },
+        toolClient: input.toolClient,
+        onToken: input.onToken,
+        onModel: input.onModel,
+        onToolStart: input.onToolStart,
+        onToolResult: input.onToolResult,
+        onUsage: input.onUsage,
+        onDebug: input.onDebug,
+        debug: input.debug,
+        signal: input.signal,
+        compactor: input.compactor,
+        excludeTools: PLANNER_BLOCKED_TOOLS,
+        systemContext: PLAN_SYSTEM_PROMPT,
+      });
       throwIfAborted(input.signal);
-      activePlanText = revisedPlan;
-      input.onPlanReady?.(revisedPlan);
+      activePlanText = revisedResult.text;
+      input.onPlanReady?.(activePlanText);
       action = normalizeAction(await input.onPlanWait());
       throwIfAborted(input.signal);
     }

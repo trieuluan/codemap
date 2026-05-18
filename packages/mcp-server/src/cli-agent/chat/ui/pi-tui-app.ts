@@ -331,23 +331,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     if (matchesKey(data, Key.ctrl("c"))) {
-      if (state.input.busy) { chatTerminal.cancelTask(); return; }
-      if (editor.getText().length > 0) { editor.setText(""); shellMode = false; clearExitConfirm(); doEditorRefresh(); return; }
-
-      const now = Date.now();
-      if (now - lastExitConfirmAt <= EXIT_CONFIRM_WINDOW_MS) {
-        cleanup();
-        process.exit(0);
-      }
-
-      lastExitConfirmAt = now;
-      statusMessage = "Press Ctrl+C again within 2s to exit";
-      if (exitConfirmTimer) clearTimeout(exitConfirmTimer);
-      exitConfirmTimer = setTimeout(() => {
-        clearExitConfirm();
-        scheduleRefresh();
-      }, EXIT_CONFIRM_WINDOW_MS);
-      scheduleRefresh();
+      handleInterrupt();
       return;
     }
 
@@ -449,17 +433,60 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── cleanup ───────────────────────────────────────────────────────────────
 
+  function handleInterrupt(): void {
+    const state = chatTerminal.store.getState();
+    if (state.input.busy) { chatTerminal.cancelTask(); return; }
+    if (copyMode) {
+      copyMode = false;
+      process.stdout.write(ENABLE_MOUSE_TRACKING);
+      clearExitConfirm();
+      scheduleRefresh();
+      return;
+    }
+    if (state.planMode) {
+      chatTerminal.store.dispatch({ planMode: false });
+      clearExitConfirm();
+      scheduleRefresh();
+      return;
+    }
+    if (editor.getText().length > 0) { editor.setText(""); shellMode = false; clearExitConfirm(); doEditorRefresh(); return; }
+    requestExit();
+  }
+
+  function requestExit(): void {
+    const now = Date.now();
+    if (now - lastExitConfirmAt <= EXIT_CONFIRM_WINDOW_MS) {
+      cleanup();
+      process.exit(0);
+    }
+
+    lastExitConfirmAt = now;
+    statusMessage = "Press Ctrl+C again within 2s to exit";
+    if (exitConfirmTimer) clearTimeout(exitConfirmTimer);
+    exitConfirmTimer = setTimeout(() => {
+      clearExitConfirm();
+      scheduleRefresh();
+    }, EXIT_CONFIRM_WINDOW_MS);
+    scheduleRefresh();
+  }
+
   function cleanup(): void {
     if (stopped) return;
     stopped = true;
+    if (exitConfirmTimer) {
+      clearTimeout(exitConfirmTimer);
+      exitConfirmTimer = undefined;
+    }
     clearInterval(tick);
     unsubscribe();
     terminal.stop();
+    process.off("SIGINT", handleInterrupt);
     process.stdout.write(DISABLE_MOUSE_TRACKING + "\x1b[?1049l\r\n");
   }
 
   process.once("exit", cleanup);
   process.once("SIGTERM", () => { cleanup(); process.exit(0); });
+  process.on("SIGINT", handleInterrupt);
 
   initShiki().then(() => scheduleRefresh()).catch(() => {});
 

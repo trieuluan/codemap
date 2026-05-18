@@ -79,6 +79,8 @@ export async function runAgentLoop(input: {
   confirmEdit?: ConfirmEditFn;
   /** Tool names to exclude — used in execute phase to block re-planning. */
   excludeTools?: Set<string>;
+  /** Extra instructions appended to system prompt — used by planner/reviewer phases. */
+  systemContext?: string;
 }): Promise<AgentLoopResult> {
   throwIfAborted(input.signal);
   let tools = (await input.toolClient.listChatTools()).filter(
@@ -102,6 +104,7 @@ export async function runAgentLoop(input: {
 
   const systemPrompt = [
     AGENT_SYSTEM_PROMPT,
+    input.systemContext,
     resourceContext,
     cachedCtx.conventions ? `## Project Conventions\n\n${cachedCtx.conventions}` : null,
     cachedCtx.rules       ? `## Project Rules\n\n${cachedCtx.rules}`             : null,
@@ -115,12 +118,15 @@ export async function runAgentLoop(input: {
   // Strategy: drop role=tool entirely; strip toolCalls field from assistant messages.
   const cleanHistory = input.history
     .filter((msg) => msg.role !== "tool")
-    .map((msg) => {
+    .flatMap((msg) => {
       if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
         const { toolCalls: _dropped, ...rest } = msg;
-        return rest;
+        // Drop assistant messages that become empty after toolCalls removed —
+        // providers reject empty content and such messages add no context.
+        if (!rest.content?.trim()) return [];
+        return [rest];
       }
-      return msg;
+      return [msg];
     });
   let allMessages: ChatMessage[] = [...cleanHistory, input.userMessage].map((msg) =>
     msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
@@ -284,8 +290,8 @@ export async function runAgentLoop(input: {
       const truncatedResult = uiResult.length > uiLimit ? uiResult.slice(0, uiLimit) + "\n..." : uiResult;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
-      // Track consecutive tool failures
-      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found");
+      // Track consecutive tool failures — including blocked bash writes so the model doesn't retry loops.
+      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found") || result.includes("[BLOCKED]");
       if (isConflict) {
         lastFailedTool = { name: toolCall.function.name, args: toolCall.function.arguments };
       } else {

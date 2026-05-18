@@ -530,7 +530,7 @@ export class ChatTerminal {
       const result = useMultiPhase
         ? await runMultiPhaseAgentLoop({
             provider: this.options.provider,
-            plannerModel: plannerProfile!.model,
+
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
             history: this.store.getState().agentHistory as ChatMessage[],
