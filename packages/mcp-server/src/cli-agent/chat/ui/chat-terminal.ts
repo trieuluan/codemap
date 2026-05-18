@@ -47,58 +47,78 @@ function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
   };
 }
 
-function formatToolCallLine(name: string, args: string): string {
-  const compactArgs = args.replace(/\s+/g, " ").trim();
-  const preview = compactArgs.length > 200 ? `${compactArgs.slice(0, 200)}...` : compactArgs;
-  return `${name}(${preview})`;
-}
 
-function parseToolCallLine(content: string): { name: string; args: string } | null {
-  const match = content.match(/^Calling:\s*([^\s(]+)\((.*)\)$/s);
-  if (!match) return null;
-  return { name: match[1] ?? "tool", args: match[2] ?? "" };
-}
+const TOOL_CALL_SUMMARY_SUFFIX = " (ctrl+o to expand)";
 
-const TOOL_CALL_SUMMARY_CONTENT = "Called codemap-mcp-dev (ctrl+o to expand)";
+function toolCallSummaryHeader(serverName: string): string {
+  return `Called ${serverName}${TOOL_CALL_SUMMARY_SUFFIX}`;
+}
 
 function isToolCallSummary(msg: Message | undefined): boolean {
   return Boolean(
-    msg?.role === "tool" &&
-    (msg.content === TOOL_CALL_SUMMARY_CONTENT || msg.content.startsWith(`${TOOL_CALL_SUMMARY_CONTENT}\n`)),
+    msg?.role === "tool" && msg.content.includes(TOOL_CALL_SUMMARY_SUFFIX),
   );
 }
 
-function withToolCallSummary(messages: Message[], toolName: string, args: string): Message[] {
-  const childLine = `⎿ ${formatToolCallLine(toolName, args)}`;
+function getServerName(toolName: string): string {
+  const sep = toolName.indexOf("__");
+  return sep === -1 ? "codemap" : toolName.slice(0, sep);
+}
+
+function withToolCallSummary(messages: Message[], toolName: string, _args: string): Message[] {
+  const serverName = getServerName(toolName);
+  const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
+  const childLine = `⎿ ${displayName}`;
   const next = [...messages];
 
+  // Look backward through tool messages for an existing summary from the same server
+  // in the current turn. Skip result messages — calls in one turn share one summary.
+  // Stop at user/assistant/system messages (turn boundaries).
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
-    if (msg?.role !== "tool") continue;
-
-    if (isToolCallSummary(msg)) {
+    if (!msg) continue;
+    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role !== "tool") continue;
+    if (isToolCallSummary(msg) && msg.toolName === serverName) {
       next[i] = { ...msg, content: `${msg.content}\n${childLine}` };
       return next;
     }
-
-    const previousCall = parseToolCallLine(msg.content);
-    if (previousCall) {
-      next[i] = {
-        ...msg,
-        content: [
-          TOOL_CALL_SUMMARY_CONTENT,
-          `⎿ ${formatToolCallLine(previousCall.name, previousCall.args)}`,
-          childLine,
-        ].join("\n"),
-        toolName: "codemap-mcp-dev",
-      };
-      return next;
-    }
-
-    break;
   }
 
-  next.push({ role: "tool", content: `Calling: ${formatToolCallLine(toolName, args)}`, toolName });
+  // No summary for this server in current turn — create one.
+  next.push({
+    role: "tool",
+    content: `${toolCallSummaryHeader(serverName)}\n${childLine}`,
+    toolName: serverName,
+    timestamp: Date.now(),
+  } as Message);
+  return next;
+}
+
+/** Mark the most-recent pending ⎿ line for toolName as done (✓ or ✗). */
+function markToolDone(messages: Message[], toolName: string, success = true): Message[] {
+  const marker = success ? " ✓" : " ✗";
+  const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (!msg) continue;
+    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role !== "tool") continue;
+
+    if (isToolCallSummary(msg)) {
+      const lines = msg.content.split("\n");
+      for (let j = lines.length - 1; j >= 0; j -= 1) {
+        const line = lines[j];
+        if (line?.startsWith(`⎿ ${displayName}`) && !line.endsWith("✓") && !line.endsWith("✗")) {
+          lines[j] = `${line}${marker}`;
+          next[i] = { ...msg, content: lines.join("\n") };
+          return next;
+        }
+      }
+      return next;
+    }
+  }
   return next;
 }
 
@@ -106,6 +126,9 @@ function appendToLastToolCallSummary(messages: Message[], content: string): Mess
   const next = [...messages];
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
+    if (!msg) continue;
+    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role !== "tool") continue;
     if (isToolCallSummary(msg)) {
       next[i] = { ...msg, content: `${msg.content}\n${content}` };
       return next;
@@ -589,7 +612,7 @@ export class ChatTerminal {
           task: { ...this.store.getState().task, phase: "executing", toolName: undefined, toolArgs: undefined },
         });
         this.store.dispatch((prev) => ({
-          messages: appendToLastToolCallSummary(prev.messages, `  ⎿ ${name} result\n${resultText}`),
+          messages: markToolDone(prev.messages, name, !resultText.includes("[ERROR]")),
         }));
         this.bus.scheduleRefresh();
       },
@@ -889,28 +912,31 @@ export class ChatTerminal {
 
   private makeConfirmEdit(): ConfirmEditFn {
     return async (name, args, preview) => {
+      // Show preview below the ⎿ toolName line in the summary.
       if (preview) {
-        // Always show preview so user knows what changed, even in auto-accept mode.
         this.store.dispatch((prev) => ({
-          messages: appendToLastToolCallSummary(prev.messages, `  ⎿ ${name} preview\n${preview}`),
-        }));
-        // Also persist preview in agentHistory so it survives session save/load.
-        this.store.dispatch((prev) => ({
-          agentHistory: [
-            ...(prev.agentHistory as ChatMessage[]),
-            { role: "tool" as const, name: `${name} preview`, content: preview },
-          ],
+          messages: appendToLastToolCallSummary(prev.messages, preview),
         }));
         this.bus.scheduleRefresh();
       }
 
       if (this.store.getState().input.autoAccept) return true;
 
+      // Manual confirm: wait for user yes/no.
       this.store.dispatch({ confirm: { active: true, toolName: name, preview } });
-      const result = await new Promise<boolean>((resolve) => {
+      const accepted = await new Promise<boolean>((resolve) => {
         this._confirmResolve = resolve;
       });
-      return result;
+
+      if (!accepted) {
+        // Mark ✗ immediately — onToolResult won't fire on rejection.
+        this.store.dispatch((prev) => ({
+          messages: markToolDone(prev.messages, name, false),
+        }));
+        this.bus.scheduleRefresh();
+      }
+
+      return accepted;
     };
   }
 

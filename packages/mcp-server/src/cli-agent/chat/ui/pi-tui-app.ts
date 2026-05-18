@@ -180,7 +180,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     const { lines: panel, cursorRow, cursorCol } = panelResult;
 
     const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
-    const allLines = [...headerLines(state), ...messageLines(state.messages, w - 2)];
+    const allLines = [...headerLines(state), ...messageLines(state.messages, w - 2, frame)];
 
     const maxScroll = Math.max(0, allLines.length - messagesHeight);
     scrollOffset = Math.min(scrollOffset, maxScroll);
