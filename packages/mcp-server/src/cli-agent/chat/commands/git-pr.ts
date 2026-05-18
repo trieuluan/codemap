@@ -67,8 +67,10 @@ export const gitPrCommand: Command = {
         ctx.reviewerModel;
       for await (const chunk of ctx.provider.stream({
         model: vanillaModel,
-        system: PR_PROMPT,
-        messages: [{ role: "user", content: context + extra }],
+        messages: [{
+          role: "user",
+          content: `${PR_PROMPT}\n\n${context}${extra}`,
+        }],
       })) {
         if (chunk.text) raw += chunk.text;
       }

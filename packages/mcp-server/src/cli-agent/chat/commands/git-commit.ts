@@ -50,10 +50,13 @@ export const gitCommitCommand: Command = {
       const vanillaModel =
         ctx.availableModels?.find((m) => m.startsWith("cc/") || m.startsWith("kr/")) ??
         ctx.plannerModel;
+      ctx.logSubprocess(`Using model: ${vanillaModel} (availableModels: ${ctx.availableModels?.length ?? "undefined"})`);
       for await (const chunk of ctx.provider.stream({
         model: vanillaModel,
-        system: COMMIT_MSG_PROMPT,
-        messages: [{ role: "user", content: `Diff:\n${diff}` }],
+        messages: [{
+          role: "user",
+          content: `${COMMIT_MSG_PROMPT}\n\nDiff:\n${diff}`,
+        }],
       })) {
         if (chunk.text) commitMsg += chunk.text;
       }
