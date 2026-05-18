@@ -46,7 +46,7 @@ export const gitCommitCommand: Command = {
       ctx.logSubprocess("Generating commit message…");
       let commitMsg = "";
       for await (const chunk of ctx.provider.stream({
-        model: ctx.coderModel,
+        model: ctx.plannerModel,
         system: COMMIT_MSG_PROMPT,
         messages: [{ role: "user", content: `Diff:\n${diff}` }],
       })) {
