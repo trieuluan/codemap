@@ -162,10 +162,15 @@ export async function runAgentLoop(input: {
     }
     throwIfAborted(input.signal);
 
+    const cleanedMessages = dropOrphanedToolMessages(allMessages);
+    const droppedCount = allMessages.length - cleanedMessages.length;
+    if (droppedCount > 0) {
+      console.warn("[agent-loop] dropped orphaned tool messages", { droppedCount, iteration: i });
+    }
     const streamRequest = {
       model: input.model,
       system: systemPrompt,
-      messages: allMessages,
+      messages: cleanedMessages,
       signal: input.signal,
       ...(tools.length > 0 && !toolSupportFailed ? { tools } : {}),
     };
@@ -447,6 +452,18 @@ function parseToolArguments(raw: string): Record<string, unknown> {
     // Fall through to a helpful error payload.
   }
   return { __invalidArguments: raw };
+}
+
+function dropOrphanedToolMessages(messages: ChatMessage[]): ChatMessage[] {
+  const pairedIds = new Set<string>();
+  for (const msg of messages) {
+    if (msg.role === "assistant" && msg.toolCalls) {
+      for (const tc of msg.toolCalls) pairedIds.add(tc.id);
+    }
+  }
+  return messages.filter(
+    (msg) => msg.role !== "tool" || (!!msg.toolCallId && pairedIds.has(msg.toolCallId)),
+  );
 }
 
 function createAbortError(): Error {

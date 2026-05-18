@@ -50,7 +50,6 @@ export const gitCommitCommand: Command = {
       const vanillaModel =
         ctx.availableModels?.find((m) => m.startsWith("cc/") || m.startsWith("kr/")) ??
         ctx.plannerModel;
-      ctx.logSubprocess(`Using model: ${vanillaModel} (availableModels: ${ctx.availableModels?.length ?? "undefined"})`);
       for await (const chunk of ctx.provider.stream({
         model: vanillaModel,
         messages: [{
