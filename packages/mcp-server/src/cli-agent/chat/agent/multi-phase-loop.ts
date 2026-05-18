@@ -8,6 +8,7 @@ import { runAgentLoop, WORKFLOW_TOOLS, type AgentLoopResult, type ConfirmEditFn 
 const PLANNER_BLOCKED_TOOLS = new Set([
   "edit_file", "write_file", "apply_patch", "move_symbols", "rename_symbol",
   "bash",
+  "get_working_diff", // avoid stale uncommitted work from prior tasks confusing planner
   ...WORKFLOW_TOOLS,
 ]);
 
@@ -117,7 +118,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     signal: input.signal,
     compactor: input.compactor,
     excludeTools: PLANNER_BLOCKED_TOOLS,
-    systemContext: PLAN_SYSTEM_PROMPT,
+    systemContext: `## Current Task\n\n${input.userMessage.content}\n\nFocus only on this task. Do not resume or complete any previous unfinished work unless it directly relates to this request.\n\n${PLAN_SYSTEM_PROMPT}`,
   });
   throwIfAborted(input.signal);
   const planText = planResult.text;

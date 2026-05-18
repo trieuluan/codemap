@@ -8,6 +8,7 @@ export interface CommandContext {
   currentModel: string;
   provider: NineRouterProvider;
   reviewerModel: string;
+  coderModel: string;
   history: ChatMessage[];
   availableModels?: string[];
   toolClient: CodeMapMcpToolClient;

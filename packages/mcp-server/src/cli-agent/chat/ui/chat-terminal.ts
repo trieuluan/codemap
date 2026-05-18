@@ -1,7 +1,7 @@
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
-import { runAgentLoop, type ConfirmEditFn } from "../agent/agent-loop.js";
+import { runAgentLoop, type ConfirmEditFn, isUserRejectedError } from "../agent/agent-loop.js";
 import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
@@ -55,6 +55,30 @@ function createAbortError(): Error {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
+}
+
+function extractCloudCommitFromGetProject(result: unknown): string | undefined {
+  const structured = (result as { structuredContent?: unknown })?.structuredContent;
+  if (!structured || typeof structured !== "object") return undefined;
+
+  const data = structured as {
+    data?: {
+      projectContext?: { latestImport?: { commitSha?: unknown } | null };
+      health?: { latestImport?: { commitSha?: unknown } | null };
+    };
+    projectContext?: { latestImport?: { commitSha?: unknown } | null };
+    health?: { latestImport?: { commitSha?: unknown } | null };
+  };
+
+  const commitSha =
+    data.data?.projectContext?.latestImport?.commitSha ??
+    data.data?.health?.latestImport?.commitSha ??
+    data.projectContext?.latestImport?.commitSha ??
+    data.health?.latestImport?.commitSha;
+
+  return typeof commitSha === "string" && commitSha.trim()
+    ? commitSha.trim()
+    : undefined;
 }
 
 async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -125,6 +149,27 @@ export class ChatTerminal {
 
     if (debug) this.logger = createDebugLogger();
 
+  }
+
+  private async refreshCloudCommitHint(): Promise<void> {
+    try {
+      const result = await this.options.toolClient.callTool("get_project", { verbose: false });
+      const cloudCommit = extractCloudCommitFromGetProject(result);
+      if (!cloudCommit) return;
+
+      const current = this.store.getState().workspace;
+      if (!current) return;
+
+      this.store.dispatch({
+        workspace: {
+          repoName: current.repoName,
+          branch: current.branch,
+          cloudCommit,
+        },
+      });
+    } catch {
+      // Non-blocking: unauthenticated/unlinked/offline workspaces should still start normally.
+    }
   }
 
   // ─── Public API for components ───────────────────────────
@@ -234,14 +279,22 @@ export class ChatTerminal {
     // Warm up file search index so @ mention is instant on first use
     await warmupFileSearch();
 
-    // Git workspace info + session init
+    // Git workspace info + cloud import commit + session init
     try {
       const info = await tryGetCurrentWorkspaceInfo();
       if (info) {
-        this.store.dispatch({ workspace: { repoName: info.repoName, branch: info.branch } });
+        this.store.dispatch({
+          workspace: {
+            repoName: info.repoName,
+            branch: info.branch,
+            localCommit: info.commitSha,
+          },
+        });
         this._gitMeta = { repo: info.repoName ?? "", branch: info.branch ?? "" };
       }
     } catch { /* non-blocking */ }
+
+    void this.refreshCloudCommitHint();
 
     await this.initSession();
 
@@ -572,6 +625,7 @@ export class ChatTerminal {
             signal: taskAbort.signal,
             compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
+            systemContext: `## Current Task\n\n${mentionContext.content}\n\nFocus only on this task. Do not resume or complete any previous unfinished work unless it directly relates to this request.`,
             ...sharedCallbacks,
           });
 
@@ -642,6 +696,12 @@ export class ChatTerminal {
       this.persistSession();
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
+      if (isUserRejectedError(err)) {
+        this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
+        this.appendMessage({ role: "system", content: "Edit rejected — stream stopped. Continue chatting to try a different approach." });
+        this.persistSession();
+        return;
+      }
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
       this.logger?.logError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -717,6 +777,12 @@ export class ChatTerminal {
       this.store.dispatch({ task: { ...this.store.getState().task, phase: "done", endTime: Date.now() } });
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
+      if (isUserRejectedError(err)) {
+        this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
+        this.appendMessage({ role: "system", content: "Edit rejected — stream stopped. Continue chatting to try a different approach." });
+        this.persistSession();
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.appendMessage({ role: "system", content: `Shell command failed: ${message}` });
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
@@ -819,10 +885,14 @@ export class ChatTerminal {
       profiles.find((p) => p.id === "reviewer")?.model ??
       profiles.find((p) => p.id === "coder")?.model ??
       s.config.model;
+    const coderModel =
+      profiles.find((p) => p.id === "coder")?.model ??
+      s.config.model;
     return {
       currentModel: s.config.model,
       provider: this.options.provider,
       reviewerModel,
+      coderModel,
       history: s.agentHistory as ChatMessage[],
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,

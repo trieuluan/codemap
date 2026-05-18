@@ -377,7 +377,7 @@ async function runConfirmedEditTool(
   throwIfAborted(signal);
 
   if (!approved) {
-    return `${dryRunText}\n\nUser declined. No files were changed.`;
+    throw createUserRejectedError(name);
   }
 
   const applied = await abortable(
@@ -453,6 +453,16 @@ function createAbortError(): Error {
   const err = new Error("Task canceled.");
   err.name = "AbortError";
   return err;
+}
+
+export function createUserRejectedError(toolName: string): Error {
+  const err = new Error(`User rejected ${toolName}. Stream stopped.`);
+  err.name = "UserRejectedError";
+  return err;
+}
+
+export function isUserRejectedError(err: unknown): boolean {
+  return err instanceof Error && err.name === "UserRejectedError";
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
