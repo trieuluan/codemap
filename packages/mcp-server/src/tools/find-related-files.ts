@@ -5,7 +5,7 @@ import { shouldUseLocalIndexBeforeRemote } from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
-import type { CodebaseSearchResponse } from "../lib/api-types.js";
+import type { CodebaseSearchResponse, SemanticSearchResult } from "../lib/api-types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ interface SignalSet {
   filenameSimilarity: number;
   importExpansion: number;
   searchRelevance: number;
+  semanticRelevance: number;
   sameFolder: number;
 }
 
@@ -49,6 +50,7 @@ const WEIGHTS: SignalSet = {
   filenameSimilarity: 0.45,
   importExpansion: 0.4,
   searchRelevance: 0.35,
+  semanticRelevance: 0.4,
   sameFolder: 0.3,
 };
 
@@ -147,6 +149,7 @@ function buildReasons(sig: Partial<SignalSet>): string[] {
   if ((sig.searchRelevance ?? 0) > 0.5) reasons.push("keyword match");
   if (sig.sameFeature) reasons.push("same feature domain");
   if ((sig.filenameSimilarity ?? 0) > 0.3) reasons.push("filename matches query");
+  if ((sig.semanticRelevance ?? 0) > 0.3) reasons.push("semantic match");
   if (sig.sameFolder) reasons.push("same folder");
   if (sig.importExpansion) reasons.push("2nd-hop import");
   return reasons.length > 0 ? reasons : ["related via import graph"];
@@ -272,7 +275,8 @@ export function registerFindRelatedFilesTool(
         "Find files related to a query, file, or symbol using multi-signal ranking. " +
         "Scores candidates by: direct imports (1.0), reverse imports (0.9), symbol usage (0.7), " +
         "same feature domain (0.5), filename similarity (0.45), 2nd-hop imports (0.4), " +
-        "search relevance (0.35), same folder (0.3). " +
+        "search relevance (0.35), semantic similarity (0.4), same folder (0.3). " +
+        "When embeddings are available, semantic search runs automatically in parallel to surface conceptually related files beyond keyword matches. " +
         "Accepts natural-language queries (e.g. 'login bug', 'add pagination') or a file path as anchor. " +
         "After results, use get_files to survey outlines before reading content. " +
         "project_id is optional if workspace is linked.",
@@ -392,7 +396,7 @@ export function registerFindRelatedFilesTool(
           }
         }
 
-        // ── Phase 2: parallel — keyword search + anchor import graph ─────────
+        // ── Phase 2: parallel — keyword search + anchor import graph + semantic
 
         await Promise.all([
           query
@@ -412,6 +416,20 @@ export function registerFindRelatedFilesTool(
                     addSymbol(s.filePath, s.displayName);
                     const sim = computeFilenameSimilarityScore(s.filePath, keywords);
                     if (sim > 0) addSignal(s.filePath, { filenameSimilarity: sim });
+                  });
+                })
+                .catch(() => {})
+            : Promise.resolve(),
+
+          query
+            ? client
+                .request<SemanticSearchResult[]>(
+                  `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+                  { authRequired: true, query: { q: query, limit: "10" } },
+                )
+                .then((results) => {
+                  results.forEach((r) => {
+                    addSignal(r.path, { semanticRelevance: r.score });
                   });
                 })
                 .catch(() => {})

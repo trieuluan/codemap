@@ -181,9 +181,10 @@ export const ARTIFACT_TEMPLATES = AGENT_PACK_TEMPLATES.map((template) => ({
 
 export const AGENT_WORKFLOW_SUMMARY = [
   "Use CodeMap MCP tools before raw file reads or grep.",
-  "For broad coding tasks, call explore_task first.",
-  "For 'which files are related?' or 'what should I read?', call find_related_files.",
+  "For broad coding tasks, call explore_task first — it automatically runs keyword, edit-location, and semantic search in parallel.",
+  "For 'which files are related?' or 'what should I read?', call find_related_files — semantic similarity is a built-in signal.",
   "For known keywords, files, symbols, or exports, call search_codebase.",
+  "For conceptual queries ('authentication flow', 'error handling') where exact names are unknown, call search_codebase(semantic=true).",
   "After you have a shortlist, call get_files for outlines, then get_file for specific content or symbols.",
   "Use find_usages/find_callers for symbol impact analysis.",
   "Use get_working_diff after edits, then build/test as appropriate.",
@@ -194,9 +195,10 @@ export const AGENT_WORKFLOW_SUMMARY = [
 
 export const AGENT_WORKFLOW_SEQUENCE = [
   "New session: get_agent_workflow, then check project-context resource. If no local index exists yet, call refresh_local_index first (no auth required).",
-  "Broad task: explore_task -> follow suggestedNextTools -> get_file/get_files.",
-  "Related-file question: find_related_files(query/file_path/symbol_name) -> get_files -> get_file.",
-  "Narrow lookup: search_codebase -> get_file(include=[outline] or [symbols]).",
+  "Broad task: explore_task -> follow suggestedNextTools -> get_file/get_files. Semantic search runs automatically.",
+  "Related-file question: find_related_files(query/file_path/symbol_name) -> get_files -> get_file. Semantic signal is built in.",
+  "Narrow lookup by name: search_codebase -> get_file(include=[outline] or [symbols]).",
+  "Conceptual lookup (no exact name): search_codebase(semantic=true) -> get_file(include=[outline]).",
   "Refactor/cleanup: find_usages or find_callers -> get_file(blast_radius if risky) -> get_working_diff.",
   "Broad work: recommend_agent_workflow -> required skills -> design/plan gates -> implementation.",
   "Verification: inspect diff, build/test, refresh_local_index, and decide whether cloud reimport is needed.",
@@ -266,7 +268,7 @@ Choose the tool based on the shape of the question:
 1. \`get_agent_workflow\` — call at the start of a new CodeMap MCP session to learn the recommended workflow and available rule resources.
 2. \`explore_task\` — use first for broad tasks such as "fix bug X", "implement Y", or "investigate Z". It returns likely files, entrypoints, symbols, risks, recommended reads, and suggested next tools.
 3. \`find_related_files\` — use when you already have an anchor file/symbol, or when the user asks "which files should I read?", "what is related to X?", or "what is the scope around X?".
-4. \`search_codebase\` — use for known keywords, filenames, exports, or symbols. It is faster than broad exploration for narrow lookup.
+4. \`search_codebase\` — use for known keywords, filenames, exports, or symbols. Pass \`semantic=true\` for conceptual queries where you do not know the exact symbol name (e.g. "authentication flow", "error handling logic").
 5. \`get_files\` — fetch outlines for several candidate files in one call. Use after \`explore_task\`, \`find_related_files\`, or \`search_codebase\`.
 6. \`get_file\` — read exact content only after you know what you need. Prefer \`include=["outline"]\` for map context and \`include=["symbols"]\` with \`symbol_names\` for function/class bodies.
 7. \`find_usages\` / \`find_callers\` — use for symbol impact analysis. Use \`find_callers\` when the symbol's file is known.
@@ -276,9 +278,10 @@ Choose the tool based on the shape of the question:
 
 ## Quick Decisions
 
-- "Fix/investigate/implement" with unclear files -> \`explore_task\`.
-- "Which files are related?" -> \`find_related_files\`.
+- "Fix/investigate/implement" with unclear files -> \`explore_task\` (semantic runs automatically).
+- "Which files are related?" -> \`find_related_files\` (semantic signal built in).
 - Known symbol or filename -> \`search_codebase\`.
+- Conceptual query, no exact name -> \`search_codebase(semantic=true)\`.
 - Several candidate files -> \`get_files\`.
 - Specific symbol body -> \`get_file(include=["symbols"], symbol_names=[...])\`.
 - Who calls/imports this? -> \`find_callers\` or \`find_usages\`.

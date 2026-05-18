@@ -19,9 +19,6 @@ interface ChangeBlock {
 const MAX_DIFF_CELLS = 200_000;
 const MAX_PREVIEW_LINES = 80;
 
-function lineNumber(n: number): string {
-  return String(n).padStart(4, " ");
-}
 
 function rangeLabel(start?: number, end?: number): string {
   if (start === undefined || end === undefined) return "-";

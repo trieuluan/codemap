@@ -9,6 +9,7 @@ import type {
   SearchExportResult,
   SearchFileResult,
   SearchSymbolResult,
+  SemanticSearchResult,
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
@@ -145,10 +146,20 @@ function rerankResults(
   };
 }
 
+function formatSemanticResult(r: SemanticSearchResult, index: number): string {
+  const location = r.startLine ? `:${r.startLine}` : "";
+  const symbol = r.symbolName ? `  [${r.symbolName}]` : "";
+  const score = `  score=${r.score.toFixed(2)}`;
+  const snippet = r.snippet ? `\n   ${r.snippet.split("\n")[0].slice(0, 120)}` : "";
+  const hint = `\n   → get_file("${r.path}", include=["outline"])`;
+  return `${index + 1}. ${r.path}${location}${symbol}${score}${snippet}${hint}`;
+}
+
 function buildOutput(
   query: string,
   results: CodebaseSearchResponse,
   kinds: Set<string>,
+  semanticResults?: SemanticSearchResult[],
 ): string {
   const sections: string[] = [`Search results for: "${query}"\n`];
   let totalCount = 0;
@@ -171,6 +182,12 @@ function buildOutput(
     totalCount += results.exports.length;
   }
 
+  if (semanticResults && semanticResults.length > 0) {
+    sections.push(`\nSemantic matches (${semanticResults.length}):`);
+    sections.push(semanticResults.map(formatSemanticResult).join("\n"));
+    totalCount += semanticResults.length;
+  }
+
   if (totalCount === 0) {
     sections.push("No results found.");
   } else {
@@ -179,6 +196,7 @@ function buildOutput(
     const topFiles = [
       ...visibleSymbols.slice(0, 3).map((symbol) => symbol.filePath),
       ...visibleFiles.slice(0, 4).map((file) => file.path),
+      ...(semanticResults ?? []).slice(0, 3).map((r) => r.path),
     ];
     const uniqueTopFiles = [...new Set(topFiles)].slice(0, 7);
     sections.push("\nBest next read:");
@@ -210,6 +228,8 @@ export function registerSearchCodebaseTool(
         "Use this INSTEAD OF grep/rg/awk for any source file lookup — faster and more accurate. " +
         "Returns ranked results with file paths and line numbers. " +
         "Use for narrow lookup when you know a keyword, filename, symbol, or export name. " +
+        "Pass semantic=true to also run embedding-based search alongside keyword search — " +
+        "useful when the query is conceptual ('authentication flow', 'error handling') rather than an exact symbol name. " +
         "For broad implementation tasks use explore_task first; for related-file questions use find_related_files. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
@@ -231,9 +251,17 @@ export function registerSearchCodebaseTool(
           .array(z.enum(SYMBOL_KIND_VALUES))
           .optional()
           .describe("Filter symbols by kind (function, class, method, etc.). Only used when kinds includes 'symbols'."),
+        semantic: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also run semantic (embedding) search alongside keyword search. " +
+            "Use when query is conceptual ('authentication flow', 'error handling') rather than a known symbol name. " +
+            "Requires embeddings to be indexed. Ignored if no project is linked.",
+          ),
       },
     },
-    withToolError(async ({ query, project_id, kinds, symbol_kinds }) => {
+    withToolError(async ({ query, project_id, kinds, symbol_kinds, semantic }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
       const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
 
@@ -310,6 +338,7 @@ export function registerSearchCodebaseTool(
       let results: CodebaseSearchResponse;
       let source: "remote" | "local" = "remote";
       let localIndexSummary: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
+      let semanticResults: SemanticSearchResult[] = [];
 
       try {
         const searchQuery: Record<string, string> = { q: query };
@@ -317,13 +346,30 @@ export function registerSearchCodebaseTool(
           searchQuery.symbolKinds = symbol_kinds.join(",");
         }
 
-        results = await client.request<CodebaseSearchResponse>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-          {
-            authRequired: true,
-            query: searchQuery,
-          },
-        );
+        const [keywordResult, semanticResult] = await Promise.allSettled([
+          client.request<CodebaseSearchResponse>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+            { authRequired: true, query: searchQuery },
+          ),
+          semantic
+            ? client.request<SemanticSearchResult[]>(
+                `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+                { authRequired: true, query: { q: query, limit: "10" } },
+              )
+            : Promise.resolve([] as SemanticSearchResult[]),
+        ]);
+
+        if (keywordResult.status === "rejected") throw keywordResult.reason;
+        results = keywordResult.value;
+
+        if (semanticResult.status === "fulfilled" && Array.isArray(semanticResult.value)) {
+          // Dedup: exclude paths already covered by keyword results
+          const keywordPaths = new Set([
+            ...results.files.map((f) => f.path),
+            ...results.symbols.map((s) => s.filePath),
+          ]);
+          semanticResults = semanticResult.value.filter((r) => !keywordPaths.has(r.path));
+        }
       } catch (error) {
         if (shouldFallbackToLocal(error)) {
           const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
@@ -340,7 +386,7 @@ export function registerSearchCodebaseTool(
       const files = activeKinds.has("files") ? results.files : [];
       const symbols = activeKinds.has("symbols") ? results.symbols : [];
       const exports = activeKinds.has("exports") ? results.exports : [];
-      const total = files.length + symbols.length + exports.length;
+      const total = files.length + symbols.length + exports.length + semanticResults.length;
 
       const suggestedNextTools: string[] = [];
       if (symbols.length > 0) {
@@ -352,18 +398,22 @@ export function registerSearchCodebaseTool(
         );
       } else if (files.length > 0) {
         suggestedNextTools.push(`get_file("${files[0].path}", include=["outline"])`);
+      } else if (semanticResults[0]) {
+        suggestedNextTools.push(`get_file("${semanticResults[0].path}", include=["outline"])`);
       }
 
-      return success(buildOutput(query, results, activeKinds), {
+      return success(buildOutput(query, results, activeKinds, semanticResults.length ? semanticResults : undefined), {
         projectId: resolvedProjectId,
         query,
         source,
         ...(localIndexSummary ? { localIndex: localIndexSummary } : {}),
         kinds: Array.from(activeKinds),
         symbolKinds: symbol_kinds ?? null,
+        semantic: semantic ?? false,
         files,
         symbols,
         exports,
+        semanticMatches: semanticResults,
         total,
         found: total > 0,
         suggestedNextTools,

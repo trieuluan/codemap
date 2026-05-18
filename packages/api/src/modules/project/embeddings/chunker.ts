@@ -22,7 +22,7 @@ export interface EmbeddingChunk {
 }
 
 const SYMBOL_KINDS = new Set(["function", "class", "interface", "component", "method", "type_alias"]);
-const MAX_CHARS = 24_000;
+const MAX_CHARS = 4_000;
 
 export function hashText(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -53,48 +53,62 @@ export async function buildEmbeddingChunks(params: {
     symbolsByFile.set(symbol.fileId, list);
   }
 
-  const chunks: EmbeddingChunk[] = [];
-  for (const file of params.files) {
-    if (!file.isText || file.isGenerated || file.isIgnored || shouldSkipEmbeddingPath(file.path)) continue;
-    const source = await readFile(join(params.workspacePath, file.path), "utf8").catch(() => null);
-    if (!source) continue;
-    const lines = source.split(/\r?\n/);
-    const symbols = symbolsByFile.get(file.id) ?? [];
+  const eligibleFiles = params.files.filter(
+    (f) => f.isText && !f.isGenerated && !f.isIgnored && !shouldSkipEmbeddingPath(f.path),
+  );
 
-    for (const symbol of symbols) {
-      const startLine = symbol.startLine ?? 1;
-      const endLine = symbol.endLine ?? startLine;
-      const body = lines.slice(Math.max(0, startLine - 1), Math.min(lines.length, endLine)).join("\n");
-      if (!body.trim()) continue;
-      chunks.push(makeChunk({
-        projectId: params.projectId,
-        fileId: file.id,
-        path: file.path,
-        symbolId: symbol.id,
-        symbolName: symbol.displayName,
-        symbolKind: symbol.kind,
-        chunkType: inferChunkType(file.path, symbol.kind),
-        language: symbol.language ?? file.language,
-        startLine,
-        endLine,
-        content: formatChunk(file.path, symbol.language ?? file.language, symbol.displayName, symbol.kind, startLine, endLine, body),
-      }));
-    }
+  // Read files in parallel with a concurrency limit to avoid exhausting file descriptors.
+  const CONCURRENCY = 32;
+  const fileChunks = await Promise.all(
+    chunk(eligibleFiles, CONCURRENCY).map((batch) =>
+      Promise.all(
+        batch.map(async (file) => {
+          const source = await readFile(join(params.workspacePath, file.path), "utf8").catch(() => null);
+          if (!source) return [];
+          const lines = source.split(/\r?\n/);
+          const symbols = symbolsByFile.get(file.id) ?? [];
+          const result: EmbeddingChunk[] = [];
 
-    if (symbols.length === 0 || source.length < 12_000 || /\.(md|mdx|json|ya?ml|toml)$/i.test(file.path)) {
-      chunks.push(makeChunk({
-        projectId: params.projectId,
-        fileId: file.id,
-        path: file.path,
-        chunkType: inferChunkType(file.path),
-        language: file.language,
-        startLine: 1,
-        endLine: lines.length,
-        content: formatChunk(file.path, file.language, undefined, undefined, 1, lines.length, source),
-      }));
-    }
-  }
-  return chunks;
+          for (const symbol of symbols) {
+            const startLine = symbol.startLine ?? 1;
+            const endLine = symbol.endLine ?? startLine;
+            const body = lines.slice(Math.max(0, startLine - 1), Math.min(lines.length, endLine)).join("\n");
+            if (!body.trim()) continue;
+            result.push(makeChunk({
+              projectId: params.projectId,
+              fileId: file.id,
+              path: file.path,
+              symbolId: symbol.id,
+              symbolName: symbol.displayName,
+              symbolKind: symbol.kind,
+              chunkType: inferChunkType(file.path, symbol.kind),
+              language: symbol.language ?? file.language,
+              startLine,
+              endLine,
+              content: formatChunk(file.path, symbol.language ?? file.language, symbol.displayName, symbol.kind, startLine, endLine, body),
+            }));
+          }
+
+          if (symbols.length === 0 || source.length < 12_000 || /\.(md|mdx|json|ya?ml|toml)$/i.test(file.path)) {
+            result.push(makeChunk({
+              projectId: params.projectId,
+              fileId: file.id,
+              path: file.path,
+              chunkType: inferChunkType(file.path),
+              language: file.language,
+              startLine: 1,
+              endLine: lines.length,
+              content: formatChunk(file.path, file.language, undefined, undefined, 1, lines.length, source),
+            }));
+          }
+
+          return result;
+        }),
+      ),
+    ),
+  );
+
+  return fileChunks.flat(2);
 }
 
 function makeChunk(input: Omit<EmbeddingChunk, "chunkKey" | "contentHash">): EmbeddingChunk {
@@ -105,6 +119,12 @@ function makeChunk(input: Omit<EmbeddingChunk, "chunkKey" | "contentHash">): Emb
 
 function formatChunk(path: string, language: string | null | undefined, symbol: string | undefined, kind: string | undefined, startLine: number, endLine: number, source: string) {
   return [`path: ${path}`, `language: ${language ?? "unknown"}`, symbol ? `symbol: ${symbol}` : null, kind ? `kind: ${kind}` : null, `lines: ${startLine}-${endLine}`, "", source].filter(Boolean).join("\n");
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
+  return result;
 }
 
 function inferChunkType(path: string, kind?: string): EmbeddingChunkType {

@@ -9,6 +9,7 @@ import type {
   SearchExportResult,
   SearchFileResult,
   SearchSymbolResult,
+  SemanticSearchResult,
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
@@ -520,6 +521,8 @@ export function registerSummarizeFeatureAreaTool(
       description:
         "Use this for questions like 'which files are related to billing/auth/admin?' " +
         "Builds a compact feature-area map grouped by frontend routes, components, API clients, backend routes, services, schema/shared, tests/docs, and tools. " +
+        "Automatically runs semantic embedding search in parallel with keyword search to surface conceptually related files — " +
+        "especially useful for feature-level queries where code may not share exact keywords. " +
         "Prefer this before reading files when the user asks for related files by feature name. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
@@ -627,17 +630,43 @@ export function registerSummarizeFeatureAreaTool(
       let results: CodebaseSearchResponse;
       let source: "remote" | "local" = "remote";
       let localIndexSummary: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"] | null = null;
+      let semanticFiles: SemanticSearchResult[] = [];
       try {
-        results = await client.request<CodebaseSearchResponse>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-          { authRequired: true, query: { q: query } },
-        );
+        const [keywordResult, semanticResult] = await Promise.allSettled([
+          client.request<CodebaseSearchResponse>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+            { authRequired: true, query: { q: query } },
+          ),
+          client.request<SemanticSearchResult[]>(
+            `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+            { authRequired: true, query: { q: query, limit: "8" } },
+          ),
+        ]);
+        if (keywordResult.status === "rejected") throw keywordResult.reason;
+        results = keywordResult.value;
+        if (semanticResult.status === "fulfilled" && Array.isArray(semanticResult.value)) {
+          semanticFiles = semanticResult.value;
+        }
       } catch (error) {
         if (!shouldFallbackToLocal(error)) throw error;
         const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
         results = store.search(query, null);
         source = "local";
         localIndexSummary = localIndex;
+      }
+
+      // Merge semantic paths into keyword results as synthetic file entries (deduped).
+      if (source === "remote" && semanticFiles.length > 0) {
+        const existingPaths = new Set([
+          ...results.files.map((f) => f.path),
+          ...results.symbols.map((s) => s.filePath),
+        ]);
+        for (const r of semanticFiles) {
+          if (!existingPaths.has(r.path)) {
+            results.files.push({ path: r.path, language: null } as SearchFileResult);
+            existingPaths.add(r.path);
+          }
+        }
       }
 
       const rankedFiles =

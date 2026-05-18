@@ -13,6 +13,7 @@ import type {
   CodebaseSearchResponse,
   EditLocationsResponse,
   EditLocationReadPlan,
+  SemanticSearchResult,
 } from "../lib/api-types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -298,6 +299,8 @@ export function registerExploreTaskTool(
         "Returns a full context pack: likelyFiles (what to edit), entrypoints (flow entry points), " +
         "symbols (relevant functions/classes), risks (high blast-radius or dangerous files), " +
         "recommendedReads (ordered reading list), and suggestedNextTools (exact tool calls to make next). " +
+        "Automatically runs keyword search, edit-location analysis, and semantic embedding search in parallel — " +
+        "semantic results are injected as additional low-confidence candidates when embeddings are available. " +
         "Call this BEFORE reading any file or running any command. " +
         "Replaces grep + manual file search. Replaces search_codebase + suggest_edit_locations combined. " +
         "If the user asks only which files are related or which files to read, use find_related_files instead.",
@@ -341,9 +344,9 @@ export function registerExploreTaskTool(
         );
       }
 
-      // ── Phase 1: parallel — keyword search + edit locations ──────────────
+      // ── Phase 1: parallel — keyword search + edit locations + semantic ───
 
-      const [searchResult, editLocsResult] = await Promise.allSettled([
+      const [searchResult, editLocsResult, semanticResult] = await Promise.allSettled([
         client.request<CodebaseSearchResponse>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
           { authRequired: true, query: { q: task } },
@@ -351,6 +354,10 @@ export function registerExploreTaskTool(
         client.request<EditLocationsResponse>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/edit-locations`,
           { authRequired: true, query: { q: task, limit: "10" } },
+        ),
+        client.request<SemanticSearchResult[]>(
+          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+          { authRequired: true, query: { q: task, limit: "5" } },
         ),
       ]);
 
@@ -363,6 +370,11 @@ export function registerExploreTaskTool(
         editLocsResult.status === "fulfilled"
           ? editLocsResult.value
           : ({ suggestions: [] } as unknown as EditLocationsResponse);
+
+      const semanticMatches: SemanticSearchResult[] =
+        semanticResult.status === "fulfilled" && Array.isArray(semanticResult.value)
+          ? semanticResult.value
+          : [];
 
       // If both cloud calls failed, hint at local fallback
       const bothFailed =
@@ -385,6 +397,28 @@ export function registerExploreTaskTool(
           reason: s.reason,
           readPlan: s.readPlan,
         }));
+
+      // Inject top-3 semantic matches as low-confidence context files (deduplicated).
+      const likelyFilePaths = new Set(likelyFiles.map((f) => f.path));
+      const keywordPaths = new Set([
+        ...search.files.map((f) => f.path),
+        ...search.symbols.map((s) => s.filePath),
+      ]);
+      let semanticInjected = 0;
+      for (const r of semanticMatches) {
+        if (semanticInjected >= 3) break;
+        if (!likelyFilePaths.has(r.path) && !keywordPaths.has(r.path)) {
+          likelyFiles.push({
+            path: r.path,
+            language: null,
+            confidence: "low",
+            reason: `semantic match (score=${r.score.toFixed(2)})${r.symbolName ? ` · ${r.symbolName}` : ""}`,
+            readPlan: OUTLINE_PLAN,
+          });
+          likelyFilePaths.add(r.path);
+          semanticInjected++;
+        }
+      }
 
       const entrypointMap = new Map<string, string>();
       const allPaths = [

@@ -46,6 +46,7 @@ export async function indexProjectEmbeddings(params: {
       GROUP BY s.id
     `);
 
+    const t0 = Date.now();
     const chunks = await buildEmbeddingChunks({
       projectId: params.projectId,
       workspacePath: params.workspacePath,
@@ -53,6 +54,7 @@ export async function indexProjectEmbeddings(params: {
       symbols: Array.from(symbols as any),
     });
     const tokensEstimated = chunks.reduce((sum, chunk) => sum + estimateTokens(chunk.content), 0);
+    console.info("[embed] chunking", { ms: Date.now() - t0, chunks: chunks.length });
 
     const existing = (chunks.length
       ? await params.db.select({ chunkKey: codeEmbedding.chunkKey, contentHash: codeEmbedding.contentHash, model: codeEmbedding.model, dimensions: codeEmbedding.dimensions })
@@ -65,6 +67,8 @@ export async function indexProjectEmbeddings(params: {
       return !row || row.contentHash !== chunk.contentHash || row.model !== provider.model || row.dimensions !== provider.dimensions;
     });
     const skipped = chunks.length - changed.length;
+
+    console.info("[embed] dedup", { ms: Date.now() - t0, total: chunks.length, changed: changed.length, skipped });
 
     if (existing.some((row: any) => row.model !== provider.model || row.dimensions !== provider.dimensions)) {
       await params.db.delete(codeEmbedding).where(sql`${codeEmbedding.projectId} = ${params.projectId}`);
@@ -79,51 +83,72 @@ export async function indexProjectEmbeddings(params: {
       tokensEstimated,
     }).where(sql`${embeddingIndexRun.id} = ${run.id}`);
 
+    const tEmbed = Date.now();
     let embedded = 0;
-    for (const batch of batchChunks(changed, config.batchSize, config.tokenBudget)) {
-      // Check if this run was cancelled by a newer import before doing more work.
-      const [current] = await params.db.select({ status: embeddingIndexRun.status })
-        .from(embeddingIndexRun)
-        .where(eq(embeddingIndexRun.id, run.id))
-        .limit(1);
-      if (current?.status === "cancelled") {
-        console.info("Embedding run cancelled by newer import", { runId: run.id, projectId: params.projectId });
-        return null;
+    const batchTimings: number[] = [];
+    // pendingInsert lets embed[N+1] overlap with insert[N] + progress update[N].
+    let pendingInsert: Promise<void> = Promise.resolve();
+
+    for (const [batchIndex, batch] of batchChunks(changed, config.batchSize, config.tokenBudget).entries()) {
+      // Check cancellation every 5 batches to reduce DB round-trips.
+      // Drain pendingInsert first so the check sees a consistent state.
+      if (batchIndex % 5 === 0) {
+        await pendingInsert;
+        const [current] = await params.db.select({ status: embeddingIndexRun.status })
+          .from(embeddingIndexRun)
+          .where(eq(embeddingIndexRun.id, run.id))
+          .limit(1);
+        if (current?.status === "cancelled") {
+          console.info("Embedding run cancelled by newer import", { runId: run.id, projectId: params.projectId });
+          return null;
+        }
       }
 
+      // Embed current batch — runs concurrently with the previous batch's pendingInsert.
+      const tBatch = Date.now();
       const vectors = await embedWithRetry(provider, batch.map((chunk) => chunk.content));
-
-      // Batch insert all rows in one query instead of 64 individual inserts.
+      batchTimings.push(Date.now() - tBatch);
       const rows = batch.map((chunk, index) =>
         toEmbeddingRow(params.projectId, provider, chunk, vectors[index]!),
       );
-      await params.db.insert(codeEmbedding).values(rows).onConflictDoUpdate({
-        target: [codeEmbedding.projectId, codeEmbedding.chunkKey],
-        set: {
-          fileId: sql`excluded.file_id`,
-          path: sql`excluded.path`,
-          symbolId: sql`excluded.symbol_id`,
-          chunkType: sql`excluded.chunk_type`,
-          language: sql`excluded.language`,
-          content: sql`excluded.content`,
-          contentHash: sql`excluded.content_hash`,
-          embedding: sql`excluded.embedding`,
-          model: sql`excluded.model`,
-          dimensions: sql`excluded.dimensions`,
-          startLine: sql`excluded.start_line`,
-          endLine: sql`excluded.end_line`,
-          metadata: sql`excluded.metadata`,
-          deletedAt: null,
-          updatedAt: new Date(),
-        },
-      });
 
+      // Wait for previous insert before kicking off the next one (ordered progress updates).
+      await pendingInsert;
       embedded += batch.length;
-      // Update progress after each batch so UI reflects real-time status.
-      await params.db.update(embeddingIndexRun).set({
-        chunksEmbedded: embedded,
-      }).where(sql`${embeddingIndexRun.id} = ${run.id}`);
+      const progressSnapshot = embedded;
+      pendingInsert = (async () => {
+        await params.db.insert(codeEmbedding).values(rows).onConflictDoUpdate({
+          target: [codeEmbedding.projectId, codeEmbedding.chunkKey],
+          set: {
+            fileId: sql`excluded.file_id`,
+            path: sql`excluded.path`,
+            symbolId: sql`excluded.symbol_id`,
+            chunkType: sql`excluded.chunk_type`,
+            language: sql`excluded.language`,
+            content: sql`excluded.content`,
+            contentHash: sql`excluded.content_hash`,
+            embedding: sql`excluded.embedding`,
+            model: sql`excluded.model`,
+            dimensions: sql`excluded.dimensions`,
+            startLine: sql`excluded.start_line`,
+            endLine: sql`excluded.end_line`,
+            metadata: sql`excluded.metadata`,
+            deletedAt: null,
+            updatedAt: new Date(),
+          },
+        });
+        await params.db.update(embeddingIndexRun)
+          .set({ chunksEmbedded: progressSnapshot })
+          .where(sql`${embeddingIndexRun.id} = ${run.id}`);
+      })();
     }
+
+    // Drain the last batch's insert + progress update before proceeding.
+    await pendingInsert;
+    const minBatch = Math.min(...batchTimings);
+    const maxBatch = Math.max(...batchTimings);
+    const avgBatch = batchTimings.length ? Math.round(batchTimings.reduce((a, b) => a + b, 0) / batchTimings.length) : 0;
+    console.info("[embed] embedding+insert", { ms: Date.now() - tEmbed, embedded, batches: batchTimings.length, batchMs: { min: minBatch, max: maxBatch, avg: avgBatch } });
 
     if (chunks.length) {
       await params.db.delete(codeEmbedding).where(sql`${codeEmbedding.projectId} = ${params.projectId} AND ${codeEmbedding.chunkKey} NOT IN (${sql.join(chunks.map((chunk) => sql`${chunk.chunkKey}`), sql`, `)})`);

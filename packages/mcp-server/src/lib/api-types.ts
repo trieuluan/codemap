@@ -58,6 +58,16 @@ export type SearchSymbolResult = ProjectMapSearchSymbolResult;
 export type SearchExportResult = ProjectMapSearchExportResult;
 export type CodebaseSearchResponse = ProjectMapSearchResponse;
 
+export type SemanticSearchResult = {
+  path: string;
+  symbolName?: string;
+  chunkType: string;
+  startLine?: number;
+  endLine?: number;
+  score: number;
+  snippet?: string;
+};
+
 export type BlastRadius = ProjectFileBlastRadius;
 
 export type InsightsFileEntry =
