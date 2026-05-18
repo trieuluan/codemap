@@ -456,13 +456,16 @@ function createAbortError(): Error {
 }
 
 export function createUserRejectedError(toolName: string): Error {
-  const err = new Error(`User rejected ${toolName}. Stream stopped.`);
-  err.name = "UserRejectedError";
+  const err = Object.assign(new Error(`User rejected ${toolName}. Stream stopped.`), {
+    name: "UserRejectedError",
+    code: "USER_REJECTED",
+  });
   return err;
 }
 
 export function isUserRejectedError(err: unknown): boolean {
-  return err instanceof Error && err.name === "UserRejectedError";
+  if (!(err instanceof Error)) return false;
+  return err.name === "UserRejectedError" || (err as { code?: string }).code === "USER_REJECTED";
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

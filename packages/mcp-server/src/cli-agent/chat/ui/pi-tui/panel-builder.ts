@@ -104,7 +104,8 @@ export function buildStatusBar(
   const gap = "  ";
   const maxLeftWidth = Math.max(0, w - hintWidth - gap.length);
   const clippedLeft = truncateVisible(left, maxLeftWidth);
-  return fitLine(clippedLeft + gap + reimportHint, w);
+  const paddingWidth = Math.max(0, w - stripAnsi(clippedLeft).length - hintWidth);
+  return fitLine(clippedLeft + " ".repeat(paddingWidth) + reimportHint, w);
 }
 
 export function buildPanel(
