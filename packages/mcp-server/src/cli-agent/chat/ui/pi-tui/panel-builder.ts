@@ -18,6 +18,16 @@ import {
 } from "./theme.js";
 import { fitLine, padToWidth, stripAnsi, truncateVisible } from "./text.js";
 
+function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
+  if (!localCommit || !cloudCommit) return false;
+
+  const local = localCommit.trim();
+  const cloud = cloudCommit.trim();
+  if (!local || !cloud) return false;
+
+  return !(local.startsWith(cloud) || cloud.startsWith(local));
+}
+
 export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return (
     phase === "thinking" ||
@@ -79,9 +89,7 @@ export function buildStatusBar(
           ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
           : ctxStr || `${C_ACTION}MCP connected${RESET}`;
 
-  const localCommit = state.workspace?.localCommit;
-  const cloudCommit = state.workspace?.cloudCommit;
-  const reimportHint = localCommit && cloudCommit && localCommit !== cloudCommit
+  const reimportHint = commitsDiffer(state.workspace?.localCommit, state.workspace?.cloudCommit)
     ? `${C_WARNING}⚠ reimport recommended${RESET}`
     : "";
 
