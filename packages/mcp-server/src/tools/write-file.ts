@@ -134,13 +134,22 @@ function buildWritePreview(filePath: string, oldContent: string | null, newConte
     if (blocks.length > 12) lines.push(`... ${blocks.length - 12} more block(s)`);
   }
 
-  lines.push("", "```diff", exists ? `--- a/${filePath}` : "--- /dev/null", `+++ b/${filePath}`);
-  for (const op of ops.slice(0, MAX_PREVIEW_LINES)) {
-    if (op.type === "add") lines.push(`+ ${lineNumber(op.newLine)} | ${op.text}`);
-    else lines.push(`- ${lineNumber(op.oldLine)} | ${op.text}`);
+  // Generate proper unified diff so renderUnifiedDiff can parse it and apply Shiki highlighting.
+  // Use basename for the diff path labels to keep headers clean and parseable.
+  const diffLabel = filePath.split("/").pop() ?? filePath;
+  const shownOps = ops.slice(0, MAX_PREVIEW_LINES);
+  const oldTotal = exists ? oldLines.length : 0;
+  const newTotal = newLines.length;
+  const hunkOldRange = `0,${Math.min(oldTotal, shownOps.length)}`;
+  const hunkNewRange = `0,${Math.min(newTotal, shownOps.length)}`;
+  lines.push("", "```diff", exists ? `--- a/${diffLabel}` : "--- /dev/null", `+++ b/${diffLabel}`);
+  lines.push(`@@ -${hunkOldRange} +${hunkNewRange} @@ ${diffLabel}`);
+  for (const op of shownOps) {
+    if (op.type === "add") lines.push(`+${op.text}`);
+    else lines.push(`-${op.text}`);
   }
   if (ops.length > MAX_PREVIEW_LINES) {
-    lines.push(`... ${ops.length - MAX_PREVIEW_LINES} more diff line(s)`);
+    lines.push(`... ${ops.length - MAX_PREVIEW_LINES} more line(s)`);
   }
   lines.push("```");
 

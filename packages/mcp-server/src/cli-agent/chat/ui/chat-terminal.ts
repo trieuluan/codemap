@@ -514,7 +514,7 @@ export class ChatTerminal {
         classification = await classifyTask(
           contentText,
           this.options.provider,
-          plannerProfile.model,
+          coderProfile.model,  // coder has better instruction following for JSON classification
           taskAbort.signal,
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;

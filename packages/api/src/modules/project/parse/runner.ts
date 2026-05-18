@@ -16,6 +16,7 @@ import {
 } from "@codemap/code-index";
 import { createRepositoryWorkspaceService } from "../import/repository-workspace";
 import { createProjectService } from "../service";
+import { indexProjectEmbeddings } from "../embeddings/indexer";
 import { createRepoParseGraphService } from "./repo-parse-graph";
 
 export type { WorkspaceFileCandidate } from "@codemap/code-index";
@@ -467,6 +468,14 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
         parseStatsJson,
       });
     }
+
+    await reportProjectParseProgress(context, 94, "indexing-embeddings");
+    await indexProjectEmbeddings({
+      db,
+      projectId: projectRecord.id,
+      projectImportId: importId,
+      workspacePath: importRecord.sourceWorkspacePath,
+    });
 
     await reportProjectParseProgress(context, 96, "cleaning-superseded-source");
     await cleanupSupersededProjectImports(projectRecord.id, importId);

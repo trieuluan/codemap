@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:${POSTGRES_IMAGE_TAG:-18}
+    image: pgvector/pgvector:pg${POSTGRES_IMAGE_TAG:-18}
     container_name: ${POSTGRES_CONTAINER_NAME:-codemap_pg}
     restart: ${POSTGRES_RESTART_POLICY:-unless-stopped}
     environment:

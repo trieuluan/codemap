@@ -6,15 +6,23 @@ const THEME = "github-dark";
 const LANGS = [
   "typescript", "javascript", "dart", "php",
   "python", "java", "kotlin", "json", "bash", "diff",
+  "sql", "markdown", "yaml", "toml", "html", "css",
+  "rust", "go", "ruby", "swift", "c", "cpp", "vue",
 ] as const;
 
 const LANG_ALIASES: Record<string, string> = {
   ts: "typescript", tsx: "typescript",
   js: "javascript", jsx: "javascript",
+  mjs: "javascript", cjs: "javascript",
   shell: "bash", sh: "bash",
   kt: "kotlin", kts: "kotlin",
   py: "python",
   jsonc: "json",
+  md: "markdown", mdx: "markdown",
+  yml: "yaml",
+  rs: "rust",
+  rb: "ruby",
+  cs: "c", // C# approximation
 };
 
 let highlighter: Highlighter | null = null;
