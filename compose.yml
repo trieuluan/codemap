@@ -21,6 +21,27 @@ services:
     volumes:
       - codemap_redis_data:/data
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ${OLLAMA_CONTAINER_NAME:-codemap_ollama}
+    restart: ${OLLAMA_RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - codemap_ollama_data:/root/.ollama
+    entrypoint: >
+      sh -c "ollama serve &
+             sleep 5 &&
+             ollama pull ${EMBEDDINGS_MODEL:-nomic-embed-text} &&
+             wait"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q '.'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
 volumes:
   codemap_postgres_data:
   codemap_redis_data:
+  codemap_ollama_data:

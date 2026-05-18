@@ -35,6 +35,17 @@ export interface ProjectImportParseStats {
   dependencyCount?: number;
 }
 
+export type EmbeddingRunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface ProjectEmbeddingStatus {
+  status: EmbeddingRunStatus;
+  chunksTotal: number;
+  chunksEmbedded: number;
+  model: string;
+  completedAt: string | null;
+  error: string | null;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -53,6 +64,7 @@ export interface Project {
   visibilityCheckedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  embeddingStatus: ProjectEmbeddingStatus | null;
 }
 
 export interface ProjectImport {

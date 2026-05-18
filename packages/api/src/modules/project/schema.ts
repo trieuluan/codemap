@@ -77,6 +77,7 @@ export {
   projectImportCompareQuerySchema,
   projectListIncludeSchema,
   projectMapSearchQuerySchema,
+  projectSemanticSearchQuerySchema,
   projectSymbolGraphQuerySchema,
   projectSymbolUsagesQuerySchema,
 } from "@codemap/shared";

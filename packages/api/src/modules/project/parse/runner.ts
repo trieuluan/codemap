@@ -470,12 +470,17 @@ export async function runProjectParse(importId: string, context?: RunProjectPars
     }
 
     await reportProjectParseProgress(context, 94, "indexing-embeddings");
-    await indexProjectEmbeddings({
-      db,
-      projectId: projectRecord.id,
-      projectImportId: importId,
-      workspacePath: importRecord.sourceWorkspacePath,
-    });
+    try {
+      await indexProjectEmbeddings({
+        db,
+        projectId: projectRecord.id,
+        projectImportId: importId,
+        workspacePath: importRecord.sourceWorkspacePath,
+      });
+    } catch (embeddingError) {
+      // Embeddings are optional — log and continue so parse succeeds.
+      console.warn("Embedding indexing failed (non-fatal):", embeddingError instanceof Error ? embeddingError.message : embeddingError);
+    }
 
     await reportProjectParseProgress(context, 96, "cleaning-superseded-source");
     await cleanupSupersededProjectImports(projectRecord.id, importId);

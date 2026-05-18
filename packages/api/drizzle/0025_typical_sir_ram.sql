@@ -1,0 +1,1 @@
+ALTER TYPE "public"."embedding_index_run_status" ADD VALUE 'cancelled';

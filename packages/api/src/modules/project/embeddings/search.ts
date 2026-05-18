@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { createEmbeddingProvider, semanticSearchEnabled, type EmbeddingProvider } from "./provider";
+import { createEmbeddingProvider, embeddingsEnabled, type EmbeddingProvider } from "./provider";
 
 export type SemanticCodeResult = {
   path: string;
@@ -21,7 +21,7 @@ export async function semanticSearchCodebase(params: {
   filters?: { chunkTypes?: string[]; language?: string };
   provider?: EmbeddingProvider;
 }): Promise<SemanticCodeResult[]> {
-  if (!semanticSearchEnabled()) return [];
+  if (!embeddingsEnabled()) return [];
 
   const provider = params.provider ?? createEmbeddingProvider();
   const [queryEmbedding] = await provider.embedTexts([params.query]);

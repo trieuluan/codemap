@@ -39,6 +39,7 @@ const projectRoutes: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.post("/:projectId/map/files/reparse", { bodyLimit: MAX_REPARSE_BODY_SIZE }, controller.reparseProjectFile);
   fastify.get("/:projectId/map/files/raw", controller.getProjectRawFile);
   fastify.get("/:projectId/map/search", controller.searchProjectMap);
+  fastify.get("/:projectId/map/search/semantic", controller.searchProjectMapSemantic);
   fastify.get("/:projectId/map/edit-locations", controller.suggestEditLocations);
   fastify.get(
     "/:projectId/map/symbol-usages",

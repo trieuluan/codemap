@@ -61,6 +61,32 @@ class OpenAIEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
+class OllamaEmbeddingProvider implements EmbeddingProvider {
+  private baseUrl: string;
+
+  constructor(
+    public model: string,
+    public dimensions: number,
+  ) {
+    this.baseUrl = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
+  }
+
+  async embedTexts(texts: string[]) {
+    const response = await fetch(`${this.baseUrl}/api/embed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.model, input: texts }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama embeddings request failed: ${response.status} ${await response.text()}`);
+    }
+
+    const json = (await response.json()) as { embeddings: number[][] };
+    return json.embeddings;
+  }
+}
+
 export function createEmbeddingProvider(): EmbeddingProvider {
   const config = getEmbeddingConfig();
 
@@ -68,6 +94,10 @@ export function createEmbeddingProvider(): EmbeddingProvider {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY is required for EMBEDDINGS_PROVIDER=openai");
     return new OpenAIEmbeddingProvider(config.model, config.dimensions, apiKey);
+  }
+
+  if (config.provider === "ollama") {
+    return new OllamaEmbeddingProvider(config.model, config.dimensions);
   }
 
   return new FakeEmbeddingProvider(config.model, config.dimensions);

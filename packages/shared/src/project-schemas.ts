@@ -127,6 +127,17 @@ export const projectMapSearchQuerySchema = z.object({
   ),
 });
 
+export const projectSemanticSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(500),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(10),
+  chunkTypes: z.preprocess(
+    (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
+    z.array(z.enum(["file", "symbol", "doc", "test", "route", "config"])).optional(),
+  ),
+  language: z.string().trim().min(1).max(50).optional(),
+});
+export type ProjectSemanticSearchQuery = z.infer<typeof projectSemanticSearchQuerySchema>;
+
 export const projectMapInsightsQuerySchema = z.object({
   file: z.string().trim().min(1).max(2000).optional(),
   symbol: z.string().trim().min(1).max(255).optional(),

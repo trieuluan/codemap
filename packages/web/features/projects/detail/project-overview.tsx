@@ -26,6 +26,7 @@ import type { WorkspaceEntitlements, WorkspaceUsageSummary } from "@codemap/shar
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
 import {
   browserProjectsApi,
@@ -36,6 +37,7 @@ import {
 } from "@/features/projects/api";
 import { ProjectStatusBadge } from "../components/project-status-badge";
 import { ProjectVisibilityBadge } from "../components/project-visibility-badge";
+import { EmbeddingStatusBadge } from "../components/embedding-status-badge";
 import {
   formatProjectImportAnalysisCount,
   getProjectImportAnalysisStats,
@@ -302,6 +304,7 @@ export function ProjectOverview({
           <div className="flex flex-wrap items-center gap-2">
             <ProjectStatusBadge status={project.status} />
             <ProjectVisibilityBadge visibility={project.visibility} />
+            <EmbeddingStatusBadge embeddingStatus={project.embeddingStatus} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
           {project.description ? (
@@ -318,14 +321,23 @@ export function ProjectOverview({
               </Link>
             </Button>
           ) : (
-            <Button
-              onClick={handleImport}
-              disabled={isImportPending || isImporting || !canImport}
-              size="sm"
-            >
-              <RefreshCcw className="size-3.5" />
-              {importLabel}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={handleImport}
+                  disabled={isImportPending || isImporting || !canImport}
+                  size="sm"
+                >
+                  <RefreshCcw className="size-3.5" />
+                  {importLabel}
+                </Button>
+              </TooltipTrigger>
+              {project.embeddingStatus?.status === "running" && (
+                <TooltipContent>
+                  <p>Embedding indexing is in progress — re-importing will restart it after parse.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
           )}
 
           {usage != null && entitlements.maxImportsPerMonth != null && (

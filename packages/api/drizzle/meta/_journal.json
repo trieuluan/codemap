@@ -169,6 +169,20 @@
       "when": 1779091727234,
       "tag": "0023_tiny_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779113154654,
+      "tag": "0024_giant_sabra",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779116487189,
+      "tag": "0025_typical_sir_ram",
+      "breakpoints": true
     }
   ]
 }

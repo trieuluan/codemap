@@ -1,4 +1,4 @@
-import { inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { codeEmbedding, embeddingIndexRun } from "../../../db/schema";
 import { buildEmbeddingChunks, estimateTokens, type EmbeddingChunk } from "./chunker";
 import { createEmbeddingProvider, embeddingsEnabled, getEmbeddingConfig, type EmbeddingProvider } from "./provider";
@@ -14,6 +14,15 @@ export async function indexProjectEmbeddings(params: {
 
   const provider = params.provider ?? createEmbeddingProvider();
   const config = getEmbeddingConfig();
+
+  // Cancel any in-progress runs for this project before starting a new one.
+  await params.db.update(embeddingIndexRun)
+    .set({ status: "cancelled", completedAt: new Date() })
+    .where(and(
+      eq(embeddingIndexRun.projectId, params.projectId),
+      inArray(embeddingIndexRun.status, ["queued", "running"]),
+    ));
+
   const [run] = await params.db.insert(embeddingIndexRun).values({
     projectId: params.projectId,
     projectImportId: params.projectImportId,
@@ -32,7 +41,7 @@ export async function indexProjectEmbeddings(params: {
       SELECT s.id, s.file_id AS "fileId", s.display_name AS "displayName", s.kind, s.language, s.signature,
              MIN(o.start_line) AS "startLine", MAX(o.end_line) AS "endLine"
       FROM repo_symbol s
-      LEFT JOIN repo_symbol_occurrence o ON o.symbol_id = s.id AND o.role IN ('definition', 'declaration')
+      LEFT JOIN repo_symbol_occurrence o ON o.symbol_id = s.id AND o.occurrence_role IN ('definition', 'declaration')
       WHERE s.project_import_id = ${params.projectImportId}
       GROUP BY s.id
     `);
@@ -61,33 +70,55 @@ export async function indexProjectEmbeddings(params: {
       await params.db.delete(codeEmbedding).where(sql`${codeEmbedding.projectId} = ${params.projectId}`);
     }
 
+    // Set total upfront so UI can show progress from the start.
+    await params.db.update(embeddingIndexRun).set({
+      chunksTotal: changed.length,
+      tokensEstimated,
+    }).where(sql`${embeddingIndexRun.id} = ${run.id}`);
+
     let embedded = 0;
     for (const batch of batchChunks(changed, config.batchSize, config.tokenBudget)) {
-      const vectors = await embedWithRetry(provider, batch.map((chunk) => chunk.content));
-      for (let index = 0; index < batch.length; index++) {
-        const chunk = batch[index];
-        await params.db.insert(codeEmbedding).values(toEmbeddingRow(params.projectId, provider, chunk, vectors[index])).onConflictDoUpdate({
-          target: [codeEmbedding.projectId, codeEmbedding.chunkKey],
-          set: {
-            fileId: chunk.fileId ?? null,
-            path: chunk.path,
-            symbolId: chunk.symbolId ?? null,
-            chunkType: chunk.chunkType,
-            language: chunk.language ?? null,
-            content: chunk.content,
-            contentHash: chunk.contentHash,
-            embedding: vectors[index],
-            model: provider.model,
-            dimensions: provider.dimensions,
-            startLine: chunk.startLine ?? null,
-            endLine: chunk.endLine ?? null,
-            metadata: chunk.metadata ?? {},
-            deletedAt: null,
-            updatedAt: new Date(),
-          },
-        });
-        embedded++;
+      // Check if this run was cancelled by a newer import before doing more work.
+      const [current] = await params.db.select({ status: embeddingIndexRun.status })
+        .from(embeddingIndexRun)
+        .where(eq(embeddingIndexRun.id, run.id));
+      if (current?.status === "cancelled") {
+        console.info("Embedding run cancelled by newer import", { runId: run.id, projectId: params.projectId });
+        return null;
       }
+
+      const vectors = await embedWithRetry(provider, batch.map((chunk) => chunk.content));
+
+      // Batch insert all rows in one query instead of 64 individual inserts.
+      const rows = batch.map((chunk, index) =>
+        toEmbeddingRow(params.projectId, provider, chunk, vectors[index]!),
+      );
+      await params.db.insert(codeEmbedding).values(rows).onConflictDoUpdate({
+        target: [codeEmbedding.projectId, codeEmbedding.chunkKey],
+        set: {
+          fileId: sql`excluded.file_id`,
+          path: sql`excluded.path`,
+          symbolId: sql`excluded.symbol_id`,
+          chunkType: sql`excluded.chunk_type`,
+          language: sql`excluded.language`,
+          content: sql`excluded.content`,
+          contentHash: sql`excluded.content_hash`,
+          embedding: sql`excluded.embedding`,
+          model: sql`excluded.model`,
+          dimensions: sql`excluded.dimensions`,
+          startLine: sql`excluded.start_line`,
+          endLine: sql`excluded.end_line`,
+          metadata: sql`excluded.metadata`,
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      });
+
+      embedded += batch.length;
+      // Update progress after each batch so UI reflects real-time status.
+      await params.db.update(embeddingIndexRun).set({
+        chunksEmbedded: embedded,
+      }).where(sql`${embeddingIndexRun.id} = ${run.id}`);
     }
 
     if (chunks.length) {

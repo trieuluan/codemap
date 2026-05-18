@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull, lt, ne } from "drizzle-orm";
-import { project, projectImport, projectMapSnapshot } from "../../db/schema";
+import { project, projectImport, projectMapSnapshot, embeddingIndexRun } from "../../db/schema";
 import { createWorkspaceService } from "../workspace/service";
 import type {
   CreateProjectBody,
@@ -306,6 +306,23 @@ export function createProjectService(database: Database) {
         scheduleVisibilityCheck(projectRecord.id, projectRecord.repositoryUrl, database);
       }
       return projectRecord;
+    },
+
+    async getLatestEmbeddingRun(projectId: string) {
+      const [run] = await database
+        .select({
+          status: embeddingIndexRun.status,
+          chunksTotal: embeddingIndexRun.chunksTotal,
+          chunksEmbedded: embeddingIndexRun.chunksEmbedded,
+          model: embeddingIndexRun.model,
+          completedAt: embeddingIndexRun.completedAt,
+          error: embeddingIndexRun.error,
+        })
+        .from(embeddingIndexRun)
+        .where(eq(embeddingIndexRun.projectId, projectId))
+        .orderBy(desc(embeddingIndexRun.createdAt))
+        .limit(1);
+      return run ?? null;
     },
 
     async updateProject(

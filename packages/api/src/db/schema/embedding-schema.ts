@@ -13,9 +13,12 @@ import {
 import { project, projectImport } from "./project-schema";
 import { repoFile, repoSymbol } from "./repo-parse-schema";
 
+// Dynamic-dimension vector — no fixed size so any embedding model can be used
+// without schema migrations. Trade-off: HNSW index requires fixed dims, so
+// similarity queries use sequential scan unless a per-dimension index exists.
 const vector = customType<{ data: number[]; driverData: string }>({
   dataType() {
-    return "vector(1536)";
+    return "vector";
   },
   toDriver(value: number[]) {
     return `[${value.join(",")}]`;
@@ -44,6 +47,7 @@ export const embeddingIndexRunStatusEnum = pgEnum("embedding_index_run_status", 
   "running",
   "completed",
   "failed",
+  "cancelled",
 ]);
 
 export const codeEmbedding = pgTable(

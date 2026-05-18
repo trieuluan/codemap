@@ -17,6 +17,7 @@ import {
   type ProjectTreeNode,
 } from "./map/tree-builder";
 import { createRepoParseGraphService } from "./parse/repo-parse-graph";
+import { semanticSearchCodebase, type SemanticCodeResult } from "./embeddings/search";
 import { createProjectService } from "./service";
 import { createWorkspaceService } from "../workspace/service";
 import { getProjectGitDiff } from "./map/git-diff";
@@ -36,6 +37,7 @@ import {
   projectMapInsightsQuerySchema,
   projectMapDiffQuerySchema,
   projectMapSearchQuerySchema,
+  projectSemanticSearchQuerySchema,
   projectSymbolGraphQuerySchema,
   projectParamsSchema,
   projectSymbolParamsSchema,
@@ -175,13 +177,16 @@ export function createProjectController(fastify: FastifyInstance) {
       const userId = getAuthenticatedUserId(fastify, request);
       const { projectId } = projectParamsSchema.parse(request.params);
 
-      const project = await service.getProjectById(projectId, userId);
+      const [project, embeddingRun] = await Promise.all([
+        service.getProjectById(projectId, userId),
+        service.getLatestEmbeddingRun(projectId),
+      ]);
 
       if (!project) {
         throw fastify.httpErrors.notFound("Project not found");
       }
 
-      return reply.success(project);
+      return reply.success({ ...project, embeddingStatus: embeddingRun ?? null });
     },
 
     updateProject: async (request: FastifyRequest, reply: FastifyReply) => {
@@ -980,6 +985,27 @@ export function createProjectController(fastify: FastifyInstance) {
           endCol: item.endCol + 1,
         })),
       });
+    },
+
+    searchProjectMapSemantic: async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getAuthenticatedUserId(fastify, request);
+      const { projectId } = projectParamsSchema.parse(request.params);
+      const query = projectSemanticSearchQuerySchema.parse(request.query ?? {});
+
+      await service.getLatestProjectMapWithSource(projectId, userId); // ownership check
+
+      const results: SemanticCodeResult[] = await semanticSearchCodebase({
+        db: fastify.db,
+        projectId,
+        query: query.q,
+        limit: query.limit,
+        filters: {
+          chunkTypes: query.chunkTypes,
+          language: query.language,
+        },
+      });
+
+      return reply.success({ results, query: query.q });
     },
 
     suggestEditLocations: async (
