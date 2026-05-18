@@ -104,20 +104,35 @@ export async function runAgentLoop(input: {
   try { cachedCtx = await getCachedContext(); } catch { /* non-blocking */ }
 
   const systemPrompt = [
-    AGENT_SYSTEM_PROMPT,
+    // systemContext (current task reminder) goes FIRST so it takes priority over history context.
     input.systemContext,
+    AGENT_SYSTEM_PROMPT,
     resourceContext,
     cachedCtx.conventions ? `## Project Conventions\n\n${cachedCtx.conventions}` : null,
     cachedCtx.rules       ? `## Project Rules\n\n${cachedCtx.rules}`             : null,
     cachedCtx.skills      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}` : null,
   ].filter(Boolean).join("\n\n");
 
+  // Observation masking: replace content of old messages with short placeholders so the
+  // model focuses on recent context instead of being pulled into earlier tasks.
+  // Keep the last MASK_KEEP_RECENT messages in full; mask everything older.
+  const MASK_KEEP_RECENT = 10;
+  const maskedHistory: ChatMessage[] = input.history.length <= MASK_KEEP_RECENT
+    ? input.history
+    : input.history.map((msg, i) => {
+        if (i >= input.history.length - MASK_KEEP_RECENT) return msg;
+        if (msg.role === "assistant" && (msg.content?.length ?? 0) > 200) {
+          return { ...msg, content: "[earlier turn — masked for focus]" };
+        }
+        return msg;
+      });
+
   // Strip orphaned tool messages and tool-call metadata from history.
   // Both sides of the pair must be present or absent — mixing causes provider errors:
   //   "orphaned tool result"  → role=tool with no matching assistant toolCall
   //   "tool call without result" → assistant toolCalls with no matching role=tool
   // Strategy: drop role=tool entirely; strip toolCalls field from assistant messages.
-  const cleanHistory = input.history
+  const cleanHistory = maskedHistory
     .filter((msg) => msg.role !== "tool")
     .flatMap((msg) => {
       if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {

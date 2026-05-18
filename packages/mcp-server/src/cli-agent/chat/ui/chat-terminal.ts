@@ -47,6 +47,73 @@ function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
   };
 }
 
+function formatToolCallLine(name: string, args: string): string {
+  const compactArgs = args.replace(/\s+/g, " ").trim();
+  const preview = compactArgs.length > 200 ? `${compactArgs.slice(0, 200)}...` : compactArgs;
+  return `${name}(${preview})`;
+}
+
+function parseToolCallLine(content: string): { name: string; args: string } | null {
+  const match = content.match(/^Calling:\s*([^\s(]+)\((.*)\)$/s);
+  if (!match) return null;
+  return { name: match[1] ?? "tool", args: match[2] ?? "" };
+}
+
+const TOOL_CALL_SUMMARY_CONTENT = "Called codemap-mcp-dev (ctrl+o to expand)";
+
+function isToolCallSummary(msg: Message | undefined): boolean {
+  return Boolean(
+    msg?.role === "tool" &&
+    (msg.content === TOOL_CALL_SUMMARY_CONTENT || msg.content.startsWith(`${TOOL_CALL_SUMMARY_CONTENT}\n`)),
+  );
+}
+
+function withToolCallSummary(messages: Message[], toolName: string, args: string): Message[] {
+  const childLine = `⎿ ${formatToolCallLine(toolName, args)}`;
+  const next = [...messages];
+
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (msg?.role !== "tool") continue;
+
+    if (isToolCallSummary(msg)) {
+      next[i] = { ...msg, content: `${msg.content}\n${childLine}` };
+      return next;
+    }
+
+    const previousCall = parseToolCallLine(msg.content);
+    if (previousCall) {
+      next[i] = {
+        ...msg,
+        content: [
+          TOOL_CALL_SUMMARY_CONTENT,
+          `⎿ ${formatToolCallLine(previousCall.name, previousCall.args)}`,
+          childLine,
+        ].join("\n"),
+        toolName: "codemap-mcp-dev",
+      };
+      return next;
+    }
+
+    break;
+  }
+
+  next.push({ role: "tool", content: `Calling: ${formatToolCallLine(toolName, args)}`, toolName });
+  return next;
+}
+
+function appendToLastToolCallSummary(messages: Message[], content: string): Message[] {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (isToolCallSummary(msg)) {
+      next[i] = { ...msg, content: `${msg.content}\n${content}` };
+      return next;
+    }
+  }
+  return next;
+}
+
 function createAbortError(): Error {
   const err = new Error("Task canceled.");
   err.name = "AbortError";
@@ -509,11 +576,10 @@ export class ChatTerminal {
         this.store.dispatch({
           task: { ...s.task, phase: "tool", toolName: name, toolArgs: args, toolsCalled: s.task.toolsCalled + 1 },
         });
-        this.appendMessage({
-          role: "tool",
-          content: `Calling: ${name}(${args.length > 200 ? args.slice(0, 200) + "..." : args})`,
-          toolName: name,
-        });
+        this.store.dispatch((prev) => ({
+          messages: withToolCallSummary(prev.messages, name, args),
+        }));
+        this.bus.scheduleRefresh();
       },
       onToolResult: (name: string, resultText: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -522,7 +588,10 @@ export class ChatTerminal {
         this.store.dispatch({
           task: { ...this.store.getState().task, phase: "executing", toolName: undefined, toolArgs: undefined },
         });
-        this.appendMessage({ role: "tool", content: resultText, toolName: `${name} result` });
+        this.store.dispatch((prev) => ({
+          messages: appendToLastToolCallSummary(prev.messages, `  ⎿ ${name} result\n${resultText}`),
+        }));
+        this.bus.scheduleRefresh();
       },
       onRefreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
       onDebug: (info: Record<string, unknown>) => {
@@ -639,7 +708,7 @@ export class ChatTerminal {
             signal: taskAbort.signal,
             compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
-            systemContext: `## Current Task (user-provided)\n\n<task>\n${mentionContext.content}\n</task>\n\nFocus only on this task. Do not resume or complete any previous unfinished work unless it directly relates to this request.`,
+            systemContext: `## Current Task\n\n<task>\n${mentionContext.content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.`,
             ...sharedCallbacks,
           });
 
@@ -696,7 +765,15 @@ export class ChatTerminal {
         const historyMessages = result.messages
           .filter((m) => m.role !== "tool")  // tool results must not persist in history
           .map((m) => ({ ...m, content: stripImagesFromContent(m.content) }));
-        const nextHistory = [...(this.store.getState().agentHistory as ChatMessage[]), ...historyMessages];
+        // Task boundary marker — signals to the model that this task is complete and a new
+        // one will follow. Combined with observation masking, prevents context from earlier
+        // tasks leaking into the next turn.
+        const boundaryMarker: ChatMessage = { role: "assistant", content: "✓ Task complete." };
+        const nextHistory = [
+          ...(this.store.getState().agentHistory as ChatMessage[]),
+          ...historyMessages,
+          boundaryMarker,
+        ];
         const cs = this.compactor.getState(nextHistory);
         this.store.dispatch({
           agentHistory: nextHistory,
@@ -814,7 +891,9 @@ export class ChatTerminal {
     return async (name, args, preview) => {
       if (preview) {
         // Always show preview so user knows what changed, even in auto-accept mode.
-        this.appendMessage({ role: "tool", content: preview, toolName: `${name} preview` });
+        this.store.dispatch((prev) => ({
+          messages: appendToLastToolCallSummary(prev.messages, `  ⎿ ${name} preview\n${preview}`),
+        }));
         // Also persist preview in agentHistory so it survives session save/load.
         this.store.dispatch((prev) => ({
           agentHistory: [

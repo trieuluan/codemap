@@ -120,7 +120,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     signal: input.signal,
     compactor: input.compactor,
     excludeTools: PLANNER_BLOCKED_TOOLS,
-    systemContext: `## Current Task (user-provided)\n\n<task>\n${input.userMessage.content}\n</task>\n\nFocus only on this task. Do not resume or complete any previous unfinished work unless it directly relates to this request.\n\n${PLAN_SYSTEM_PROMPT}`,
+    systemContext: `## Current Task\n\n<task>\n${input.userMessage.content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.\n\n${PLAN_SYSTEM_PROMPT}`,
   });
   throwIfAborted(input.signal);
   const planText = planResult.text;
