@@ -62,8 +62,11 @@ export const gitPrCommand: Command = {
 
       ctx.logSubprocess("Generating PR description…");
       let raw = "";
+      const vanillaModel =
+        ctx.availableModels?.find((m) => m.startsWith("cc/") || m.startsWith("kr/")) ??
+        ctx.reviewerModel;
       for await (const chunk of ctx.provider.stream({
-        model: ctx.reviewerModel,
+        model: vanillaModel,
         system: PR_PROMPT,
         messages: [{ role: "user", content: context + extra }],
       })) {
