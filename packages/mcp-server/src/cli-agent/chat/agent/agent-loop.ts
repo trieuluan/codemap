@@ -291,7 +291,7 @@ export async function runAgentLoop(input: {
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
       // Track consecutive tool failures — including blocked bash writes so the model doesn't retry loops.
-      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found") || result.includes("[BLOCKED]");
+      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found") || result.includes("[BASH_WRITE_BLOCKED]");
       if (isConflict) {
         lastFailedTool = { name: toolCall.function.name, args: toolCall.function.arguments };
       } else {

@@ -78,7 +78,7 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
       const fileWriteViolation = detectFileWrite(command);
       if (fileWriteViolation) {
         return success(
-          `[BLOCKED] ${fileWriteViolation}\n\nUse edit_file(file_path, old_string, new_string) for targeted edits, or write_file(file_path, content) for new files. Do NOT use bash/python/sed to modify source files.`,
+          `[BASH_WRITE_BLOCKED] ${fileWriteViolation}\n\nUse edit_file(file_path, old_string, new_string) for targeted edits, or write_file(file_path, content) for new files. Do NOT use bash/python/sed to modify source files.`,
           { exitCode: 1, stdout: "", stderr: fileWriteViolation, blocked: true },
         );
       }
