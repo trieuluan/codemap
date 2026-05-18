@@ -83,6 +83,8 @@ export interface UIState {
   workspace?: {
     repoName: string;
     branch: string;
+    localCommit?: string;
+    cloudCommit?: string;
   };
 
   // Agent history (ChatMessage[] sent to provider)

@@ -16,7 +16,7 @@ import {
   RESET,
   SPINNER,
 } from "./theme.js";
-import { fitLine, padToWidth } from "./text.js";
+import { fitLine, padToWidth, stripAnsi, truncateVisible } from "./text.js";
 
 export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return (
@@ -79,12 +79,24 @@ export function buildStatusBar(
           ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
           : ctxStr || `${C_ACTION}MCP connected${RESET}`;
 
-  return fitLine(
+  const localCommit = state.workspace?.localCommit;
+  const cloudCommit = state.workspace?.cloudCommit;
+  const reimportHint = localCommit && cloudCommit && localCommit !== cloudCommit
+    ? `${C_WARNING}⚠ reimport recommended${RESET}`
+    : "";
+
+  const left =
     `${C_WHITE}${workspace}${RESET}${C_MUTED}${branch} · ${RESET}` +
-      `${C_WHITE}${truncate(state.config.model, 28)}${RESET}${C_MUTED} · ${RESET}` +
-      right,
-    w,
-  );
+    `${C_WHITE}${truncate(state.config.model, 28)}${RESET}${C_MUTED} · ${RESET}` +
+    right;
+
+  if (!reimportHint) return fitLine(left, w);
+
+  const hintWidth = stripAnsi(reimportHint).length;
+  const gap = "  ";
+  const maxLeftWidth = Math.max(0, w - hintWidth - gap.length);
+  const clippedLeft = truncateVisible(left, maxLeftWidth);
+  return fitLine(clippedLeft + gap + reimportHint, w);
 }
 
 export function buildPanel(
