@@ -120,6 +120,7 @@ export const embeddingIndexRun = pgTable(
     model: text("model").notNull(),
     dimensions: integer("dimensions").notNull(),
     chunksTotal: integer("chunks_total").default(0).notNull(),
+    chunksToEmbed: integer("chunks_to_embed").default(0).notNull(),
     chunksEmbedded: integer("chunks_embedded").default(0).notNull(),
     chunksSkipped: integer("chunks_skipped").default(0).notNull(),
     tokensEstimated: integer("tokens_estimated").default(0).notNull(),

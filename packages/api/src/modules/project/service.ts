@@ -313,6 +313,7 @@ export function createProjectService(database: Database) {
         .select({
           status: embeddingIndexRun.status,
           chunksTotal: embeddingIndexRun.chunksTotal,
+          chunksToEmbed: embeddingIndexRun.chunksToEmbed,
           chunksEmbedded: embeddingIndexRun.chunksEmbedded,
           model: embeddingIndexRun.model,
           completedAt: embeddingIndexRun.completedAt,

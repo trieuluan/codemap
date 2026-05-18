@@ -40,6 +40,7 @@ export type EmbeddingRunStatus = "queued" | "running" | "completed" | "failed" |
 export interface ProjectEmbeddingStatus {
   status: EmbeddingRunStatus;
   chunksTotal: number;
+  chunksToEmbed: number;
   chunksEmbedded: number;
   model: string;
   completedAt: string | null;

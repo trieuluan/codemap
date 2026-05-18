@@ -28,7 +28,8 @@ export function EmbeddingStatusBadge({ embeddingStatus }: { embeddingStatus: Pro
   }
 
   if (status === "running" || status === "queued") {
-    const pct = chunksTotal > 0 ? Math.round((chunksEmbedded / chunksTotal) * 100) : 0;
+    const { chunksToEmbed } = embeddingStatus;
+    const pct = chunksToEmbed > 0 ? Math.round((chunksEmbedded / chunksToEmbed) * 100) : 0;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -37,13 +38,19 @@ export function EmbeddingStatusBadge({ embeddingStatus }: { embeddingStatus: Pro
             className="gap-1 border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400"
           >
             <Loader2 className="size-3 animate-spin" />
-            Indexing embeddings{chunksTotal > 0 ? ` ${pct}%` : "…"}
+            Indexing embeddings{chunksToEmbed > 0 ? ` ${pct}%` : "…"}
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
-          <p>
-            {status === "queued" ? "Waiting to start" : `${chunksEmbedded} / ${chunksTotal} chunks · ${model}`}
-          </p>
+          {status === "queued" ? (
+            <p>Waiting to start</p>
+          ) : (
+            <p>
+              {chunksEmbedded} / {chunksToEmbed} new chunks
+              {chunksTotal > chunksToEmbed ? ` · ${chunksTotal - chunksToEmbed} skipped` : ""}
+              {" · "}{model}
+            </p>
+          )}
         </TooltipContent>
       </Tooltip>
     );

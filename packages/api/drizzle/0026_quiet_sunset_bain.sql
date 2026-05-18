@@ -1,0 +1,1 @@
+ALTER TABLE "embedding_index_runs" ADD COLUMN "chunks_to_embed" integer DEFAULT 0 NOT NULL;

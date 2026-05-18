@@ -71,8 +71,11 @@ export async function indexProjectEmbeddings(params: {
     }
 
     // Set total upfront so UI can show progress from the start.
+    // chunksTotal = full project chunk count (consistent with completed state).
+    // chunksToEmbed = delta actually being processed this run (skipped chunks excluded).
     await params.db.update(embeddingIndexRun).set({
-      chunksTotal: changed.length,
+      chunksTotal: chunks.length,
+      chunksToEmbed: changed.length,
       tokensEstimated,
     }).where(sql`${embeddingIndexRun.id} = ${run.id}`);
 
@@ -81,7 +84,8 @@ export async function indexProjectEmbeddings(params: {
       // Check if this run was cancelled by a newer import before doing more work.
       const [current] = await params.db.select({ status: embeddingIndexRun.status })
         .from(embeddingIndexRun)
-        .where(eq(embeddingIndexRun.id, run.id));
+        .where(eq(embeddingIndexRun.id, run.id))
+        .limit(1);
       if (current?.status === "cancelled") {
         console.info("Embedding run cancelled by newer import", { runId: run.id, projectId: params.projectId });
         return null;
