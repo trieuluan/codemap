@@ -158,9 +158,14 @@ async function saveCache(paths: { md: string; meta: string }, content: string, h
 
 // ─── Streaming synthesis ──────────────────────────────────
 
-async function stream(provider: NineRouterProvider, model: string, system: string, userContent: string): Promise<string> {
+async function stream(provider: NineRouterProvider, model: string, prompt: string, userContent: string): Promise<string> {
+  // Put the synthesis prompt in the user message — cx/* combo models have fixed system prompts
+  // that override the system field, causing them to ignore synthesis instructions entirely.
   let result = "";
-  for await (const chunk of provider.stream({ model, system, messages: [{ role: "user", content: userContent }] })) {
+  for await (const chunk of provider.stream({
+    model,
+    messages: [{ role: "user", content: `${prompt}\n\n${userContent}` }],
+  })) {
     if (chunk.text) result += chunk.text;
   }
   return result.trim();

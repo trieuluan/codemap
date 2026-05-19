@@ -19,12 +19,24 @@ function stripAnsi(s: string): string {
 // identity, non-CodeMap tools, and hard safety rules.
 const AGENT_SYSTEM_PROMPT = `You are CodeMap Chat Agent, a local coding assistant that implements tasks using tools.
 
-## Tool priority for file operations
+## File operations
 1. edit_file — ALWAYS use for modifying existing files. Provide enough surrounding context in old_string to make it unique.
 2. write_file — ONLY for creating new files or complete rewrites when edit_file cannot apply a diff cleanly.
 3. bash — ONLY for running commands (build, test, grep, find). NEVER use bash/sed/python to modify file content when edit_file is available.
 
 Never claim a file changed until the tool confirms it was applied.
+
+## CodeMap MCP usage
+Use CodeMap tools only when repository context is needed. Do not call them for normal chat, theory questions, or tasks unrelated to this repo.
+
+- Call \`get_agent_workflow\` once per session; do not repeat unless workflow context is lost.
+- Do not call \`get_project\` or \`list_projects\` unless the user asks for project/account/cloud status.
+- Broad tasks with unclear files: \`recommend_agent_workflow\` → \`explore_task\`.
+- Feature areas: \`summarize_feature_area\`; related files: \`find_related_files\`; known symbols/files: \`search_codebase\`.
+- Prefer \`get_files\` outlines before reading content; prefer \`get_file(include=["symbols"])\` over full-file reads.
+- Impact analysis: \`find_usages\` or \`find_callers\`.
+- For small tasks where the exact file/pattern is already known, use bash/rg directly instead of CodeMap.
+- After edits: build/test, inspect diff, refresh local index when useful; trigger cloud reimport only when requested.
 
 ## When given an approved plan
 Execute it directly using tools. Do NOT restate the plan, explain steps, or ask for confirmation — just implement.
@@ -44,6 +56,8 @@ export type ConfirmEditFn = (
   args: Record<string, unknown>,
   preview: string | null,
 ) => Promise<boolean>;
+
+export type CancelTaskStreamFn = (reason?: string) => void;
 
 function addUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {
   return {
@@ -78,10 +92,16 @@ export async function runAgentLoop(input: {
   signal?: AbortSignal;
   compactor?: ContextCompactor;
   confirmEdit?: ConfirmEditFn;
+  /** Cancels the owning task stream when a terminal local decision stops execution. */
+  cancelTaskStream?: CancelTaskStreamFn;
   /** Tool names to exclude — used in execute phase to block re-planning. */
   excludeTools?: Set<string>;
   /** Extra instructions appended to system prompt — used by planner/reviewer phases. */
   systemContext?: string;
+  /** Pre-fetched MCP resource context — pass from session cache to avoid re-fetching every turn. */
+  resourceContext?: string | null;
+  /** Pre-loaded project context (conventions/rules/skills) — pass from session cache. */
+  projectContext?: { conventions: string | null; rules: string | null; skills: string | null };
 }): Promise<AgentLoopResult> {
   throwIfAborted(input.signal);
   let tools = (await input.toolClient.listChatTools()).filter(
@@ -89,19 +109,20 @@ export async function runAgentLoop(input: {
   );
   throwIfAborted(input.signal);
 
-  // Fetch MCP resources once and prepend to system prompt
-  let resourceContext: string | null = null;
-  try {
-    resourceContext = await abortable(fetchResourceContext(input.toolClient), input.signal);
-  } catch {
-    /* non-blocking — agent runs fine without resource context */
+  // Use caller-provided resource context if available, otherwise fetch (fallback for direct callers).
+  let resourceContext: string | null = input.resourceContext ?? null;
+  if (resourceContext === undefined) {
+    try {
+      resourceContext = await abortable(fetchResourceContext(input.toolClient), input.signal);
+    } catch { /* non-blocking */ }
+    throwIfAborted(input.signal);
   }
-  throwIfAborted(input.signal);
 
-  // Inject synthesized project context (read from cache — synthesis happens at startup)
-  let cachedCtx: { conventions: string | null; rules: string | null; skills: string | null } =
-    { conventions: null, rules: null, skills: null };
-  try { cachedCtx = await getCachedContext(); } catch { /* non-blocking */ }
+  // Use caller-provided project context if available, otherwise load from cache.
+  let cachedCtx = input.projectContext ?? { conventions: null, rules: null, skills: null };
+  if (!input.projectContext) {
+    try { cachedCtx = await getCachedContext(); } catch { /* non-blocking */ }
+  }
 
   const systemPrompt = [
     // systemContext (current task reminder) goes FIRST so it takes priority over history context.
@@ -303,7 +324,19 @@ export async function runAgentLoop(input: {
       }
 
       input.onToolStart?.(toolCall.function.name, toolCall.function.arguments, toolCall.id);
-      const rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
+      let rawResult: string;
+      try {
+        rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
+      } catch (err) {
+        if (isUserRejectedError(err)) {
+          const message = err instanceof Error ? err.message : `User rejected ${toolCall.function.name}. Stream stopped.`;
+          input.cancelTaskStream?.(message);
+          resultMessages.push({ role: "assistant", content: message });
+          shouldBreak = true;
+          break;
+        }
+        throw err;
+      }
       throwIfAborted(input.signal);
       if (shouldRefreshWorkspaceCommitsAfterTool(toolCall.function.name)) {
         await refreshWorkspaceCommitsAfterCloudImportTool(input.onRefreshWorkspaceCommits, input.signal);
@@ -324,8 +357,12 @@ export async function runAgentLoop(input: {
         consecutiveFailures = 0;
       }
 
-      // allMessages: full result for current turn.
-      allMessages.push({ role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: result });
+      // allMessages: full result for current turn (hard cap at 2MB to prevent API body-limit errors).
+      const MAX_TOOL_RESULT_CHARS = 2_000_000;
+      const cappedResult = result.length > MAX_TOOL_RESULT_CHARS
+        ? result.slice(0, MAX_TOOL_RESULT_CHARS) + `\n\n[Output truncated — full output was ${result.length.toLocaleString()} chars]`
+        : result;
+      allMessages.push({ role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: cappedResult });
 
       // Accumulate compact summary for resultMessages (no tool role — avoids provider pairing issues).
       const snippet = result.length > 120 ? result.slice(0, 120) + "…" : result;

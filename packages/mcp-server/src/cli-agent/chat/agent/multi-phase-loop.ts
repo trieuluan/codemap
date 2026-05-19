@@ -2,7 +2,13 @@ import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { ContextCompactor } from "./context-compactor.js";
-import { runAgentLoop, WORKFLOW_TOOLS, type AgentLoopResult, type ConfirmEditFn } from "./agent-loop.js";
+import {
+  runAgentLoop,
+  WORKFLOW_TOOLS,
+  type AgentLoopResult,
+  type CancelTaskStreamFn,
+  type ConfirmEditFn,
+} from "./agent-loop.js";
 
 // Tools the planner must never call — write tools + bash (not inherently read-only).
 const PLANNER_BLOCKED_TOOLS = new Set([
@@ -77,6 +83,7 @@ export interface MultiPhaseLoopInput {
   signal?: AbortSignal;
   compactor?: ContextCompactor;
   confirmEdit?: ConfirmEditFn;
+  cancelTaskStream?: CancelTaskStreamFn;
 }
 
 /** Strip orphaned tool messages from history before sending to any provider. */
@@ -238,6 +245,7 @@ export async function runMultiPhaseAgentLoop(input: MultiPhaseLoopInput): Promis
     signal: input.signal,
     compactor: input.compactor,
     confirmEdit: input.confirmEdit,
+    cancelTaskStream: input.cancelTaskStream,
     excludeTools: WORKFLOW_TOOLS,
   });
   throwIfAborted(input.signal);

@@ -48,7 +48,8 @@
       "mcp__codemap-mcp-dev__recommend_agent_workflow",
       "mcp__codemap-mcp-dev__summarize_feature_area",
       "mcp__codemap-mcp-dev__find_related_files",
-      "WebFetch(domain:www.threads.com)"
+      "WebFetch(domain:www.threads.com)",
+      "Bash(sqlite3 *)"
     ]
   },
   "enableAllProjectMcpServers": true,

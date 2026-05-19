@@ -2,6 +2,7 @@ import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { DiffLineType, DiffParser } from "@git-diff-view/core";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
+import type { ChatMode, ChatWorkspaceState } from "../store.js";
 import {
   BOLD,
   C_ACTION,
@@ -22,6 +23,21 @@ type ListItemToken = MarkdownToken & {
   task?: boolean;
   tokens?: unknown[];
 };
+
+export function workspaceStateCardLines(state: ChatWorkspaceState, mode: ChatMode, width: number): string[] {
+  const project = state.projectName ?? state.repoName ?? "local workspace";
+  const branch = state.branch ?? "unknown branch";
+  const indexColor = state.isIndexStale ? C_WARNING : state.indexStatus === "failed" ? C_ERROR : C_SUCCESS;
+  const index = `${indexColor}${state.indexStatus}${RESET}${state.indexUpdatedAt ? `${C_GRAY} · ${state.indexUpdatedAt}${RESET}` : ""}`;
+  const changes = state.hasLocalChanges ? `${C_WARNING}${state.changedFilesCount} files${RESET}` : `${C_SUCCESS}none${RESET}`;
+  const basis = state.includeDiff ? "indexed + local diff" : "indexed only";
+  const lines = [
+    `${BOLD}Workspace${RESET} ${C_GRAY}Project:${RESET} ${project}  ${C_GRAY}Branch:${RESET} ${branch}  ${C_GRAY}Mode:${RESET} ${mode}`,
+    `${C_GRAY}Index:${RESET} ${index}  ${C_GRAY}Local changes:${RESET} ${changes}  ${C_GRAY}Basis:${RESET} ${basis}`,
+  ];
+  if (state.isIndexStale) lines.push(`${C_WARNING}Index may be stale. Use current diff or refresh index before relying on graph-only answers.${RESET}`);
+  return lines.flatMap((line) => wrapPlain(line, Math.max(20, width)));
+}
 
 const RENDERER_METHODS = [
   "blockquote",
@@ -48,8 +64,8 @@ const BG_DIFF_ADD = "\x1b[48;2;0;55;18m";
 
 export function stripAnsi(s: string): string {
   return s
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")  // CSI sequences (colors, cursor, etc.)
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")  // OSC sequences
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") // CSI sequences (colors, cursor, etc.)
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC sequences
     .replace(CURSOR_MARKER, "");
 }
 
@@ -77,7 +93,10 @@ export function wrapPlain(text: string, width: number): string[] {
   const out: string[] = [];
   for (const para of text.split("\n")) {
     let remaining = para;
-    if (remaining.length === 0) { out.push(""); continue; }
+    if (remaining.length === 0) {
+      out.push("");
+      continue;
+    }
     while (visibleWidth(remaining) > max) {
       // Walk char-by-char skipping ANSI sequences to find the correct break byte index
       let vis = 0;
@@ -86,7 +105,10 @@ export function wrapPlain(text: string, width: number): string[] {
       while (i < remaining.length) {
         if (remaining.charCodeAt(i) === 0x1b && remaining[i + 1] === "[") {
           const end = remaining.indexOf("m", i + 2);
-          if (end !== -1) { i = end + 1; continue; }
+          if (end !== -1) {
+            i = end + 1;
+            continue;
+          }
         }
         if (remaining[i] === " ") lastSpaceI = i;
         vis++;
@@ -176,10 +198,17 @@ function langFromPath(path: string): string {
 function highlightCodeLineFallback(raw: string, lang: string): string {
   const normalized = normalizeLang(lang);
   if (normalized === "diff") {
-    if (raw.startsWith("+") && !raw.startsWith("+++")) return `${C_SUCCESS}${raw}${RESET}`;
-    if (raw.startsWith("-") && !raw.startsWith("---")) return `${C_ERROR}${raw}${RESET}`;
+    if (raw.startsWith("+") && !raw.startsWith("+++"))
+      return `${C_SUCCESS}${raw}${RESET}`;
+    if (raw.startsWith("-") && !raw.startsWith("---"))
+      return `${C_ERROR}${raw}${RESET}`;
     if (raw.startsWith("@@")) return `${C_ACTION}${raw}${RESET}`;
-    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("---") || raw.startsWith("+++")) {
+    if (
+      raw.startsWith("diff ") ||
+      raw.startsWith("index ") ||
+      raw.startsWith("---") ||
+      raw.startsWith("+++")
+    ) {
       return `${C_WARNING}${raw}${RESET}`;
     }
     return `${C_MUTED}${raw}${RESET}`;
@@ -187,8 +216,12 @@ function highlightCodeLineFallback(raw: string, lang: string): string {
 
   if (normalized === "json") {
     return raw
-      .replace(/("(?:[^"\\]|\\.)*")(\s*:)?/g, (_m, key: string, colon: string | undefined) =>
-        colon ? `${C_ACTION}${key}${RESET}${colon}` : `${C_SUCCESS}${key}${RESET}`,
+      .replace(
+        /("(?:[^"\\]|\\.)*")(\s*:)?/g,
+        (_m, key: string, colon: string | undefined) =>
+          colon
+            ? `${C_ACTION}${key}${RESET}${colon}`
+            : `${C_SUCCESS}${key}${RESET}`,
       )
       .replace(/\b(true|false|null)\b/g, `${C_WARNING}$1${RESET}`)
       .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`);
@@ -196,22 +229,35 @@ function highlightCodeLineFallback(raw: string, lang: string): string {
 
   if (normalized === "sh") {
     const comment = raw.match(COMMENT_RE);
-    const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
+    const body =
+      comment && comment.index !== undefined
+        ? raw.slice(0, comment.index)
+        : raw;
     const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
-    return body
-      .replace(/\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g, `${C_ACTION}$1${RESET}`)
-      .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
-      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix;
+    return (
+      body
+        .replace(
+          /\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g,
+          `${C_ACTION}$1${RESET}`,
+        )
+        .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
+        .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix
+    );
   }
 
   if (KEYWORD_LANGS.has(normalized)) {
     const comment = raw.match(COMMENT_RE);
-    const body = comment && comment.index !== undefined ? raw.slice(0, comment.index) : raw;
+    const body =
+      comment && comment.index !== undefined
+        ? raw.slice(0, comment.index)
+        : raw;
     const suffix = comment ? `${C_GRAY}${comment[0]}${RESET}` : "";
-    return body
-      .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
-      .replace(KEYWORDS, `${C_ACTION}$1${RESET}`)
-      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix;
+    return (
+      body
+        .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
+        .replace(KEYWORDS, `${C_ACTION}$1${RESET}`)
+        .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix
+    );
   }
 
   return raw;
@@ -238,7 +284,6 @@ function reapplyBackground(line: string, bg: string): string {
   return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + RESET;
 }
 
-
 function parseDiffFilePath(header: string): string {
   const plus = header.split("\n").find((line) => line.startsWith("+++ "));
   const minus = header.split("\n").find((line) => line.startsWith("--- "));
@@ -253,20 +298,48 @@ function langFromHunkHeader(hunkText: string): string {
   return match?.[1] ? langFromPath(match[1].trim()) : "";
 }
 
-function renderUnifiedDiff(source: string, width: number, noHighlight: boolean): string[] | null {
-  let parsed: ReturnType<DiffParser["parse"]>;
+function renderUnifiedDiff(
+  source: string,
+  width: number,
+  noHighlight: boolean,
+): string[] | null {
+  // Strip truncation notes ("... N more line(s)") — DiffParser treats them as invalid hunk headers.
+  const cleanSource = source
+    .split("\n")
+    .filter((l) => !/^\.\.\. \d+ more line\(s\)/.test(l))
+    .join("\n");
+
+  let parsed: ReturnType<DiffParser["parse"]> | null = null;
   try {
-    parsed = new DiffParser().parse(source);
+    parsed = new DiffParser().parse(cleanSource);
   } catch {
-    return null;
+    parsed = null;
   }
 
-  if (parsed.hunks.length === 0) return null;
+  if (!parsed || parsed.hunks.length === 0) {
+    // DiffParser rejects incorrect hunk ranges (e.g. @@ -0,N +0,M @@ from old write_file
+    // previews). Reconstruct the hunk by counting actual +/- lines in the body, then retry.
+    const srcLines = cleanSource.split("\n");
+    const hunkIdx = srcLines.findIndex((l) => l.startsWith("@@"));
+    if (hunkIdx !== -1) {
+      const body = srcLines.slice(hunkIdx + 1);
+      const adds = body.filter((l) => l.startsWith("+")).length;
+      const dels = body.filter((l) => l.startsWith("-")).length;
+      const oldRange = dels > 0 ? `1,${dels}` : "0,0";
+      const newRange = adds > 0 ? `1,${adds}` : "0,0";
+      const ctx = (srcLines[hunkIdx] ?? "").replace(/^@@ .+? @@/, "");
+      const fixedHunk = `@@ -${oldRange} +${newRange} @@${ctx}`;
+      const fixedSrc = [...srcLines.slice(0, hunkIdx), fixedHunk, ...body].join("\n");
+      try { parsed = new DiffParser().parse(fixedSrc); } catch { return null; }
+    }
+    if (!parsed || parsed.hunks.length === 0) return null;
+  }
 
   const filePath = parseDiffFilePath(parsed.header);
   // Fallback: edit_file preview embeds the path in the hunk @@ header line.
-  const language = langFromPath(filePath)
-    || langFromHunkHeader(parsed.hunks[0]?.lines[0]?.text ?? "");
+  const language =
+    langFromPath(filePath) ||
+    langFromHunkHeader(parsed.hunks[0]?.lines[0]?.text ?? "");
 
   // Collect every content line text (strips trailing newline only).
   // We pass all lines as one block to Shiki so it has full context for
@@ -283,6 +356,8 @@ function renderUnifiedDiff(source: string, width: number, noHighlight: boolean):
   if (!noHighlight && isShikiReady() && language) {
     preHighlighted = highlightBlock(contentTexts.join("\n"), language);
   } else if (!noHighlight) {
+    // if (!isShikiReady()) process.stderr.write(`[diff-render] shiki not ready lang=${language}\n`);
+    // else if (!language) process.stderr.write(`[diff-render] no language detected, path="${parseDiffFilePath(parsed.header)}"\n`);
     preHighlighted = contentTexts.map((t) =>
       highlightCodeLineFallback(t.length === 0 ? " " : t, language),
     );
@@ -290,7 +365,20 @@ function renderUnifiedDiff(source: string, width: number, noHighlight: boolean):
     preHighlighted = contentTexts;
   }
 
-  const gutterWidth = 2; // marker + space only
+  // Only show per-line numbers when there are no context lines (write_file create / pure-add).
+  const hasContextLines = parsed.hunks.some((h) =>
+    h.lines.slice(1).some((l) => l.type !== DiffLineType.Add && l.type !== DiffLineType.Delete),
+  );
+  let maxLineNo = 0;
+  if (!hasContextLines) {
+    for (const hunk of parsed.hunks)
+      for (const line of hunk.lines.slice(1)) {
+        const n = (line.type === DiffLineType.Add ? line.newLineNumber : line.oldLineNumber) ?? 0;
+        if (n > maxLineNo) maxLineNo = n;
+      }
+  }
+  const lineNoW = maxLineNo > 0 ? Math.max(2, String(maxLineNo).length) : 0;
+  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 3 : 2; // "± N │ " or "± "
   const codeWidth = Math.max(8, width - gutterWidth);
   const out: string[] = [];
 
@@ -309,9 +397,19 @@ function renderUnifiedDiff(source: string, width: number, noHighlight: boolean):
       const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
 
       for (const [index, segment] of wrapped.entries()) {
-        const gutter = index === 0 ? `${markerColor}${marker}${RESET} ` : `  `;
+        let gutter: string;
+        if (index === 0 && lineNoW > 0) {
+          const lineNo = (isAdd ? line.newLineNumber : line.oldLineNumber) ?? null;
+          const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
+          // Reset before number so bg color doesn't tint the gutter; restore bg after │ if needed.
+          gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET}${bg} `;
+        } else {
+          gutter = index === 0 ? `${markerColor}${marker}${RESET} ` : " ".repeat(gutterWidth);
+        }
         const rendered = `${gutter}${segment}${RESET}`;
-        out.push(bg ? reapplyBackground(padToWidth(rendered, width), bg) : rendered);
+        out.push(
+          bg ? reapplyBackground(padToWidth(rendered, width), bg) : rendered,
+        );
       }
     }
   }
@@ -333,19 +431,28 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
 
   code(code: unknown, lang?: string): string {
     const source = isToken(code) ? tokenText(code) : String(code ?? "");
-    const language = isToken(code) && typeof code.lang === "string" ? code.lang : lang ?? "";
+    const language =
+      isToken(code) && typeof code.lang === "string" ? code.lang : (lang ?? "");
     if (normalizeLang(language) === "diff") {
       const diffLines = renderUnifiedDiff(source, this.width, this.noHighlight);
       if (diffLines) return diffLines.join("\n") + "\n";
     }
 
     const separator = `${C_MUTED}${"-".repeat(Math.min(this.width, 40))}${RESET}`;
-    const useShiki = !this.noHighlight && isShikiReady() && normalizeLang(language) !== "diff";
+    const useShiki =
+      !this.noHighlight && isShikiReady() && normalizeLang(language) !== "diff";
     const highlighted = useShiki
       ? highlightBlock(source, language)
-      : source.split("\n").map((line) =>
-          this.noHighlight ? line : highlightCodeLineFallback(line.length === 0 ? " " : line, language),
-        );
+      : source
+          .split("\n")
+          .map((line) =>
+            this.noHighlight
+              ? line
+              : highlightCodeLineFallback(
+                  line.length === 0 ? " " : line,
+                  language,
+                ),
+          );
     const codeWidth = Math.max(8, this.width - 4);
     const body = highlighted.flatMap((line) =>
       wrapPlain(line, codeWidth).map((wrapped) => `    ${wrapped}${RESET}`),
@@ -355,13 +462,20 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
   }
 
   heading(heading: unknown, level?: number): string {
-    const depth = isToken(heading) && typeof heading.depth === "number" ? heading.depth : level ?? 1;
+    const depth =
+      isToken(heading) && typeof heading.depth === "number"
+        ? heading.depth
+        : (level ?? 1);
     const text = this.inlineFrom(heading);
     const color = depth <= 2 ? `${C_ACTION}${BOLD}` : `${C_AI}${BOLD}`;
     const lines = wrapPlain(text, Math.max(8, this.width - 2));
-    return lines.map((line, index) =>
-      index === 0 ? `${color}${line}${RESET}` : `  ${line}`,
-    ).join("\n") + "\n";
+    return (
+      lines
+        .map((line, index) =>
+          index === 0 ? `${color}${line}${RESET}` : `  ${line}`,
+        )
+        .join("\n") + "\n"
+    );
   }
 
   paragraph(paragraph: unknown): string {
@@ -382,10 +496,15 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
 
     const body = String(list ?? "").trim();
     if (!body) return "";
-    return body.split("\n").map((line, index) => {
-      const marker = ordered ? `${index + 1}. ` : "- ";
-      return this.formatListLine(marker, line);
-    }).join("\n") + "\n";
+    return (
+      body
+        .split("\n")
+        .map((line, index) => {
+          const marker = ordered ? `${index + 1}. ` : "- ";
+          return this.formatListLine(marker, line);
+        })
+        .join("\n") + "\n"
+    );
   }
 
   listitem(item: unknown): string {
@@ -393,15 +512,22 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
   }
 
   blockquote(quote: unknown): string {
-    const text = isToken(quote) && Array.isArray(quote.tokens)
-      ? this.parser.parse(quote.tokens).trim()
-      : String(quote ?? "").trim();
+    const text =
+      isToken(quote) && Array.isArray(quote.tokens)
+        ? this.parser.parse(quote.tokens).trim()
+        : String(quote ?? "").trim();
     if (!text) return "";
-    return text.split("\n").flatMap((line) =>
-      wrapPlain(line.trimStart(), Math.max(8, this.width - 2)).map((wrapped) =>
-        wrapped ? `${C_MUTED}│${RESET} ${C_GRAY}${wrapped}${RESET}` : "",
-      ),
-    ).join("\n") + "\n";
+    return (
+      text
+        .split("\n")
+        .flatMap((line) =>
+          wrapPlain(line.trimStart(), Math.max(8, this.width - 2)).map(
+            (wrapped) =>
+              wrapped ? `${C_MUTED}│${RESET} ${C_GRAY}${wrapped}${RESET}` : "",
+          ),
+        )
+        .join("\n") + "\n"
+    );
   }
 
   hr(): string {
@@ -425,19 +551,25 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
   }
 
   link(hrefOrToken: unknown, _title?: string | null, text?: string): string {
-    const href = isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
-      ? hrefOrToken.href
-      : String(hrefOrToken ?? "");
-    const label = isToken(hrefOrToken) ? this.inlineFrom(hrefOrToken) : text ?? href;
+    const href =
+      isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
+        ? hrefOrToken.href
+        : String(hrefOrToken ?? "");
+    const label = isToken(hrefOrToken)
+      ? this.inlineFrom(hrefOrToken)
+      : (text ?? href);
     if (!href || label === href) return `${C_GRAY}${label || href}${RESET}`;
     return `${label} ${C_MUTED}(${href})${RESET}`;
   }
 
   image(hrefOrToken: unknown, title?: string | null, text?: string): string {
-    const href = isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
-      ? hrefOrToken.href
-      : String(hrefOrToken ?? "");
-    const label = isToken(hrefOrToken) ? tokenText(hrefOrToken) : text ?? "image";
+    const href =
+      isToken(hrefOrToken) && typeof hrefOrToken.href === "string"
+        ? hrefOrToken.href
+        : String(hrefOrToken ?? "");
+    const label = isToken(hrefOrToken)
+      ? tokenText(hrefOrToken)
+      : (text ?? "image");
     const suffix = title ? ` - ${title}` : "";
     return `${C_GRAY}![${label}${suffix}]${RESET}${href ? ` ${C_MUTED}(${href})${RESET}` : ""}`;
   }
@@ -487,7 +619,10 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
       const available = Math.max(colCount * 3, this.width - colCount * 3 - 1);
       const total = colWidths.reduce((s, w) => s + w, 0);
       for (let i = 0; i < colWidths.length; i++) {
-        colWidths[i] = Math.max(3, Math.floor(((colWidths[i] ?? 3) / total) * available));
+        colWidths[i] = Math.max(
+          3,
+          Math.floor(((colWidths[i] ?? 3) / total) * available),
+        );
       }
     }
 
@@ -546,7 +681,10 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
 
   private formatListLine(marker: string, text: string): string {
     const markerWidth = visibleWidth(marker);
-    const markerColor = marker.trim() === "-" ? `${C_ACTION}-${RESET} ` : `${C_ACTION}${marker}${RESET}`;
+    const markerColor =
+      marker.trim() === "-"
+        ? `${C_ACTION}-${RESET} `
+        : `${C_ACTION}${marker}${RESET}`;
     const continuation = " ".repeat(markerWidth);
     const bodyWidth = Math.max(8, this.width - markerWidth);
     const lines = stripTrailingBlankLines(text.split("\n"));
@@ -567,15 +705,30 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
   }
 }
 
-export function renderMarkdownish(text: string, width: number, options?: { noHighlight?: boolean }): string[] {
-  const renderer = new CodeMapTerminalRenderer(width, options?.noHighlight ?? false);
+export function renderMarkdownish(
+  text: string,
+  width: number,
+  options?: { noHighlight?: boolean },
+): string[] {
+  const renderer = new CodeMapTerminalRenderer(
+    width,
+    options?.noHighlight ?? false,
+  );
   const rendererMethods: Record<string, (...args: unknown[]) => string> = {};
   for (const method of RENDERER_METHODS) {
-    rendererMethods[method] = function (this: { options: Record<string, unknown>; parser: CodeMapTerminalRenderer["parser"] }, ...args: unknown[]) {
+    rendererMethods[method] = function (
+      this: {
+        options: Record<string, unknown>;
+        parser: CodeMapTerminalRenderer["parser"];
+      },
+      ...args: unknown[]
+    ) {
       renderer.options = this.options;
       renderer.parser = this.parser;
       const fn = (renderer as unknown as Record<string, unknown>)[method];
-      return typeof fn === "function" ? fn.apply(renderer, args) as string : "";
+      return typeof fn === "function"
+        ? (fn.apply(renderer, args) as string)
+        : "";
     };
   }
   const parser = new Marked({
@@ -583,7 +736,9 @@ export function renderMarkdownish(text: string, width: number, options?: { noHig
     breaks: false,
     gfm: true,
   });
-  parser.use({ renderer: rendererMethods, useNewRenderer: true } as Parameters<Marked["use"]>[0]);
+  parser.use({ renderer: rendererMethods, useNewRenderer: true } as Parameters<
+    Marked["use"]
+  >[0]);
   const rendered = parser.parse(text) as string;
   const lines = stripTrailingBlankLines(rendered.split("\n"));
 

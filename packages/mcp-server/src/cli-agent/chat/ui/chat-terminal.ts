@@ -1,6 +1,8 @@
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
+import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
+import { getCachedContext } from "../../convention-synthesizer.js";
 import { runAgentLoop, type ConfirmEditFn, isUserRejectedError } from "../agent/agent-loop.js";
 import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
@@ -77,7 +79,7 @@ function withToolCallSummary(messages: Message[], toolName: string, _args: strin
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
-    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role === "user") break;
     if (msg.role !== "tool") continue;
     if (isToolCallSummary(msg) && msg.toolName === serverName) {
       next[i] = { ...msg, content: `${msg.content}\n${childLine}` };
@@ -96,14 +98,15 @@ function withToolCallSummary(messages: Message[], toolName: string, _args: strin
 }
 
 /** Mark the most-recent pending ⎿ line for toolName as done (✓ or ✗). */
-function markToolDone(messages: Message[], toolName: string, success = true): Message[] {
+function markToolDone(messages: Message[], toolName: string, resultText: string): Message[] {
+  const success = !resultText.includes("[ERROR]");
   const marker = success ? " ✓" : " ✗";
   const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
   const next = [...messages];
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
-    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role === "user") break;
     if (msg.role !== "tool") continue;
 
     if (isToolCallSummary(msg)) {
@@ -112,7 +115,8 @@ function markToolDone(messages: Message[], toolName: string, success = true): Me
         const line = lines[j];
         if (line?.startsWith(`⎿ ${displayName}`) && !line.endsWith("✓") && !line.endsWith("✗")) {
           lines[j] = `${line}${marker}`;
-          next[i] = { ...msg, content: lines.join("\n") };
+          const toolResults = [...(msg.toolResults ?? []), { name: displayName, content: resultText, success }];
+          next[i] = { ...msg, content: lines.join("\n"), toolResults };
           return next;
         }
       }
@@ -127,7 +131,7 @@ function appendToLastToolCallSummary(messages: Message[], content: string): Mess
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
-    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (msg.role === "user") break;
     if (msg.role !== "tool") continue;
     if (isToolCallSummary(msg)) {
       next[i] = { ...msg, content: `${msg.content}\n${content}` };
@@ -169,6 +173,38 @@ function extractCloudCommitFromGetProject(result: unknown): string | undefined {
   return typeof commitSha === "string" && commitSha.trim()
     ? commitSha.trim()
     : undefined;
+}
+
+const TASK_BOUNDARY_CONTENT = "✓ Task complete.";
+
+/**
+ * Prune old task context from agentHistory on each new turn.
+ * Keeps the most recent task fully intact so follow-up questions have context.
+ * Only prunes tasks older than the second-most-recent boundary to prevent
+ * unbounded history growth while still allowing conversational continuity.
+ */
+function pruneToPreviousTaskBoundary(history: ChatMessage[]): ChatMessage[] {
+  // Find all boundary positions
+  const boundaries: number[] = [];
+  for (let i = 0; i < history.length; i++) {
+    if (history[i]?.role === "assistant" && history[i]?.content === TASK_BOUNDARY_CONTENT) {
+      boundaries.push(i);
+    }
+  }
+
+  // Fewer than 2 boundaries → nothing old enough to prune, keep full history
+  if (boundaries.length < 2) return history;
+
+  // Prune everything before the second-to-last boundary (keep last task intact)
+  const keepFrom = boundaries[boundaries.length - 2]! + 1;
+  const pruned = history.slice(0, keepFrom);
+  const kept = history.slice(keepFrom);
+  const taskCount = pruned.filter((m) => m.content === TASK_BOUNDARY_CONTENT).length;
+  const summary: ChatMessage = {
+    role: "assistant",
+    content: `[${taskCount} older task${taskCount !== 1 ? "s" : ""} pruned — recent context preserved.]`,
+  };
+  return [summary, ...kept];
 }
 
 async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -220,6 +256,9 @@ export class ChatTerminal {
   private options: ChatTerminalOptions;
   private _sessionId: string | null = null;
   private _gitMeta: { repo: string; branch: string } = { repo: "", branch: "" };
+  // Session-level caches — fetched once on first turn, reused for the entire session.
+  private _resourceContext: string | null | undefined = undefined; // undefined = not yet fetched
+  private _projectContext: { conventions: string | null; rules: string | null; skills: string | null } | undefined = undefined;
 
   constructor(options: ChatTerminalOptions) {
     this.options = options;
@@ -284,22 +323,41 @@ export class ChatTerminal {
   // ─── Public API for components ───────────────────────────
 
   /** Cancel the running task and reset to idle. Late async results are ignored by task id. */
-  cancelTask(): void {
+  cancelTask(): string | null {
     const state = this.store.getState();
-    if (!state.input.busy) return;
+    if (!state.input.busy) return null;
+    const canceledPrompt = state.input.lastUserText;
     this._taskAbort?.abort();
     this._taskAbort = null;
     this._activeTaskId = 0;
     // Also cancel any pending confirm dialog
     this._confirmResolve?.(false);
     this._confirmResolve = null;
-    this.appendMessage({ role: "system", content: this.formatCancelMessage(state.task) });
+    this._planReviewResolve?.("cancel");
+    this._planReviewResolve = null;
+
+    // Roll back UI messages to before the last user message so the conversation
+    // history is preserved and the user's prompt is returned to the input field.
+    const msgs = state.messages as Message[];
+    const lastUserIdx = msgs.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+    const rolledBackMsgs = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx) : msgs;
+
+    // Same rollback for agent history.
+    const history = state.agentHistory as ChatMessage[];
+    const lastUserHistIdx = history.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+    const rolledBackHistory = lastUserHistIdx >= 0 ? history.slice(0, lastUserHistIdx) : history;
+
     this.store.dispatch({
+      messages: rolledBackMsgs,
+      agentHistory: rolledBackHistory,
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       confirm: { active: false, toolName: "", preview: null },
+      planReview: { active: false, selection: 0 },
       streaming: { active: false, content: "", entryIndex: -1 },
     });
+    this.persistSession();
+    return canceledPrompt;
   }
 
   resolveConfirm(accept: boolean): void {
@@ -561,7 +619,11 @@ export class ChatTerminal {
     let hasStreamingEntry = false;
     let lastTurnUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-    const resetStreaming = () => { streamingContent = ""; hasStreamingEntry = false; };
+    const resetStreaming = () => {
+      streamingContent = "";
+      hasStreamingEntry = false;
+      this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
+    };
 
     const sharedCallbacks = {
       onToken: (token: string) => {
@@ -571,9 +633,11 @@ export class ChatTerminal {
         streamingContent += token;
         if (!hasStreamingEntry) {
           hasStreamingEntry = true;
-          this.appendMessage({ role: "assistant", content: streamingContent });
+          const entryIndex = this.appendMessage({ role: "assistant", content: streamingContent });
+          this.store.dispatch({ streaming: { active: true, content: streamingContent, entryIndex } });
         } else {
           this.updateLastAssistantMessage(streamingContent);
+          this.store.dispatch((prev) => ({ streaming: { ...prev.streaming, active: true, content: streamingContent } }));
         }
         this.store.dispatch({ task: { ...s.task, phase: "streaming" } });
         this.bus.scheduleRefresh();
@@ -612,7 +676,7 @@ export class ChatTerminal {
           task: { ...this.store.getState().task, phase: "executing", toolName: undefined, toolArgs: undefined },
         });
         this.store.dispatch((prev) => ({
-          messages: markToolDone(prev.messages, name, !resultText.includes("[ERROR]")),
+          messages: markToolDone(prev.messages, name, resultText),
         }));
         this.bus.scheduleRefresh();
       },
@@ -678,19 +742,26 @@ export class ChatTerminal {
         return coderProfile?.model;
       })() ?? this.store.getState().config.model;
 
+      // Fetch session-level caches once — reused across all runAgentLoop calls this turn.
+      const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
+        this.getSessionResourceContext(taskAbort.signal),
+        this.getSessionProjectContext(),
+      ]);
+
       const result = useMultiPhase
         ? await runMultiPhaseAgentLoop({
             provider: this.options.provider,
 
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
-            history: this.store.getState().agentHistory as ChatMessage[],
+            history: pruneToPreviousTaskBoundary(this.store.getState().agentHistory as ChatMessage[]),
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
             debug: this.store.getState().debug,
             signal: taskAbort.signal,
             compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
+            cancelTaskStream: () => this.cancelTask(),
             onPhaseStart: (phase, model) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
@@ -724,14 +795,17 @@ export class ChatTerminal {
         : await runAgentLoop({
             provider: this.options.provider,
             model: singlePhaseModel,
-            history: this.store.getState().agentHistory as ChatMessage[],
+            history: pruneToPreviousTaskBoundary(this.store.getState().agentHistory as ChatMessage[]),
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
             debug: this.store.getState().debug,
             signal: taskAbort.signal,
             compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
+            cancelTaskStream: () => this.cancelTask(),
             systemContext: `## Current Task\n\n<task>\n${mentionContext.content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.`,
+            resourceContext: sessionResourceCtx,
+            projectContext: sessionProjectCtx,
             ...sharedCallbacks,
           });
 
@@ -791,7 +865,7 @@ export class ChatTerminal {
         // Task boundary marker — signals to the model that this task is complete and a new
         // one will follow. Combined with observation masking, prevents context from earlier
         // tasks leaking into the next turn.
-        const boundaryMarker: ChatMessage = { role: "assistant", content: "✓ Task complete." };
+        const boundaryMarker: ChatMessage = { role: "assistant", content: TASK_BOUNDARY_CONTENT };
         const nextHistory = [
           ...(this.store.getState().agentHistory as ChatMessage[]),
           ...historyMessages,
@@ -915,7 +989,11 @@ export class ChatTerminal {
       // Show preview below the ⎿ toolName line in the summary.
       if (preview) {
         this.store.dispatch((prev) => ({
-          messages: appendToLastToolCallSummary(prev.messages, preview),
+          messages: appendToLastToolCallSummary(prev.messages,
+            // Don't double-wrap: write-file preview already has a ```diff block inside metadata.
+            preview.includes("@@ -") && !preview.includes("```diff")
+              ? `\`\`\`diff\n${preview}\n\`\`\``
+              : preview),
         }));
         this.bus.scheduleRefresh();
       }
@@ -931,7 +1009,7 @@ export class ChatTerminal {
       if (!accepted) {
         // Mark ✗ immediately — onToolResult won't fire on rejection.
         this.store.dispatch((prev) => ({
-          messages: markToolDone(prev.messages, name, false),
+          messages: markToolDone(prev.messages, name, "[ERROR] User rejected tool execution."),
         }));
         this.bus.scheduleRefresh();
       }
@@ -940,12 +1018,37 @@ export class ChatTerminal {
     };
   }
 
+  // ─── Session context cache ────────────────────────────────
+
+  private async getSessionResourceContext(signal?: AbortSignal): Promise<string | null> {
+    if (this._resourceContext !== undefined) return this._resourceContext;
+    try {
+      this._resourceContext = await fetchResourceContext(this.options.toolClient);
+    } catch {
+      this._resourceContext = null;
+    }
+    return this._resourceContext;
+  }
+
+  private async getSessionProjectContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {
+    if (this._projectContext !== undefined) return this._projectContext;
+    try {
+      this._projectContext = await getCachedContext();
+    } catch {
+      this._projectContext = { conventions: null, rules: null, skills: null };
+    }
+    return this._projectContext ?? { conventions: null, rules: null, skills: null };
+  }
+
   // ─── Message helpers ──────────────────────────────────────
 
-  private appendMessage(msg: Message): void {
-    this.store.dispatch((prev) => ({
-      messages: [...prev.messages, { timestamp: Date.now(), ...msg }],
-    }));
+  private appendMessage(msg: Message): number {
+    let index = -1;
+    this.store.dispatch((prev) => {
+      index = prev.messages.length;
+      return { messages: [...prev.messages, { timestamp: Date.now(), ...msg }] };
+    });
+    return index;
   }
 
   private updateLastAssistantMessage(content: string): void {
@@ -977,22 +1080,6 @@ export class ChatTerminal {
 
   private isActiveTask(taskId: number, controller: AbortController): boolean {
     return this._activeTaskId === taskId && this._taskAbort === controller && !controller.signal.aborted;
-  }
-
-  private formatCancelMessage(task: ReturnType<Store["getState"]>["task"]): string {
-    const elapsed = task.startTime
-      ? ` after ${Math.max(1, Math.round((Date.now() - task.startTime) / 1000))}s`
-      : "";
-    if (task.phase === "tool" && task.toolName) {
-      return `Task canceled${elapsed} while running ${task.toolName}.`;
-    }
-    if (task.phase === "streaming") {
-      return `Task canceled${elapsed} while streaming the model response.`;
-    }
-    if (task.phase === "thinking") {
-      return `Task canceled${elapsed} while waiting for the model.`;
-    }
-    return `Task canceled${elapsed}.`;
   }
 
   // ─── Command context ──────────────────────────────────────

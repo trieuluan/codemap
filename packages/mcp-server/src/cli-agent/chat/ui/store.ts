@@ -7,6 +7,9 @@ export interface Message {
   content: string;
   toolName?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+  toolResults?: Array<{ name: string; content: string; success: boolean }>;
+  expanded?: boolean;
+  expandedResultIndex?: number;
   welcomeData?: WelcomeData;
   timestamp?: number;
 }
@@ -19,6 +22,43 @@ export interface WelcomeData {
 // ─── UI State ────────────────────────────────────────────
 
 export type Screen = "main" | "help";
+
+export type ChatMode = "auto" | "find_files" | "explain_code" | "plan_change" | "edit_code" | "review_diff" | "debug_issue";
+
+export interface ChatWorkspaceState {
+  projectId?: string;
+  projectName?: string;
+  repoName?: string;
+  branch?: string;
+  commitSha?: string;
+  indexStatus: "fresh" | "stale" | "indexing" | "failed" | "missing" | "unknown";
+  indexUpdatedAt?: string;
+  isIndexStale: boolean;
+  hasLocalChanges: boolean;
+  changedFilesCount: number;
+  authMode: "local" | "cloud" | "unauthenticated";
+  includeDiff: boolean;
+  activeContextSummary?: string;
+}
+
+export interface ChatContextItem {
+  id: string;
+  type: "file" | "symbol" | "search" | "diff" | "tool_call" | "assumption";
+  label: string;
+  source: "user" | "tool" | "system";
+  pinned: boolean;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChatContextState {
+  files: ChatContextItem[];
+  symbols: ChatContextItem[];
+  searches: ChatContextItem[];
+  diffs: ChatContextItem[];
+  toolCalls: ChatContextItem[];
+  assumptions: ChatContextItem[];
+}
 
 export interface UIState {
   // Current screen
@@ -86,6 +126,10 @@ export interface UIState {
     localCommit?: string;
     cloudCommit?: string;
   };
+
+  chatMode: ChatMode;
+  workspaceState: ChatWorkspaceState;
+  contextState: ChatContextState;
 
   // Agent history (ChatMessage[] sent to provider)
   agentHistory: Array<{ role: string; content: string; toolCalls?: unknown[] }>;
@@ -157,6 +201,23 @@ export function createInitialState(opts: {
       profile: opts.profile,
       debug: opts.debug ?? false,
       availableModels: opts.availableModels ?? [],
+    },
+    chatMode: "auto",
+    workspaceState: {
+      indexStatus: "unknown",
+      isIndexStale: false,
+      hasLocalChanges: false,
+      changedFilesCount: 0,
+      authMode: "local",
+      includeDiff: false,
+    },
+    contextState: {
+      files: [],
+      symbols: [],
+      searches: [],
+      diffs: [],
+      toolCalls: [],
+      assumptions: [],
     },
     agentHistory: [],
     synthRunning: false,

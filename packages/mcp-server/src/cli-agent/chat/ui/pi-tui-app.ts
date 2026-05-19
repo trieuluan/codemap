@@ -23,7 +23,7 @@ import {
   RESET,
   SPINNER,
 } from "./pi-tui/theme.js";
-import { fitLine } from "./pi-tui/text.js";
+import { fitLine, stripAnsi, workspaceStateCardLines } from "./pi-tui/text.js";
 import { renderEditor } from "./pi-tui/editor-renderer.js";
 import {
   buildPanel,
@@ -180,7 +180,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     const { lines: panel, cursorRow, cursorCol } = panelResult;
 
     const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
-    const allLines = [...headerLines(state), ...messageLines(state.messages, w - 2, frame)];
+    const allLines = [
+      ...headerLines(state),
+      ...workspaceStateCardLines(state.workspaceState, state.chatMode, w - 2),
+      ...messageLines(state.messages, w - 2, frame),
+    ];
 
     const maxScroll = Math.max(0, allLines.length - messagesHeight);
     scrollOffset = Math.min(scrollOffset, maxScroll);
@@ -306,7 +310,78 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── input ─────────────────────────────────────────────────────────────────
 
+  function toggleResultAt(row: number): boolean {
+    const state = chatTerminal.store.getState();
+    const messagesHeight = Math.max(1, R() - currentBottomHeight - borderRows());
+    const lines = [...headerLines(state), ...messageLines(state.messages, W() - 2, frame)];
+    const maxScroll = Math.max(0, lines.length - messagesHeight);
+    const startLine = Math.max(0, lines.length - messagesHeight - Math.min(scrollOffset, maxScroll));
+    const clickedLineIndex = startLine + row - 1;
+    const line = stripAnsi(lines[clickedLineIndex] ?? "");
+    const match = line.match(/^\s*⎿ (.+?)(?: [✓✗])?$/);
+    if (!match) return false;
+    const clickedToolName = match[1];
+
+    // Multiple chat turns commonly render the same tool name (for example
+    // repeated bash/search calls). Matching only by tool name toggles the
+    // first/oldest message with that name, not the row the user clicked. Use
+    // the rendered row position to identify the Nth visible occurrence of this
+    // tool line, then toggle the corresponding Nth tool result in message order.
+    let occurrence = 0;
+    for (let index = 0; index <= clickedLineIndex; index += 1) {
+      const renderedMatch = stripAnsi(lines[index] ?? "").match(/^\s*⎿ (.+?)(?: [✓✗])?$/);
+      if (renderedMatch?.[1] === clickedToolName) occurrence += 1;
+    }
+
+    const messages = state.messages;
+    for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+      const msg = messages[messageIndex];
+      if (msg?.role !== "tool" || !msg.toolResults?.length) continue;
+      for (let resultIndex = 0; resultIndex < msg.toolResults.length; resultIndex += 1) {
+        if (msg.toolResults[resultIndex]?.name !== clickedToolName) continue;
+        occurrence -= 1;
+        if (occurrence !== 0) continue;
+        const next = messages.map((message, index) => {
+          if (index !== messageIndex || message.role !== "tool") return message;
+          return { ...message, expandedResultIndex: message.expandedResultIndex === resultIndex ? undefined : resultIndex };
+        });
+        chatTerminal.store.dispatch({ messages: next });
+        scheduleRefresh();
+        return true;
+      }
+    }
+    return false;
+  }
+
   function onInput(data: string): void {
+    if (matchesKey(data, Key.ctrl("o"))) {
+      const messages = chatTerminal.store.getState().messages;
+      let expandableIndex = -1;
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const msg = messages[index];
+        if (msg?.role === "tool" && msg.toolResults?.length) {
+          expandableIndex = index;
+          break;
+        }
+      }
+
+      if (expandableIndex !== -1) {
+        const next = [...messages];
+        const msg = next[expandableIndex];
+        if (msg) next[expandableIndex] = {
+          ...msg,
+          expandedResultIndex: msg.expandedResultIndex === undefined ? 0 : undefined,
+        };
+        chatTerminal.store.dispatch({ messages: next });
+        scrollOffset = 0;
+        scheduleRefresh();
+      }
+      return;
+    }
+
+    const mouseUp = data.match(/^\x1b\[<0;(\d+);(\d+)M/);
+    if (mouseUp && toggleResultAt(Number(mouseUp[2]))) return;
+
     // Mouse scroll: SGR encoding.
     if (/^\x1b\[<64;/.test(data)) { scrollOffset += SCROLL_SPEED; scheduleRefresh(); return; }
     if (/^\x1b\[<65;/.test(data)) { scrollOffset = Math.max(0, scrollOffset - SCROLL_SPEED); scheduleRefresh(); return; }
@@ -435,7 +510,16 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   function handleInterrupt(): void {
     const state = chatTerminal.store.getState();
-    if (state.input.busy) { chatTerminal.cancelTask(); return; }
+    if (state.input.busy) {
+      const canceledPrompt = chatTerminal.cancelTask();
+      if (canceledPrompt) {
+        editor.setText(canceledPrompt);
+        shellMode = canceledPrompt.startsWith("!");
+      }
+      clearExitConfirm();
+      doEditorRefresh();
+      return;
+    }
     if (copyMode) {
       copyMode = false;
       process.stdout.write(ENABLE_MOUSE_TRACKING);
@@ -488,7 +572,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   process.once("SIGTERM", () => { cleanup(); process.exit(0); });
   process.on("SIGINT", handleInterrupt);
 
-  initShiki().then(() => scheduleRefresh()).catch(() => {});
+  await initShiki().catch(() => {});
 
   doRefresh();
 

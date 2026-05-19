@@ -2,18 +2,60 @@ type TextContent = { type: "text"; text: string };
 
 export type ToolData = Record<string, unknown> | unknown[];
 
+export type Verbosity = "compact" | "normal" | "verbose" | "debug";
+
+export const verbositySchemaValues = [
+  "compact",
+  "normal",
+  "verbose",
+  "debug",
+] as const;
+
+export type ToolOutputOptions = {
+  verbosity?: Verbosity;
+  limit?: number;
+  max_chars?: number;
+  include_raw?: boolean;
+};
+
+export type ToolEnvelopeMeta = Record<string, unknown> & {
+  verbosity?: Verbosity;
+  total?: number;
+  returned?: number;
+};
+
+export type AgentHints = Record<string, unknown> & {
+  recommendedNextTool?: string;
+  recommendedPaths?: string[];
+  avoidReadingFullFiles?: boolean;
+};
+
+export type ToolEnvelope<TItems = unknown> = Record<string, unknown> & {
+  summary: string;
+  items?: TItems[];
+  nextActions?: string[];
+  truncated?: boolean;
+  truncationReason?: string;
+  meta?: ToolEnvelopeMeta;
+  agentHints?: AgentHints;
+  display?: string;
+  raw?: unknown;
+};
+
 export type ToolErrorShape = Record<string, unknown> & {
   code: string;
   message: string;
   details?: unknown;
 };
 
-export type ToolSuccessPayload<TData extends ToolData = ToolData> =
-  Record<string, unknown> & {
-    summary: string;
-    data: TData;
-    isError?: false;
-  };
+export type ToolSuccessPayload<TData extends ToolData = ToolData> = Record<
+  string,
+  unknown
+> & {
+  summary: string;
+  data: TData;
+  isError?: false;
+};
 
 export type ToolErrorPayload = Record<string, unknown> & {
   summary: string;
@@ -21,12 +63,14 @@ export type ToolErrorPayload = Record<string, unknown> & {
   isError: true;
 };
 
-export type ToolSuccessResult<TData extends ToolData = ToolData> =
-  Record<string, unknown> & {
-    content: TextContent[];
-    structuredContent: ToolSuccessPayload<TData>;
-    isError?: false;
-  };
+export type ToolSuccessResult<TData extends ToolData = ToolData> = Record<
+  string,
+  unknown
+> & {
+  content: TextContent[];
+  structuredContent: ToolSuccessPayload<TData>;
+  isError?: false;
+};
 
 export type ToolErrorResult = Record<string, unknown> & {
   content: TextContent[];
@@ -61,6 +105,73 @@ function toErrorShape(error: unknown): ToolErrorShape {
     code: "TOOL_ERROR",
     message: String(error),
   };
+}
+
+export function normalizeVerbosity(value?: string): Verbosity {
+  if (
+    value === "compact" ||
+    value === "normal" ||
+    value === "verbose" ||
+    value === "debug"
+  ) {
+    return value;
+  }
+  return "compact";
+}
+
+export function normalizeLimit(
+  value: number | undefined,
+  fallback = 10,
+): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.floor(value as number));
+}
+
+export function normalizeMaxChars(
+  value: number | undefined,
+  fallback = 12000,
+): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(500, Math.floor(value as number));
+}
+
+export function truncateText(
+  text: string,
+  maxChars: number,
+): { text: string; truncated: boolean; truncationReason?: string } {
+  if (text.length <= maxChars) return { text, truncated: false };
+  return {
+    text: `${text.slice(0, Math.max(0, maxChars - 80))}\n... [truncated: max_chars exceeded]`,
+    truncated: true,
+    truncationReason: "max_chars exceeded",
+  };
+}
+
+export function buildToolEnvelope<TItems = unknown>(args: {
+  summary: string;
+  items?: TItems[];
+  nextActions?: string[];
+  truncated?: boolean;
+  truncationReason?: string;
+  meta?: ToolEnvelopeMeta;
+  agentHints?: AgentHints;
+  display?: string;
+  raw?: unknown;
+}): ToolEnvelope<TItems> {
+  const envelope: ToolEnvelope<TItems> = {
+    summary: args.summary,
+  };
+
+  if (args.items !== undefined) envelope.items = args.items;
+  if (args.nextActions?.length) envelope.nextActions = args.nextActions;
+  if (args.truncated !== undefined) envelope.truncated = args.truncated;
+  if (args.truncationReason) envelope.truncationReason = args.truncationReason;
+  if (args.meta) envelope.meta = args.meta;
+  if (args.agentHints) envelope.agentHints = args.agentHints;
+  if (args.display) envelope.display = args.display;
+  if (args.raw !== undefined) envelope.raw = args.raw;
+
+  return envelope;
 }
 
 /** Wraps a string into the MCP text content response shape. */
@@ -101,7 +212,10 @@ export function errorContent(error: unknown): ToolResult {
  * Prepends context score warnings to a summary when the agent has skipped
  * mandatory orientation steps. Non-blocking — data is still returned.
  */
-export function prependContextWarnings(summary: string, warnings: string[]): string {
+export function prependContextWarnings(
+  summary: string,
+  warnings: string[],
+): string {
   if (warnings.length === 0) return summary;
   const block = warnings.map((w) => `⚠ ${w}`).join("\n");
   return `${block}\n\n${summary}`;

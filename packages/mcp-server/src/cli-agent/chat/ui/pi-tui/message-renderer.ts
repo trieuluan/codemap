@@ -41,6 +41,9 @@ function toolLineLimit(msg: Message): number {
   if (name.endsWith(" preview") || name === "plan") {
     return Infinity;
   }
+  if (msg.content.includes("(ctrl+o to expand)")) {
+    return Infinity;
+  }
   const content = msg.content.toLowerCase();
   if (
     name.includes("edit_file") ||
@@ -149,20 +152,12 @@ export function messageLines(
         (msg.toolName ?? "").endsWith(" preview") || msg.toolName === "plan";
 
       if (isSummary) {
-        // Tool call tree view — no toolName prefix, colorize ✓/✗ per line.
+        // Tool call tree view — line-by-line state machine so ⎿ lines always render at tree
+        // level regardless of position, and fenced blocks get Shiki highlight individually.
         const prefixW = 9;
         const bodyW = Math.max(20, width - prefixW);
-        const rawLines = safeRender(stripAnsi(msg.content), bodyW, {
-          noHighlight: true,
-        });
-        const limit = toolLineLimit(msg);
-        const lines =
-          rawLines.length > limit
-            ? [
-                ...rawLines.slice(0, limit),
-                `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`,
-              ]
-            : rawLines;
+        const metaW = Math.max(20, width - (prefixW + 3));
+
         const spin = SPINNER[frame % SPINNER.length] ?? "⠋";
         const colorLine = (line: string) => {
           if (line.endsWith("✓"))
@@ -173,9 +168,84 @@ export function messageLines(
             return `${C_GRAY}${line}${RESET} ${C_WHITE}${spin}${RESET}`;
           return `${C_GRAY}${line}${RESET}`;
         };
-        out.push(`${time} ${C_MUTED}${lines[0] ?? ""}${RESET}`);
-        for (const line of lines.slice(1))
-          out.push(`${" ".repeat(prefixW)}${colorLine(line)}`);
+
+        const renderedToolNameOccurrences = new Map<string, number>();
+        const renderExpandedResult = (line: string) => {
+          const toolMatch = line.match(/^⎿ (.+?)(?: [✓✗])?$/);
+          if (!toolMatch || !msg.toolResults?.length) return;
+          const toolName = toolMatch[1];
+          const occurrence = (renderedToolNameOccurrences.get(toolName) ?? 0) + 1;
+          renderedToolNameOccurrences.set(toolName, occurrence);
+
+          let matchingOccurrence = 0;
+          const resultIndex = msg.toolResults.findIndex((result) => {
+            if (result.name !== toolName) return false;
+            matchingOccurrence += 1;
+            return matchingOccurrence === occurrence;
+          });
+          if (resultIndex === -1 || msg.expandedResultIndex !== resultIndex) return;
+
+          const result = msg.toolResults[resultIndex];
+          if (!result) return;
+          const hasDiff = result.content.includes("@@ -") || result.content.includes("```diff")
+            || /^[-+]\s+\d+ \|/m.test(result.content);
+          const contentToRender = hasDiff && !result.content.trimStart().startsWith("```")
+            ? `\`\`\`diff\n${result.content}\n\`\`\``
+            : result.content;
+          const resultLines = safeRender(stripAnsi(contentToRender), bodyW, { noHighlight: !hasDiff });
+          for (const resultLine of resultLines) {
+            out.push(`${" ".repeat(prefixW)}  ${resultLine}`);
+          }
+        };
+
+        const rawLines = msg.content.split("\n");
+        let fenceBuf: string[] = [];
+        let inFence = false;
+
+        // First line is always the header "Called <server> (ctrl+o to expand)"
+        out.push(`${time} ${C_MUTED}${stripAnsi(rawLines[0] ?? "")}${RESET}`);
+
+        for (let li = 1; li < rawLines.length; li++) {
+          const rawLine = rawLines[li] ?? "";
+          const clean = stripAnsi(rawLine).trimEnd();
+
+          if (inFence) {
+            if (clean.startsWith("```")) {
+              // Close fence — render accumulated content with Shiki
+              fenceBuf.push(rawLine);
+              inFence = false;
+              const rendered = safeRender(stripAnsi(fenceBuf.join("\n")), metaW, { noHighlight: false });
+              for (const rl of rendered)
+                out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${rl}`);
+              fenceBuf = [];
+            } else {
+              fenceBuf.push(rawLine);
+            }
+            continue;
+          }
+
+          if (clean.startsWith("```")) {
+            inFence = true;
+            fenceBuf = [rawLine];
+          } else if (clean.startsWith("⎿ ")) {
+            out.push(`${" ".repeat(prefixW)}${colorLine(clean)}`);
+            renderExpandedResult(clean);
+          } else if (clean === "") {
+            // skip blank lines
+          } else {
+            // Meta text (Edit preview, Mode, Changes, ...) — │ connector, no highlight
+            const rendered = safeRender(clean, metaW, { noHighlight: true });
+            for (const rl of rendered)
+              out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${C_GRAY}${rl}${RESET}`);
+          }
+        }
+
+        // Flush unclosed fence (e.g. pending diff still streaming)
+        if (fenceBuf.length > 0) {
+          const rendered = safeRender(stripAnsi(fenceBuf.join("\n")), metaW, { noHighlight: true });
+          for (const rl of rendered)
+            out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${C_GRAY}${rl}${RESET}`);
+        }
       } else {
         const prefixW = Math.min(9 + toolName.length + 1, 32);
         const bodyW = Math.max(20, width - prefixW);
