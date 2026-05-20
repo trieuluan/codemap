@@ -49,6 +49,7 @@ import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerCodeReviewTool } from "./tools/code-review.js";
 import { registerSuggestPatchTool } from "./tools/suggest-patch.js";
+import { registerApplyPatchTool } from "./tools/apply-patch.js";
 import { registerEditFileTool } from "./tools/edit-file.js";
 import { registerWriteFileTool } from "./tools/write-file.js";
 import { registerDeployPreviewTool } from "./tools/deploy-preview.js";
@@ -157,6 +158,7 @@ async function runMcpServer() {
     registerFindCyclesTool(server, config);
     registerCodeReviewTool(server, config);
     registerSuggestPatchTool(server, config);
+    registerApplyPatchTool(server, config);
     registerEditFileTool(server, config);
     registerWriteFileTool(server, config);
     registerDeployPreviewTool(server, config);

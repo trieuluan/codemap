@@ -4,6 +4,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import { tryGetCurrentWorkspaceInfo } from "../lib/workspace-git.js";
 import type { TriggerImportResult } from "../lib/api-types.js";
 
 export function registerTriggerReimportTool(
@@ -54,6 +55,13 @@ export function registerTriggerReimportTool(
         });
       }
 
+      // Auto-detect current git branch when not explicitly provided.
+      let resolvedBranch = branch ?? null;
+      if (!resolvedBranch) {
+        const ws = await tryGetCurrentWorkspaceInfo();
+        resolvedBranch = ws?.branch ?? null;
+      }
+
       let result: TriggerImportResult;
 
       try {
@@ -62,7 +70,7 @@ export function registerTriggerReimportTool(
           {
             authRequired: true,
             method: "POST",
-            body: branch ? { branch } : {},
+            body: resolvedBranch ? { branch: resolvedBranch } : {},
           },
         );
       } catch (error) {

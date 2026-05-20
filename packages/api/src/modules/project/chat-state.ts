@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { desc, eq } from "drizzle-orm";
-import { projectImport } from "../../db/schema";
+import { project, projectImport } from "../../db/schema";
 import type { Database } from "./service.shared";
 
 const execFileAsync = promisify(execFile);
@@ -71,9 +71,7 @@ function statusFromImport(latestImport: typeof projectImport.$inferSelect | null
 export function createChatStateService(database: Database) {
   return {
     async getChatWorkspaceState(projectId: string): Promise<ChatWorkspaceState | null> {
-      const projectRecord = await database.query.project.findFirst({
-        where: (project, { eq }) => eq(project.id, projectId),
-      });
+      const [projectRecord] = await database.select().from(project).where(eq(project.id, projectId)).limit(1);
       if (!projectRecord) return null;
 
       const latestImport = await database.query.projectImport.findFirst({

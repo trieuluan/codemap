@@ -75,7 +75,7 @@ const TOOLS_FULL_EXTRA = [
   "- write_file — write full content to a file, creating it if needed; use for new files or full rewrites",
   "- bash — execute shell commands; use for builds, tests, git operations, package installs, or anything other tools don't cover; cwd defaults to workspace root, pass cwd param for sub-packages",
   "- suggest_patch — analyze workspace changes and generate unified diffs with blast radius",
-  "- apply_patch — apply a unified diff patch to the workspace; use after suggest_patch to commit proposed changes",
+  "- apply_patch — apply a unified diff patch to the workspace after a successful dry-run preflight; supports raw or base64 patches and configurable strip_level (-pN)",
   "- deploy_preview — deploy a preview build of the project",
   "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
   "- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage GitLab OAuth for repository imports",
