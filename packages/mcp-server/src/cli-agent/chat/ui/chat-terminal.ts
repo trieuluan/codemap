@@ -466,8 +466,18 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
       });
 
-    const { startPiTuiApp } = await import("./pi-tui-app.js");
-    await startPiTuiApp(this);
+    const mode = process.env.CODEMAP_RENDER ?? "tui";
+    if (mode === "tui") {
+      const { startPiTuiApp } = await import("./pi-tui-app.js");
+      await startPiTuiApp(this);
+    } else if (mode === "classic") {
+      const { startClassicApp } = await import("./classic-app.js");
+      await startClassicApp(this);
+    } else {
+      // Default: inline mode — pi-tui editor without alternate screen
+      const { startInlineApp } = await import("./inline-app.js");
+      await startInlineApp(this);
+    }
   }
 
   // ─── Session management ───────────────────────────────────
@@ -871,9 +881,20 @@ export class ChatTerminal {
           ...historyMessages,
           boundaryMarker,
         ];
-        const cs = this.compactor.getState(nextHistory);
+        // runAgentLoop compacts the request-local message list before provider calls,
+        // but the persisted session history is rebuilt here from the store plus the
+        // latest result messages. Compact this canonical history too; otherwise the
+        // status panel can show >100% usage even though auto-compact fired inside the
+        // loop, and the next turn starts from the un-compacted session history again.
+        const persistedCompaction = await this.compactor.maybeCompact(
+          nextHistory,
+          this.store.getState().config.model,
+          { reason: "auto_threshold" },
+        );
+        const persistedHistory = persistedCompaction.messages;
+        const cs = persistedCompaction.state;
         this.store.dispatch({
-          agentHistory: nextHistory,
+          agentHistory: persistedHistory,
           compaction: {
             usagePercent: cs.usagePercent,
             compactedCount: cs.compactedCount,
@@ -1106,6 +1127,13 @@ export class ChatTerminal {
       history: s.agentHistory as ChatMessage[],
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,
+      getMessages: () => this.store.getState().messages as Message[],
+      appendMessage: (msg: Partial<Message> & { role: string; content: string }) => {
+        this.store.dispatch((prev) => ({
+          messages: [...prev.messages, { timestamp: Date.now(), ...msg } as Message],
+        }));
+        this.bus.scheduleRefresh();
+      },
       setMessages: (updater: Message[] | ((prev: Message[]) => Message[])) => {
         if (typeof updater === "function") {
           this.store.dispatch((prev) => ({ messages: updater(prev.messages) }));

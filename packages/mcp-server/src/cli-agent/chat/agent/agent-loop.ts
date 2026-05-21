@@ -519,6 +519,14 @@ function renderEditDiffPreview(
     return lines.join("\n");
   }
 
+  if (toolName === "apply_patch") {
+    const patch = typeof args.patch === "string" ? args.patch : null;
+    if (patch) return patch;
+
+    const base64Patch = typeof args.base64_patch === "string" ? args.base64_patch : null;
+    if (base64Patch) return `[base64 patch]\n${base64Patch}`;
+  }
+
   return null;
 }
 

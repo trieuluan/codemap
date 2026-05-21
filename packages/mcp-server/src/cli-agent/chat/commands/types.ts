@@ -13,6 +13,8 @@ export interface CommandContext {
   history: ChatMessage[];
   availableModels?: string[];
   toolClient: CodeMapMcpToolClient;
+  getMessages: () => ChatEntry[];
+  appendMessage: (msg: Partial<ChatEntry> & { role: string; content: string }) => void;
   setMessages: (updater: ChatEntry[] | ((prev: ChatEntry[]) => ChatEntry[])) => void;
   setHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => void;

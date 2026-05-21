@@ -13,6 +13,8 @@ interface ApplyPatchResult {
   applied: boolean;
   dryRun: boolean;
   reverse: boolean;
+  requiresConfirmation: boolean;
+  confirmed: boolean;
   filesModified: string[];
   filesCreated: string[];
   filesDeleted: string[];
@@ -22,6 +24,7 @@ interface ApplyPatchResult {
   patchFormat: "unified" | "base64" | "unknown";
   stripLevel: number;
   preflightOutput?: string;
+  patchPreview?: string;
   [key: string]: unknown;
 }
 
@@ -80,6 +83,49 @@ function runPatch(args: string[], cwd: string, timeout: number): Promise<{ stdou
   });
 }
 
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function normalizeDiffPath(path: string, stripLevel: number): string {
+  const cleaned = path.replace(/^"|"$/g, "").replace(/\t.*$/, "").trim();
+  if (cleaned === "/dev/null") return cleaned;
+  const parts = cleaned.split("/").filter(Boolean);
+  return parts.slice(Math.min(stripLevel, parts.length)).join("/") || cleaned;
+}
+
+function parsePatchChanges(patchContent: string, stripLevel: number, reverse: boolean): {
+  filesModified: string[];
+  filesCreated: string[];
+  filesDeleted: string[];
+} {
+  const filesModified: string[] = [];
+  const filesCreated: string[] = [];
+  const filesDeleted: string[] = [];
+  const lines = patchContent.split("\n");
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!lines[i].startsWith("--- ") || i + 1 >= lines.length || !lines[i + 1].startsWith("+++ ")) continue;
+
+    const oldPath = normalizeDiffPath(lines[i].slice(4), stripLevel);
+    const newPath = normalizeDiffPath(lines[i + 1].slice(4), stripLevel);
+    const createsFile = reverse ? newPath === "/dev/null" : oldPath === "/dev/null";
+    const deletesFile = reverse ? oldPath === "/dev/null" : newPath === "/dev/null";
+    const targetPath = reverse ? oldPath : newPath;
+    const sourcePath = reverse ? newPath : oldPath;
+
+    if (createsFile) filesCreated.push(targetPath);
+    else if (deletesFile) filesDeleted.push(sourcePath);
+    else filesModified.push(targetPath);
+  }
+
+  return {
+    filesModified: unique(filesModified),
+    filesCreated: unique(filesCreated),
+    filesDeleted: unique(filesDeleted),
+  };
+}
+
 function parsePatchOutput(output: string): {
   filesModified: string[];
   filesCreated: string[];
@@ -106,7 +152,48 @@ function parsePatchOutput(output: string): {
       conflicts.push(match ? match[1].trim() : line.trim());
     }
   }
-  return { filesModified, filesCreated, filesDeleted, conflicts };
+  return {
+    filesModified: unique(filesModified),
+    filesCreated: unique(filesCreated),
+    filesDeleted: unique(filesDeleted),
+    conflicts: unique(conflicts),
+  };
+}
+
+function truncatePatchPreview(patchContent: string, maxChars = 12_000): string {
+  if (patchContent.length <= maxChars) return patchContent;
+  return `${patchContent.slice(0, maxChars)}\n...\n[patch preview truncated: ${patchContent.length - maxChars} more character(s)]`;
+}
+
+function formatFileList(label: string, files: string[]): string {
+  if (files.length === 0) return `${label}: 0`;
+  return `${label}: ${files.length}\n${files.map((file) => `  - ${file}`).join("\n")}`;
+}
+
+function formatPatchPreviewMessage(result: ApplyPatchResult): string {
+  const changedCount = result.filesModified.length + result.filesCreated.length + result.filesDeleted.length;
+  const mode = result.dryRun ? "Dry run preview" : "Confirmation preview";
+  const reason = result.dryRun
+    ? "Not applied because dry_run=true."
+    : "Not applied because confirm_apply=true was not provided.";
+  const next = result.dryRun
+    ? "To apply this patch, call apply_patch again with dry_run=false and confirm_apply=true."
+    : "To apply this patch, call apply_patch again with confirm_apply=true.";
+
+  return (
+    `### Patch Preview - Preflight passed\n\n` +
+    `Mode: ${mode}\n` +
+    `Applied: no\n` +
+    `Reason: ${reason}\n` +
+    `Requires confirmation to apply: ${result.requiresConfirmation ? "yes" : "no"}\n` +
+    `Next: ${next}\n` +
+    `Files touched: ${changedCount}\n` +
+    `${formatFileList("Changed", result.filesModified)}\n` +
+    `${formatFileList("Created", result.filesCreated)}\n` +
+    `${formatFileList("Deleted", result.filesDeleted)}\n\n` +
+    (result.preflightOutput ? `Preflight output:\n\`\`\`\n${result.preflightOutput}\n\`\`\`\n\n` : "") +
+    (result.patchPreview ? `Patch preview:\n\`\`\`diff\n${result.patchPreview}\n\`\`\`` : "")
+  );
 }
 
 function extractPatchError(error: unknown): string {
@@ -152,21 +239,33 @@ export function registerApplyPatchTool(
     {
       title: "Apply Patch",
       description:
-        "Apply a unified diff patch to the workspace after a successful dry-run preflight. " +
-        "Supports raw unified diffs and base64-encoded patches. " +
-        "Warning: This modifies files in your workspace unless dry_run is true!",
+        "Preview or apply a unified diff patch after a successful dry-run preflight. " +
+        "By default, apply_patch returns a diff preview and requires confirm_apply=true before modifying files. " +
+        "Supports raw unified diffs and base64-encoded patches.",
       inputSchema: {
         patch: z.string().optional().describe("Unified diff patch content to apply. Provide either patch or base64_patch, not both."),
         base64_patch: z.string().optional().describe("Base64-encoded unified diff patch. Provide either patch or base64_patch, not both."),
+        base64Patch: z.string().optional().describe("Alias for base64_patch. Prefer base64_patch."),
         reverse: z.boolean().optional().default(false).describe("Apply patch in reverse (undo changes). Default: false."),
         dry_run: z.boolean().optional().default(false).describe("Show what would be changed without applying. Default: false."),
+        dryRun: z.boolean().optional().describe("Alias for dry_run. Prefer dry_run."),
+        confirm_apply: z.boolean().optional().default(false).describe("Required to actually modify files. If false, returns a preview even when dry_run is false."),
+        confirmApply: z.boolean().optional().describe("Alias for confirm_apply. Prefer confirm_apply."),
         fuzz: z.number().int().min(0).max(100).optional().default(2).describe("Set fuzz factor for patch application. Default: 2."),
         strip_level: z.number().int().min(0).max(10).optional().default(1).describe("Path strip level passed to patch as -pN. Use 1 for git diffs with a/ and b/ prefixes, 0 for plain paths. Default: 1."),
+        stripLevel: z.number().int().min(0).max(10).optional().describe("Alias for strip_level. Prefer strip_level."),
         project_id: z.string().uuid().optional().describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
     withToolError(
-      async ({ patch, base64_patch, reverse, dry_run, fuzz, strip_level, project_id }) => {
+      async (args) => {
+        const { patch, reverse, fuzz, project_id } = args;
+        const camelArgs = args as { base64Patch?: string; dryRun?: boolean; confirmApply?: boolean; stripLevel?: number };
+        const base64_patch = args.base64_patch ?? camelArgs.base64Patch;
+        const dry_run = args.dry_run === true || camelArgs.dryRun === true;
+        const confirm_apply = args.confirm_apply === true || camelArgs.confirmApply === true;
+        const strip_level = args.strip_level ?? camelArgs.stripLevel;
+
         if (patch && base64_patch) {
           return success("Provide only one of 'patch' or 'base64_patch', not both.", { projectId: project_id, applied: false, error: "ambiguous_patch_input" });
         }
@@ -194,37 +293,47 @@ export function registerApplyPatchTool(
         const workspacePath = await readWorkspacePath();
         const stripLevel = strip_level ?? 1;
         const fuzzFactor = fuzz ?? 2;
+        const reversePatch = Boolean(reverse);
+        const confirmed = Boolean(confirm_apply);
+        const parsedChanges = parsePatchChanges(patchContent, stripLevel, reversePatch);
         const result: ApplyPatchResult = {
           applied: false,
           dryRun: Boolean(dry_run),
-          reverse: Boolean(reverse),
-          filesModified: [],
-          filesCreated: [],
-          filesDeleted: [],
+          reverse: reversePatch,
+          requiresConfirmation: !confirmed,
+          confirmed,
+          filesModified: parsedChanges.filesModified,
+          filesCreated: parsedChanges.filesCreated,
+          filesDeleted: parsedChanges.filesDeleted,
           conflicts: [],
           output: "",
           workspacePath,
           patchFormat,
           stripLevel,
+          patchPreview: truncatePatchPreview(patchContent),
         };
 
         const patchFile = await createTempPatchFile(patchContent);
         try {
-          const dryArgs = buildPatchArgs({ stripLevel, fuzz: fuzzFactor, patchFile, dryRun: true, reverse });
+          const dryArgs = buildPatchArgs({ stripLevel, fuzz: fuzzFactor, patchFile, dryRun: true, reverse: reversePatch });
           const dry = await runPatch(dryArgs, workspacePath, 10_000);
           result.preflightOutput = dry.stdout + dry.stderr;
+          result.output = result.preflightOutput;
 
-          if (dry_run) {
-            result.output = result.preflightOutput;
-            Object.assign(result, parsePatchOutput(result.output));
-            return success(`### Dry Run Result — Patch would apply cleanly\n\n${result.output}`, result);
+          if (dry_run || !confirmed) {
+            return success(formatPatchPreviewMessage(result), result);
           }
 
-          const applyArgs = buildPatchArgs({ stripLevel, fuzz: fuzzFactor, patchFile, reverse });
+          const applyArgs = buildPatchArgs({ stripLevel, fuzz: fuzzFactor, patchFile, reverse: reversePatch });
           const applied = await runPatch(applyArgs, workspacePath, 10_000);
           result.output = applied.stdout + applied.stderr;
           result.applied = true;
-          Object.assign(result, parsePatchOutput(result.output));
+          result.requiresConfirmation = false;
+          Object.assign(result, { ...parsePatchOutput(result.output), conflicts: [] });
+          const reparsedChanges = parsePatchChanges(patchContent, stripLevel, reversePatch);
+          result.filesModified = reparsedChanges.filesModified.length ? reparsedChanges.filesModified : result.filesModified;
+          result.filesCreated = reparsedChanges.filesCreated.length ? reparsedChanges.filesCreated : result.filesCreated;
+          result.filesDeleted = reparsedChanges.filesDeleted.length ? reparsedChanges.filesDeleted : result.filesDeleted;
         } catch (error) {
           const errOutput = extractPatchError(error);
           result.output = errOutput;

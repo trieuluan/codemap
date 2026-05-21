@@ -15,6 +15,7 @@ import { gitPushCommand } from "./git-push.js";
 import { gitPrCommand } from "./git-pr.js";
 import { sessionsCommand } from "./sessions.js";
 import { conventionsCommand } from "./conventions.js";
+import { copyCommand } from "./copy-cmd.js";
 
 import type { CommandContext, Command } from "./types.js";
 
@@ -30,6 +31,7 @@ const commands: Command[] = [
   gitPrCommand,
   sessionsCommand,
   conventionsCommand,
+  copyCommand,
   clearCommand,
   historyCommand,
   debugCommand,

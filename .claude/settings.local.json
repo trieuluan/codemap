@@ -49,7 +49,12 @@
       "mcp__codemap-mcp-dev__summarize_feature_area",
       "mcp__codemap-mcp-dev__find_related_files",
       "WebFetch(domain:www.threads.com)",
-      "Bash(sqlite3 *)"
+      "Bash(sqlite3 *)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:kotrotsos.medium.com)",
+      "WebFetch(domain:claude-code-from-source.com)",
+      "WebFetch(domain:slyapustin.com)",
+      "WebFetch(domain:steipete.me)"
     ]
   },
   "enableAllProjectMcpServers": true,

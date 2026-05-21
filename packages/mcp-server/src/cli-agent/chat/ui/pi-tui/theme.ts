@@ -41,7 +41,8 @@ export const SPINNER = [
   "⠏",
 ] as const;
 
-export const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1006h";
-export const DISABLE_MOUSE_TRACKING = "\x1b[?1000l\x1b[?1006l";
+// ?1000h = button events, ?1002h = button-motion (needed for drag/selection), ?1006h = SGR coords
+export const ENABLE_MOUSE_TRACKING = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+export const DISABLE_MOUSE_TRACKING = "\x1b[?1000l\x1b[?1002l\x1b[?1006l";
 
 export { BOLD, DIM, RESET };
