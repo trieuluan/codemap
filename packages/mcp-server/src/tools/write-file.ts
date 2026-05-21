@@ -38,7 +38,10 @@ function rangeLabel(start?: number, end?: number): string {
   return start === end ? String(start) : `${start}-${end}`;
 }
 
-function buildFallbackLineOps(oldLines: string[], newLines: string[]): LineOp[] {
+function buildFallbackLineOps(
+  oldLines: string[],
+  newLines: string[],
+): LineOp[] {
   return [
     ...oldLines.map((text, idx) => ({
       type: "delete" as const,
@@ -64,9 +67,10 @@ function buildLineOps(oldLines: string[], newLines: string[]): LineOp[] {
 
   for (let i = oldLines.length - 1; i >= 0; i--) {
     for (let j = newLines.length - 1; j >= 0; j--) {
-      dp[i]![j] = oldLines[i] === newLines[j]
-        ? dp[i + 1]![j + 1]! + 1
-        : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      dp[i]![j] =
+        oldLines[i] === newLines[j]
+          ? dp[i + 1]![j + 1]! + 1
+          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
     }
   }
 
@@ -75,7 +79,11 @@ function buildLineOps(oldLines: string[], newLines: string[]): LineOp[] {
   let j = 0;
 
   while (i < oldLines.length || j < newLines.length) {
-    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+    if (
+      i < oldLines.length &&
+      j < newLines.length &&
+      oldLines[i] === newLines[j]
+    ) {
       i++;
       j++;
     } else if (
@@ -93,7 +101,10 @@ function buildLineOps(oldLines: string[], newLines: string[]): LineOp[] {
   return ops;
 }
 
-function areAdjacentLineOps(previous: LineOp | undefined, current: LineOp): boolean {
+function areAdjacentLineOps(
+  previous: LineOp | undefined,
+  current: LineOp,
+): boolean {
   return (
     !previous ||
     (current.type === "add" &&
@@ -121,11 +132,12 @@ function buildChangeBlocks(ops: LineOp[]): ChangeBlock[] {
     );
 
     blocks.push({
-      type: deletes.length > 0 && adds.length > 0
-        ? "change"
-        : deletes.length > 0
-          ? "delete"
-          : "add",
+      type:
+        deletes.length > 0 && adds.length > 0
+          ? "change"
+          : deletes.length > 0
+            ? "delete"
+            : "add",
       oldStart: deletes[0]?.oldLine,
       oldEnd: deletes.at(-1)?.oldLine,
       newStart: adds[0]?.newLine,
@@ -143,7 +155,10 @@ function buildChangeBlocks(ops: LineOp[]): ChangeBlock[] {
   return blocks;
 }
 
-function buildWriteLineOps(oldContent: string | null, newContent: string): LineOp[] {
+function buildWriteLineOps(
+  oldContent: string | null,
+  newContent: string,
+): LineOp[] {
   const newLines = newContent.split("\n");
   if (oldContent === null) {
     return newLines.map((text, idx) => ({
@@ -164,13 +179,20 @@ function appendChangeSummary(lines: string[], blocks: ChangeBlock[]) {
   }
 
   for (const block of blocks.slice(0, MAX_CHANGE_BLOCKS)) {
-    const marker = block.type === "add" ? "+" : block.type === "delete" ? "-" : "~";
-    const label = block.type === "add"
-      ? rangeLabel(block.newStart, block.newEnd)
-      : block.type === "delete"
-        ? rangeLabel(block.oldStart, block.oldEnd)
-        : `${rangeLabel(block.oldStart, block.oldEnd)} -> ${rangeLabel(block.newStart, block.newEnd)}`;
-    const text = block.type === "add" ? "Added" : block.type === "delete" ? "Removed" : "Changed";
+    const marker =
+      block.type === "add" ? "+" : block.type === "delete" ? "-" : "~";
+    const label =
+      block.type === "add"
+        ? rangeLabel(block.newStart, block.newEnd)
+        : block.type === "delete"
+          ? rangeLabel(block.oldStart, block.oldEnd)
+          : `${rangeLabel(block.oldStart, block.oldEnd)} -> ${rangeLabel(block.newStart, block.newEnd)}`;
+    const text =
+      block.type === "add"
+        ? "Added"
+        : block.type === "delete"
+          ? "Removed"
+          : "Changed";
     lines.push(`${marker} ${label.padEnd(12)} ${text}`);
   }
 
@@ -182,38 +204,61 @@ function appendChangeSummary(lines: string[], blocks: ChangeBlock[]) {
 const DIFF_CONTEXT = 3;
 
 // Replay ops + context lines → list of hunks, like git diff -U3.
-function buildUnifiedHunks(oldLines: string[], newLines: string[], ops: LineOp[]) {
+function buildUnifiedHunks(
+  oldLines: string[],
+  newLines: string[],
+  ops: LineOp[],
+) {
   type Event =
     | { kind: "ctx"; oldLine: number; newLine: number; text: string }
     | { kind: "del"; oldLine: number; text: string }
     | { kind: "add"; newLine: number; text: string };
 
   const events: Event[] = [];
-  let oi = 1, ni = 1, opIdx = 0;
+  let oi = 1,
+    ni = 1,
+    opIdx = 0;
 
   while (oi <= oldLines.length || ni <= newLines.length) {
     const op = ops[opIdx];
     if (op?.type === "delete" && op.oldLine === oi) {
       events.push({ kind: "del", oldLine: oi, text: oldLines[oi - 1]! });
-      oi++; opIdx++;
+      oi++;
+      opIdx++;
     } else if (op?.type === "add" && op.newLine === ni) {
       events.push({ kind: "add", newLine: ni, text: newLines[ni - 1]! });
-      ni++; opIdx++;
+      ni++;
+      opIdx++;
     } else if (oi <= oldLines.length && ni <= newLines.length) {
-      events.push({ kind: "ctx", oldLine: oi, newLine: ni, text: oldLines[oi - 1]! });
-      oi++; ni++;
+      events.push({
+        kind: "ctx",
+        oldLine: oi,
+        newLine: ni,
+        text: oldLines[oi - 1]!,
+      });
+      oi++;
+      ni++;
     } else break;
   }
 
-  const changedIdx = events.reduce<number[]>((a, e, i) => { if (e.kind !== "ctx") a.push(i); return a; }, []);
+  const changedIdx = events.reduce<number[]>((a, e, i) => {
+    if (e.kind !== "ctx") a.push(i);
+    return a;
+  }, []);
   if (changedIdx.length === 0) return [];
 
   // Merge nearby changed regions into clusters separated by > 2*DIFF_CONTEXT context lines.
   const clusters: Array<[number, number]> = [];
-  let cs = changedIdx[0]!, ce = changedIdx[0]!;
+  let cs = changedIdx[0]!,
+    ce = changedIdx[0]!;
   for (let k = 1; k < changedIdx.length; k++) {
-    if (changedIdx[k]! - ce <= 2 * DIFF_CONTEXT + 1) { ce = changedIdx[k]!; }
-    else { clusters.push([cs, ce]); cs = changedIdx[k]!; ce = changedIdx[k]!; }
+    if (changedIdx[k]! - ce <= 2 * DIFF_CONTEXT + 1) {
+      ce = changedIdx[k]!;
+    } else {
+      clusters.push([cs, ce]);
+      cs = changedIdx[k]!;
+      ce = changedIdx[k]!;
+    }
   }
   clusters.push([cs, ce]);
 
@@ -222,8 +267,14 @@ function buildUnifiedHunks(oldLines: string[], newLines: string[], ops: LineOp[]
     const to = Math.min(events.length - 1, clEnd + DIFF_CONTEXT);
     const slice = events.slice(from, to + 1);
 
-    const firstOld = slice.find((e): e is Extract<Event, { kind: "ctx" | "del" }> => e.kind === "ctx" || e.kind === "del");
-    const firstNew = slice.find((e): e is Extract<Event, { kind: "ctx" | "add" }> => e.kind === "ctx" || e.kind === "add");
+    const firstOld = slice.find(
+      (e): e is Extract<Event, { kind: "ctx" | "del" }> =>
+        e.kind === "ctx" || e.kind === "del",
+    );
+    const firstNew = slice.find(
+      (e): e is Extract<Event, { kind: "ctx" | "add" }> =>
+        e.kind === "ctx" || e.kind === "add",
+    );
     const oldStart = firstOld?.oldLine ?? 0;
     const newStart = firstNew?.newLine ?? 1;
     const oldCount = slice.filter((e) => e.kind !== "add").length;
@@ -245,21 +296,44 @@ function appendUnifiedDiff(
   const newLines = newContent.split("\n");
   const hunks = buildUnifiedHunks(oldLines, newLines, ops);
 
-  out.push("", "```diff", oldContent === null ? "--- /dev/null" : `--- a/${diffLabel}`, `+++ b/${diffLabel}`);
+  out.push(
+    "",
+    "```diff",
+    oldContent === null ? "--- /dev/null" : `--- a/${diffLabel}`,
+    `+++ b/${diffLabel}`,
+  );
 
   for (const hunk of hunks) {
-    const oldRange = hunk.oldCount === 1 ? `${hunk.oldStart}` : `${hunk.oldStart},${hunk.oldCount}`;
-    const newRange = hunk.newCount === 1 ? `${hunk.newStart}` : `${hunk.newStart},${hunk.newCount}`;
-    out.push(`@@ -${hunk.oldStart === 0 ? "0,0" : oldRange} +${newRange} @@ ${diffLabel}`);
+    const oldRange =
+      hunk.oldCount === 1
+        ? `${hunk.oldStart}`
+        : `${hunk.oldStart},${hunk.oldCount}`;
+    const newRange =
+      hunk.newCount === 1
+        ? `${hunk.newStart}`
+        : `${hunk.newStart},${hunk.newCount}`;
+    out.push(
+      `@@ -${hunk.oldStart === 0 ? "0,0" : oldRange} +${newRange} @@ ${diffLabel}`,
+    );
     for (const e of hunk.lines) {
-      out.push(e.kind === "add" ? `+${e.text}` : e.kind === "del" ? `-${e.text}` : ` ${e.text}`);
+      out.push(
+        e.kind === "add"
+          ? `+${e.text}`
+          : e.kind === "del"
+            ? `-${e.text}`
+            : ` ${e.text}`,
+      );
     }
   }
 
   out.push("```");
 }
 
-function buildWritePreview(filePath: string, oldContent: string | null, newContent: string): string {
+function buildWritePreview(
+  filePath: string,
+  oldContent: string | null,
+  newContent: string,
+): string {
   const exists = oldContent !== null;
   const ops = buildWriteLineOps(oldContent, newContent);
   const additions = ops.filter((op) => op.type === "add").length;
@@ -293,17 +367,15 @@ export function registerWriteFileTool(
         "Write content to a file, creating it if it doesn't exist. " +
         "Overwrites the entire file. For targeted edits, use edit_file instead.",
       inputSchema: {
-        file_path: z
-          .string()
-          .describe("The absolute path to the file."),
-        content: z
-          .string()
-          .describe("The full content to write."),
+        file_path: z.string().describe("The absolute path to the file."),
+        content: z.string().describe("The full content to write."),
         dry_run: z
           .boolean()
           .optional()
           .default(false)
-          .describe("Show what would be written without writing. Default: false."),
+          .describe(
+            "Show what would be written without writing. Default: false.",
+          ),
       },
     },
     withToolError(async ({ file_path, content, dry_run }) => {
@@ -326,7 +398,10 @@ export function registerWriteFileTool(
       };
 
       if (dry_run) {
-        return success(buildWritePreview(file_path, oldContent, content), result);
+        return success(
+          buildWritePreview(file_path, oldContent, content),
+          result,
+        );
       }
 
       await mkdir(dirname(absPath), { recursive: true });

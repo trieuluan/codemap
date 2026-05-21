@@ -302,28 +302,30 @@ function toMultimodalContent(text: string): string | unknown[] {
 
 function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
   const messages = request.messages;
-  return messages.map((message) => {
-    if (message.role === "tool") {
-      return {
-        role: "tool",
-        content: message.content,
-        tool_call_id: message.toolCallId,
-        name: message.name,
-      };
-    }
+  return messages
+    .filter((message) => message.role !== "tool_call")  // tool_call is UI-only, not sent to provider
+    .map((message) => {
+      if (message.role === "tool") {
+        return {
+          role: "tool",
+          content: message.content,
+          tool_call_id: message.toolCallId,
+          name: message.name,
+        };
+      }
 
-    const content = toMultimodalContent(message.content);
-    return {
-      role: message.role,
-      // Omit content when empty and tool_calls are present — some providers (e.g. claude)
-      // drop the assistant message entirely if content is an empty string, creating orphaned
-      // tool results on the next turn.
-      ...(content !== "" && content !== null ? { content } : {}),
-      ...(message.toolCalls && message.toolCalls.length > 0
-        ? { tool_calls: message.toolCalls }
-        : {}),
-    };
-  });
+      const content = toMultimodalContent(message.content);
+      return {
+        role: message.role,
+        // Omit content when empty and tool_calls are present — some providers (e.g. claude)
+        // drop the assistant message entirely if content is an empty string, creating orphaned
+        // tool results on the next turn.
+        ...(content !== "" && content !== null ? { content } : {}),
+        ...(message.toolCalls && message.toolCalls.length > 0
+          ? { tool_calls: message.toolCalls }
+          : {}),
+      };
+    });
 }
 
 function parseStreamLine(

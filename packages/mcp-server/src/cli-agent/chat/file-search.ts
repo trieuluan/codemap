@@ -38,7 +38,9 @@ export async function searchIndexedFiles(
 }
 
 // Cache the local store so we don't reopen SQLite every keystroke
-let cachedLocalStore: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["store"] | null = null;
+let cachedLocalStore:
+  | Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["store"]
+  | null = null;
 
 async function searchLocalIndex(query: string): Promise<IndexedFileOption[]> {
   try {
@@ -80,7 +82,6 @@ async function searchLocalIndex(query: string): Promise<IndexedFileOption[]> {
   }
 }
 
-
 async function searchWorkspaceFiles(
   query: string,
 ): Promise<IndexedFileOption[]> {
@@ -96,7 +97,9 @@ async function searchWorkspaceFiles(
       cachedWorkspaceFiles = await workspaceFilesPromise;
     }
     return rankFiles(
-      cachedWorkspaceFiles!.filter((file) => file.isText && isSelectablePath(file.path)),
+      cachedWorkspaceFiles!.filter(
+        (file) => file.isText && isSelectablePath(file.path),
+      ),
       query,
     ).map((file) => ({
       path: file.path,
@@ -181,6 +184,7 @@ function sourcePreferencePenalty(filePath: string): number {
     score += 50;
   if (lower.includes("/node_modules/") || lower.includes("/.next/"))
     score += 100;
+  if (lower.includes("/.pnpm-store/")) score += 100;
   if (lower.startsWith(".") || lower.includes("/.")) score += 20;
   return score;
 }
@@ -190,6 +194,7 @@ function isSelectablePath(filePath: string): boolean {
   if (lower.endsWith(".ds_store")) return false;
   if (lower.includes("/node_modules/") || lower.includes("/.git/"))
     return false;
+  if (lower.includes(".pnpm-store/")) return false;
   if (
     lower.includes("/dist/") ||
     lower.includes("/build/") ||
@@ -234,7 +239,7 @@ function debugFileSearch(message: string, details?: unknown) {
       ? ""
       : ` ${
           details instanceof Error
-            ? details.stack ?? details.message
+            ? (details.stack ?? details.message)
             : JSON.stringify(details)
         }`;
   process.stderr.write(`[codemap:file-search] ${message}${suffix}\n`);

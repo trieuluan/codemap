@@ -6,7 +6,7 @@
   "shutdownAction": "stopCompose",
   "remoteUser": "node",
   "forwardPorts": [3000, 3001, 5432, 6379],
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "pnpm install",
   "postStartCommand": "docker compose restart worker mcp_server",
   "customizations": {
     "vscode": {

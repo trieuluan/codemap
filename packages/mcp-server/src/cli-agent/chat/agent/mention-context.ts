@@ -45,7 +45,9 @@ export async function hydrateMentionContext(
       const raw = await readFile(absolutePath, "utf8");
       const remaining = MAX_TOTAL_CHARS - totalChars;
       if (remaining <= 0) {
-        warnings.push("Skipped remaining file mentions because context is full.");
+        warnings.push(
+          "Skipped remaining file mentions because context is full.",
+        );
         break;
       }
 
@@ -107,7 +109,11 @@ function formatContextBlock(blocks: string[]) {
   return `<mentioned_files>\n${blocks.join("\n\n")}\n</mentioned_files>`;
 }
 
-function formatFileBlock(filePath: string, content: string, truncated: boolean) {
+function formatFileBlock(
+  filePath: string,
+  content: string,
+  truncated: boolean,
+) {
   const suffix = truncated ? "\n\n[truncated]" : "";
   return `<file path="${escapeAttribute(filePath)}">\n${content}${suffix}\n</file>`;
 }

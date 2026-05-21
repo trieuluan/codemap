@@ -56,7 +56,9 @@
       "WebFetch(domain:slyapustin.com)",
       "WebFetch(domain:steipete.me)",
       "mcp__codemap-mcp-dev__get_agent_workflow",
-      "mcp__codemap-mcp-dev__refresh_local_index"
+      "mcp__codemap-mcp-dev__refresh_local_index",
+      "WebFetch(domain:docs.claude.com)",
+      "mcp__codemap-mcp-dev__find_by_pattern"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -148,8 +148,12 @@ export async function runAgentLoop(input: {
     ? input.history
     : input.history.map((msg, i) => {
         if (i >= input.history.length - MASK_KEEP_RECENT) return msg;
-        if (msg.role === "assistant" && (msg.content?.length ?? 0) > 200) {
-          return { ...msg, content: "[earlier turn — masked for focus]" };
+        // Mask assistant, tool_call, and tool messages with significant content
+        const contentLength = msg.content?.length ?? 0;
+        if (contentLength > 200) {
+          if (msg.role === "assistant" || msg.role === "tool_call" || msg.role === "tool") {
+            return { ...msg, content: "[earlier turn — masked for focus]" };
+          }
         }
         return msg;
       });

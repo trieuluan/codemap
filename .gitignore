@@ -87,3 +87,6 @@ packages/web/next-env.d.ts
 .codemap/
 
 docs/*
+
+.pnpm-store
+.pnpm-store/*

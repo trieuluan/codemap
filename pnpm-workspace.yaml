@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+allowBuilds:
+  argon2: true
+  esbuild: true
+  koffi: true
+  msgpackr-extract: true
+  sharp: true
+  tree-sitter-python: true
