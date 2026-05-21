@@ -6,7 +6,7 @@ import {
   ProcessTerminal,
 } from "@earendil-works/pi-tui";
 import type { ChatTerminal } from "./chat-terminal.js";
-import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
+import { headerLines, messageLines, messageLinesFullView } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
 import { getCommandList } from "../commands/index.js";
 import { initShiki } from "./pi-tui/shiki-highlight.js";
@@ -35,7 +35,8 @@ import {
 export { isActiveTaskPhase };
 
 const SCROLL_SPEED = 1;
-const MIN_RENDER_INTERVAL_MS = 16;
+const MIN_RENDER_INTERVAL_MS = 33;
+const SCROLLED_AWAY_RENDER_INTERVAL_MS = 250;
 const EXIT_CONFIRM_WINDOW_MS = 2000;
 // Border characters used in copy mode.
 const BDR = { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│", ml: "├", mr: "┤" };
@@ -65,6 +66,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let lastRenderAt = 0;
   let lastVirtualTotal = 0;
   let lastMessagesHeight = 1;
+  let focusedToolTarget: { messageIndex: number; resultIndex: number } | undefined;
+  let viewMode: { messageIndex: number; scroll: number } | undefined;
 
   // ── diff-based screen buffer ─────────────────────────────────────────────
   // Track what's currently on screen. doRefresh only writes rows that changed,
@@ -98,6 +101,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   type MessageBlock = {
     signature: string;
     contentRef: string;
+    contentLength: number;
     lines: string[];
     start: number;
     length: number;
@@ -107,6 +111,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let _cachedChromeLines: string[] = [];
   let _cachedWidth = -1;
   let _cachedChromeSignature = "";
+  let _cachedMessageCount = 0;
+  let _cachedVirtualTotal = 0;
 
   function messageRenderSignature(
     msg: ReturnType<typeof chatTerminal.store.getState>["messages"][number],
@@ -120,10 +126,13 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       idx,
       msg.role,
       msg.toolName ?? "",
+      msg.name ?? "", // for tool_call role
       msg.expanded ? "1" : "0",
       msg.expandedResultIndex ?? "",
       msg.toolCalls?.length ?? 0,
       msg.toolResults?.length ?? 0,
+      focusedToolTarget?.messageIndex === idx ? focusedToolTarget.resultIndex : "",
+      viewMode ? `${viewMode.messageIndex}:${viewMode.scroll}` : "",
       spinning && msg.role === "tool" ? frame : "",
     ].join(":");
   }
@@ -138,7 +147,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     const widthChanged = w !== _cachedWidth;
     const chromeSignature = chromeRenderSignature(state);
 
-    if (widthChanged || chromeSignature !== _cachedChromeSignature) {
+    const chromeChanged = chromeSignature !== _cachedChromeSignature;
+    if (widthChanged || chromeChanged) {
       _cachedChromeLines = [
         ...headerLines(state),
         ...workspaceStateCardLines(state.workspaceState, state.chatMode, contentWidth),
@@ -146,23 +156,56 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       _cachedChromeSignature = chromeSignature;
     }
 
+    let firstDirty = 0;
+    if (!widthChanged && !chromeChanged && _cachedMessageCount === state.messages.length) {
+      firstDirty = state.messages.length;
+      for (let idx = 0; idx < state.messages.length; idx += 1) {
+        const msg = state.messages[idx];
+        const prev = _cachedBlocks[idx];
+        if (!msg || !prev) { firstDirty = idx; break; }
+        const signature = messageRenderSignature(msg, idx, spinning);
+        if (prev.signature !== signature || prev.contentRef !== msg.content) {
+          firstDirty = idx;
+          break;
+        }
+      }
+    }
+
     const nextBlocks: MessageBlock[] = [];
-    let cursor = _cachedChromeLines.length;
-    for (let idx = 0; idx < state.messages.length; idx += 1) {
+    for (let idx = 0; idx < firstDirty; idx += 1) {
+      const prev = _cachedBlocks[idx];
+      if (prev) nextBlocks[idx] = prev;
+    }
+
+    let cursor = firstDirty > 0
+      ? (nextBlocks[firstDirty - 1]?.start ?? _cachedChromeLines.length) + (nextBlocks[firstDirty - 1]?.length ?? 0)
+      : _cachedChromeLines.length;
+    for (let idx = firstDirty; idx < state.messages.length; idx += 1) {
       const msg = state.messages[idx];
       if (!msg) continue;
       const signature = messageRenderSignature(msg, idx, spinning);
       const prev = !widthChanged ? _cachedBlocks[idx] : undefined;
-      const lines = prev?.signature === signature && prev.contentRef === msg.content
-        ? prev.lines
-        : messageLines([msg], contentWidth, frame);
-      nextBlocks[idx] = { signature, contentRef: msg.content, lines, start: cursor, length: lines.length };
+      const canFreezeStreamingAppend = scrollAnchorLine >= 0 &&
+        prev?.signature === signature &&
+        msg.content.length >= prev.contentLength &&
+        msg.content.startsWith(prev.contentRef);
+      const lines = canFreezeStreamingAppend ? prev.lines : messageLines([msg], contentWidth, frame);
+      nextBlocks[idx] = {
+        signature,
+        contentRef: canFreezeStreamingAppend ? prev.contentRef : msg.content,
+        contentLength: canFreezeStreamingAppend ? prev.contentLength : msg.content.length,
+        lines,
+        start: cursor,
+        length: lines.length,
+      };
       cursor += lines.length;
     }
     _cachedBlocks = nextBlocks;
     _cachedWidth = w;
+    _cachedMessageCount = state.messages.length;
+    _cachedVirtualTotal = cursor;
 
-    const total = cursor;
+    const total = _cachedVirtualTotal;
     const findBlock = (index: number): MessageBlock | undefined => {
       let lo = 0;
       let hi = _cachedBlocks.length - 1;
@@ -327,12 +370,41 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
     if (refreshQueued) return;
     refreshQueued = true;
-    const delay = immediate ? 0 : Math.max(0, MIN_RENDER_INTERVAL_MS - (Date.now() - lastRenderAt));
+    const interval = scrollAnchorLine >= 0 ? SCROLLED_AWAY_RENDER_INTERVAL_MS : MIN_RENDER_INTERVAL_MS;
+    const delay = immediate ? 0 : Math.max(0, interval - (Date.now() - lastRenderAt));
     if (delay === 0) {
       queueMicrotask(runScheduledRefresh);
       return;
     }
     refreshTimer = setTimeout(runScheduledRefresh, delay);
+  }
+
+  function currentMessageIndex(): number {
+    if (focusedToolTarget) return focusedToolTarget.messageIndex;
+    const centerLine = visStartLine + Math.floor(Math.max(1, lastMessagesHeight) / 2);
+    for (const block of _cachedBlocks) {
+      if (!block) continue;
+      if (centerLine >= block.start && centerLine < block.start + block.length) return _cachedBlocks.indexOf(block);
+    }
+    return Math.max(0, chatTerminal.store.getState().messages.length - 1);
+  }
+
+  function renderViewModeVirtualLines(state: ReturnType<typeof chatTerminal.store.getState>, w: number): VirtualLines {
+    if (!viewMode) return { total: 0, getLine: () => "", getRange: () => [] };
+    const msg = state.messages[viewMode.messageIndex];
+    if (!msg) return { total: 0, getLine: () => "", getRange: () => [] };
+
+    const contentWidth = w - 2;
+    const lines = [
+      ...headerLines(state),
+      ...messageLinesFullView([msg], contentWidth, frame),
+    ];
+
+    return {
+      total: lines.length,
+      getLine: (index: number) => lines[index] ?? "",
+      getRange: (startLine: number, count: number) => lines.slice(startLine, startLine + count),
+    };
   }
 
   function doRefresh(): void {
@@ -345,6 +417,34 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     const w = W();
     const h = R();
     const iw = innerWidth();
+
+    if (viewMode) {
+      const virtualLines = renderViewModeVirtualLines(state, w);
+      const maxStart = Math.max(0, virtualLines.total - h);
+      viewMode.scroll = Math.max(0, Math.min(maxStart, viewMode.scroll));
+      const screenLines: string[] = new Array(h).fill("");
+      for (let i = 0; i < h; i++) {
+        const lineIdx = viewMode.scroll + i;
+        if (i === 0 && viewMode.scroll > 0) {
+          screenLines[i] = fitLine(`${C_GRAY}  ↑ ${viewMode.scroll} line${viewMode.scroll === 1 ? "" : "s"} above${RESET}`, w);
+        } else if (i === h - 1 && lineIdx < virtualLines.total - 1) {
+          const below = virtualLines.total - (viewMode.scroll + h);
+          screenLines[i] = fitLine(`${C_GRAY}  ↓ ${below} more — Esc to close${RESET}`, w);
+        } else {
+          screenLines[i] = virtualLines.getLine(lineIdx);
+        }
+      }
+      let buf = "\x1b[?2026h\x1b[?25l";
+      for (let row = 0; row < h; row++) {
+        if (screenLines[row] !== prevScreenLines[row]) {
+          buf += `\x1b[${row + 1};1H\x1b[2K${screenLines[row] ?? ""}`;
+        }
+      }
+      prevScreenLines = screenLines;
+      buf += "\x1b[?25l\x1b[?2026l";
+      process.stdout.write(buf);
+      return;
+    }
 
     // Advance spinner frame once per render when active.
     if (isActiveTaskPhase(state.task.phase) || state.synthRunning) {
@@ -528,7 +628,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // Partial refresh — rewrites only the editor + status-bar rows in the panel
   // using absolute cursor addressing. Avoids a full repaint on every keystroke.
   function doEditorRefresh(): void {
-    if (stopped || currentBottomHeight === 0) return;
+    if (stopped || viewMode || currentBottomHeight === 0) return;
     const state = chatTerminal.store.getState();
     debugMode = state.debug;
     planMode = state.planMode;
@@ -638,21 +738,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     return true;
   }
 
-  function toggleResultAt(row: number): boolean {
+  function resolveToolTargetAt(row: number): { messageIndex: number; resultIndex: number } | undefined {
     const state = chatTerminal.store.getState();
     const lines = renderVirtualLines(state, W());
-    // visStartLine is kept up to date by doRefresh on every frame.
     const clickedLineIndex = visStartLine + row - 1;
     const line = stripAnsi(lines.getLine(clickedLineIndex));
     const match = line.match(/^\s*⎿ (.+?)(?: [✓✗])?$/);
-    if (!match) return false;
+    if (!match) return undefined;
     const clickedToolName = match[1];
 
-    // Multiple chat turns commonly render the same tool name (for example
-    // repeated bash/search calls). Matching only by tool name toggles the
-    // first/oldest message with that name, not the row the user clicked. Use
-    // the rendered row position to identify the Nth visible occurrence of this
-    // tool line, then toggle the corresponding Nth tool result in message order.
     let occurrence = 0;
     for (let index = 0; index <= clickedLineIndex; index += 1) {
       const renderedMatch = stripAnsi(lines.getLine(index)).match(/^\s*⎿ (.+?)(?: [✓✗])?$/);
@@ -666,41 +760,77 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       for (let resultIndex = 0; resultIndex < msg.toolResults.length; resultIndex += 1) {
         if (msg.toolResults[resultIndex]?.name !== clickedToolName) continue;
         occurrence -= 1;
-        if (occurrence !== 0) continue;
-        const next = messages.map((message, index) => {
-          if (index !== messageIndex || message.role !== "tool") return message;
-          return { ...message, expandedResultIndex: message.expandedResultIndex === resultIndex ? undefined : resultIndex };
-        });
-        chatTerminal.store.dispatch({ messages: next });
-        scheduleRefresh();
-        return true;
+        if (occurrence === 0) return { messageIndex, resultIndex };
       }
     }
-    return false;
+    return undefined;
+  }
+
+  function toggleResultAt(row: number): boolean {
+    const target = resolveToolTargetAt(row);
+    if (!target) return false;
+    const messages = chatTerminal.store.getState().messages;
+    const next = messages.map((message, index) => {
+      if (index !== target.messageIndex || message.role !== "tool") return message;
+      return { ...message, expandedResultIndex: message.expandedResultIndex === target.resultIndex ? undefined : target.resultIndex };
+    });
+    focusedToolTarget = target;
+    chatTerminal.store.dispatch({ messages: next });
+    scheduleRefresh();
+    return true;
+  }
+
+  function openCurrentMessageViewer(): boolean {
+    const messages = chatTerminal.store.getState().messages;
+    const messageIndex = currentMessageIndex();
+    const msg = messages[messageIndex];
+    if (!msg) return false;
+    viewMode = { messageIndex, scroll: 0 };
+    prevScreenLines = [];
+    scheduleRefresh(true);
+    return true;
   }
 
   function onInput(data: string): void {
-    if (matchesKey(data, Key.ctrl("o"))) {
-      const messages = chatTerminal.store.getState().messages;
-      let expandableIndex = -1;
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const msg = messages[index];
-        if (msg?.role === "tool" && msg.toolResults?.length) {
-          expandableIndex = index;
-          break;
-        }
+    if (viewMode) {
+      if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("o"))) {
+        viewMode = undefined;
+        prevScreenLines = [];
+        scheduleRefresh(true);
+        return;
       }
+      const page = Math.max(1, R() - 1);
+      const total = renderViewModeVirtualLines(chatTerminal.store.getState(), W()).total;
+      const maxScroll = Math.max(0, total - R());
+      const scrollViewBy = (delta: number) => {
+        viewMode!.scroll = Math.max(0, Math.min(maxScroll, viewMode!.scroll + delta));
+        scheduleRefresh(true);
+      };
+      if (matchesKey(data, Key.up)) { scrollViewBy(-1); return; }
+      if (matchesKey(data, Key.down)) { scrollViewBy(1); return; }
+      if (data === "\x1b[5~") { scrollViewBy(-page); return; }
+      if (data === "\x1b[6~") { scrollViewBy(page); return; }
 
-      if (expandableIndex !== -1) {
-        const next = [...messages];
-        const msg = next[expandableIndex];
-        if (msg) next[expandableIndex] = {
-          ...msg,
-          expandedResultIndex: msg.expandedResultIndex === undefined ? 0 : undefined,
-        };
-        chatTerminal.store.dispatch({ messages: next });
-        scrollAnchorLine = -1;
-        scheduleRefresh();
+      const sgrPress = data.match(/^\x1b\[<(\d+);(\d+);(\d+)M$/);
+      if (sgrPress) {
+        const btn = Number(sgrPress[1]);
+        if (btn === 64) { scrollViewBy(-SCROLL_SPEED); return; }
+        if (btn === 65) { scrollViewBy(SCROLL_SPEED); return; }
+      }
+      if (data.startsWith("\x1b[M") && data.length >= 6) {
+        const btn = data.charCodeAt(3) - 32;
+        if (btn === 64) { scrollViewBy(-SCROLL_SPEED); return; }
+        if (btn === 65) { scrollViewBy(SCROLL_SPEED); return; }
+      }
+      if (/^\x1b\[<64;/.test(data)) { scrollViewBy(-SCROLL_SPEED); return; }
+      if (/^\x1b\[<65;/.test(data)) { scrollViewBy(SCROLL_SPEED); return; }
+      return;
+    }
+
+    if (matchesKey(data, Key.ctrl("o"))) {
+      if (!openCurrentMessageViewer()) {
+        statusMessage = "No message to open";
+        setTimeout(() => { statusMessage = ""; scheduleRefresh(); }, 2000);
       }
       return;
     }

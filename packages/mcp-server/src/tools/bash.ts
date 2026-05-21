@@ -10,19 +10,27 @@ const MAX_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 4_000;
 const TAIL_CHARS = 500; // chars to keep from end when truncating
 
-const SOURCE_EXTS = /\.(ts|tsx|js|jsx|mjs|cjs|py|json|yaml|yml|md|css|html|xml|sh|toml|rs|go|rb|swift|cs|cpp|c|vue|kt|java|php)$/;
+const SOURCE_EXTS =
+  /\.(ts|tsx|js|jsx|mjs|cjs|py|json|yaml|yml|md|css|html|xml|sh|toml|rs|go|rb|swift|cs|cpp|c|vue|kt|java|php)$/;
 
 function detectFileWrite(command: string): string | null {
   // Python pathlib / open write
-  if (/\.write_text\s*\(/.test(command)) return "Detected Python Path.write_text() — file modification via bash is not allowed.";
-  if (/open\s*\([^)]*['"]\s*w\s*['"]/.test(command)) return "Detected Python open(..., 'w') — file modification via bash is not allowed.";
-  if (/\.write\s*\(/.test(command) && /pathlib|Path\(|open\(/.test(command)) return "Detected Python file write — file modification via bash is not allowed.";
+  if (/\.write_text\s*\(/.test(command))
+    return "Detected Python Path.write_text() — file modification via bash is not allowed.";
+  if (/open\s*\([^)]*['"]\s*w\s*['"]/.test(command))
+    return "Detected Python open(..., 'w') — file modification via bash is not allowed.";
+  if (/\.write\s*\(/.test(command) && /pathlib|Path\(|open\(/.test(command))
+    return "Detected Python file write — file modification via bash is not allowed.";
 
   // Node.js fs writes
-  if (/fs\.(writeFile|writeFileSync|appendFile|appendFileSync)\s*\(/.test(command)) return "Detected Node.js fs.writeFile — file modification via bash is not allowed.";
+  if (
+    /fs\.(writeFile|writeFileSync|appendFile|appendFileSync)\s*\(/.test(command)
+  )
+    return "Detected Node.js fs.writeFile — file modification via bash is not allowed.";
 
   // awk output redirect to source file
-  if (/\bawk\b.+>\s*\S+/.test(command) && SOURCE_EXTS.test(command)) return "Detected awk redirect to source file — use edit_file instead.";
+  if (/\bawk\b.+>\s*\S+/.test(command) && SOURCE_EXTS.test(command))
+    return "Detected awk redirect to source file — use edit_file instead.";
 
   // Shell redirect writing to source files: cmd > file.ts or cmd >> file.ts
   const redirectMatch = command.match(/(?:^|;|\|)\s*[^|>]*>+\s*(\S+)/m);
@@ -35,7 +43,8 @@ function detectFileWrite(command: string): string | null {
 
   // tee to source file
   const teeMatch = command.match(/\btee\s+(\S+)/);
-  if (teeMatch && SOURCE_EXTS.test(teeMatch[1] ?? "")) return `Detected tee to source file '${teeMatch[1]}' — use write_file instead.`;
+  if (teeMatch && SOURCE_EXTS.test(teeMatch[1] ?? ""))
+    return `Detected tee to source file '${teeMatch[1]}' — use write_file instead.`;
 
   return null;
 }
@@ -57,20 +66,24 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
           .string()
           .min(1)
           .max(4000)
-          .describe("Shell command to execute, e.g. 'npm run build', 'git log --oneline -10', 'ls -la src/'"),
+          .describe(
+            "Shell command to execute, e.g. 'npm run build', 'git log --oneline -10', 'ls -la src/'",
+          ),
         timeout_ms: z
           .number()
           .int()
           .min(1000)
           .max(MAX_TIMEOUT_MS)
           .optional()
-          .describe(`Timeout in milliseconds. Default: ${DEFAULT_TIMEOUT_MS}. Max: ${MAX_TIMEOUT_MS}.`),
+          .describe(
+            `Timeout in milliseconds. Default: ${DEFAULT_TIMEOUT_MS}. Max: ${MAX_TIMEOUT_MS}.`,
+          ),
         cwd: z
           .string()
           .optional()
           .describe(
             "Working directory relative to workspace root. Defaults to workspace root. " +
-            "Example: 'packages/api' to run in a sub-package.",
+              "Example: 'packages/api' to run in a sub-package.",
           ),
       },
     },
@@ -79,7 +92,12 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
       if (fileWriteViolation) {
         return success(
           `[BASH_WRITE_BLOCKED] ${fileWriteViolation}\n\nUse edit_file(file_path, old_string, new_string) for targeted edits, or write_file(file_path, content) for new files. Do NOT use bash/python/sed to modify source files.`,
-          { exitCode: 1, stdout: "", stderr: fileWriteViolation, blocked: true },
+          {
+            exitCode: 1,
+            stdout: "",
+            stderr: fileWriteViolation,
+            blocked: true,
+          },
         );
       }
 
@@ -88,7 +106,10 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
         ? `${workspaceRoot}/${cwdArg.replace(/^\//, "")}`
         : workspaceRoot;
 
-      const timeoutMs = Math.min(timeout_ms ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+      const timeoutMs = Math.min(
+        timeout_ms ?? DEFAULT_TIMEOUT_MS,
+        MAX_TIMEOUT_MS,
+      );
 
       let stdout = "";
       let stderr = "";
@@ -107,12 +128,19 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
         stderr = result.stderr ?? "";
         exitCode = result.exitCode ?? 0;
       } catch (err: unknown) {
-        const e = err as { timedOut?: boolean; stdout?: string; stderr?: string; exitCode?: number };
+        const e = err as {
+          timedOut?: boolean;
+          stdout?: string;
+          stderr?: string;
+          exitCode?: number;
+        };
         if (e.timedOut) {
-          return success(
-            `Command timed out after ${timeoutMs}ms: ${command}`,
-            { exitCode: -1, stdout: e.stdout ?? "", stderr: e.stderr ?? "", timedOut: true },
-          );
+          return success(`Command timed out after ${timeoutMs}ms: ${command}`, {
+            exitCode: -1,
+            stdout: e.stdout ?? "",
+            stderr: e.stderr ?? "",
+            timedOut: true,
+          });
         }
         stdout = e.stdout ?? "";
         stderr = e.stderr ?? "";
@@ -128,9 +156,10 @@ export function registerBashTool(server: McpServer, _config: McpServerConfig) {
         truncated = `${head}\n... [${omitted} chars omitted] ...\n${tail}`;
       }
 
-      const summary = exitCode === 0
-        ? `$ ${command}\n${truncated || "(no output)"}`
-        : `$ ${command}\nExit code: ${exitCode}\n${truncated || "(no output)"}`;
+      const summary =
+        exitCode === 0
+          ? `$ ${command}\n${truncated || "(no output)"}`
+          : `$ ${command}\nExit code: ${exitCode}\n${truncated || "(no output)"}`;
 
       return success(summary, { exitCode, stdout, stderr });
     }),

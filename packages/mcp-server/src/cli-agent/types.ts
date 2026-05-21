@@ -30,7 +30,7 @@ export interface GatewayConfig {
 }
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system" | "user" | "assistant" | "tool" | "tool_call";
   content: string;
   /** Preserved reasoning/thinking content from thinking-mode models (e.g. DeepSeek-R1, mimo). */
   reasoning_content?: string;

@@ -54,7 +54,9 @@
       "WebFetch(domain:kotrotsos.medium.com)",
       "WebFetch(domain:claude-code-from-source.com)",
       "WebFetch(domain:slyapustin.com)",
-      "WebFetch(domain:steipete.me)"
+      "WebFetch(domain:steipete.me)",
+      "mcp__codemap-mcp-dev__get_agent_workflow",
+      "mcp__codemap-mcp-dev__refresh_local_index"
     ]
   },
   "enableAllProjectMcpServers": true,

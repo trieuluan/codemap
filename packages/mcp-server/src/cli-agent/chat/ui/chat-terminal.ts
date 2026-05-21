@@ -50,10 +50,20 @@ function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
 }
 
 
-const TOOL_CALL_SUMMARY_SUFFIX = " (ctrl+o to expand)";
+const TOOL_CALL_SUMMARY_SUFFIX = " — click preview · Ctrl+O full view";
+const TOOL_PREVIEW_LINE_LIMIT = 120;
 
-function toolCallSummaryHeader(serverName: string): string {
-  return `Called ${serverName}${TOOL_CALL_SUMMARY_SUFFIX}`;
+function byteLength(text: string): number {
+  return Buffer.byteLength(text, "utf8");
+}
+
+function previewToolContent(text: string, lineLimit = TOOL_PREVIEW_LINE_LIMIT): { content: string; truncated: boolean } {
+  const lines = text.split("\n");
+  if (lines.length <= lineLimit) return { content: text, truncated: false };
+  return {
+    content: `${lines.slice(0, lineLimit).join("\n")}\n… (${lines.length - lineLimit} more lines hidden; Ctrl+O for full output)`,
+    truncated: true,
+  };
 }
 
 function isToolCallSummary(msg: Message | undefined): boolean {
@@ -62,38 +72,44 @@ function isToolCallSummary(msg: Message | undefined): boolean {
   );
 }
 
-function getServerName(toolName: string): string {
-  const sep = toolName.indexOf("__");
-  return sep === -1 ? "codemap" : toolName.slice(0, sep);
-}
-
 function withToolCallSummary(messages: Message[], toolName: string, _args: string): Message[] {
-  const serverName = getServerName(toolName);
   const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
-  const childLine = `⎿ ${displayName}`;
   const next = [...messages];
 
-  // Look backward through tool messages for an existing summary from the same server
-  // in the current turn. Skip result messages — calls in one turn share one summary.
-  // Stop at user/assistant/system messages (turn boundaries).
+  // Look backward through tool_call messages for an existing call from the same server
+  // in the current turn. Stop at user/assistant/system messages (turn boundaries).
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
     if (msg.role === "user") break;
-    if (msg.role !== "tool") continue;
-    if (isToolCallSummary(msg) && msg.toolName === serverName) {
-      next[i] = { ...msg, content: `${msg.content}\n${childLine}` };
+    if (msg.role === "tool_call" && msg.name === displayName) {
+      // Tool call already exists, just return
+      return next;
+    }
+    // If we hit a tool result, that means we're in the old summary mode
+    if (msg.role === "tool" && isToolCallSummary(msg)) {
+      // Convert to interleaved mode: add tool_call before the summary
+      const childLine = `Call ${displayName}`;
+      const toolCallMsg: Message = {
+        role: "tool_call",
+        name: displayName,
+        content: childLine,
+        timestamp: Date.now(),
+      };
+      next.splice(i, 0, toolCallMsg);
       return next;
     }
   }
 
-  // No summary for this server in current turn — create one.
-  next.push({
-    role: "tool",
-    content: `${toolCallSummaryHeader(serverName)}\n${childLine}`,
-    toolName: serverName,
+  // No tool_call for this server in current turn — create one.
+  const childLine = `Call ${displayName}`;
+  const toolCallMsg: Message = {
+    role: "tool_call",
+    name: displayName,
+    content: childLine,
     timestamp: Date.now(),
-  } as Message);
+  };
+  next.push(toolCallMsg);
   return next;
 }
 
@@ -102,7 +118,36 @@ function markToolDone(messages: Message[], toolName: string, resultText: string)
   const success = !resultText.includes("[ERROR]");
   const marker = success ? " ✓" : " ✗";
   const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
+  const preview = previewToolContent(resultText);
   const next = [...messages];
+
+  // Find the tool_call message for this tool (interleaved mode)
+  let toolCallIndex = -1;
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (!msg) continue;
+    if (msg.role === "user") break;
+    if (msg.role === "tool_call" && msg.name === displayName) {
+      toolCallIndex = i;
+      break;
+    }
+  }
+
+  if (toolCallIndex >= 0) {
+    // Insert tool result right after tool_call
+    // For now, just add a simple tool message without fullContent
+    // (fullContent is only used in the old summary mode)
+    const toolResultMsg: Message = {
+      role: "tool",
+      name: displayName,
+      content: preview.content,
+      timestamp: Date.now(),
+    };
+    next.splice(toolCallIndex + 1, 0, toolResultMsg);
+    return next;
+  }
+
+  // Fallback: look for tool call summary (old mode)
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
@@ -115,7 +160,18 @@ function markToolDone(messages: Message[], toolName: string, resultText: string)
         const line = lines[j];
         if (line?.startsWith(`⎿ ${displayName}`) && !line.endsWith("✓") && !line.endsWith("✗")) {
           lines[j] = `${line}${marker}`;
-          const toolResults = [...(msg.toolResults ?? []), { name: displayName, content: resultText, success }];
+          const toolResults = [
+            ...(msg.toolResults ?? []),
+            {
+              name: displayName,
+              content: preview.content,
+              fullContent: resultText,
+              success,
+              truncated: preview.truncated,
+              previewLineLimit: TOOL_PREVIEW_LINE_LIMIT,
+              originalBytes: byteLength(resultText),
+            },
+          ];
           next[i] = { ...msg, content: lines.join("\n"), toolResults };
           return next;
         }
@@ -128,10 +184,17 @@ function markToolDone(messages: Message[], toolName: string, resultText: string)
 
 function appendToLastToolCallSummary(messages: Message[], content: string): Message[] {
   const next = [...messages];
+
+  // Look backward for a tool_call message (interleaved mode)
   for (let i = next.length - 1; i >= 0; i -= 1) {
     const msg = next[i];
     if (!msg) continue;
     if (msg.role === "user") break;
+    if (msg.role === "tool_call") {
+      // For tool_call, we don't append content - it's just a marker
+      // Instead, we could add metadata, but for now just return
+      return next;
+    }
     if (msg.role !== "tool") continue;
     if (isToolCallSummary(msg)) {
       next[i] = { ...msg, content: `${msg.content}\n${content}` };

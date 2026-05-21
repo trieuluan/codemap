@@ -2,12 +2,24 @@ import type { EventBus, TaskPhase, UsageStats } from "./event-bus.js";
 
 // ─── Message Types ───────────────────────────────────────
 
-export interface Message {
-  role: "user" | "assistant" | "tool" | "system" | "welcome";
+export interface ToolResult {
+  name: string;
   content: string;
-  toolName?: string;
+  fullContent?: string;
+  success: boolean;
+  truncated?: boolean;
+  previewLineLimit?: number;
+  originalBytes?: number;
+}
+
+export interface Message {
+  role: "user" | "assistant" | "tool" | "tool_call" | "system" | "welcome";
+  content: string;
+  name?: string; // for tool_call role
+  toolName?: string; // for tool role (summary)
+  toolCallId?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
-  toolResults?: Array<{ name: string; content: string; success: boolean }>;
+  toolResults?: ToolResult[];
   expanded?: boolean;
   expandedResultIndex?: number;
   welcomeData?: WelcomeData;

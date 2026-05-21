@@ -299,15 +299,13 @@ export async function runAgentLoop(input: {
 
     // Model wants to call tools.
     // allMessages gets full data for current turn context.
-    // resultMessages gets a single compact assistant message per iteration — no tool role messages,
-    // which avoids tool_use_id / tool_result pairing issues across providers.
+    // resultMessages gets interleaved messages: assistant message, then each tool_call + tool result pair.
     usedTools = true;
-    allMessages.push({
-      role: "assistant",
-      content: accumulated,
-      ...reasoningField,
-      toolCalls: streamToolCalls,
-    });
+
+    // Add assistant message with reasoning if present
+    const assistantMsg: ChatMessage = { role: "assistant", content: accumulated, ...reasoningField };
+    allMessages.push(assistantMsg);
+    resultMessages.push(assistantMsg);
 
     const iterationSummaryParts: string[] = [];
     if (accumulated.trim()) iterationSummaryParts.push(accumulated.trim());
@@ -330,6 +328,17 @@ export async function runAgentLoop(input: {
       }
 
       input.onToolStart?.(toolCall.function.name, toolCall.function.arguments, toolCall.id);
+
+      // Add tool_call message (interleaved - shows what the AI wants to call)
+      const toolCallMsg: ChatMessage = {
+        role: "tool_call",
+        content: `Call ${toolCall.function.name}`,
+        name: toolCall.function.name,
+        toolCallId: toolCall.id,
+      };
+      allMessages.push(toolCallMsg);
+      resultMessages.push(toolCallMsg);
+
       let rawResult: string;
       try {
         rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
@@ -368,7 +377,9 @@ export async function runAgentLoop(input: {
       const cappedResult = result.length > MAX_TOOL_RESULT_CHARS
         ? result.slice(0, MAX_TOOL_RESULT_CHARS) + `\n\n[Output truncated — full output was ${result.length.toLocaleString()} chars]`
         : result;
-      allMessages.push({ role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: cappedResult });
+      const toolResultMsg: ChatMessage = { role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: cappedResult };
+      allMessages.push(toolResultMsg);
+      resultMessages.push(toolResultMsg);
 
       // Accumulate compact summary for resultMessages (no tool role — avoids provider pairing issues).
       const snippet = result.length > 120 ? result.slice(0, 120) + "…" : result;

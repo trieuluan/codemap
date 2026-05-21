@@ -115,6 +115,23 @@ export function messageLines(
   width: number,
   frame = 0,
 ): string[] {
+  return renderMessageLines(messages, width, frame, false);
+}
+
+export function messageLinesFullView(
+  messages: Message[],
+  width: number,
+  frame = 0,
+): string[] {
+  return renderMessageLines(messages, width, frame, true);
+}
+
+function renderMessageLines(
+  messages: Message[],
+  width: number,
+  frame = 0,
+  fullView = false,
+): string[] {
   if (messages.length === 0) {
     return [
       `${C_ACTION}${BOLD}Welcome to CodeMap Agent${RESET}`,
@@ -145,8 +162,17 @@ export function messageLines(
       out.push(`${time} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${line}`);
+    } else if (msg.role === "tool_call") {
+      // Tool call message - shown between assistant and tool result
+      const toolName = truncate(msg.name ?? "tool", 20);
+      const prefixW = 9;
+      const bodyW = Math.max(20, width - prefixW);
+      const lines = safeRender(stripAnsi(msg.content), bodyW);
+      out.push(`${time} ${C_WARNING}→${RESET} ${C_WARNING}${toolName}:${RESET} ${lines[0] ?? ""}`);
+      for (const line of lines.slice(1))
+        out.push(`${" ".repeat(prefixW)}${C_WARNING}  ${line}${RESET}`);
     } else if (msg.role === "tool") {
-      const isSummary = msg.content.includes("(ctrl+o to expand)");
+      const isSummary = msg.content.includes("click preview · Ctrl+O full view") || msg.content.includes("(ctrl+o to expand)");
       const toolName = truncate(msg.toolName ?? "tool", 20);
       const isPreview =
         (msg.toolName ?? "").endsWith(" preview") || msg.toolName === "plan";
@@ -183,15 +209,17 @@ export function messageLines(
             matchingOccurrence += 1;
             return matchingOccurrence === occurrence;
           });
-          if (resultIndex === -1 || msg.expandedResultIndex !== resultIndex) return;
+          // In fullView mode, show all tool results; otherwise only show the expanded one
+          if (resultIndex === -1 || (!fullView && msg.expandedResultIndex !== resultIndex)) return;
 
           const result = msg.toolResults[resultIndex];
           if (!result) return;
-          const hasDiff = result.content.includes("@@ -") || result.content.includes("```diff")
-            || /^[-+]\s+\d+ \|/m.test(result.content);
-          const contentToRender = hasDiff && !result.content.trimStart().startsWith("```")
-            ? `\`\`\`diff\n${result.content}\n\`\`\``
-            : result.content;
+          const resultContent = fullView ? (result.fullContent ?? result.content) : result.content;
+          const hasDiff = resultContent.includes("@@ -") || resultContent.includes("```diff")
+            || /^[-+]\s+\d+ \|/m.test(resultContent);
+          const contentToRender = hasDiff && !resultContent.trimStart().startsWith("```")
+            ? `\`\`\`diff\n${resultContent}\n\`\`\``
+            : resultContent;
           const resultLines = safeRender(stripAnsi(contentToRender), bodyW, { noHighlight: !hasDiff });
           for (const resultLine of resultLines) {
             out.push(`${" ".repeat(prefixW)}  ${resultLine}`);
@@ -202,7 +230,7 @@ export function messageLines(
         let fenceBuf: string[] = [];
         let inFence = false;
 
-        // First line is always the header "Called <server> (ctrl+o to expand)"
+        // First line is always the header "Called <server> — click preview · Ctrl+O full view"
         out.push(`${time} ${C_MUTED}${stripAnsi(rawLines[0] ?? "")}${RESET}`);
 
         for (let li = 1; li < rawLines.length; li++) {
