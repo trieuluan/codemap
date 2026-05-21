@@ -3,11 +3,18 @@ import type { ChatMessage, ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
 import { getCachedContext } from "../../convention-synthesizer.js";
-import { runAgentLoop, type ConfirmEditFn, isUserRejectedError } from "../agent/agent-loop.js";
+import {
+  runAgentLoop,
+  type ConfirmEditFn,
+  isUserRejectedError,
+} from "../agent/agent-loop.js";
 import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
-import { classifyTask, type TaskClassification } from "../agent/task-classifier.js";
+import {
+  classifyTask,
+  type TaskClassification,
+} from "../agent/task-classifier.js";
 import { executeCommand } from "../commands/index.js";
 import { isStrongModel } from "../commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
@@ -36,7 +43,10 @@ function stripImagesFromContent(text: string): string {
 function subtractUsage(next: TokenUsage, prev: TokenUsage): TokenUsage {
   return {
     promptTokens: Math.max(0, next.promptTokens - prev.promptTokens),
-    completionTokens: Math.max(0, next.completionTokens - prev.completionTokens),
+    completionTokens: Math.max(
+      0,
+      next.completionTokens - prev.completionTokens,
+    ),
     totalTokens: Math.max(0, next.totalTokens - prev.totalTokens),
   };
 }
@@ -49,7 +59,6 @@ function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
   };
 }
 
-
 const TOOL_CALL_SUMMARY_SUFFIX = " — click preview · Ctrl+O full view";
 const TOOL_PREVIEW_LINE_LIMIT = 120;
 
@@ -57,7 +66,10 @@ function byteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
 }
 
-function previewToolContent(text: string, lineLimit = TOOL_PREVIEW_LINE_LIMIT): { content: string; truncated: boolean } {
+function previewToolContent(
+  text: string,
+  lineLimit = TOOL_PREVIEW_LINE_LIMIT,
+): { content: string; truncated: boolean } {
   const lines = text.split("\n");
   if (lines.length <= lineLimit) return { content: text, truncated: false };
   return {
@@ -72,8 +84,14 @@ function isToolCallSummary(msg: Message | undefined): boolean {
   );
 }
 
-function withToolCallSummary(messages: Message[], toolName: string, _args: string): Message[] {
-  const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
+function withToolCallSummary(
+  messages: Message[],
+  toolName: string,
+  _args: string,
+): Message[] {
+  const displayName = toolName.includes("__")
+    ? toolName.slice(toolName.indexOf("__") + 2)
+    : toolName;
   const next = [...messages];
 
   // Look backward through tool_call messages for an existing call from the same server
@@ -114,10 +132,16 @@ function withToolCallSummary(messages: Message[], toolName: string, _args: strin
 }
 
 /** Mark the most-recent pending ⎿ line for toolName as done (✓ or ✗). */
-function markToolDone(messages: Message[], toolName: string, resultText: string): Message[] {
+function markToolDone(
+  messages: Message[],
+  toolName: string,
+  resultText: string,
+): Message[] {
   const success = !resultText.includes("[ERROR]");
   const marker = success ? " ✓" : " ✗";
-  const displayName = toolName.includes("__") ? toolName.slice(toolName.indexOf("__") + 2) : toolName;
+  const displayName = toolName.includes("__")
+    ? toolName.slice(toolName.indexOf("__") + 2)
+    : toolName;
   const preview = previewToolContent(resultText);
   const next = [...messages];
 
@@ -158,7 +182,11 @@ function markToolDone(messages: Message[], toolName: string, resultText: string)
       const lines = msg.content.split("\n");
       for (let j = lines.length - 1; j >= 0; j -= 1) {
         const line = lines[j];
-        if (line?.startsWith(`⎿ ${displayName}`) && !line.endsWith("✓") && !line.endsWith("✗")) {
+        if (
+          line?.startsWith(`⎿ ${displayName}`) &&
+          !line.endsWith("✓") &&
+          !line.endsWith("✗")
+        ) {
           lines[j] = `${line}${marker}`;
           const toolResults = [
             ...(msg.toolResults ?? []),
@@ -182,7 +210,10 @@ function markToolDone(messages: Message[], toolName: string, resultText: string)
   return next;
 }
 
-function appendToLastToolCallSummary(messages: Message[], content: string): Message[] {
+function appendToLastToolCallSummary(
+  messages: Message[],
+  content: string,
+): Message[] {
   const next = [...messages];
 
   // Look backward for a tool_call message (interleaved mode)
@@ -215,7 +246,8 @@ function isAbortError(err: unknown): boolean {
 }
 
 function extractCloudCommitFromGetProject(result: unknown): string | undefined {
-  const structured = (result as { structuredContent?: unknown })?.structuredContent;
+  const structured = (result as { structuredContent?: unknown })
+    ?.structuredContent;
   if (!structured || typeof structured !== "object") return undefined;
 
   const data = structured as {
@@ -250,7 +282,10 @@ function pruneToPreviousTaskBoundary(history: ChatMessage[]): ChatMessage[] {
   // Find all boundary positions
   const boundaries: number[] = [];
   for (let i = 0; i < history.length; i++) {
-    if (history[i]?.role === "assistant" && history[i]?.content === TASK_BOUNDARY_CONTENT) {
+    if (
+      history[i]?.role === "assistant" &&
+      history[i]?.content === TASK_BOUNDARY_CONTENT
+    ) {
       boundaries.push(i);
     }
   }
@@ -262,7 +297,9 @@ function pruneToPreviousTaskBoundary(history: ChatMessage[]): ChatMessage[] {
   const keepFrom = boundaries[boundaries.length - 2]! + 1;
   const pruned = history.slice(0, keepFrom);
   const kept = history.slice(keepFrom);
-  const taskCount = pruned.filter((m) => m.content === TASK_BOUNDARY_CONTENT).length;
+  const taskCount = pruned.filter(
+    (m) => m.content === TASK_BOUNDARY_CONTENT,
+  ).length;
   const summary: ChatMessage = {
     role: "assistant",
     content: `[${taskCount} older task${taskCount !== 1 ? "s" : ""} pruned — recent context preserved.]`,
@@ -270,7 +307,10 @@ function pruneToPreviousTaskBoundary(history: ChatMessage[]): ChatMessage[] {
   return [summary, ...kept];
 }
 
-async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+async function abortable<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
   if (signal.aborted) throw createAbortError();
   let cleanup: (() => void) | undefined;
   const abortPromise = new Promise<T>((_, reject) => {
@@ -321,7 +361,13 @@ export class ChatTerminal {
   private _gitMeta: { repo: string; branch: string } = { repo: "", branch: "" };
   // Session-level caches — fetched once on first turn, reused for the entire session.
   private _resourceContext: string | null | undefined = undefined; // undefined = not yet fetched
-  private _projectContext: { conventions: string | null; rules: string | null; skills: string | null } | undefined = undefined;
+  private _projectContext:
+    | {
+        conventions: string | null;
+        rules: string | null;
+        skills: string | null;
+      }
+    | undefined = undefined;
 
   constructor(options: ChatTerminalOptions) {
     this.options = options;
@@ -340,7 +386,6 @@ export class ChatTerminal {
     );
 
     if (debug) this.logger = createDebugLogger();
-
   }
 
   private async refreshWorkspaceCommits(): Promise<void> {
@@ -356,14 +401,19 @@ export class ChatTerminal {
             cloudCommit: current?.cloudCommit,
           },
         });
-        this._gitMeta = { repo: info.repoName ?? "", branch: info.branch ?? "" };
+        this._gitMeta = {
+          repo: info.repoName ?? "",
+          branch: info.branch ?? "",
+        };
       }
     } catch {
       // Non-blocking: workspaces without git should still start normally.
     }
 
     try {
-      const result = await this.options.toolClient.callTool("get_project", { verbose: false });
+      const result = await this.options.toolClient.callTool("get_project", {
+        verbose: false,
+      });
       const cloudCommit = extractCloudCommitFromGetProject(result);
       if (!cloudCommit) return;
 
@@ -402,13 +452,20 @@ export class ChatTerminal {
     // Roll back UI messages to before the last user message so the conversation
     // history is preserved and the user's prompt is returned to the input field.
     const msgs = state.messages as Message[];
-    const lastUserIdx = msgs.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
+    const lastUserIdx = msgs.reduce(
+      (acc, m, i) => (m.role === "user" ? i : acc),
+      -1,
+    );
     const rolledBackMsgs = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx) : msgs;
 
     // Same rollback for agent history.
     const history = state.agentHistory as ChatMessage[];
-    const lastUserHistIdx = history.reduce((acc, m, i) => m.role === "user" ? i : acc, -1);
-    const rolledBackHistory = lastUserHistIdx >= 0 ? history.slice(0, lastUserHistIdx) : history;
+    const lastUserHistIdx = history.reduce(
+      (acc, m, i) => (m.role === "user" ? i : acc),
+      -1,
+    );
+    const rolledBackHistory =
+      lastUserHistIdx >= 0 ? history.slice(0, lastUserHistIdx) : history;
 
     this.store.dispatch({
       messages: rolledBackMsgs,
@@ -426,7 +483,9 @@ export class ChatTerminal {
   resolveConfirm(accept: boolean): void {
     this._confirmResolve?.(accept);
     this._confirmResolve = null;
-    this.store.dispatch({ confirm: { active: false, toolName: "", preview: null } });
+    this.store.dispatch({
+      confirm: { active: false, toolName: "", preview: null },
+    });
   }
 
   /** Called by the multi-phase loop: pause and wait for user plan review. */
@@ -447,7 +506,9 @@ export class ChatTerminal {
   }
 
   resolveConfirmAll(): void {
-    this.store.dispatch((prev) => ({ input: { ...prev.input, autoAccept: true } }));
+    this.store.dispatch((prev) => ({
+      input: { ...prev.input, autoAccept: true },
+    }));
     this.resolveConfirm(true);
   }
 
@@ -463,16 +524,23 @@ export class ChatTerminal {
     const beforeHistory = state.agentHistory as ChatMessage[];
     const beforeTokens = this.compactor.estimateTokens(beforeHistory);
     onProgress?.("Calling summarizer model...");
-    const compacted = await this.compactor.compactNow(beforeHistory, state.config.model);
+    const compacted = await this.compactor.compactNow(
+      beforeHistory,
+      state.config.model,
+    );
     const nextHistory = compacted ?? beforeHistory;
     const afterTokens = this.compactor.estimateTokens(nextHistory);
 
     let summaryText: string | undefined;
     if (compacted) {
       const summaryMsg = nextHistory.find(
-        (m) => m.role === "system" && m.content.includes("[Previous conversation summary]"),
+        (m) =>
+          m.role === "system" &&
+          m.content.includes("[Previous conversation summary]"),
       );
-      summaryText = summaryMsg?.content.replace("[Previous conversation summary]\n", "").trim();
+      summaryText = summaryMsg?.content
+        .replace("[Previous conversation summary]\n", "")
+        .trim();
 
       const cs = this.compactor.getState(nextHistory);
       this.store.dispatch({
@@ -567,8 +635,14 @@ export class ChatTerminal {
           return;
         }
       }
-    } catch { /* fallback to new session */ }
-    this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
+    } catch {
+      /* fallback to new session */
+    }
+    this._sessionId = createSession({
+      gitRepo: repo,
+      gitBranch: branch,
+      model,
+    });
   }
 
   persistSession(): void {
@@ -584,15 +658,23 @@ export class ChatTerminal {
         model,
         s.messages, // save full visible transcript for exact resume
       );
-    } catch { /* non-blocking */ }
+    } catch {
+      /* non-blocking */
+    }
   }
 
   startNewSession(): void {
     const { repo, branch } = this._gitMeta;
     const model = this.store.getState().config.model;
     try {
-      this._sessionId = createSession({ gitRepo: repo, gitBranch: branch, model });
-    } catch { /* ignore */ }
+      this._sessionId = createSession({
+        gitRepo: repo,
+        gitBranch: branch,
+        model,
+      });
+    } catch {
+      /* ignore */
+    }
     this.store.dispatch((prev) => ({
       agentHistory: [],
       messages: [],
@@ -621,7 +703,10 @@ export class ChatTerminal {
         sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       });
     } catch (err) {
-      this.appendMessage({ role: "system", content: `Failed to load session: ${err}` });
+      this.appendMessage({
+        role: "system",
+        content: `Failed to load session: ${err}`,
+      });
     }
   }
 
@@ -631,7 +716,11 @@ export class ChatTerminal {
     await this.handleSubmitWithContent(text, text);
   }
 
-  async handleSubmitWithContent(displayText: string, contentText: string, forceMultiPhase = false): Promise<void> {
+  async handleSubmitWithContent(
+    displayText: string,
+    contentText: string,
+    forceMultiPhase = false,
+  ): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;
 
@@ -664,7 +753,10 @@ export class ChatTerminal {
       }
       const handled = executeCommand(displayText, this.buildCommandContext());
       if (!handled) {
-        this.appendMessage({ role: "system", content: "Unknown command. Type /help for available commands." });
+        this.appendMessage({
+          role: "system",
+          content: "Unknown command. Type /help for available commands.",
+        });
       }
       return;
     }
@@ -674,7 +766,9 @@ export class ChatTerminal {
       return;
     }
 
-    this.store.dispatch({ input: { ...state.input, busy: true, lastUserText: contentText } });
+    this.store.dispatch({
+      input: { ...state.input, busy: true, lastUserText: contentText },
+    });
     this.appendMessage({ role: "user", content: displayText });
     this.store.dispatch({
       task: {
@@ -690,12 +784,18 @@ export class ChatTerminal {
 
     let streamingContent = "";
     let hasStreamingEntry = false;
-    let lastTurnUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    let lastTurnUsage: TokenUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
 
     const resetStreaming = () => {
       streamingContent = "";
       hasStreamingEntry = false;
-      this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
+      this.store.dispatch({
+        streaming: { active: false, content: "", entryIndex: -1 },
+      });
     };
 
     const sharedCallbacks = {
@@ -706,11 +806,22 @@ export class ChatTerminal {
         streamingContent += token;
         if (!hasStreamingEntry) {
           hasStreamingEntry = true;
-          const entryIndex = this.appendMessage({ role: "assistant", content: streamingContent });
-          this.store.dispatch({ streaming: { active: true, content: streamingContent, entryIndex } });
+          const entryIndex = this.appendMessage({
+            role: "assistant",
+            content: streamingContent,
+          });
+          this.store.dispatch({
+            streaming: { active: true, content: streamingContent, entryIndex },
+          });
         } else {
           this.updateLastAssistantMessage(streamingContent);
-          this.store.dispatch((prev) => ({ streaming: { ...prev.streaming, active: true, content: streamingContent } }));
+          this.store.dispatch((prev) => ({
+            streaming: {
+              ...prev.streaming,
+              active: true,
+              content: streamingContent,
+            },
+          }));
         }
         this.store.dispatch({ task: { ...s.task, phase: "streaming" } });
         this.bus.scheduleRefresh();
@@ -734,7 +845,13 @@ export class ChatTerminal {
         resetStreaming();
         const s = this.store.getState();
         this.store.dispatch({
-          task: { ...s.task, phase: "tool", toolName: name, toolArgs: args, toolsCalled: s.task.toolsCalled + 1 },
+          task: {
+            ...s.task,
+            phase: "tool",
+            toolName: name,
+            toolArgs: args,
+            toolsCalled: s.task.toolsCalled + 1,
+          },
         });
         this.store.dispatch((prev) => ({
           messages: withToolCallSummary(prev.messages, name, args),
@@ -746,7 +863,12 @@ export class ChatTerminal {
         this.logger?.logToolResult(name, resultText);
         resetStreaming();
         this.store.dispatch({
-          task: { ...this.store.getState().task, phase: "executing", toolName: undefined, toolArgs: undefined },
+          task: {
+            ...this.store.getState().task,
+            phase: "executing",
+            toolName: undefined,
+            toolArgs: undefined,
+          },
         });
         this.store.dispatch((prev) => ({
           messages: markToolDone(prev.messages, name, resultText),
@@ -767,6 +889,8 @@ export class ChatTerminal {
           });
         } else if (info.event === "tool_fallback") {
           this.logger?.logToolFallback(String(info.reason ?? ""));
+        } else {
+          this.logger?.logDebugInfo(info);
         }
       },
     };
@@ -783,7 +907,11 @@ export class ChatTerminal {
       const plannerProfile = profiles.find((p) => p.id === "planner");
       const coderProfile = profiles.find((p) => p.id === "coder");
       const reviewerProfile = profiles.find((p) => p.id === "reviewer");
-      const hasAllProfiles = !!(plannerProfile && coderProfile && reviewerProfile);
+      const hasAllProfiles = !!(
+        plannerProfile &&
+        coderProfile &&
+        reviewerProfile
+      );
       let classification: TaskClassification = {
         phase: "single",
         tier: "coder",
@@ -795,25 +923,33 @@ export class ChatTerminal {
 
       if (!forceMultiPhase && !planMode && hasAllProfiles) {
         this.store.dispatch({
-          task: { ...this.store.getState().task, phase: "classifying", model: plannerProfile.model },
+          task: {
+            ...this.store.getState().task,
+            phase: "classifying",
+            model: plannerProfile.model,
+          },
         });
         this.bus.scheduleRefresh();
 
         classification = await classifyTask(
           contentText,
           this.options.provider,
-          coderProfile.model,  // coder has better instruction following for JSON classification
+          coderProfile.model, // coder has better instruction following for JSON classification
           taskAbort.signal,
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;
       }
 
-      const useMultiPhase = forceMultiPhase || planMode || (hasAllProfiles && classification.phase === "multi");
-      const singlePhaseModel = (() => {
-        if (classification.tier === "planner") return plannerProfile?.model;
-        if (classification.tier === "reviewer") return reviewerProfile?.model;
-        return coderProfile?.model;
-      })() ?? this.store.getState().config.model;
+      const useMultiPhase =
+        forceMultiPhase ||
+        planMode ||
+        (hasAllProfiles && classification.phase === "multi");
+      const singlePhaseModel =
+        (() => {
+          if (classification.tier === "planner") return plannerProfile?.model;
+          if (classification.tier === "reviewer") return reviewerProfile?.model;
+          return coderProfile?.model;
+        })() ?? this.store.getState().config.model;
 
       // Fetch session-level caches once — reused across all runAgentLoop calls this turn.
       const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
@@ -827,7 +963,9 @@ export class ChatTerminal {
 
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
-            history: pruneToPreviousTaskBoundary(this.store.getState().agentHistory as ChatMessage[]),
+            history: pruneToPreviousTaskBoundary(
+              this.store.getState().agentHistory as ChatMessage[],
+            ),
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
             debug: this.store.getState().debug,
@@ -838,7 +976,9 @@ export class ChatTerminal {
             onPhaseStart: (phase, model) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
-              this.store.dispatch({ task: { ...this.store.getState().task, phase, model } });
+              this.store.dispatch({
+                task: { ...this.store.getState().task, phase, model },
+              });
               this.bus.scheduleRefresh();
             },
             onPlanReady: (plan) => {
@@ -848,11 +988,18 @@ export class ChatTerminal {
               // assistant message without prefix, once as "plan: ..." below).
               if (hasStreamingEntry) {
                 this.store.dispatch((prev) => ({
-                  messages: prev.messages.filter((m) => m.role !== "assistant" || m.content !== streamingContent),
+                  messages: prev.messages.filter(
+                    (m) =>
+                      m.role !== "assistant" || m.content !== streamingContent,
+                  ),
                 }));
               }
               resetStreaming();
-              this.appendMessage({ role: "tool", content: plan, toolName: "plan" });
+              this.appendMessage({
+                role: "tool",
+                content: plan,
+                toolName: "plan",
+              });
               // Persist plan in agentHistory so it survives session save/load.
               this.store.dispatch((prev) => ({
                 agentHistory: [
@@ -868,7 +1015,9 @@ export class ChatTerminal {
         : await runAgentLoop({
             provider: this.options.provider,
             model: singlePhaseModel,
-            history: pruneToPreviousTaskBoundary(this.store.getState().agentHistory as ChatMessage[]),
+            history: pruneToPreviousTaskBoundary(
+              this.store.getState().agentHistory as ChatMessage[],
+            ),
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
             debug: this.store.getState().debug,
@@ -884,7 +1033,9 @@ export class ChatTerminal {
 
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const s = this.store.getState();
-      this.store.dispatch({ task: { ...s.task, phase: "done", endTime: Date.now() } });
+      this.store.dispatch({
+        task: { ...s.task, phase: "done", endTime: Date.now() },
+      });
 
       // Auto-exit plan mode after one multi-phase run.
       if (useMultiPhase && planMode && !forceMultiPhase) {
@@ -897,7 +1048,8 @@ export class ChatTerminal {
           .flatMap((m) => m.toolCalls ?? [])
           .map((tc) => tc.function.name);
         this.logger.logSummary({
-          totalChunks: 0, textChunks: 0,
+          totalChunks: 0,
+          textChunks: 0,
           toolCallChunks: toolCallsList.length,
           finalToolCalls: toolCallsList,
           model: this.store.getState().config.model,
@@ -912,7 +1064,11 @@ export class ChatTerminal {
         });
       }
 
-      if (useMultiPhase && !result.usedTools && !result.unsupportedToolCalling) {
+      if (
+        useMultiPhase &&
+        !result.usedTools &&
+        !result.unsupportedToolCalling
+      ) {
         this.appendMessage({
           role: "system",
           content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nTry /compact to free context, or check your coder profile configuration.`,
@@ -922,23 +1078,30 @@ export class ChatTerminal {
       if (hasStreamingEntry && result.text) {
         this.updateLastAssistantMessage(result.text || "(no response)");
       } else if (!hasStreamingEntry) {
-        this.appendMessage({ role: "assistant", content: result.text || "(no response)" });
+        this.appendMessage({
+          role: "assistant",
+          content: result.text || "(no response)",
+        });
       }
 
       this.bus.scheduleRefresh();
       // Don't pollute agentHistory with no-tool-call responses from multi-phase execute —
       // they cause the next coder turn to mimic the same "re-plan and apologize" pattern.
-      const shouldAddToHistory = !useMultiPhase || result.usedTools || result.unsupportedToolCalling;
+      const shouldAddToHistory =
+        !useMultiPhase || result.usedTools || result.unsupportedToolCalling;
       if (shouldAddToHistory) {
         // result.messages already starts with the user message (see agent-loop resultMessages init).
         // Strip base64 images to avoid sending vision content to non-vision models in future turns.
         const historyMessages = result.messages
-          .filter((m) => m.role !== "tool")  // tool results must not persist in history
+          .filter((m) => m.role !== "tool") // tool results must not persist in history
           .map((m) => ({ ...m, content: stripImagesFromContent(m.content) }));
         // Task boundary marker — signals to the model that this task is complete and a new
         // one will follow. Combined with observation masking, prevents context from earlier
         // tasks leaking into the next turn.
-        const boundaryMarker: ChatMessage = { role: "assistant", content: TASK_BOUNDARY_CONTENT };
+        const boundaryMarker: ChatMessage = {
+          role: "assistant",
+          content: TASK_BOUNDARY_CONTENT,
+        };
         const nextHistory = [
           ...(this.store.getState().agentHistory as ChatMessage[]),
           ...historyMessages,
@@ -970,7 +1133,11 @@ export class ChatTerminal {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
       if (isUserRejectedError(err)) {
         this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
-        this.appendMessage({ role: "system", content: "Edit rejected — stream stopped. Continue chatting to try a different approach." });
+        this.appendMessage({
+          role: "system",
+          content:
+            "Edit rejected — stream stopped. Continue chatting to try a different approach.",
+        });
         this.persistSession();
         return;
       }
@@ -978,24 +1145,32 @@ export class ChatTerminal {
       this.logger?.logError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
       const isContextFull =
-        errMsg.includes("context window") || errMsg.includes("context length") ||
-        errMsg.includes("maximum context") || errMsg.includes("token limit") ||
-        errMsg.includes("too long") || errMsg.includes("exceeds") ||
-        errMsg.includes("input is too long") || errMsg.includes("prompt is too long");
+        errMsg.includes("context window") ||
+        errMsg.includes("context length") ||
+        errMsg.includes("maximum context") ||
+        errMsg.includes("token limit") ||
+        errMsg.includes("too long") ||
+        errMsg.includes("exceeds") ||
+        errMsg.includes("input is too long") ||
+        errMsg.includes("prompt is too long");
       const isModelBroken =
-        errMsg.includes("zero-length") || errMsg.includes("empty document") || errMsg.includes("429");
+        errMsg.includes("zero-length") ||
+        errMsg.includes("empty document") ||
+        errMsg.includes("429");
       const cs = this.store.getState().config;
 
       if (isContextFull) {
         this.appendMessage({
           role: "system",
-          content: "Context window full. Run `/compact` to summarize history, then retry.",
+          content:
+            "Context window full. Run `/compact` to summarize history, then retry.",
         });
       } else if (isModelBroken && cs.availableModels.length > 1) {
-        const strong = cs.availableModels.filter(m => m !== cs.model && isStrongModel(m));
-        const newModel = strong[0]
-          ?? cs.availableModels.find((m) => m !== cs.model)
-          ?? null;
+        const strong = cs.availableModels.filter(
+          (m) => m !== cs.model && isStrongModel(m),
+        );
+        const newModel =
+          strong[0] ?? cs.availableModels.find((m) => m !== cs.model) ?? null;
         if (newModel) {
           this.store.dispatch({ config: { ...cs, model: newModel } });
           this.appendMessage({
@@ -1003,7 +1178,10 @@ export class ChatTerminal {
             content: `Model "${cs.model}" failed. Auto-switched to "${newModel}". Resend your message to retry.`,
           });
         } else {
-          this.appendMessage({ role: "system", content: `Model "${cs.model}" failed and no alternative found.` });
+          this.appendMessage({
+            role: "system",
+            content: `Model "${cs.model}" failed and no alternative found.`,
+          });
         }
       } else {
         this.appendMessage({ role: "system", content: `Error: ${errMsg}` });
@@ -1018,7 +1196,10 @@ export class ChatTerminal {
   private async handleShellSubmit(text: string): Promise<void> {
     const command = text.slice(1).trim();
     if (!command) {
-      this.appendMessage({ role: "system", content: "Usage: !<shell command>" });
+      this.appendMessage({
+        role: "system",
+        content: "Usage: !<shell command>",
+      });
       return;
     }
 
@@ -1046,17 +1227,30 @@ export class ChatTerminal {
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const content = result.content || "(no output)";
       this.appendMessage({ role: "tool", content, toolName: "bash result" });
-      this.store.dispatch({ task: { ...this.store.getState().task, phase: "done", endTime: Date.now() } });
+      this.store.dispatch({
+        task: {
+          ...this.store.getState().task,
+          phase: "done",
+          endTime: Date.now(),
+        },
+      });
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
       if (isUserRejectedError(err)) {
         this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
-        this.appendMessage({ role: "system", content: "Edit rejected — stream stopped. Continue chatting to try a different approach." });
+        this.appendMessage({
+          role: "system",
+          content:
+            "Edit rejected — stream stopped. Continue chatting to try a different approach.",
+        });
         this.persistSession();
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
-      this.appendMessage({ role: "system", content: `Shell command failed: ${message}` });
+      this.appendMessage({
+        role: "system",
+        content: `Shell command failed: ${message}`,
+      });
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
     } finally {
       if (this.isActiveTask(taskId, taskAbort)) {
@@ -1073,11 +1267,13 @@ export class ChatTerminal {
       // Show preview below the ⎿ toolName line in the summary.
       if (preview) {
         this.store.dispatch((prev) => ({
-          messages: appendToLastToolCallSummary(prev.messages,
+          messages: appendToLastToolCallSummary(
+            prev.messages,
             // Don't double-wrap: write-file preview already has a ```diff block inside metadata.
             preview.includes("@@ -") && !preview.includes("```diff")
               ? `\`\`\`diff\n${preview}\n\`\`\``
-              : preview),
+              : preview,
+          ),
         }));
         this.bus.scheduleRefresh();
       }
@@ -1085,7 +1281,9 @@ export class ChatTerminal {
       if (this.store.getState().input.autoAccept) return true;
 
       // Manual confirm: wait for user yes/no.
-      this.store.dispatch({ confirm: { active: true, toolName: name, preview } });
+      this.store.dispatch({
+        confirm: { active: true, toolName: name, preview },
+      });
       const accepted = await new Promise<boolean>((resolve) => {
         this._confirmResolve = resolve;
       });
@@ -1093,7 +1291,11 @@ export class ChatTerminal {
       if (!accepted) {
         // Mark ✗ immediately — onToolResult won't fire on rejection.
         this.store.dispatch((prev) => ({
-          messages: markToolDone(prev.messages, name, "[ERROR] User rejected tool execution."),
+          messages: markToolDone(
+            prev.messages,
+            name,
+            "[ERROR] User rejected tool execution.",
+          ),
         }));
         this.bus.scheduleRefresh();
       }
@@ -1104,24 +1306,34 @@ export class ChatTerminal {
 
   // ─── Session context cache ────────────────────────────────
 
-  private async getSessionResourceContext(signal?: AbortSignal): Promise<string | null> {
+  private async getSessionResourceContext(
+    signal?: AbortSignal,
+  ): Promise<string | null> {
     if (this._resourceContext !== undefined) return this._resourceContext;
     try {
-      this._resourceContext = await fetchResourceContext(this.options.toolClient);
+      this._resourceContext = await fetchResourceContext(
+        this.options.toolClient,
+      );
     } catch {
       this._resourceContext = null;
     }
     return this._resourceContext;
   }
 
-  private async getSessionProjectContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {
+  private async getSessionProjectContext(): Promise<{
+    conventions: string | null;
+    rules: string | null;
+    skills: string | null;
+  }> {
     if (this._projectContext !== undefined) return this._projectContext;
     try {
       this._projectContext = await getCachedContext();
     } catch {
       this._projectContext = { conventions: null, rules: null, skills: null };
     }
-    return this._projectContext ?? { conventions: null, rules: null, skills: null };
+    return (
+      this._projectContext ?? { conventions: null, rules: null, skills: null }
+    );
   }
 
   // ─── Message helpers ──────────────────────────────────────
@@ -1130,7 +1342,9 @@ export class ChatTerminal {
     let index = -1;
     this.store.dispatch((prev) => {
       index = prev.messages.length;
-      return { messages: [...prev.messages, { timestamp: Date.now(), ...msg }] };
+      return {
+        messages: [...prev.messages, { timestamp: Date.now(), ...msg }],
+      };
     });
     return index;
   }
@@ -1163,7 +1377,11 @@ export class ChatTerminal {
   }
 
   private isActiveTask(taskId: number, controller: AbortController): boolean {
-    return this._activeTaskId === taskId && this._taskAbort === controller && !controller.signal.aborted;
+    return (
+      this._activeTaskId === taskId &&
+      this._taskAbort === controller &&
+      !controller.signal.aborted
+    );
   }
 
   // ─── Command context ──────────────────────────────────────
@@ -1176,11 +1394,9 @@ export class ChatTerminal {
       profiles.find((p) => p.id === "coder")?.model ??
       s.config.model;
     const coderModel =
-      profiles.find((p) => p.id === "coder")?.model ??
-      s.config.model;
+      profiles.find((p) => p.id === "coder")?.model ?? s.config.model;
     const plannerModel =
-      profiles.find((p) => p.id === "planner")?.model ??
-      s.config.model;
+      profiles.find((p) => p.id === "planner")?.model ?? s.config.model;
     return {
       currentModel: s.config.model,
       provider: this.options.provider,
@@ -1191,9 +1407,14 @@ export class ChatTerminal {
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,
       getMessages: () => this.store.getState().messages as Message[],
-      appendMessage: (msg: Partial<Message> & { role: string; content: string }) => {
+      appendMessage: (
+        msg: Partial<Message> & { role: string; content: string },
+      ) => {
         this.store.dispatch((prev) => ({
-          messages: [...prev.messages, { timestamp: Date.now(), ...msg } as Message],
+          messages: [
+            ...prev.messages,
+            { timestamp: Date.now(), ...msg } as Message,
+          ],
         }));
         this.bus.scheduleRefresh();
       },
@@ -1204,22 +1425,32 @@ export class ChatTerminal {
           this.store.dispatch({ messages: updater });
         }
       },
-      setHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+      setHistory: (
+        updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]),
+      ) => {
         if (typeof updater === "function") {
-          this.store.dispatch((prev) => ({ agentHistory: updater(prev.agentHistory as ChatMessage[]) }));
+          this.store.dispatch((prev) => ({
+            agentHistory: updater(prev.agentHistory as ChatMessage[]),
+          }));
         } else {
           this.store.dispatch({ agentHistory: updater });
         }
       },
       setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => {
         if (typeof updater === "function") {
-          this.store.dispatch((prev) => ({ input: { ...prev.input, history: updater(prev.input.history) } }));
+          this.store.dispatch((prev) => ({
+            input: { ...prev.input, history: updater(prev.input.history) },
+          }));
         } else {
-          this.store.dispatch((prev) => ({ input: { ...prev.input, history: updater } }));
+          this.store.dispatch((prev) => ({
+            input: { ...prev.input, history: updater },
+          }));
         }
       },
       setCurrentModel: (m: string) => {
-        this.store.dispatch((prev) => ({ config: { ...prev.config, model: m } }));
+        this.store.dispatch((prev) => ({
+          config: { ...prev.config, model: m },
+        }));
       },
       setBusy: (b: boolean) => {
         this.store.dispatch((prev) => ({ input: { ...prev.input, busy: b } }));
@@ -1232,15 +1463,19 @@ export class ChatTerminal {
       },
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
-      compactHistory: (onProgress?: (step: string) => void) => this.compactHistory(onProgress),
+      compactHistory: (onProgress?: (step: string) => void) =>
+        this.compactHistory(onProgress),
       persistSession: () => this.persistSession(),
       getCompactionStatus: () => ({
         policy: this.compactor.getPolicy(),
-        state: this.compactor.getState(this.store.getState().agentHistory as ChatMessage[]),
+        state: this.compactor.getState(
+          this.store.getState().agentHistory as ChatMessage[],
+        ),
       }),
       resend: () => {
         const cs = this.store.getState();
-        if (cs.input.lastUserText && !cs.input.busy) this.handleSubmit(cs.input.lastUserText);
+        if (cs.input.lastUserText && !cs.input.busy)
+          this.handleSubmit(cs.input.lastUserText);
       },
       exit: () => {
         process.stdout.write("\x1b[?1000l\x1b[?1006l");
@@ -1250,15 +1485,22 @@ export class ChatTerminal {
       newSession: () => this.startNewSession(),
       loadSessionById: (id: string) => this.loadSessionById(id),
       startSubprocess: (command: string) => {
-        this.store.dispatch({ subprocess: { active: true, command, logLines: [] } });
+        this.store.dispatch({
+          subprocess: { active: true, command, logLines: [] },
+        });
       },
       logSubprocess: (line: string) => {
         this.store.dispatch((prev) => ({
-          subprocess: { ...prev.subprocess, logLines: [...prev.subprocess.logLines, line] },
+          subprocess: {
+            ...prev.subprocess,
+            logLines: [...prev.subprocess.logLines, line],
+          },
         }));
       },
       endSubprocess: () => {
-        this.store.dispatch({ subprocess: { active: false, command: "", logLines: [] } });
+        this.store.dispatch({
+          subprocess: { active: false, command: "", logLines: [] },
+        });
       },
       refreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
     };

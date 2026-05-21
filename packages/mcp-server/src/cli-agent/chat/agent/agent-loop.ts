@@ -1,10 +1,15 @@
 import { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, ChatToolCall, TokenUsage } from "../../types.js";
-import { CodeMapMcpToolClient, fetchResourceContext, isConfirmTool } from "../mcp/mcp-tool-client.js";
+import {
+  CodeMapMcpToolClient,
+  fetchResourceContext,
+  isConfirmTool,
+} from "../mcp/mcp-tool-client.js";
 import { getCachedContext } from "../../convention-synthesizer.js";
 import type { ContextCompactor } from "./context-compactor.js";
 
 const MAX_AGENT_TOOL_ITERATIONS = 50;
+const HARDCODED_AGENT_MODEL = "kr/qwen3-coder-next";
 
 function stripAnsi(s: string): string {
   return s
@@ -107,7 +112,11 @@ export async function runAgentLoop(input: {
   /** Pre-fetched MCP resource context — pass from session cache to avoid re-fetching every turn. */
   resourceContext?: string | null;
   /** Pre-loaded project context (conventions/rules/skills) — pass from session cache. */
-  projectContext?: { conventions: string | null; rules: string | null; skills: string | null };
+  projectContext?: {
+    conventions: string | null;
+    rules: string | null;
+    skills: string | null;
+  };
 }): Promise<AgentLoopResult> {
   throwIfAborted(input.signal);
   let tools = (await input.toolClient.listChatTools()).filter(
@@ -119,15 +128,28 @@ export async function runAgentLoop(input: {
   let resourceContext: string | null = input.resourceContext ?? null;
   if (resourceContext === undefined) {
     try {
-      resourceContext = await abortable(fetchResourceContext(input.toolClient), input.signal);
-    } catch { /* non-blocking */ }
+      resourceContext = await abortable(
+        fetchResourceContext(input.toolClient),
+        input.signal,
+      );
+    } catch {
+      /* non-blocking */
+    }
     throwIfAborted(input.signal);
   }
 
   // Use caller-provided project context if available, otherwise load from cache.
-  let cachedCtx = input.projectContext ?? { conventions: null, rules: null, skills: null };
+  let cachedCtx = input.projectContext ?? {
+    conventions: null,
+    rules: null,
+    skills: null,
+  };
   if (!input.projectContext) {
-    try { cachedCtx = await getCachedContext(); } catch { /* non-blocking */ }
+    try {
+      cachedCtx = await getCachedContext();
+    } catch {
+      /* non-blocking */
+    }
   }
 
   const systemPrompt = [
@@ -135,28 +157,39 @@ export async function runAgentLoop(input: {
     input.systemContext,
     AGENT_SYSTEM_PROMPT,
     resourceContext,
-    cachedCtx.conventions ? `## Project Conventions\n\n${cachedCtx.conventions}` : null,
-    cachedCtx.rules       ? `## Project Rules\n\n${cachedCtx.rules}`             : null,
-    cachedCtx.skills      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}` : null,
-  ].filter(Boolean).join("\n\n");
+    cachedCtx.conventions
+      ? `## Project Conventions\n\n${cachedCtx.conventions}`
+      : null,
+    cachedCtx.rules ? `## Project Rules\n\n${cachedCtx.rules}` : null,
+    cachedCtx.skills
+      ? `## Project Skills & Workflows\n\n${cachedCtx.skills}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   // Observation masking: replace content of old messages with short placeholders so the
   // model focuses on recent context instead of being pulled into earlier tasks.
   // Keep the last MASK_KEEP_RECENT messages in full; mask everything older.
   const MASK_KEEP_RECENT = 10;
-  const maskedHistory: ChatMessage[] = input.history.length <= MASK_KEEP_RECENT
-    ? input.history
-    : input.history.map((msg, i) => {
-        if (i >= input.history.length - MASK_KEEP_RECENT) return msg;
-        // Mask assistant, tool_call, and tool messages with significant content
-        const contentLength = msg.content?.length ?? 0;
-        if (contentLength > 200) {
-          if (msg.role === "assistant" || msg.role === "tool_call" || msg.role === "tool") {
-            return { ...msg, content: "[earlier turn — masked for focus]" };
+  const maskedHistory: ChatMessage[] =
+    input.history.length <= MASK_KEEP_RECENT
+      ? input.history
+      : input.history.map((msg, i) => {
+          if (i >= input.history.length - MASK_KEEP_RECENT) return msg;
+          // Mask assistant, tool_call, and tool messages with significant content
+          const contentLength = msg.content?.length ?? 0;
+          if (contentLength > 200) {
+            if (
+              msg.role === "assistant" ||
+              msg.role === "tool_call" ||
+              msg.role === "tool"
+            ) {
+              return { ...msg, content: "[earlier turn — masked for focus]" };
+            }
           }
-        }
-        return msg;
-      });
+          return msg;
+        });
 
   // Strip orphaned tool messages and tool-call metadata from history.
   // Both sides of the pair must be present or absent — mixing causes provider errors:
@@ -166,7 +199,11 @@ export async function runAgentLoop(input: {
   const cleanHistory = maskedHistory
     .filter((msg) => msg.role !== "tool")
     .flatMap((msg) => {
-      if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      if (
+        msg.role === "assistant" &&
+        msg.toolCalls &&
+        msg.toolCalls.length > 0
+      ) {
         const { toolCalls: _dropped, ...rest } = msg;
         // Drop assistant messages that become empty after toolCalls removed —
         // providers reject empty content and such messages add no context.
@@ -175,8 +212,9 @@ export async function runAgentLoop(input: {
       }
       return [msg];
     });
-  let allMessages: ChatMessage[] = [...cleanHistory, input.userMessage].map((msg) =>
-    msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
+  let allMessages: ChatMessage[] = [...cleanHistory, input.userMessage].map(
+    (msg) =>
+      msg.role === "tool" ? { ...msg, content: stripAnsi(msg.content) } : msg,
   );
   const resultMessages: ChatMessage[] = [input.userMessage];
   let usedTools = false;
@@ -190,7 +228,9 @@ export async function runAgentLoop(input: {
   if (input.compactor) {
     allMessages = input.compactor.truncateToolResults(allMessages);
     const compacted = await abortable(
-      input.compactor.maybeCompact(allMessages, input.model, { reason: "auto_threshold" }),
+      input.compactor.maybeCompact(allMessages, input.model, {
+        reason: "auto_threshold",
+      }),
       input.signal,
     );
     if (compacted.compacted) allMessages = compacted.messages;
@@ -202,7 +242,9 @@ export async function runAgentLoop(input: {
     // Compact history if it is still growing too large during tool iterations.
     if (input.compactor && i > 0) {
       const compacted = await abortable(
-        input.compactor.maybeCompact(allMessages, input.model, { reason: "auto_threshold" }),
+        input.compactor.maybeCompact(allMessages, input.model, {
+          reason: "auto_threshold",
+        }),
         input.signal,
       );
       if (compacted.compacted) allMessages = compacted.messages;
@@ -212,10 +254,13 @@ export async function runAgentLoop(input: {
     const cleanedMessages = dropOrphanedToolMessages(allMessages);
     const droppedCount = allMessages.length - cleanedMessages.length;
     if (droppedCount > 0) {
-      console.warn("[agent-loop] dropped orphaned tool messages", { droppedCount, iteration: i });
+      console.warn("[agent-loop] dropped orphaned tool messages", {
+        droppedCount,
+        iteration: i,
+      });
     }
     const streamRequest = {
-      model: input.model,
+      model: HARDCODED_AGENT_MODEL,
       system: systemPrompt,
       messages: cleanedMessages,
       signal: input.signal,
@@ -226,6 +271,7 @@ export async function runAgentLoop(input: {
     let accumulatedReasoning = "";
     let streamToolCalls: ChatToolCall[] | undefined;
     try {
+      input.onDebug?.({ event: "stream_start", iteration: i });
       input.onDebug?.({
         event: "stream_request",
         model: streamRequest.model,
@@ -238,6 +284,18 @@ export async function runAgentLoop(input: {
         streamRequest,
         input.debug,
       )) {
+        input.onDebug?.({
+          event: "stream_chunk_received",
+          chunkIndex: chunkIdx,
+        });
+        input.onDebug?.({ event: "stream_chunk", chunkIndex: chunkIdx, chunk });
+        input.onDebug?.({
+          event: "stream_chunk_content",
+          chunkIndex: chunkIdx,
+          textLength: chunk.text?.length ?? 0,
+          toolCallCount: chunk.toolCalls?.length ?? 0,
+          text: chunk.text,
+        });
         throwIfAborted(input.signal);
         const debugInfo: Record<string, unknown> = {
           chunk: chunkIdx++,
@@ -291,7 +349,11 @@ export async function runAgentLoop(input: {
 
     if (!streamToolCalls || streamToolCalls.length === 0) {
       // No tool calls — final text response, done streaming
-      resultMessages.push({ role: "assistant", content: finalText, ...reasoningField });
+      resultMessages.push({
+        role: "assistant",
+        content: finalText,
+        ...reasoningField,
+      });
       return {
         text: finalText,
         messages: resultMessages,
@@ -307,7 +369,11 @@ export async function runAgentLoop(input: {
     usedTools = true;
 
     // Add assistant message with reasoning if present
-    const assistantMsg: ChatMessage = { role: "assistant", content: accumulated, ...reasoningField };
+    const assistantMsg: ChatMessage = {
+      role: "assistant",
+      content: accumulated,
+      ...reasoningField,
+    };
     allMessages.push(assistantMsg);
     resultMessages.push(assistantMsg);
 
@@ -331,7 +397,11 @@ export async function runAgentLoop(input: {
         }
       }
 
-      input.onToolStart?.(toolCall.function.name, toolCall.function.arguments, toolCall.id);
+      input.onToolStart?.(
+        toolCall.function.name,
+        toolCall.function.arguments,
+        toolCall.id,
+      );
 
       // Add tool_call message (interleaved - shows what the AI wants to call)
       const toolCallMsg: ChatMessage = {
@@ -345,10 +415,18 @@ export async function runAgentLoop(input: {
 
       let rawResult: string;
       try {
-        rawResult = await executeToolCall(input.toolClient, toolCall, input.confirmEdit, input.signal);
+        rawResult = await executeToolCall(
+          input.toolClient,
+          toolCall,
+          input.confirmEdit,
+          input.signal,
+        );
       } catch (err) {
         if (isUserRejectedError(err)) {
-          const message = err instanceof Error ? err.message : `User rejected ${toolCall.function.name}. Stream stopped.`;
+          const message =
+            err instanceof Error
+              ? err.message
+              : `User rejected ${toolCall.function.name}. Stream stopped.`;
           input.cancelTaskStream?.(message);
           resultMessages.push({ role: "assistant", content: message });
           shouldBreak = true;
@@ -358,19 +436,32 @@ export async function runAgentLoop(input: {
       }
       throwIfAborted(input.signal);
       if (shouldRefreshWorkspaceCommitsAfterTool(toolCall.function.name)) {
-        await refreshWorkspaceCommitsAfterCloudImportTool(input.onRefreshWorkspaceCommits, input.signal);
+        await refreshWorkspaceCommitsAfterCloudImportTool(
+          input.onRefreshWorkspaceCommits,
+          input.signal,
+        );
       }
       throwIfAborted(input.signal);
       const result = stripAnsi(rawResult);
       const uiResult = formatToolUiResult(toolCall.function.name, result);
       const uiLimit = isFileWriteTool(toolCall.function.name) ? 1_200 : 500;
-      const truncatedResult = uiResult.length > uiLimit ? uiResult.slice(0, uiLimit) + "\n..." : uiResult;
+      const truncatedResult =
+        uiResult.length > uiLimit
+          ? uiResult.slice(0, uiLimit) + "\n..."
+          : uiResult;
       input.onToolResult?.(toolCall.function.name, truncatedResult);
 
       // Track consecutive tool failures — including blocked bash writes so the model doesn't retry loops.
-      const isConflict = result.includes("conflict") || result.includes("FAILED") || result.includes("not_found") || result.includes("[BASH_WRITE_BLOCKED]");
+      const isConflict =
+        result.includes("conflict") ||
+        result.includes("FAILED") ||
+        result.includes("not_found") ||
+        result.includes("[BASH_WRITE_BLOCKED]");
       if (isConflict) {
-        lastFailedTool = { name: toolCall.function.name, args: toolCall.function.arguments };
+        lastFailedTool = {
+          name: toolCall.function.name,
+          args: toolCall.function.arguments,
+        };
       } else {
         lastFailedTool = null;
         consecutiveFailures = 0;
@@ -378,10 +469,17 @@ export async function runAgentLoop(input: {
 
       // allMessages: full result for current turn (hard cap at 2MB to prevent API body-limit errors).
       const MAX_TOOL_RESULT_CHARS = 2_000_000;
-      const cappedResult = result.length > MAX_TOOL_RESULT_CHARS
-        ? result.slice(0, MAX_TOOL_RESULT_CHARS) + `\n\n[Output truncated — full output was ${result.length.toLocaleString()} chars]`
-        : result;
-      const toolResultMsg: ChatMessage = { role: "tool", name: toolCall.function.name, toolCallId: toolCall.id, content: cappedResult };
+      const cappedResult =
+        result.length > MAX_TOOL_RESULT_CHARS
+          ? result.slice(0, MAX_TOOL_RESULT_CHARS) +
+            `\n\n[Output truncated — full output was ${result.length.toLocaleString()} chars]`
+          : result;
+      const toolResultMsg: ChatMessage = {
+        role: "tool",
+        name: toolCall.function.name,
+        toolCallId: toolCall.id,
+        content: cappedResult,
+      };
       allMessages.push(toolResultMsg);
       resultMessages.push(toolResultMsg);
 
@@ -391,7 +489,10 @@ export async function runAgentLoop(input: {
     }
 
     if (!shouldBreak && iterationSummaryParts.length > 0) {
-      resultMessages.push({ role: "assistant", content: iterationSummaryParts.join("\n") });
+      resultMessages.push({
+        role: "assistant",
+        content: iterationSummaryParts.join("\n"),
+      });
     }
     if (shouldBreak) break;
 
@@ -400,7 +501,7 @@ export async function runAgentLoop(input: {
   }
 
   const limitMsg = shouldBreak
-    ? resultMessages[resultMessages.length - 1]?.content ?? "Stopped."
+    ? (resultMessages[resultMessages.length - 1]?.content ?? "Stopped.")
     : `Hit safety limit (${MAX_AGENT_TOOL_ITERATIONS} iterations). This likely indicates a runaway loop — try a narrower task.`;
 
   return {
@@ -471,9 +572,7 @@ async function runConfirmedEditTool(
   const preview = dryRunPreview || renderEditDiffPreview(name, args);
 
   // Use Ink-native confirm callback, or auto-approve if no callback (non-TUI mode)
-  const approved = confirmEdit
-    ? await confirmEdit(name, args, preview)
-    : true;
+  const approved = confirmEdit ? await confirmEdit(name, args, preview) : true;
   throwIfAborted(signal);
 
   if (!approved) {
@@ -538,7 +637,8 @@ function renderEditDiffPreview(
     const patch = typeof args.patch === "string" ? args.patch : null;
     if (patch) return patch;
 
-    const base64Patch = typeof args.base64_patch === "string" ? args.base64_patch : null;
+    const base64Patch =
+      typeof args.base64_patch === "string" ? args.base64_patch : null;
     if (base64Patch) return `[base64 patch]\n${base64Patch}`;
   }
 
@@ -565,7 +665,9 @@ function dropOrphanedToolMessages(messages: ChatMessage[]): ChatMessage[] {
     }
   }
   return messages.filter(
-    (msg) => msg.role !== "tool" || (!!msg.toolCallId && pairedIds.has(msg.toolCallId)),
+    (msg) =>
+      msg.role !== "tool" ||
+      (!!msg.toolCallId && pairedIds.has(msg.toolCallId)),
   );
 }
 
@@ -576,23 +678,32 @@ function createAbortError(): Error {
 }
 
 export function createUserRejectedError(toolName: string): Error {
-  const err = Object.assign(new Error(`User rejected ${toolName}. Stream stopped.`), {
-    name: "UserRejectedError",
-    code: "USER_REJECTED",
-  });
+  const err = Object.assign(
+    new Error(`User rejected ${toolName}. Stream stopped.`),
+    {
+      name: "UserRejectedError",
+      code: "USER_REJECTED",
+    },
+  );
   return err;
 }
 
 export function isUserRejectedError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  return err.name === "UserRejectedError" || (err as { code?: string }).code === "USER_REJECTED";
+  return (
+    err.name === "UserRejectedError" ||
+    (err as { code?: string }).code === "USER_REJECTED"
+  );
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw createAbortError();
 }
 
-async function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+async function abortable<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
   throwIfAborted(signal);
   if (!signal) return promise;
   let cleanup: (() => void) | undefined;

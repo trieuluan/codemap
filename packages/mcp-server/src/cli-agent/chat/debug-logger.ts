@@ -80,6 +80,9 @@ export function createDebugLogger() {
     }) {
       write({ type: "summary", ...info });
     },
+    logDebugInfo(info: Record<string, unknown>) {
+      write({ type: "debug_info", ...info });
+    },
   };
 }
 
