@@ -9,6 +9,11 @@ import type {
   ProviderHealth,
   TokenUsage,
 } from "./types.js";
+import {
+  buildQwenToolPrompt,
+  extractQwenXmlToolCalls,
+  isQwenToolModel,
+} from "./qwen-tool-calls.js";
 
 interface ChatCompletionResponse {
   model?: string;
@@ -47,25 +52,28 @@ export class NineRouterProvider implements GatewayProvider {
   readonly name = "9router";
 
   constructor(
-    private readonly baseUrl: string,
-    private readonly apiKey: string | undefined,
+    private readonly _baseUrl: string,
+    private readonly _apiKey: string | undefined,
   ) {}
+
+  get baseUrl(): string { return this._baseUrl; }
+  get apiKey(): string | undefined { return this._apiKey; }
 
   async healthCheck(): Promise<ProviderHealth> {
     try {
-      const response = await fetch(`${this.baseUrl}/models`, {
+      const response = await fetch(`${this._baseUrl}/models`, {
         method: "GET",
         headers: this.buildHeaders(),
       });
       if (response.ok) {
         return {
           ok: true,
-          message: `${this.name} reachable at ${this.baseUrl}`,
+          message: `${this.name} reachable at ${this._baseUrl}`,
         };
       }
       return {
         ok: false,
-        message: `${this.name} returned HTTP ${response.status} from ${this.baseUrl}/models`,
+        message: `${this.name} returned HTTP ${response.status} from ${this._baseUrl}/models`,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -79,7 +87,7 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   async listModelDetails(): Promise<GatewayModel[]> {
-    const response = await fetch(`${this.baseUrl}/models`, {
+    const response = await fetch(`${this._baseUrl}/models`, {
       method: "GET",
       headers: this.buildHeaders(),
     });
@@ -98,14 +106,16 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
-    const url = `${this.baseUrl}/chat/completions`;
+    const url = `${this._baseUrl}/chat/completions`;
     const headers = {
       ...this.buildHeaders(),
       "content-type": "application/json",
     };
+    const qwenXml = isQwenToolModel(request.model);
+    const system = buildProviderSystemPrompt(request, qwenXml);
     const requestBody = JSON.stringify({
       model: request.model,
-      ...(request.system ? { system: request.system } : {}),
+      ...(system ? { system } : {}),
       messages: buildMessages(request),
       temperature: request.temperature ?? 0.2,
       max_tokens: request.maxTokens,
@@ -140,11 +150,17 @@ export class NineRouterProvider implements GatewayProvider {
     const body = parseCompletionBody(raw) as ChatCompletionResponse;
     const message = body.choices?.[0]?.message;
     const text = message?.content ?? body.choices?.[0]?.text ?? "";
+    const nativeToolCalls = normalizeToolCalls(message?.tool_calls ?? message?.toolCalls);
+    const qwenParsed = !nativeToolCalls && qwenXml
+      ? extractQwenXmlToolCalls(text, allowedToolNames(request.tools))
+      : null;
     return {
-      text,
+      text: qwenParsed
+        ? withUnknownToolDiagnostics(qwenParsed.visibleText, qwenParsed.unknownToolNames, request.tools)
+        : text,
       model: body.model ?? request.model,
       provider: this.name,
-      toolCalls: normalizeToolCalls(message?.tool_calls ?? message?.toolCalls),
+      toolCalls: nativeToolCalls ?? qwenParsed?.toolCalls,
     };
   }
 
@@ -152,14 +168,16 @@ export class NineRouterProvider implements GatewayProvider {
     request: CompletionRequest,
     _debug?: boolean,
   ): AsyncGenerator<CompletionStreamChunk> {
-    const url = `${this.baseUrl}/chat/completions`;
+    const url = `${this._baseUrl}/chat/completions`;
     const headers = {
       ...this.buildHeaders(),
       "content-type": "application/json",
     };
+    const qwenXml = isQwenToolModel(request.model);
+    const system = buildProviderSystemPrompt(request, qwenXml);
     const body = JSON.stringify({
       model: request.model,
-      ...(request.system ? { system: request.system } : {}),
+      ...(system ? { system } : {}),
       messages: buildMessages(request),
       temperature: request.temperature ?? 0.2,
       max_tokens: request.maxTokens,
@@ -202,6 +220,7 @@ export class NineRouterProvider implements GatewayProvider {
       number,
       { id: string; name: string; arguments: string }
     >();
+    let qwenTextBuffer = "";
     let model: string | undefined;
 
     try {
@@ -220,6 +239,31 @@ export class NineRouterProvider implements GatewayProvider {
           if (tc.name) entry.name = tc.name;
           if (tc.arguments) entry.arguments += tc.arguments;
           return undefined; // don't yield yet
+        }
+        if (qwenXml && parsed.text) {
+          const extracted = extractQwenXmlToolCalls(
+            qwenTextBuffer + parsed.text,
+            allowedToolNames(request.tools),
+          );
+          qwenTextBuffer = extracted.incompleteRemainder;
+          const visibleText = withUnknownToolDiagnostics(
+            extracted.visibleText,
+            extracted.unknownToolNames,
+            request.tools,
+          );
+          if (extracted.toolCalls.length > 0) {
+            return {
+              ...parsed,
+              text: extracted.unknownToolNames.length > 0 ? visibleText : "",
+              toolCalls: extracted.toolCalls,
+              done: true,
+            };
+          }
+          if (visibleText !== parsed.text || qwenTextBuffer) {
+            return visibleText || parsed.reasoning || parsed.usage
+              ? { ...parsed, text: visibleText }
+              : undefined;
+          }
         }
         return parsed;
       };
@@ -255,6 +299,31 @@ export class NineRouterProvider implements GatewayProvider {
         if (result) yield result;
       }
 
+      if (qwenTextBuffer) {
+        const extracted = extractQwenXmlToolCalls(
+          qwenTextBuffer,
+          allowedToolNames(request.tools),
+        );
+        qwenTextBuffer = extracted.incompleteRemainder;
+        const visibleText = withUnknownToolDiagnostics(
+          extracted.visibleText,
+          extracted.unknownToolNames,
+          request.tools,
+        );
+        if (visibleText || extracted.toolCalls.length > 0) {
+          yield {
+            text: extracted.toolCalls.length > 0 && extracted.unknownToolNames.length === 0
+              ? ""
+              : visibleText,
+            model,
+            provider: this.name,
+            ...(extracted.toolCalls.length > 0
+              ? { toolCalls: extracted.toolCalls, done: true }
+              : {}),
+          };
+        }
+      }
+
       yield* finalizeToolCalls(toolCallsByIdx, model);
     } finally {
       reader.releaseLock();
@@ -262,8 +331,8 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    if (!this.apiKey) return {};
-    return { authorization: `Bearer ${this.apiKey}` };
+    if (!this._apiKey) return {};
+    return { authorization: `Bearer ${this._apiKey}` };
   }
 }
 
@@ -326,6 +395,33 @@ function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
           : {}),
       };
     });
+}
+
+function buildProviderSystemPrompt(
+  request: CompletionRequest,
+  qwenXml: boolean,
+): string | undefined {
+  if (!qwenXml || !request.tools || request.tools.length === 0) {
+    return request.system;
+  }
+  return [request.system, buildQwenToolPrompt(request.tools)].filter(Boolean).join("\n\n");
+}
+
+function allowedToolNames(tools: ChatToolDefinition[] | undefined): string[] {
+  return tools?.map((tool) => tool.function.name) ?? [];
+}
+
+function withUnknownToolDiagnostics(
+  text: string,
+  unknownToolNames: string[],
+  tools: ChatToolDefinition[] | undefined,
+): string {
+  if (unknownToolNames.length === 0) return text;
+  const available = allowedToolNames(tools).join(", ");
+  const diagnostics = Array.from(new Set(unknownToolNames)).map(
+    (name) => `Model requested unknown tool "${name}"; available tools are: ${available || "(none)"}.`,
+  );
+  return [text, ...diagnostics].filter(Boolean).join("\n");
 }
 
 function parseStreamLine(

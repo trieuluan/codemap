@@ -50,6 +50,9 @@ approval_mode = "approve"
 [mcp_servers.codemap-mcp-dev.tools.find_usages]
 approval_mode = "approve"
 
+[mcp_servers.codemap-mcp-dev.tools.web_search]
+approval_mode = "approve"
+
 [mcp_servers.codemap_mcp_dev]
 args = [
     "tsx",

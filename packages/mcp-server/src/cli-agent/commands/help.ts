@@ -11,7 +11,7 @@ Usage:
   codemap status
   codemap route "fix a failing migration" [--mode local-only|cloud-ok]
   codemap ask "Say hi" [--model fast|strong|local]
-  codemap chat [--model fast|strong|local] [--mode local-only|cloud-ok] [--no-stream]
+  codemap chat [--model fast|strong|local] [--mode local-only|cloud-ok] [--ui tui|classic|inline|mastra]
 
 Environment:
   CODEMAP_LLM_GATEWAY_BASE_URL       OpenAI-compatible base URL. Default: http://localhost:4000/v1

@@ -1,9 +1,16 @@
 packages:
   - "packages/*"
 allowBuilds:
+  '@google/genai': true
+  agent-browser: true
   argon2: true
+  bufferutil: true
+  edgedriver: true
   esbuild: true
+  geckodriver: true
   koffi: true
   msgpackr-extract: true
+  onnxruntime-node: true
+  protobufjs: true
   sharp: true
   tree-sitter-python: true

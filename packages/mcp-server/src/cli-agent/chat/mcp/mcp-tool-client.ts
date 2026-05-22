@@ -47,15 +47,21 @@ export class CodeMapMcpToolClient {
   private defaultConn: McpServerConnection;
   private extraConns: Map<string, McpServerConnection> = new Map();
   private connectionErrors: Map<string, string> = new Map();
+  private _serverConfig: { command: string; args: string[]; env: Record<string, string> };
 
   constructor() {
     const runtime = resolvePackageRuntime();
     const codemapServer = resolveServerCommand(runtime);
-    this.defaultConn = new McpServerConnection("codemap", {
+    this._serverConfig = {
       command: codemapServer.command,
       args: codemapServer.args,
       env: { CODEMAP_TOOL_MODE: "full" },
-    });
+    };
+    this.defaultConn = new McpServerConnection("codemap", this._serverConfig);
+  }
+
+  getServerConfig(): { command: string; args: string[]; env: Record<string, string> } {
+    return this._serverConfig;
   }
 
   async connectExtras(): Promise<void> {

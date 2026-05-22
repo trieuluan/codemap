@@ -4,11 +4,14 @@ import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
 import { getCachedContext } from "../../convention-synthesizer.js";
 import {
-  runAgentLoop,
   type ConfirmEditFn,
   isUserRejectedError,
 } from "../agent/agent-loop.js";
-import { runMultiPhaseAgentLoop } from "../agent/multi-phase-loop.js";
+import {
+  runMultiPhaseAgentRuntime,
+  runSingleAgentRuntime,
+  type ChatUiMode,
+} from "../runtime/cli-runtime.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
 import {
@@ -342,6 +345,7 @@ interface ChatTerminalOptions {
   availableModels?: string[];
   apiToken?: string; // from McpServerConfig — used to detect unauthenticated state
   mcpConfig?: import("../../../config.js").McpServerConfig;
+  uiMode?: ChatUiMode;
 }
 
 export class ChatTerminal {
@@ -597,8 +601,20 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
       });
 
-    const mode = process.env.CODEMAP_RENDER ?? "tui";
-    if (mode === "tui") {
+    const mode = this.options.uiMode ?? process.env.CODEMAP_RENDER ?? "tui";
+    if (mode === "mastra") {
+      const { startMastraTuiPrototype } = await import(
+        "../runtime/mastra-tui-prototype.js"
+      );
+      const result = await startMastraTuiPrototype();
+      if (result.started) return;
+      this.appendMessage({
+        role: "system",
+        content: `MastraTUI prototype unavailable — falling back to CodeMap TUI.\n${result.reason ?? ""}`.trim(),
+      });
+    }
+
+    if (mode === "tui" || mode === "mastra") {
       const { startPiTuiApp } = await import("./pi-tui-app.js");
       await startPiTuiApp(this);
     } else if (mode === "classic") {
@@ -951,14 +967,14 @@ export class ChatTerminal {
           return coderProfile?.model;
         })() ?? this.store.getState().config.model;
 
-      // Fetch session-level caches once — reused across all runAgentLoop calls this turn.
+      // Fetch session-level caches once — reused across all agent calls this turn.
       const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
         this.getSessionResourceContext(taskAbort.signal),
         this.getSessionProjectContext(),
       ]);
 
       const result = useMultiPhase
-        ? await runMultiPhaseAgentLoop({
+        ? await runMultiPhaseAgentRuntime({
             provider: this.options.provider,
 
             coderModel: coderProfile!.model,
@@ -1012,7 +1028,7 @@ export class ChatTerminal {
             onPlanWait: () => this.waitForPlanReview(),
             ...sharedCallbacks,
           })
-        : await runAgentLoop({
+        : await runSingleAgentRuntime({
             provider: this.options.provider,
             model: singlePhaseModel,
             history: pruneToPreviousTaskBoundary(
@@ -1107,7 +1123,7 @@ export class ChatTerminal {
           ...historyMessages,
           boundaryMarker,
         ];
-        // runAgentLoop compacts the request-local message list before provider calls,
+        // The agent compacts the request-local message list before provider calls,
         // but the persisted session history is rebuilt here from the store plus the
         // latest result messages. Compact this canonical history too; otherwise the
         // status panel can show >100% usage even though auto-compact fired inside the

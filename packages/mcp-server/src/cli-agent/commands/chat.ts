@@ -1,6 +1,7 @@
 import type { GatewayCommandContext } from "../command-context.js";
 import { CodeMapMcpToolClient } from "../chat/mcp/mcp-tool-client.js";
 import { selectChatProfile } from "../chat/commands/profiles.js";
+import type { ChatUiMode } from "../chat/runtime/cli-runtime.js";
 import { NineRouterProvider } from "../provider.js";
 import type { GatewayConfig } from "../types.js";
 import { printGatewayHint } from "./gateway-hint.js";
@@ -10,6 +11,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const provider = new NineRouterProvider(ctx.config.baseUrl, ctx.config.apiKey);
   const availableModels = await loadGatewayModels(ctx.config, provider);
   const profile = selectChatProfile(ctx.config, ctx.flags.model);
+  const uiMode = parseUiMode(ctx.flags.ui);
   const toolClient = new CodeMapMcpToolClient();
 
   await toolClient.connectExtras();
@@ -26,6 +28,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       availableModels,
       apiToken: mcpConfig.apiToken ?? undefined,
       mcpConfig,
+      uiMode,
     });
     await terminal.start();
   } catch (err) {
@@ -35,6 +38,18 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   } finally {
     await toolClient.close();
   }
+}
+
+function parseUiMode(value: string | undefined): ChatUiMode | undefined {
+  if (
+    value === "tui" ||
+    value === "classic" ||
+    value === "inline" ||
+    value === "mastra"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 async function loadGatewayModels(config: GatewayConfig, provider: NineRouterProvider): Promise<string[]> {
