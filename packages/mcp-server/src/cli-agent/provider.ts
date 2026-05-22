@@ -1,4 +1,18 @@
+import { createOpenAI } from "@ai-sdk/openai";
+import {
+  generateText,
+  jsonSchema,
+  streamText,
+  tool,
+  type LanguageModelUsage,
+  type ModelMessage,
+  type TextStreamPart,
+  type ToolChoice,
+  type ToolSet,
+  type TypedToolCall,
+} from "ai";
 import type {
+  ChatMessage,
   ChatToolCall,
   ChatToolDefinition,
   CompletionRequest,
@@ -9,44 +23,6 @@ import type {
   ProviderHealth,
   TokenUsage,
 } from "./types.js";
-import {
-  buildQwenToolPrompt,
-  extractQwenXmlToolCalls,
-  isQwenToolModel,
-} from "./qwen-tool-calls.js";
-
-interface ChatCompletionResponse {
-  model?: string;
-  choices?: Array<{
-    message?: {
-      content?: string;
-      tool_calls?: ChatToolCall[];
-      toolCalls?: ChatToolCall[];
-    };
-    text?: string;
-  }>;
-}
-
-interface ChatCompletionStreamResponse {
-  model?: string;
-  choices?: Array<{
-    delta?: {
-      content?: string;
-      reasoning_content?: string;
-      tool_calls?: Array<{
-        index?: number;
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }>;
-    };
-    text?: string;
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-}
 
 export class NineRouterProvider implements GatewayProvider {
   readonly name = "9router";
@@ -106,228 +82,93 @@ export class NineRouterProvider implements GatewayProvider {
   }
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
-    const url = `${this._baseUrl}/chat/completions`;
-    const headers = {
-      ...this.buildHeaders(),
-      "content-type": "application/json",
-    };
-    const qwenXml = isQwenToolModel(request.model);
-    const system = buildProviderSystemPrompt(request, qwenXml);
-    const requestBody = JSON.stringify({
-      model: request.model,
-      ...(system ? { system } : {}),
-      messages: buildMessages(request),
-      temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens,
-      tools: sanitizeTools(request.tools),
-      tool_choice: request.toolChoice,
-    });
-
-    let response: Response;
     try {
-      response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: requestBody,
-        signal: request.signal,
+      const result = await generateText({
+        model: this.model(request.model),
+        system: request.system,
+        messages: buildModelMessages(request.messages),
+        temperature: request.temperature ?? 0.2,
+        maxOutputTokens: request.maxTokens,
+        tools: buildAiTools(request.tools),
+        toolChoice: buildToolChoice(request.toolChoice),
+        abortSignal: request.signal,
       });
+
+      return {
+        text: result.text,
+        model: request.model,
+        provider: this.name,
+        toolCalls: normalizeAiToolCalls(result.toolCalls),
+      };
     } catch (err) {
       if (request.signal?.aborted || isAbortError(err)) throw createAbortError();
-      const cause = err instanceof Error && "cause" in err
-        ? ` (cause: ${JSON.stringify(err.cause)})`
-        : "";
-      throw new Error(
-        `Complete fetch failed: ${url} — ${err instanceof Error ? err.message : String(err)}${cause}`,
-      );
+      throw err;
     }
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Completion failed: HTTP ${response.status} ${text}`);
-    }
-
-    const raw = await response.text();
-    const body = parseCompletionBody(raw) as ChatCompletionResponse;
-    const message = body.choices?.[0]?.message;
-    const text = message?.content ?? body.choices?.[0]?.text ?? "";
-    const nativeToolCalls = normalizeToolCalls(message?.tool_calls ?? message?.toolCalls);
-    const qwenParsed = !nativeToolCalls && qwenXml
-      ? extractQwenXmlToolCalls(text, allowedToolNames(request.tools))
-      : null;
-    return {
-      text: qwenParsed
-        ? withUnknownToolDiagnostics(qwenParsed.visibleText, qwenParsed.unknownToolNames, request.tools)
-        : text,
-      model: body.model ?? request.model,
-      provider: this.name,
-      toolCalls: nativeToolCalls ?? qwenParsed?.toolCalls,
-    };
   }
 
   async *stream(
     request: CompletionRequest,
     _debug?: boolean,
   ): AsyncGenerator<CompletionStreamChunk> {
-    const url = `${this._baseUrl}/chat/completions`;
-    const headers = {
-      ...this.buildHeaders(),
-      "content-type": "application/json",
-    };
-    const qwenXml = isQwenToolModel(request.model);
-    const system = buildProviderSystemPrompt(request, qwenXml);
-    const body = JSON.stringify({
-      model: request.model,
-      ...(system ? { system } : {}),
-      messages: buildMessages(request),
-      temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens,
-      stream: true,
-      tools: sanitizeTools(request.tools),
-      stream_options: { include_usage: true },
-    });
-
-    let response: Response;
+    let result: ReturnType<typeof streamText<ToolSet>>;
     try {
-      response = await fetch(url, {
-        method: "POST",
-        headers,
-        body,
-        signal: request.signal,
+      result = streamText({
+        model: this.model(request.model),
+        system: request.system,
+        messages: buildModelMessages(request.messages),
+        temperature: request.temperature ?? 0.2,
+        maxOutputTokens: request.maxTokens,
+        tools: buildAiTools(request.tools),
+        toolChoice: buildToolChoice(request.toolChoice),
+        abortSignal: request.signal,
       });
     } catch (err) {
       if (request.signal?.aborted || isAbortError(err)) throw createAbortError();
-      const cause = err instanceof Error && "cause" in err
-        ? ` (cause: ${JSON.stringify(err.cause)})`
-        : "";
-      throw new Error(
-        `Stream fetch failed: ${url} — ${err instanceof Error ? err.message : String(err)}${cause}`,
-      );
+      throw err;
     }
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Completion failed: HTTP ${response.status} ${text}`);
-    }
-    if (!response.body) {
-      throw new Error("Completion stream failed: response body is empty.");
-    }
-
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    const toolCallsByIdx = new Map<
-      number,
-      { id: string; name: string; arguments: string }
-    >();
-    let qwenTextBuffer = "";
-    let model: string | undefined;
 
     try {
-      const emitLine = (line: string): CompletionStreamChunk | "done" | undefined => {
-        const parsed = parseStreamLine(line);
-        if (parsed === "done" || !parsed) return parsed;
-        if (parsed.model) model = parsed.model;
-        if (parsed.toolCallDelta) {
-          const tc = parsed.toolCallDelta;
-          const idx = tc.index ?? 0;
-          if (!toolCallsByIdx.has(idx)) {
-            toolCallsByIdx.set(idx, { id: "", name: "", arguments: "" });
-          }
-          const entry = toolCallsByIdx.get(idx)!;
-          if (tc.id) entry.id = tc.id;
-          if (tc.name) entry.name = tc.name;
-          if (tc.arguments) entry.arguments += tc.arguments;
-          return undefined; // don't yield yet
-        }
-        if (qwenXml && parsed.text) {
-          const extracted = extractQwenXmlToolCalls(
-            qwenTextBuffer + parsed.text,
-            allowedToolNames(request.tools),
-          );
-          qwenTextBuffer = extracted.incompleteRemainder;
-          const visibleText = withUnknownToolDiagnostics(
-            extracted.visibleText,
-            extracted.unknownToolNames,
-            request.tools,
-          );
-          if (extracted.toolCalls.length > 0) {
-            return {
-              ...parsed,
-              text: extracted.unknownToolNames.length > 0 ? visibleText : "",
-              toolCalls: extracted.toolCalls,
-              done: true,
-            };
-          }
-          if (visibleText !== parsed.text || qwenTextBuffer) {
-            return visibleText || parsed.reasoning || parsed.usage
-              ? { ...parsed, text: visibleText }
-              : undefined;
-          }
-        }
-        return parsed;
-      };
-
-      while (true) {
+      let emittedToolCalls = false;
+      for await (const part of result.fullStream) {
         throwIfAborted(request.signal);
-        const { done, value } = await reader.read();
-        throwIfAborted(request.signal);
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          throwIfAborted(request.signal);
-          const result = emitLine(line);
-          if (result === "done") {
-            yield* finalizeToolCalls(toolCallsByIdx, model);
-            return;
-          }
-          if (result) yield result;
-        }
+        const chunk = streamPartToChunk(part, request.model, this.name);
+        if (chunk?.toolCalls?.length) emittedToolCalls = true;
+        if (chunk) yield chunk;
       }
 
-      buffer += decoder.decode();
-      for (const line of buffer.split(/\r?\n/)) {
-        throwIfAborted(request.signal);
-        const result = emitLine(line);
-        if (result === "done") {
-          yield* finalizeToolCalls(toolCallsByIdx, model);
-          return;
-        }
-        if (result) yield result;
+      let usage: LanguageModelUsage | undefined;
+      try { usage = await result.usage; } catch { usage = undefined; }
+      let toolCalls: Array<TypedToolCall<ToolSet>> = [];
+      try { toolCalls = await result.toolCalls; } catch { toolCalls = []; }
+      if (!emittedToolCalls && toolCalls.length > 0) {
+        yield {
+          text: "",
+          model: request.model,
+          provider: this.name,
+          toolCalls: normalizeAiToolCalls(toolCalls),
+          done: true,
+        };
       }
-
-      if (qwenTextBuffer) {
-        const extracted = extractQwenXmlToolCalls(
-          qwenTextBuffer,
-          allowedToolNames(request.tools),
-        );
-        qwenTextBuffer = extracted.incompleteRemainder;
-        const visibleText = withUnknownToolDiagnostics(
-          extracted.visibleText,
-          extracted.unknownToolNames,
-          request.tools,
-        );
-        if (visibleText || extracted.toolCalls.length > 0) {
-          yield {
-            text: extracted.toolCalls.length > 0 && extracted.unknownToolNames.length === 0
-              ? ""
-              : visibleText,
-            model,
-            provider: this.name,
-            ...(extracted.toolCalls.length > 0
-              ? { toolCalls: extracted.toolCalls, done: true }
-              : {}),
-          };
-        }
+      if (usage) {
+        yield {
+          text: "",
+          model: request.model,
+          provider: this.name,
+          usage: normalizeUsage(usage),
+        };
       }
-
-      yield* finalizeToolCalls(toolCallsByIdx, model);
-    } finally {
-      reader.releaseLock();
+    } catch (err) {
+      if (request.signal?.aborted || isAbortError(err)) throw createAbortError();
+      throw err;
     }
+  }
+
+  private model(modelId: string | undefined) {
+    return createOpenAI({
+      baseURL: this._baseUrl,
+      apiKey: this._apiKey,
+      name: this.name,
+    }).chat(modelId ?? "gpt-4.1");
   }
 
   private buildHeaders(): Record<string, string> {
@@ -342,8 +183,8 @@ const INLINE_IMAGE_RE = /!\[([^\]]*)\]\((data:image\/([^;]+);base64,([a-zA-Z0-9+
 // Convert a message content string that may contain inline base64 images into
 // an OpenAI-compatible multimodal content array. If no images are found the
 // original string is returned so non-vision models are unaffected.
-function toMultimodalContent(text: string): string | unknown[] {
-  const parts: unknown[] = [];
+function toMultimodalContent(text: string): string | Array<Record<string, unknown>> {
+  const parts: Array<Record<string, unknown>> = [];
   let last = 0;
   let match: RegExpExecArray | null;
 
@@ -355,162 +196,144 @@ function toMultimodalContent(text: string): string | unknown[] {
     const mimeType = `image/${match[3]}`;
     const base64 = match[4]!.replace(/\s+/g, "");
     parts.push({
-      type: "image_url",
-      image_url: { url: `data:${mimeType};base64,${base64}`, detail: "auto" },
+      type: "image",
+      image: `data:${mimeType};base64,${base64}`,
     });
 
     last = match.index + match[0].length;
   }
 
-  if (parts.length === 0) return text; // no images — keep as string
+  if (parts.length === 0) return text;
 
   const remaining = text.slice(last).trim();
   if (remaining) parts.push({ type: "text", text: remaining });
   return parts;
 }
 
-function buildMessages(request: CompletionRequest): Record<string, unknown>[] {
-  const messages = request.messages;
+function buildModelMessages(messages: ChatMessage[]): ModelMessage[] {
   return messages
-    .filter((message) => message.role !== "tool_call")  // tool_call is UI-only, not sent to provider
-    .map((message) => {
-      if (message.role === "tool") {
-        return {
-          role: "tool",
-          content: message.content,
-          tool_call_id: message.toolCallId,
-          name: message.name,
-        };
+    .filter((message) => message.role !== "tool_call")
+    .flatMap((message): ModelMessage[] => {
+      if (message.role === "system") {
+        return [{ role: "system", content: message.content }];
       }
-
-      const content = toMultimodalContent(message.content);
-      return {
-        role: message.role,
-        // Omit content when empty and tool_calls are present — some providers (e.g. claude)
-        // drop the assistant message entirely if content is an empty string, creating orphaned
-        // tool results on the next turn.
-        ...(content !== "" && content !== null ? { content } : {}),
-        ...(message.toolCalls && message.toolCalls.length > 0
-          ? { tool_calls: message.toolCalls }
-          : {}),
-      };
+      if (message.role === "user") {
+        return [{ role: "user", content: toMultimodalContent(message.content) } as ModelMessage];
+      }
+      if (message.role === "assistant") {
+        return [{
+          role: "assistant",
+          content: message.content,
+          ...(message.toolCalls?.length ? { toolCalls: message.toolCalls.map(toAiToolCall) } : {}),
+        } as ModelMessage];
+      }
+      if (message.role === "tool") {
+        return [{
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: message.toolCallId ?? "",
+              toolName: message.name ?? "tool",
+              output: { type: "text", value: message.content },
+            },
+          ],
+        } as ModelMessage];
+      }
+      return [];
     });
 }
 
-function buildProviderSystemPrompt(
-  request: CompletionRequest,
-  qwenXml: boolean,
-): string | undefined {
-  if (!qwenXml || !request.tools || request.tools.length === 0) {
-    return request.system;
-  }
-  return [request.system, buildQwenToolPrompt(request.tools)].filter(Boolean).join("\n\n");
+function buildAiTools(tools: ChatToolDefinition[] | undefined): ToolSet | undefined {
+  if (!tools || tools.length === 0) return undefined;
+  return Object.fromEntries(
+    tools.map((definition) => [
+      definition.function.name,
+      tool({
+        description: definition.function.description,
+        inputSchema: jsonSchema(
+          definition.function.parameters ?? { type: "object", properties: {} },
+        ),
+      }),
+    ]),
+  ) as ToolSet;
 }
 
-function allowedToolNames(tools: ChatToolDefinition[] | undefined): string[] {
-  return tools?.map((tool) => tool.function.name) ?? [];
+function buildToolChoice(
+  choice: CompletionRequest["toolChoice"],
+): ToolChoice<ToolSet> | undefined {
+  if (!choice) return undefined;
+  if (choice === "auto" || choice === "none") return choice;
+  return { type: "tool", toolName: choice.function.name };
 }
 
-function withUnknownToolDiagnostics(
-  text: string,
-  unknownToolNames: string[],
-  tools: ChatToolDefinition[] | undefined,
-): string {
-  if (unknownToolNames.length === 0) return text;
-  const available = allowedToolNames(tools).join(", ");
-  const diagnostics = Array.from(new Set(unknownToolNames)).map(
-    (name) => `Model requested unknown tool "${name}"; available tools are: ${available || "(none)"}.`,
-  );
-  return [text, ...diagnostics].filter(Boolean).join("\n");
+function toAiToolCall(toolCall: ChatToolCall) {
+  return {
+    type: "tool-call" as const,
+    toolCallId: toolCall.id,
+    toolName: toolCall.function.name,
+    input: parseToolArguments(toolCall.function.arguments),
+  };
 }
 
-function parseStreamLine(
-  line: string,
-): (CompletionStreamChunk & { toolCallDelta?: { index?: number; id?: string; name?: string; arguments?: string } }) | "done" | undefined {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith(":")) return undefined;
-  if (!trimmed.startsWith("data:")) return undefined;
+function normalizeAiToolCalls(
+  toolCalls: Array<TypedToolCall<ToolSet>> | undefined,
+): ChatToolCall[] | undefined {
+  if (!toolCalls || toolCalls.length === 0) return undefined;
+  return toolCalls.flatMap((toolCall, index) => {
+    const name = toolCall.toolName;
+    if (!name) return [];
+    return [{
+      id: toolCall.toolCallId || `call_${index}`,
+      type: "function" as const,
+      function: {
+        name,
+        arguments: JSON.stringify("input" in toolCall ? toolCall.input ?? {} : {}),
+      },
+    }];
+  });
+}
 
-  let data = trimmed.slice("data:".length).trim();
-  if (data === "[DONE]") return "done";
-
-  // Handle double 'data:' prefix from some SSE implementations
-  if (data.startsWith("data:")) {
-    data = data.slice("data:".length).trim();
+function streamPartToChunk(
+  part: TextStreamPart<ToolSet>,
+  model: string | undefined,
+  provider: string,
+): CompletionStreamChunk | undefined {
+  if (part.type === "text-delta") {
+    return { text: part.text, model, provider };
   }
-
-  let body: ChatCompletionStreamResponse;
-  try {
-    body = JSON.parse(data) as ChatCompletionStreamResponse;
-  } catch {
-    // Skip malformed SSE lines
-    return undefined;
+  if (part.type === "reasoning-delta") {
+    return { text: "", reasoning: part.text, model, provider };
   }
-
-  // Extract usage if present (sent in final chunk when stream_options.include_usage = true)
-  let usage: TokenUsage | undefined;
-  if (body.usage) {
-    usage = {
-      promptTokens: body.usage.prompt_tokens ?? 0,
-      completionTokens: body.usage.completion_tokens ?? 0,
-      totalTokens: body.usage.total_tokens ?? 0,
-    };
-  }
-
-  const delta = body.choices?.[0]?.delta;
-  const toolCallDeltas = delta?.tool_calls;
-  if (toolCallDeltas && toolCallDeltas.length > 0) {
-    const tc = toolCallDeltas[0];
+  if (part.type === "tool-call") {
     return {
       text: "",
-      model: body.model,
-      provider: "9router",
-      ...(usage ? { usage } : {}),
-      toolCallDelta: {
-        index: tc?.index,
-        id: tc?.id,
-        name: tc?.function?.name,
-        arguments: tc?.function?.arguments,
-      },
+      model,
+      provider,
+      toolCalls: normalizeAiToolCalls([part]),
+      done: true,
     };
   }
-
-  const text = delta?.content ?? body.choices?.[0]?.text ?? "";
-  const reasoning = delta?.reasoning_content;
-  // Usage-only chunk (no text, no tool calls) — still emit it so caller can collect
-  if (!text && !reasoning && usage) {
-    return { text: "", model: body.model, provider: "9router", usage };
+  if (part.type === "finish-step") {
+    return { text: "", model, provider, usage: normalizeUsage(part.usage) };
   }
-  if (!text && !reasoning) return undefined;
+  return undefined;
+}
+
+function normalizeUsage(usage: LanguageModelUsage): TokenUsage {
   return {
-    text,
-    ...(reasoning ? { reasoning } : {}),
-    model: body.model,
-    provider: "9router",
-    ...(usage ? { usage } : {}),
+    promptTokens: usage.inputTokens ?? 0,
+    completionTokens: usage.outputTokens ?? 0,
+    totalTokens: usage.totalTokens ?? 0,
   };
 }
 
-function* finalizeToolCalls(
-  toolCallsByIdx: Map<number, { id: string; name: string; arguments: string }>,
-  model: string | undefined,
-): Generator<CompletionStreamChunk> {
-  if (toolCallsByIdx.size === 0) return;
-  const toolCalls: ChatToolCall[] = Array.from(toolCallsByIdx.values())
-    .filter((tc) => tc.name)
-    .map((tc, index) => ({
-      id: tc.id || `call_${index}`,
-      type: "function" as const,
-      function: { name: tc.name, arguments: tc.arguments },
-    }));
-  if (toolCalls.length === 0) return;
-  yield {
-    text: "",
-    model,
-    provider: "9router",
-    toolCalls,
-    done: true,
-  };
+function parseToolArguments(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function isString(value: string | undefined): value is string {
@@ -529,123 +352,4 @@ function isAbortError(err: unknown): boolean {
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw createAbortError();
-}
-
-function parseCompletionBody(raw: string): ChatCompletionResponse {
-  const trimmed = raw.trim();
-
-  // Normal JSON response
-  if (trimmed.startsWith("{")) {
-    return JSON.parse(trimmed) as ChatCompletionResponse;
-  }
-
-  // SSE response — extract JSON from "data:" lines
-  let mergedText = "";
-  const toolCallsByIdx = new Map<
-    number,
-    { id: string; name: string; arguments: string }
-  >();
-  let model: string | undefined;
-
-  for (const line of trimmed.split(/\r?\n/)) {
-    const l = line.trim();
-    if (!l.startsWith("data:")) continue;
-
-    let data = l.slice("data:".length).trim();
-    if (data === "[DONE]") continue;
-    if (data.startsWith("data:")) {
-      data = data.slice("data:".length).trim();
-    }
-
-    let chunk: Record<string, unknown>;
-    try {
-      chunk = JSON.parse(data);
-    } catch {
-      continue;
-    }
-
-    if (!model && chunk.model) model = chunk.model as string;
-
-    const choices = chunk.choices as Array<Record<string, unknown>> | undefined;
-    const choice = choices?.[0];
-
-    // Non-streaming SSE: message field with content/tool_calls directly
-    if (choice?.message) {
-      return chunk as unknown as ChatCompletionResponse;
-    }
-
-    // Streaming format: accumulate delta
-    const delta = choice?.delta as Record<string, unknown> | undefined;
-    if (delta?.content) mergedText += delta.content as string;
-
-    if (delta?.tool_calls) {
-      for (const tc of delta.tool_calls as Array<Record<string, unknown>>) {
-        const idx = (tc.index as number) ?? 0;
-        if (!toolCallsByIdx.has(idx)) {
-          toolCallsByIdx.set(idx, { id: "", name: "", arguments: "" });
-        }
-        const entry = toolCallsByIdx.get(idx)!;
-        if (tc.id) entry.id = tc.id as string;
-        const fn = tc.function as Record<string, unknown> | undefined;
-        if (fn?.name) entry.name = fn.name as string;
-        if (fn?.arguments) entry.arguments += fn.arguments as string;
-      }
-    }
-  }
-
-  // Build the merged streaming response
-  const toolCalls = Array.from(toolCallsByIdx.values()).map((tc) => ({
-    id: tc.id,
-    type: "function" as const,
-    function: { name: tc.name, arguments: tc.arguments },
-  }));
-
-  const result: Record<string, unknown> = {
-    model,
-    choices: [{ message: { content: mergedText } }],
-  };
-  if (toolCalls.length > 0) {
-    ((result.choices as Array<Record<string, unknown>>)[0].message as Record<string, unknown>).tool_calls = toolCalls;
-  }
-  return result as unknown as ChatCompletionResponse;
-}
-
-
-function sanitizeTools(
-  tools: ChatToolDefinition[] | undefined,
-): ChatToolDefinition[] | undefined {
-  if (!tools || tools.length === 0) return undefined;
-  return tools.map((tool) => ({
-    type: "function" as const,
-    function: {
-      name: tool.function.name,
-      ...(tool.function.description ? { description: tool.function.description } : {}),
-      ...(tool.function.parameters && typeof tool.function.parameters === "object"
-        ? { parameters: tool.function.parameters }
-        : {}),
-    },
-  }));
-}
-
-function normalizeToolCalls(
-  toolCalls: ChatToolCall[] | undefined,
-): ChatToolCall[] | undefined {
-  if (!toolCalls || toolCalls.length === 0) return undefined;
-  return toolCalls.flatMap((toolCall, index) => {
-    const name = toolCall.function?.name;
-    if (!name) return [];
-    return [
-      {
-        id: toolCall.id || `call_${index}`,
-        type: "function" as const,
-        function: {
-          name,
-          arguments:
-            typeof toolCall.function.arguments === "string"
-              ? toolCall.function.arguments
-              : JSON.stringify(toolCall.function.arguments ?? {}),
-        },
-      },
-    ];
-  });
 }

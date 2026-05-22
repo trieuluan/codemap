@@ -10,6 +10,8 @@ import {
 import type { ChatToolDefinition } from "../../types.js";
 import { McpServerConnection } from "./mcp-server-connection.js";
 
+type ExtraServerConfig = { command: string; args?: string[]; env?: Record<string, string> };
+
 const require = createRequire(import.meta.url);
 
 const CONFIRM_PATTERNS =
@@ -45,8 +47,7 @@ const DEFAULT_PRIORITY_RESOURCES = [
 
 export class CodeMapMcpToolClient {
   private defaultConn: McpServerConnection;
-  private extraConns: Map<string, McpServerConnection> = new Map();
-  private connectionErrors: Map<string, string> = new Map();
+  private _extraConfigs: Map<string, ExtraServerConfig> = new Map();
   private _serverConfig: { command: string; args: string[]; env: Record<string, string> };
 
   constructor() {
@@ -64,35 +65,14 @@ export class CodeMapMcpToolClient {
     return this._serverConfig;
   }
 
+  getExtraServerConfigs(): Record<string, ExtraServerConfig> {
+    return Object.fromEntries(this._extraConfigs);
+  }
+
   async connectExtras(): Promise<void> {
     const configs = await readMcpServerConfigs();
     for (const [name, config] of configs) {
-      try {
-        const conn = new McpServerConnection(name, config);
-        await conn.connect();
-        this.extraConns.set(name, conn);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.connectionErrors.set(name, msg);
-      }
-    }
-    // List tools for extra connections to populate caches
-    for (const [name, conn] of this.extraConns) {
-      try {
-        await conn.listTools();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.connectionErrors.set(name, msg);
-        this.extraConns.delete(name);
-      }
-    }
-    // List resources for extra connections
-    for (const conn of this.extraConns.values()) {
-      try {
-        await conn.listResources();
-      } catch {
-        // non-blocking
-      }
+      this._extraConfigs.set(name, config);
     }
   }
 
@@ -100,23 +80,19 @@ export class CodeMapMcpToolClient {
     const statuses: McpServerStatus[] = [
       { name: "codemap", connected: true, tools: this.defaultConn.tools?.length ?? 0 },
     ];
-    for (const [name, conn] of this.extraConns) {
-      statuses.push({ name, connected: true, tools: conn.tools?.length ?? 0 });
-    }
-    for (const [name, error] of this.connectionErrors) {
-      statuses.push({ name, connected: false, tools: 0, error });
+    for (const [name] of this._extraConfigs) {
+      statuses.push({ name, connected: true, tools: 0 });
     }
     return statuses;
   }
 
   async listAllowedTools(): Promise<AgentTool[]> {
-    const defaultTools = await this.defaultConn.listTools();
-    return [...defaultTools, ...this.listExtraTools().map((t) => t.tool)];
+    return this.defaultConn.listTools();
   }
 
   async listChatTools(): Promise<ChatToolDefinition[]> {
-    const defaultTools = await this.defaultConn.listTools();
-    const result: ChatToolDefinition[] = defaultTools.map((tool) => ({
+    const tools = await this.defaultConn.listTools();
+    return tools.map((tool) => ({
       type: "function" as const,
       function: {
         name: tool.name,
@@ -124,94 +100,25 @@ export class CodeMapMcpToolClient {
         parameters: tool.inputSchema,
       },
     }));
-
-    for (const { serverName, tool } of this.listExtraTools()) {
-      result.push({
-        type: "function" as const,
-        function: {
-          name: `${serverName}__${tool.name}`,
-          description: `[${serverName}] ${tool.description}`,
-          parameters: tool.inputSchema,
-        },
-      });
-    }
-
-    return result;
   }
 
   async callTool(
     name: string,
     args: Record<string, unknown>,
   ): Promise<AgentToolCallResult> {
-    const sep = name.indexOf("__");
-    if (sep > 0) {
-      const serverName = name.slice(0, sep);
-      const toolName = name.slice(sep + 2);
-      const conn = this.extraConns.get(serverName);
-      if (conn) {
-        return conn.callTool(toolName, args);
-      }
-    }
     return this.defaultConn.callTool(name, args);
   }
 
   async listResources(): Promise<{ uri: string; name: string }[]> {
-    const defaultResources = await this.defaultConn.listResources();
-    return [...defaultResources, ...this.listExtraResources()];
+    return this.defaultConn.listResources();
   }
 
   async readResource(uri: string): Promise<string> {
-    // Try default first
-    const defaultResources = await this.defaultConn.listResources();
-    if (defaultResources.some((r) => r.uri === uri)) {
-      return this.defaultConn.readResource(uri);
-    }
-    // Try extra servers
-    for (const conn of this.extraConns.values()) {
-      try {
-        const resources = await conn.listResources();
-        if (resources.some((r) => r.uri === uri)) {
-          return conn.readResource(uri);
-        }
-      } catch {
-        // skip
-      }
-    }
     return this.defaultConn.readResource(uri);
   }
 
   async close(): Promise<void> {
     await this.defaultConn.close();
-    for (const conn of this.extraConns.values()) {
-      await conn.close();
-    }
-    this.extraConns.clear();
-    this.connectionErrors.clear();
-  }
-
-  private listExtraTools(): {
-    serverName: string;
-    tool: AgentTool;
-  }[] {
-    const result: { serverName: string; tool: AgentTool }[] = [];
-    for (const [name, conn] of this.extraConns) {
-      const tools = conn.tools;
-      if (tools) {
-        for (const tool of tools) {
-          result.push({ serverName: name, tool });
-        }
-      }
-    }
-    return result;
-  }
-
-  private listExtraResources(): { uri: string; name: string }[] {
-    const result: { uri: string; name: string }[] = [];
-    for (const conn of this.extraConns.values()) {
-      const resources = conn.resources;
-      if (resources) result.push(...resources);
-    }
-    return result;
   }
 }
 

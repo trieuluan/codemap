@@ -30,7 +30,7 @@ export function createDebugLogger() {
   function write(entry: Record<string, unknown>) {
     appendFileSync(
       logFile,
-      JSON.stringify({ ...entry, ts: new Date().toISOString() }) + "\n",
+      JSON.stringify(sanitizeForLog({ ...entry, ts: new Date().toISOString() })) + "\n",
     );
   }
 
@@ -87,3 +87,24 @@ export function createDebugLogger() {
 }
 
 export type DebugLogger = ReturnType<typeof createDebugLogger>;
+
+function sanitizeForLog(value: unknown, depth = 0): unknown {
+  if (value == null) return value;
+  if (typeof value === "string") {
+    return value.length > 1_000 ? `${value.slice(0, 1_000)}…[truncated ${value.length}]` : value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    if (depth >= 4) return `[array ${value.length}]`;
+    return value.slice(0, 50).map((item) => sanitizeForLog(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    if (depth >= 4) return "[object]";
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>).slice(0, 80)) {
+      out[key] = sanitizeForLog(item, depth + 1);
+    }
+    return out;
+  }
+  return String(value);
+}

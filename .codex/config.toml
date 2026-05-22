@@ -134,6 +134,9 @@ approval_mode = "approve"
 [mcp_servers.codemap_mcp_dev.tools.wait_for_import]
 approval_mode = "approve"
 
+[mcp_servers.codemap_mcp_dev.tools.find_callers]
+approval_mode = "approve"
+
 [mcp_servers.openai_docs]
 transport = "streamable_http"
 url = "https://developers.openai.com/mcp"

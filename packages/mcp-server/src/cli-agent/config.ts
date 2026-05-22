@@ -48,14 +48,19 @@ export async function loadGatewayConfig(
     apiKey,
     defaultProfile,
     profiles,
-    configSource: fileConfig.source ?? (hasEnvironmentConfig() ? "environment" : "built-in defaults"),
+    configSource:
+      fileConfig.source ??
+      (hasEnvironmentConfig() ? "environment" : "built-in defaults"),
   };
 }
 
 export async function writeGatewayConfig(
   options: WriteGatewayConfigOptions,
 ): Promise<{ path: string; created: boolean }> {
-  const configPath = getGatewayConfigPath(options.scope, options.cwd ?? process.cwd());
+  const configPath = getGatewayConfigPath(
+    options.scope,
+    options.cwd ?? process.cwd(),
+  );
   const config = buildDefaultGatewayFile({ baseUrl: options.baseUrl });
 
   try {
@@ -77,8 +82,12 @@ export async function writeGatewayConfig(
   }
 }
 
-export function getGatewayConfigPath(scope: GatewayConfigScope, cwd = process.cwd()): string {
-  if (scope === "project") return path.join(cwd, ".codemap", "llm-gateway.json");
+export function getGatewayConfigPath(
+  scope: GatewayConfigScope,
+  cwd = process.cwd(),
+): string {
+  if (scope === "project")
+    return path.join(cwd, ".codemap", "llm-gateway.json");
   return path.join(homedir(), ".codemap", "llm-gateway.json");
 }
 

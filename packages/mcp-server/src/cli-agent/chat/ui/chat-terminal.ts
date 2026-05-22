@@ -12,6 +12,7 @@ import {
   runSingleAgentRuntime,
   type ChatUiMode,
 } from "../runtime/cli-runtime.js";
+import { resetHarnessSingleton } from "../runtime/mastra-harness-runtime.js";
 import { ContextCompactor } from "../agent/context-compactor.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
 import {
@@ -275,39 +276,20 @@ function extractCloudCommitFromGetProject(result: unknown): string | undefined {
 
 const TASK_BOUNDARY_CONTENT = "✓ Task complete.";
 
-/**
- * Prune old task context from agentHistory on each new turn.
- * Keeps the most recent task fully intact so follow-up questions have context.
- * Only prunes tasks older than the second-most-recent boundary to prevent
- * unbounded history growth while still allowing conversational continuity.
- */
-function pruneToPreviousTaskBoundary(history: ChatMessage[]): ChatMessage[] {
-  // Find all boundary positions
-  const boundaries: number[] = [];
-  for (let i = 0; i < history.length; i++) {
-    if (
-      history[i]?.role === "assistant" &&
-      history[i]?.content === TASK_BOUNDARY_CONTENT
-    ) {
-      boundaries.push(i);
-    }
-  }
-
-  // Fewer than 2 boundaries → nothing old enough to prune, keep full history
-  if (boundaries.length < 2) return history;
-
-  // Prune everything before the second-to-last boundary (keep last task intact)
-  const keepFrom = boundaries[boundaries.length - 2]! + 1;
-  const pruned = history.slice(0, keepFrom);
-  const kept = history.slice(keepFrom);
-  const taskCount = pruned.filter(
-    (m) => m.content === TASK_BOUNDARY_CONTENT,
-  ).length;
-  const summary: ChatMessage = {
-    role: "assistant",
-    content: `[${taskCount} older task${taskCount !== 1 ? "s" : ""} pruned — recent context preserved.]`,
-  };
-  return [summary, ...kept];
+function buildEnrichedContent(
+  content: string,
+  resourceContext: string | null,
+  projectContext: { conventions: string | null; rules: string | null; skills: string | null } | null,
+): string {
+  const parts: string[] = [];
+  if (projectContext?.rules) parts.push(projectContext.rules);
+  if (projectContext?.conventions) parts.push(projectContext.conventions);
+  if (projectContext?.skills) parts.push(projectContext.skills);
+  if (resourceContext) parts.push(resourceContext);
+  parts.push(
+    `## Current Task\n\n<task>\n${content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.`,
+  );
+  return parts.join("\n\n---\n\n");
 }
 
 async function abortable<T>(
@@ -578,8 +560,10 @@ export class ChatTerminal {
       // "loggedin" or "skip" → proceed to main chat
     }
 
-    // Warm up file search index so @ mention is instant on first use
-    await warmupFileSearch();
+    // Warm up file search index in the background so startup can render quickly.
+    warmupFileSearch()
+      .catch(() => {})
+      .finally(() => this.bus.scheduleRefresh());
 
     // Git workspace info + cloud import commit + session init
     await this.refreshWorkspaceCommits();
@@ -697,6 +681,8 @@ export class ChatTerminal {
       sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       input: { ...prev.input, history: [] },
     }));
+    // Reset Mastra harness so the next turn starts a fresh thread.
+    resetHarnessSingleton().catch(() => { /* best-effort */ });
   }
 
   loadSessionById(sessionId: string): void {
@@ -815,6 +801,12 @@ export class ChatTerminal {
     };
 
     const sharedCallbacks = {
+      onStreamReset: () => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        streamingContent = "";
+        this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
+        this.bus.scheduleRefresh();
+      },
       onToken: (token: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         const s = this.store.getState();
@@ -858,7 +850,10 @@ export class ChatTerminal {
       onToolStart: (name: string, args: string, id: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
-        resetStreaming();
+        // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
+        // next text response from Mastra replaces this entry instead of appending.
+        streamingContent = "";
+        this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
         const s = this.store.getState();
         this.store.dispatch({
           task: {
@@ -912,7 +907,6 @@ export class ChatTerminal {
     };
 
     try {
-      this.compactor.beginTurn();
       const mentionContext = await hydrateMentionContext(contentText);
       if (!this.isActiveTask(taskId, taskAbort)) return;
       for (const warning of mentionContext.warnings) {
@@ -976,19 +970,13 @@ export class ChatTerminal {
       const result = useMultiPhase
         ? await runMultiPhaseAgentRuntime({
             provider: this.options.provider,
-
+            availableModels: this.store.getState().config.availableModels,
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
-            history: pruneToPreviousTaskBoundary(
-              this.store.getState().agentHistory as ChatMessage[],
-            ),
             userMessage: { role: "user", content: mentionContext.content },
             toolClient: this.options.toolClient,
-            debug: this.store.getState().debug,
             signal: taskAbort.signal,
-            compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
-            cancelTaskStream: () => this.cancelTask(),
             onPhaseStart: (phase, model) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
@@ -1031,19 +1019,18 @@ export class ChatTerminal {
         : await runSingleAgentRuntime({
             provider: this.options.provider,
             model: singlePhaseModel,
-            history: pruneToPreviousTaskBoundary(
-              this.store.getState().agentHistory as ChatMessage[],
-            ),
-            userMessage: { role: "user", content: mentionContext.content },
+            availableModels: this.store.getState().config.availableModels,
+            userMessage: {
+              role: "user",
+              content: buildEnrichedContent(
+                mentionContext.content,
+                sessionResourceCtx,
+                sessionProjectCtx,
+              ),
+            },
             toolClient: this.options.toolClient,
-            debug: this.store.getState().debug,
             signal: taskAbort.signal,
-            compactor: this.compactor,
             confirmEdit: this.makeConfirmEdit(),
-            cancelTaskStream: () => this.cancelTask(),
-            systemContext: `## Current Task\n\n<task>\n${mentionContext.content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.`,
-            resourceContext: sessionResourceCtx,
-            projectContext: sessionProjectCtx,
             ...sharedCallbacks,
           });
 
@@ -1099,6 +1086,7 @@ export class ChatTerminal {
           content: result.text || "(no response)",
         });
       }
+      resetStreaming();
 
       this.bus.scheduleRefresh();
       // Don't pollute agentHistory with no-tool-call responses from multi-phase execute —

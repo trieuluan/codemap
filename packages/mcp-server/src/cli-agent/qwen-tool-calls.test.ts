@@ -210,18 +210,25 @@ test("does not execute unknown fenced tool names", () => {
   assert.deepEqual(result.unknownToolNames, ["read_file"]);
 });
 
-test("provider complete converts Qwen XML text into tool calls", async () => {
+test("provider complete leaves Qwen XML text to AI SDK without custom parsing", async () => {
   const restoreFetch = mockFetch(
     new Response(JSON.stringify({
+      id: "chatcmpl_test",
+      object: "chat.completion",
+      created: 0,
       model: "qwen3-coder-next",
       choices: [
         {
+          index: 0,
           message: {
+            role: "assistant",
             content:
               "<tool_call><function=search_codebase><parameter=query>agent loop</parameter></function></tool_call>",
           },
+          finish_reason: "stop",
         },
       ],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
     })),
   );
   try {
@@ -232,12 +239,8 @@ test("provider complete converts Qwen XML text into tool calls", async () => {
       tools: [searchTool],
     });
 
-    assert.equal(result.text, "");
-    assert.equal(result.toolCalls?.length, 1);
-    assert.equal(result.toolCalls?.[0]?.function.name, "search_codebase");
-    assert.deepEqual(JSON.parse(result.toolCalls![0]!.function.arguments), {
-      query: "agent loop",
-    });
+    assert.match(result.text, /<tool_call>/);
+    assert.equal(result.toolCalls, undefined);
   } finally {
     restoreFetch();
   }
@@ -247,9 +250,13 @@ test("provider stream preserves native OpenAI tool calls and usage", async () =>
   const restoreFetch = mockFetch(
     sseResponse([
       {
+        id: "chatcmpl_test",
+        object: "chat.completion.chunk",
+        created: 0,
         model: "qwen3-coder-next",
         choices: [
           {
+            index: 0,
             delta: {
               tool_calls: [
                 {
@@ -259,12 +266,16 @@ test("provider stream preserves native OpenAI tool calls and usage", async () =>
                 },
               ],
             },
+            finish_reason: null,
           },
         ],
       },
       {
+        id: "chatcmpl_test",
+        object: "chat.completion.chunk",
+        created: 0,
         model: "qwen3-coder-next",
-        choices: [{ delta: {} }],
+        choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
         usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
       },
       "[DONE]",
@@ -286,17 +297,22 @@ test("provider stream preserves native OpenAI tool calls and usage", async () =>
   }
 });
 
-test("provider stream converts Qwen XML text into tool call chunks", async () => {
+test("provider stream leaves Qwen XML text as streamed text", async () => {
   const restoreFetch = mockFetch(
     sseResponse([
       {
+        id: "chatcmpl_test",
+        object: "chat.completion.chunk",
+        created: 0,
         model: "qwen3-coder-next",
         choices: [
           {
+            index: 0,
             delta: {
               content:
                 "<tool_call><function=search_codebase><parameter=query>agent loop</parameter></function></tool_call>",
             },
+            finish_reason: null,
           },
         ],
       },
@@ -311,64 +327,8 @@ test("provider stream converts Qwen XML text into tool call chunks", async () =>
       tools: [searchTool],
     }));
 
-    const toolChunk = chunks.find((chunk) => chunk.toolCalls);
-    assert.equal(toolChunk?.text, "");
-    assert.equal(toolChunk?.toolCalls?.[0]?.function.name, "search_codebase");
-    assert.deepEqual(JSON.parse(toolChunk!.toolCalls![0]!.function.arguments), {
-      query: "agent loop",
-    });
-  } finally {
-    restoreFetch();
-  }
-});
-
-test("provider stream emits separate Qwen fenced tool calls across chunks", async () => {
-  const restoreFetch = mockFetch(
-    sseResponse([
-      {
-        model: "qwen3-coder-next",
-        choices: [
-          {
-            delta: {
-              content: "Intro\n```\nbash\nfind . -type f | head -50\n```",
-            },
-          },
-        ],
-      },
-      {
-        model: "qwen3-coder-next",
-        choices: [
-          {
-            delta: {
-              content: "\nThen\n```\nget_project_map\n```",
-            },
-          },
-        ],
-      },
-      "[DONE]",
-    ]),
-  );
-  try {
-    const provider = new NineRouterProvider("https://example.test", "key");
-    const chunks = await collectStream(provider.stream({
-      model: "kr/qwen3-coder-next",
-      messages: [{ role: "user", content: "read code" }],
-      tools: [
-        searchTool,
-        {
-          type: "function",
-          function: { name: "bash", parameters: { properties: { command: { type: "string" } } } },
-        },
-        { type: "function", function: { name: "get_project_map" } },
-      ],
-    }));
-
-    const toolChunks = chunks.filter((chunk) => chunk.toolCalls);
-    assert.equal(toolChunks.length, 2);
-    assert.equal(toolChunks[0]?.text, "");
-    assert.equal(toolChunks[0]?.toolCalls?.[0]?.function.name, "bash");
-    assert.equal(toolChunks[1]?.text, "");
-    assert.equal(toolChunks[1]?.toolCalls?.[0]?.function.name, "get_project_map");
+    assert.match(chunks.map((chunk) => chunk.text).join(""), /<tool_call>/);
+    assert.equal(chunks.some((chunk) => chunk.toolCalls), false);
   } finally {
     restoreFetch();
   }
