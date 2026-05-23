@@ -91,8 +91,8 @@ export interface UIState {
     usage?: UsageStats;
   };
 
-  // Accumulated token usage for the current chat session.
-  sessionUsage: UsageStats;
+  // Total tokens consumed in the current thread (synced from Mastra thread storage).
+  sessionTokens: number;
 
   // Streaming buffer
   streaming: {
@@ -143,9 +143,6 @@ export interface UIState {
   workspaceState: ChatWorkspaceState;
   contextState: ChatContextState;
 
-  // Agent history (ChatMessage[] sent to provider)
-  agentHistory: Array<{ role: string; content: string; toolCalls?: unknown[] }>;
-
   // Background synthesis status
   synthRunning: boolean;
 
@@ -154,13 +151,6 @@ export interface UIState {
 
   // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
   planReview: { active: boolean; selection: number };
-
-  // Context compaction status
-  compaction: {
-    usagePercent: number;
-    compactedCount: number;
-    lastStrategy?: string;
-  };
 
   // Debug
   debug: boolean;
@@ -182,11 +172,7 @@ export function createInitialState(opts: {
       phase: "idle",
       toolsCalled: 0,
     },
-    sessionUsage: {
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    },
+    sessionTokens: 0,
     streaming: {
       active: false,
       content: "",
@@ -231,11 +217,9 @@ export function createInitialState(opts: {
       toolCalls: [],
       assumptions: [],
     },
-    agentHistory: [],
     synthRunning: false,
     planMode: false,
     planReview: { active: false, selection: 0 },
-    compaction: { usagePercent: 0, compactedCount: 0 },
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

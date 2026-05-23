@@ -1,5 +1,5 @@
 import type { NineRouterProvider } from "../../provider.js";
-import type { ChatMessage, ModelProfile, TokenUsage } from "../../types.js";
+import type { ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
 import { getCachedContext } from "../../convention-synthesizer.js";
@@ -12,8 +12,14 @@ import {
   runSingleAgentRuntime,
   type ChatUiMode,
 } from "../runtime/cli-runtime.js";
-import { resetHarnessSingleton } from "../runtime/mastra-harness-runtime.js";
-import { ContextCompactor } from "../agent/context-compactor.js";
+import {
+  resetHarnessSingleton,
+  getMastraThreadId,
+  getMastraCurrentModelId,
+  getMastraThreadTokenUsage,
+  switchMastraThread,
+} from "../runtime/mastra-harness-runtime.js";
+import { resolveGatewayModel } from "../runtime/mastra-models.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
 import {
   classifyTask,
@@ -23,45 +29,15 @@ import { executeCommand } from "../commands/index.js";
 import { isStrongModel } from "../commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../file-search.js";
-import {
-  createSession,
-  saveSession,
-  loadSession,
-  findLastSession,
-} from "../session-store.js";
 import { loadOrSynthesizeAll } from "../../convention-synthesizer.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
+import { loadThreadIntoUI } from "../commands/sessions.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
 
-function stripImagesFromContent(text: string): string {
-  return text.replace(
-    /!\[([^\]]*)\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=\s]+\)/g,
-    (_match, alt) => `[image${alt ? `: ${alt}` : ""}]`,
-  );
-}
-
-function subtractUsage(next: TokenUsage, prev: TokenUsage): TokenUsage {
-  return {
-    promptTokens: Math.max(0, next.promptTokens - prev.promptTokens),
-    completionTokens: Math.max(
-      0,
-      next.completionTokens - prev.completionTokens,
-    ),
-    totalTokens: Math.max(0, next.totalTokens - prev.totalTokens),
-  };
-}
-
-function addUsage(total: TokenUsage, next: TokenUsage): TokenUsage {
-  return {
-    promptTokens: total.promptTokens + next.promptTokens,
-    completionTokens: total.completionTokens + next.completionTokens,
-    totalTokens: total.totalTokens + next.totalTokens,
-  };
-}
 
 const TOOL_CALL_SUMMARY_SUFFIX = " — click preview · Ctrl+O full view";
 const TOOL_PREVIEW_LINE_LIMIT = 120;
@@ -274,14 +250,19 @@ function extractCloudCommitFromGetProject(result: unknown): string | undefined {
     : undefined;
 }
 
-const TASK_BOUNDARY_CONTENT = "✓ Task complete.";
-
 function buildEnrichedContent(
   content: string,
   resourceContext: string | null,
-  projectContext: { conventions: string | null; rules: string | null; skills: string | null } | null,
+  projectContext: {
+    conventions: string | null;
+    rules: string | null;
+    skills: string | null;
+  } | null,
+  modelId?: string,
 ): string {
   const parts: string[] = [];
+  if (modelId)
+    parts.push(`## Session Info\n\nYou are running as model: **${modelId}**`);
   if (projectContext?.rules) parts.push(projectContext.rules);
   if (projectContext?.conventions) parts.push(projectContext.conventions);
   if (projectContext?.skills) parts.push(projectContext.skills);
@@ -341,10 +322,7 @@ export class ChatTerminal {
   private _taskSeq = 0;
   private _activeTaskId = 0;
   private logger: DebugLogger | null = null;
-  private compactor: ContextCompactor;
   private options: ChatTerminalOptions;
-  private _sessionId: string | null = null;
-  private _gitMeta: { repo: string; branch: string } = { repo: "", branch: "" };
   // Session-level caches — fetched once on first turn, reused for the entire session.
   private _resourceContext: string | null | undefined = undefined; // undefined = not yet fetched
   private _projectContext:
@@ -358,7 +336,6 @@ export class ChatTerminal {
   constructor(options: ChatTerminalOptions) {
     this.options = options;
     this.bus = new EventBus();
-    this.compactor = new ContextCompactor(options.provider);
 
     const debug = process.env.CODEMAP_DEBUG_AGENT_TOOLS === "1";
     this.store = new Store(
@@ -387,10 +364,6 @@ export class ChatTerminal {
             cloudCommit: current?.cloudCommit,
           },
         });
-        this._gitMeta = {
-          repo: info.repoName ?? "",
-          branch: info.branch ?? "",
-        };
       }
     } catch {
       // Non-blocking: workspaces without git should still start normally.
@@ -444,25 +417,14 @@ export class ChatTerminal {
     );
     const rolledBackMsgs = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx) : msgs;
 
-    // Same rollback for agent history.
-    const history = state.agentHistory as ChatMessage[];
-    const lastUserHistIdx = history.reduce(
-      (acc, m, i) => (m.role === "user" ? i : acc),
-      -1,
-    );
-    const rolledBackHistory =
-      lastUserHistIdx >= 0 ? history.slice(0, lastUserHistIdx) : history;
-
     this.store.dispatch({
       messages: rolledBackMsgs,
-      agentHistory: rolledBackHistory,
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       confirm: { active: false, toolName: "", preview: null },
       planReview: { active: false, selection: 0 },
       streaming: { active: false, content: "", entryIndex: -1 },
     });
-    this.persistSession();
     return canceledPrompt;
   }
 
@@ -498,57 +460,6 @@ export class ChatTerminal {
     this.resolveConfirm(true);
   }
 
-  async compactHistory(onProgress?: (step: string) => void): Promise<{
-    beforeMessages: number;
-    afterMessages: number;
-    beforeTokens: number;
-    afterTokens: number;
-    compacted: boolean;
-    summaryText?: string;
-  }> {
-    const state = this.store.getState();
-    const beforeHistory = state.agentHistory as ChatMessage[];
-    const beforeTokens = this.compactor.estimateTokens(beforeHistory);
-    onProgress?.("Calling summarizer model...");
-    const compacted = await this.compactor.compactNow(
-      beforeHistory,
-      state.config.model,
-    );
-    const nextHistory = compacted ?? beforeHistory;
-    const afterTokens = this.compactor.estimateTokens(nextHistory);
-
-    let summaryText: string | undefined;
-    if (compacted) {
-      const summaryMsg = nextHistory.find(
-        (m) =>
-          m.role === "system" &&
-          m.content.includes("[Previous conversation summary]"),
-      );
-      summaryText = summaryMsg?.content
-        .replace("[Previous conversation summary]\n", "")
-        .trim();
-
-      const cs = this.compactor.getState(nextHistory);
-      this.store.dispatch({
-        agentHistory: nextHistory,
-        compaction: {
-          usagePercent: cs.usagePercent,
-          compactedCount: cs.compactedCount,
-          lastStrategy: cs.lastStrategy,
-        },
-      });
-    }
-
-    return {
-      beforeMessages: beforeHistory.length,
-      afterMessages: nextHistory.length,
-      beforeTokens,
-      afterTokens,
-      compacted: Boolean(compacted),
-      summaryText,
-    };
-  }
-
   // ─── Start ───────────────────────────────────────────────
 
   async start(): Promise<void> {
@@ -568,8 +479,6 @@ export class ChatTerminal {
     // Git workspace info + cloud import commit + session init
     await this.refreshWorkspaceCommits();
 
-    await this.initSession();
-
     // Synthesize project conventions in background (non-blocking)
     const profiles = this.options.profiles ?? [];
     const plannerModel =
@@ -585,129 +494,42 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
       });
 
-    const mode = this.options.uiMode ?? process.env.CODEMAP_RENDER ?? "tui";
-    if (mode === "mastra") {
-      const { startMastraTuiPrototype } = await import(
-        "../runtime/mastra-tui-prototype.js"
-      );
-      const result = await startMastraTuiPrototype();
-      if (result.started) return;
-      this.appendMessage({
-        role: "system",
-        content: `MastraTUI prototype unavailable — falling back to CodeMap TUI.\n${result.reason ?? ""}`.trim(),
-      });
-    }
-
-    if (mode === "tui" || mode === "mastra") {
-      const { startPiTuiApp } = await import("./pi-tui-app.js");
-      await startPiTuiApp(this);
-    } else if (mode === "classic") {
-      const { startClassicApp } = await import("./classic-app.js");
-      await startClassicApp(this);
-    } else {
-      // Default: inline mode — pi-tui editor without alternate screen
-      const { startInlineApp } = await import("./inline-app.js");
-      await startInlineApp(this);
-    }
+    const { startPiTuiApp } = await import("./pi-tui-app.js");
+    await startPiTuiApp(this);
   }
 
   // ─── Session management ───────────────────────────────────
 
-  private async initSession(): Promise<void> {
-    const { repo, branch } = this._gitMeta;
-    const model = this.store.getState().config.model;
-    try {
-      const last = findLastSession(repo, branch);
-      if (last) {
-        const loaded = loadSession(last.id);
-        if (loaded && loaded.agentHistory.length > 0) {
-          this._sessionId = last.id;
-          this.store.dispatch({
-            agentHistory: loaded.agentHistory,
-            messages: [
-              ...loaded.uiMessages,
-              {
-                role: "system",
-                content: `_Session resumed · ${loaded.agentHistory.length} messages · ${last.name}_`,
-              },
-            ],
-          });
-          return;
-        }
-      }
-    } catch {
-      /* fallback to new session */
-    }
-    this._sessionId = createSession({
-      gitRepo: repo,
-      gitBranch: branch,
-      model,
-    });
-  }
-
   persistSession(): void {
-    if (!this._sessionId) return;
-    const s = this.store.getState();
-    const tokenCount = s.sessionUsage.totalTokens;
-    const model = s.task.model ?? s.config.model;
-    try {
-      saveSession(
-        this._sessionId,
-        s.agentHistory as ChatMessage[],
-        tokenCount,
-        model,
-        s.messages, // save full visible transcript for exact resume
-      );
-    } catch {
-      /* non-blocking */
-    }
+    /* no-op: Mastra persists thread storage */
   }
 
   startNewSession(): void {
-    const { repo, branch } = this._gitMeta;
-    const model = this.store.getState().config.model;
-    try {
-      this._sessionId = createSession({
-        gitRepo: repo,
-        gitBranch: branch,
-        model,
-      });
-    } catch {
-      /* ignore */
-    }
     this.store.dispatch((prev) => ({
-      agentHistory: [],
       messages: [],
-      sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      sessionTokens: 0,
       input: { ...prev.input, history: [] },
     }));
-    // Reset Mastra harness so the next turn starts a fresh thread.
-    resetHarnessSingleton().catch(() => { /* best-effort */ });
+    resetHarnessSingleton().catch(() => {
+      /* best-effort */
+    });
   }
 
-  loadSessionById(sessionId: string): void {
+  async loadThreadById(threadId: string): Promise<void> {
     try {
-      const loaded = loadSession(sessionId);
-      if (!loaded) {
-        this.appendMessage({ role: "system", content: "Session not found." });
-        return;
-      }
-      this._sessionId = sessionId;
+      await switchMastraThread(threadId);
+      await loadThreadIntoUI(
+        threadId,
+        (msgs) => this.store.dispatch({ messages: msgs }),
+        (msg) => this.appendMessage(msg as Message),
+      );
       this.store.dispatch({
-        agentHistory: loaded.agentHistory,
-        messages: [
-          ...loaded.uiMessages,
-          {
-            role: "system",
-            content: `_Session loaded · ${loaded.agentHistory.length} messages · ${loaded.session.name}_`,
-          },
-        ],
-        sessionUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        sessionTokens: 0,
       });
     } catch (err) {
       this.appendMessage({
         role: "system",
-        content: `Failed to load session: ${err}`,
+        content: `Failed to load thread: ${err}`,
       });
     }
   }
@@ -786,11 +608,6 @@ export class ChatTerminal {
 
     let streamingContent = "";
     let hasStreamingEntry = false;
-    let lastTurnUsage: TokenUsage = {
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    };
 
     const resetStreaming = () => {
       streamingContent = "";
@@ -804,7 +621,9 @@ export class ChatTerminal {
       onStreamReset: () => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         streamingContent = "";
-        this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
+        this.store.dispatch({
+          streaming: { active: false, content: "", entryIndex: -1 },
+        });
         this.bus.scheduleRefresh();
       },
       onToken: (token: string) => {
@@ -840,12 +659,7 @@ export class ChatTerminal {
       },
       onUsage: (usage: TokenUsage) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
-        const delta = subtractUsage(usage, lastTurnUsage);
-        lastTurnUsage = usage;
-        this.store.dispatch((prev) => ({
-          task: { ...prev.task, usage },
-          sessionUsage: addUsage(prev.sessionUsage, delta),
-        }));
+        this.store.dispatch((prev) => ({ task: { ...prev.task, usage } }));
       },
       onToolStart: (name: string, args: string, id: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -853,7 +667,9 @@ export class ChatTerminal {
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
         // next text response from Mastra replaces this entry instead of appending.
         streamingContent = "";
-        this.store.dispatch({ streaming: { active: false, content: "", entryIndex: -1 } });
+        this.store.dispatch({
+          streaming: { active: false, content: "", entryIndex: -1 },
+        });
         const s = this.store.getState();
         this.store.dispatch({
           task: {
@@ -886,7 +702,22 @@ export class ChatTerminal {
         }));
         this.bus.scheduleRefresh();
       },
-      onRefreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
+      onOMObservation: (tokensObserved: number, observationTokens: number) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.appendMessage({
+          role: "system",
+          content: `🧠 Memory: observed ${tokensObserved.toLocaleString()} tokens → distilled to ${observationTokens.toLocaleString()} observation tokens`,
+        });
+        this.bus.scheduleRefresh();
+      },
+      onOMReflection: (compressedTokens: number) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.appendMessage({
+          role: "system",
+          content: `🧠 Memory: reflected & compressed ${compressedTokens.toLocaleString()} tokens`,
+        });
+        this.bus.scheduleRefresh();
+      },
       onDebug: (info: Record<string, unknown>) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         if (!this.store.getState().debug) return;
@@ -973,7 +804,19 @@ export class ChatTerminal {
             availableModels: this.store.getState().config.availableModels,
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
-            userMessage: { role: "user", content: mentionContext.content },
+            userMessage: {
+              role: "user",
+              content: buildEnrichedContent(
+                mentionContext.content,
+                sessionResourceCtx,
+                sessionProjectCtx,
+                getMastraCurrentModelId() ??
+                  resolveGatewayModel(
+                    coderProfile!.model,
+                    this.store.getState().config.availableModels,
+                  ),
+              ),
+            },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
             confirmEdit: this.makeConfirmEdit(),
@@ -1004,13 +847,6 @@ export class ChatTerminal {
                 content: plan,
                 toolName: "plan",
               });
-              // Persist plan in agentHistory so it survives session save/load.
-              this.store.dispatch((prev) => ({
-                agentHistory: [
-                  ...(prev.agentHistory as ChatMessage[]),
-                  { role: "tool" as const, name: "plan", content: plan },
-                ],
-              }));
               this.bus.scheduleRefresh();
             },
             onPlanWait: () => this.waitForPlanReview(),
@@ -1026,6 +862,11 @@ export class ChatTerminal {
                 mentionContext.content,
                 sessionResourceCtx,
                 sessionProjectCtx,
+                getMastraCurrentModelId() ??
+                  resolveGatewayModel(
+                    singlePhaseModel,
+                    this.store.getState().config.availableModels,
+                  ),
               ),
             },
             toolClient: this.options.toolClient,
@@ -1074,7 +915,7 @@ export class ChatTerminal {
       ) {
         this.appendMessage({
           role: "system",
-          content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nTry /compact to free context, or check your coder profile configuration.`,
+          content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nCheck your coder profile configuration or start a new session with /new.`,
         });
       }
 
@@ -1089,50 +930,22 @@ export class ChatTerminal {
       resetStreaming();
 
       this.bus.scheduleRefresh();
-      // Don't pollute agentHistory with no-tool-call responses from multi-phase execute —
-      // they cause the next coder turn to mimic the same "re-plan and apologize" pattern.
-      const shouldAddToHistory =
-        !useMultiPhase || result.usedTools || result.unsupportedToolCalling;
-      if (shouldAddToHistory) {
-        // result.messages already starts with the user message (see agent-loop resultMessages init).
-        // Strip base64 images to avoid sending vision content to non-vision models in future turns.
-        const historyMessages = result.messages
-          .filter((m) => m.role !== "tool") // tool results must not persist in history
-          .map((m) => ({ ...m, content: stripImagesFromContent(m.content) }));
-        // Task boundary marker — signals to the model that this task is complete and a new
-        // one will follow. Combined with observation masking, prevents context from earlier
-        // tasks leaking into the next turn.
-        const boundaryMarker: ChatMessage = {
-          role: "assistant",
-          content: TASK_BOUNDARY_CONTENT,
-        };
-        const nextHistory = [
-          ...(this.store.getState().agentHistory as ChatMessage[]),
-          ...historyMessages,
-          boundaryMarker,
-        ];
-        // The agent compacts the request-local message list before provider calls,
-        // but the persisted session history is rebuilt here from the store plus the
-        // latest result messages. Compact this canonical history too; otherwise the
-        // status panel can show >100% usage even though auto-compact fired inside the
-        // loop, and the next turn starts from the un-compacted session history again.
-        const persistedCompaction = await this.compactor.maybeCompact(
-          nextHistory,
-          this.store.getState().config.model,
-          { reason: "auto_threshold" },
-        );
-        const persistedHistory = persistedCompaction.messages;
-        const cs = persistedCompaction.state;
-        this.store.dispatch({
-          agentHistory: persistedHistory,
-          compaction: {
-            usagePercent: cs.usagePercent,
-            compactedCount: cs.compactedCount,
-            lastStrategy: cs.lastStrategy,
-          },
-        });
+
+      // Accumulate session-level token usage from this turn's result.
+      if (result.usage?.totalTokens) {
+        this.store.dispatch((prev) => ({
+          sessionTokens: prev.sessionTokens + result.usage!.totalTokens,
+        }));
+        this.bus.scheduleRefresh();
+      } else {
+        // Fallback: try to sync from Mastra thread storage.
+        getMastraThreadTokenUsage().then((usage) => {
+          if (usage?.totalTokens) {
+            this.store.dispatch({ sessionTokens: usage.totalTokens });
+            this.bus.scheduleRefresh();
+          }
+        }).catch(() => {});
       }
-      this.persistSession();
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
       if (isUserRejectedError(err)) {
@@ -1142,7 +955,6 @@ export class ChatTerminal {
           content:
             "Edit rejected — stream stopped. Continue chatting to try a different approach.",
         });
-        this.persistSession();
         return;
       }
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
@@ -1167,7 +979,7 @@ export class ChatTerminal {
         this.appendMessage({
           role: "system",
           content:
-            "Context window full. Run `/compact` to summarize history, then retry.",
+            "Context window full. Start a new session with /new to free context.",
         });
       } else if (isModelBroken && cs.availableModels.length > 1) {
         const strong = cs.availableModels.filter(
@@ -1407,7 +1219,6 @@ export class ChatTerminal {
       reviewerModel,
       coderModel,
       plannerModel,
-      history: s.agentHistory as ChatMessage[],
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,
       getMessages: () => this.store.getState().messages as Message[],
@@ -1427,17 +1238,6 @@ export class ChatTerminal {
           this.store.dispatch((prev) => ({ messages: updater(prev.messages) }));
         } else {
           this.store.dispatch({ messages: updater });
-        }
-      },
-      setHistory: (
-        updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]),
-      ) => {
-        if (typeof updater === "function") {
-          this.store.dispatch((prev) => ({
-            agentHistory: updater(prev.agentHistory as ChatMessage[]),
-          }));
-        } else {
-          this.store.dispatch({ agentHistory: updater });
         }
       },
       setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => {
@@ -1467,15 +1267,10 @@ export class ChatTerminal {
       },
       debugLogFile: this.logger?.logFile ?? null,
       lastUserText: s.input.lastUserText,
-      compactHistory: (onProgress?: (step: string) => void) =>
-        this.compactHistory(onProgress),
-      persistSession: () => this.persistSession(),
-      getCompactionStatus: () => ({
-        policy: this.compactor.getPolicy(),
-        state: this.compactor.getState(
-          this.store.getState().agentHistory as ChatMessage[],
-        ),
-      }),
+      persistSession: () => {
+        /* no-op */
+      },
+      getSessionTokens: () => this.store.getState().sessionTokens,
       resend: () => {
         const cs = this.store.getState();
         if (cs.input.lastUserText && !cs.input.busy)
@@ -1485,9 +1280,9 @@ export class ChatTerminal {
         process.stdout.write("\x1b[?1000l\x1b[?1006l");
         process.exit(0);
       },
-      currentSessionId: this._sessionId ?? undefined,
       newSession: () => this.startNewSession(),
-      loadSessionById: (id: string) => this.loadSessionById(id),
+      getMastraThreadId: () => getMastraThreadId(),
+      loadThreadById: (id: string) => this.loadThreadById(id),
       startSubprocess: (command: string) => {
         this.store.dispatch({
           subprocess: { active: true, command, logLines: [] },

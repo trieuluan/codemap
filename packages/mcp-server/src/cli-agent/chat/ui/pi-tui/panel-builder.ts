@@ -72,13 +72,6 @@ export function buildStatusBar(
   const workspace = state.workspace?.repoName ?? state.config.profile;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
 
-  const pct = state.compaction?.usagePercent ?? 0;
-  const count = state.compaction?.compactedCount ?? 0;
-  const ctxColor = pct >= 80 ? C_ERROR : pct >= 60 ? C_WARNING : C_MUTED;
-  const ctxStr = pct > 0
-    ? `${ctxColor}ctx ${pct}%${RESET}${count > 0 ? `${C_MUTED} ${count}x${RESET}` : ""}`
-    : "";
-
   const right = statusMessage
     ? `${C_WARNING}${statusMessage}${RESET}`
     : copyMode
@@ -87,9 +80,12 @@ export function buildStatusBar(
         ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
         : debugMode
           ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
-          : ctxStr || `${C_ACTION}MCP connected${RESET}`;
+          : `${C_ACTION}MCP connected${RESET}`;
 
-  const reimportHint = commitsDiffer(state.workspace?.localCommit, state.workspace?.cloudCommit)
+  const reimportHint = commitsDiffer(
+    state.workspace?.localCommit,
+    state.workspace?.cloudCommit,
+  )
     ? `${C_WARNING}⚠ reimport recommended${RESET}`
     : "";
 
@@ -104,7 +100,10 @@ export function buildStatusBar(
   const gap = "  ";
   const maxLeftWidth = Math.max(0, w - hintWidth - gap.length);
   const clippedLeft = truncateVisible(left, maxLeftWidth);
-  const paddingWidth = Math.max(0, w - stripAnsi(clippedLeft).length - hintWidth);
+  const paddingWidth = Math.max(
+    0,
+    w - stripAnsi(clippedLeft).length - hintWidth,
+  );
   return fitLine(clippedLeft + " ".repeat(paddingWidth) + reimportHint, w);
 }
 
@@ -113,14 +112,7 @@ export function buildPanel(
   w: number,
   ctx: PanelContext,
 ): PanelResult {
-  const {
-    editor,
-    frame,
-    shellMode,
-    debugMode,
-    copyMode,
-    statusMessage,
-  } = ctx;
+  const { editor, frame, shellMode, debugMode, copyMode, statusMessage } = ctx;
 
   let { confirmSelection, confirmSignature } = ctx;
 
@@ -168,7 +160,9 @@ export function buildPanel(
 
   // Subprocess log.
   if (state.subprocess.active) {
-    out.push(fitLine(`${C_WARNING}Running:${RESET} ${state.subprocess.command}`, w));
+    out.push(
+      fitLine(`${C_WARNING}Running:${RESET} ${state.subprocess.command}`, w),
+    );
     for (const l of state.subprocess.logLines.slice(-4)) {
       out.push(fitLine(`${C_GRAY}${l}${RESET}`, w));
     }
@@ -181,15 +175,23 @@ export function buildPanel(
     const elapsed = state.task.startTime
       ? formatElapsed(Math.max(0, endTime - state.task.startTime))
       : "0s";
-    const turnTok = state.task.usage?.totalTokens ?? 0;
-    const sessTok = state.sessionUsage.totalTokens;
+    const promptTok = state.task.usage?.promptTokens ?? 0;
+    const completionTok = state.task.usage?.completionTokens ?? 0;
+    const sessTok = state.sessionTokens;
     const usage =
-      turnTok > 0 || sessTok > 0
-        ? ` · t ${formatTokenCount(turnTok)} · s ${formatTokenCount(sessTok)} tok`
+      promptTok > 0 || sessTok > 0
+        ? ` · ${[
+            promptTok > 0 ? `↑${formatTokenCount(promptTok)}` : "",
+            completionTok > 0 ? `↓${formatTokenCount(completionTok)}` : "",
+            sessTok > 0 ? `∑${formatTokenCount(sessTok)}` : "",
+          ]
+            .filter(Boolean)
+            .join(" ")} tok`
         : "";
     const tool = state.task.toolName ? ` · ${state.task.toolName}` : "";
-    const model = state.task.model
-      ? ` ${C_GRAY}${truncate(state.task.model, 28)}${RESET}`
+    const displayModel = state.task.model ?? "";
+    const model = displayModel
+      ? ` ${C_GRAY}${truncate(displayModel, 28)}${RESET}`
       : "";
     const phaseLabel: Record<string, string> = {
       classifying: "classifying...",
@@ -215,31 +217,43 @@ export function buildPanel(
       state.task.phase === "done"
         ? `${C_SUCCESS}✓${RESET}`
         : `${phaseColor}${SPINNER[frame]}${RESET}`;
-    out.push(fitLine(` ${marker} ${phaseColor}${label}${RESET}${model}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`, w));
+    out.push(
+      fitLine(
+        ` ${marker} ${phaseColor}${label}${RESET}${model}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`,
+        w,
+      ),
+    );
   }
 
   // Background synthesis indicator.
   if (state.synthRunning) {
-    out.push(fitLine(
-      ` ${C_AI}${SPINNER[frame]}${RESET} ${C_GRAY}synthesizing context ${C_MUTED}(conventions · rules · skills)…${RESET}`,
-      w,
-    ));
+    out.push(
+      fitLine(
+        ` ${C_AI}${SPINNER[frame]}${RESET} ${C_GRAY}synthesizing context ${C_MUTED}(conventions · rules · skills)…${RESET}`,
+        w,
+      ),
+    );
   }
 
   // Hint bar — shows plan review options when waiting for user approval.
   if (state.planReview?.active) {
     const sel = state.planReview.selection ?? 0;
     const PLAN_OPTIONS = [
-      { label: "implement", desc: "Proceed with implementation (planner → coder → reviewer)" },
-      { label: "no",        desc: "Cancel — don't implement this plan" },
+      {
+        label: "implement",
+        desc: "Proceed with implementation (planner → coder → reviewer)",
+      },
+      { label: "no", desc: "Cancel — don't implement this plan" },
     ];
-    out.push(fitLine(
-      `  ${C_AI}◈ Plan ready${RESET}  ` +
-        `${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}` +
-        `${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}` +
-        `${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to revise${RESET}`,
-      w,
-    ));
+    out.push(
+      fitLine(
+        `  ${C_AI}◈ Plan ready${RESET}  ` +
+          `${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}` +
+          `${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}` +
+          `${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to revise${RESET}`,
+        w,
+      ),
+    );
     for (const [idx, opt] of PLAN_OPTIONS.entries()) {
       const selected = idx === sel;
       const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
@@ -248,19 +262,23 @@ export function buildPanel(
       const label = selected
         ? `${labelColor}${BOLD}${opt.label}${RESET}`
         : `${labelColor}${opt.label}${RESET}`;
-      out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w));
+      out.push(
+        fitLine(`  ${prefix} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
+      );
     }
   } else {
-    out.push(fitLine(
-      `  ${C_ACTION}Tab${RESET} ${C_GRAY}complete${RESET}` +
-        `  ${C_ACTION}↑↓${RESET} ${C_GRAY}history${RESET}` +
-        `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
-        `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
-        `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
-        `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
-        `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
-      w,
-    ));
+    out.push(
+      fitLine(
+        `  ${C_ACTION}Tab${RESET} ${C_GRAY}complete${RESET}` +
+          `  ${C_ACTION}↑↓${RESET} ${C_GRAY}history${RESET}` +
+          `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
+          `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
+          `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
+          `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
+          `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
+        w,
+      ),
+    );
   }
 
   // Editor + autocomplete.
@@ -283,7 +301,10 @@ export function buildPanel(
     }
     out.push(
       fitLine(`${C_WARNING}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
-      fitLine(`${C_MUTED}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`, w),
+      fitLine(
+        `${C_MUTED}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`,
+        w,
+      ),
     );
     const options = [
       { label: "Apply", desc: "Apply this change" },
@@ -297,7 +318,9 @@ export function buildPanel(
       const label = selected
         ? `${isReject ? C_ERROR : C_WHITE}${BOLD}${option.label}${RESET}`
         : `${isReject ? C_ERROR : C_WHITE}${option.label}${RESET}`;
-      out.push(fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w));
+      out.push(
+        fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w),
+      );
     }
   }
 

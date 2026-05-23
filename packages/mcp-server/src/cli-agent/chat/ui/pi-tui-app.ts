@@ -25,10 +25,8 @@ import {
 } from "./pi-tui/theme.js";
 import { fitLine, stripAnsi, workspaceStateCardLines } from "./pi-tui/text.js";
 import { copyToClipboard } from "./pi-tui/clipboard.js";
-import { renderEditor } from "./pi-tui/editor-renderer.js";
 import {
   buildPanel,
-  buildStatusBar,
   isActiveTaskPhase,
 } from "./pi-tui/panel-builder.js";
 
@@ -50,7 +48,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // ── render state ──────────────────────────────────────────────────────────
   let stopped = false;
   let currentBottomHeight = 0;
-  let editorStartInPanel = 0;
   // Scroll anchoring: -1 = auto-follow (always show latest content).
   // When >= 0, it is the content-line index pinned at the top of the viewport.
   // New streaming content appended below leaves the viewport completely unchanged.
@@ -72,7 +69,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // ── diff-based screen buffer ─────────────────────────────────────────────
   // Track what's currently on screen. doRefresh only writes rows that changed,
   // reducing terminal I/O from O(H) lines per frame to O(changed_lines) per frame.
-  let prevScreenLines: string[] = [];
 
   // ── in-app text selection ─────────────────────────────────────────────────
   // Selection is tracked in *content* space (index into virtual lines), not screen rows.
@@ -88,6 +84,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let anchorLine = -1;   let anchorCol = -1;
   // Updated each frame so mouse handlers can convert screen row → content line.
   let visStartLine = 0;
+  // Inline rendering: track how many lines the last frame rendered so we can
+  // go up exactly that many lines at the start of the next frame.
+  let prevTotalHeight = 0;
 
   // ── virtualized message render cache ──────────────────────────────────────
   // Keep global content coordinates as line indexes, but avoid constructing one
@@ -248,7 +247,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tuiStub: any = {
     terminal: { get rows() { return R(); } },
-    requestRender: () => doEditorRefresh(),
+    requestRender: () => scheduleRefresh(true),
   };
 
   // ── editor ────────────────────────────────────────────────────────────────
@@ -307,13 +306,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   function innerWidth(): number { return copyMode ? W() - 2 : W(); }
   function borderRows(): number { return copyMode ? 3 : 0; }
-
-  // Absolute (1-indexed) row where the panel starts.
-  //   normal: messagesHeight + 1
-  //   copy:   1(top) + messagesHeight + 1(sep) + 1(panel start) = messagesHeight + 3
-  function panelStartRow(messagesHeight: number): number {
-    return messagesHeight + 1 + (copyMode ? 2 : 0);
-  }
 
   // ── rendering ─────────────────────────────────────────────────────────────
 
@@ -435,12 +427,23 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         }
       }
       let buf = "\x1b[?2026h\x1b[?25l";
-      for (let row = 0; row < h; row++) {
-        if (screenLines[row] !== prevScreenLines[row]) {
-          buf += `\x1b[${row + 1};1H\x1b[2K${screenLines[row] ?? ""}`;
+      if (prevTotalHeight > 0) buf += `\x1b[${prevTotalHeight}A`;
+      buf += "\x1b[J";
+      for (let i = 0; i < h; i++) {
+        const lineIdx = viewMode.scroll + i;
+        let line: string;
+        if (i === 0 && viewMode.scroll > 0) {
+          line = fitLine(`${C_GRAY}  ↑ ${viewMode.scroll} line${viewMode.scroll === 1 ? "" : "s"} above${RESET}`, w);
+        } else if (i === h - 1 && lineIdx < virtualLines.total - 1) {
+          const below = virtualLines.total - (viewMode.scroll + h);
+          line = fitLine(`${C_GRAY}  ↓ ${below} more — Esc to close${RESET}`, w);
+        } else {
+          line = virtualLines.getLine(lineIdx);
         }
+        buf += `\r${line}`;
+        if (i < h - 1) buf += "\r\n";
       }
-      prevScreenLines = screenLines;
+      prevTotalHeight = h - 1;
       buf += "\x1b[?25l\x1b[?2026l";
       process.stdout.write(buf);
       return;
@@ -456,13 +459,13 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     });
     confirmSignature = panelResult.confirmSignature;
     confirmSelection = panelResult.confirmSelection;
-    editorStartInPanel = panelResult.editorStart;
     currentBottomHeight = panelResult.lines.length;
     const { lines: panel, cursorRow, cursorCol } = panelResult;
 
-    const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
     const virtualLines = renderVirtualLines(state, w);
     lastVirtualTotal = virtualLines.total;
+    const availableHeight = Math.max(1, h - currentBottomHeight - borderRows());
+    const messagesHeight = Math.min(availableHeight, Math.max(1, virtualLines.total));
     lastMessagesHeight = messagesHeight;
 
     const maxStart = Math.max(0, virtualLines.total - messagesHeight);
@@ -480,17 +483,20 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
     visStartLine = startLine; // keep in sync so mouse handlers can convert screen row → content line
 
+    const totalHeight = messagesHeight + borderRows() + currentBottomHeight;
     let buf = "\x1b[?2026h\x1b[?25l";
-    buf += "\x1b[H";
+    // Inline rendering: go up exactly as many lines as the previous frame rendered,
+    // then clear to bottom and re-render in place.
+    if (prevTotalHeight > 0) buf += `\x1b[${prevTotalHeight}A`;
+    buf += "\x1b[J";
 
     if (copyMode) {
       const bc = C_YELLOW;
       const hbar = BDR.h.repeat(iw);
 
-      buf += `\x1b[2K${bc}${BDR.tl}${hbar}${BDR.tr}${RESET}\r\n`;
+      buf += `\r${bc}${BDR.tl}${hbar}${BDR.tr}${RESET}\r\n`;
 
       for (let i = 0; i < messagesHeight; i++) {
-        buf += `\x1b[2K${bc}${BDR.v}${RESET}`;
         let cell = "";
         if (i === 0 && startLine > 0) {
           cell = fitLine(`${C_GRAY}  ↑ ${startLine} line${startLine === 1 ? "" : "s"} above${RESET}`, iw);
@@ -498,29 +504,28 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
           const below = virtualLines.total - (startLine + messagesHeight);
           if (below > 0) cell = fitLine(`${C_GRAY}  ↓ ${below} more — scroll down for latest${RESET}`, iw);
         }
-        if (!cell) {
-          const lineIdx = startLine + i;
-          cell = fitLine(virtualLines.getLine(lineIdx), iw);
-        }
-        buf += `${cell}${bc}${BDR.v}${RESET}\r\n`;
+        if (!cell) cell = fitLine(virtualLines.getLine(startLine + i), iw);
+        buf += `\r${bc}${BDR.v}${RESET}${cell}${bc}${BDR.v}${RESET}\r\n`;
       }
 
-      buf += `\x1b[2K${bc}${BDR.ml}${hbar}${BDR.mr}${RESET}\r\n`;
+      buf += `\r${bc}${BDR.ml}${hbar}${BDR.mr}${RESET}\r\n`;
 
-      for (const [i, line] of panel.entries()) {
-        buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(line, iw)}${bc}${BDR.v}${RESET}`;
+      for (let i = 0; i < panel.length; i++) {
+        buf += `\r${bc}${BDR.v}${RESET}${fitLine(panel[i]!, iw)}${bc}${BDR.v}${RESET}`;
         if (i < panel.length - 1) buf += "\r\n";
       }
-
-      buf += `\r\n\x1b[2K${bc}${BDR.bl}${hbar}${BDR.br}${RESET}`;
+      // Bottom border on its own line.
+      buf += `\r\n\r${bc}${BDR.bl}${hbar}${BDR.br}${RESET}`;
 
       if (cursorRow >= 0) {
-        buf += `\x1b[${panelStartRow(messagesHeight) + cursorRow};${cursorCol + 2}H`;
+        // Cursor is in panel; go up from bottom border: panel.length rows = border + rows-in-panel.
+        const rowsUp = panel.length - cursorRow;
+        if (rowsUp > 0) buf += `\x1b[${rowsUp}A`;
+        buf += `\x1b[${cursorCol + 2}G`;
       }
     } else {
-      // Build the expected screen content for this frame (normal mode).
-      // Then diff against prevScreenLines — only write rows that changed.
-      const screenLines: string[] = new Array(h).fill("");
+      // Build message lines and apply selection highlighting.
+      const screenLines: string[] = new Array(messagesHeight).fill("");
 
       for (let i = 0; i < messagesHeight; i++) {
         if (i === 0 && startLine > 0) {
@@ -532,22 +537,14 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
             continue;
           }
         }
-        const lineIdx = startLine + i;
-        screenLines[i] = virtualLines.getLine(lineIdx);
-      }
-
-      const panelRow0 = panelStartRow(messagesHeight) - 1; // 0-indexed
-      for (let i = 0; i < panel.length; i++) {
-        screenLines[panelRow0 + i] = panel[i] ?? "";
+        screenLines[i] = virtualLines.getLine(startLine + i);
       }
 
       // Apply character-precise selection highlight preserving text colors.
-      // Selection is in content space (virtual line index); convert to screen rows here.
       if (selStartLine >= 0 && selEndLine >= 0) {
-        const SEL_BG = "\x1b[48;2;38;79;120m"; // selection background (muted blue)
-        const SEL_RESET = "\x1b[49m";           // reset background only, keep foreground
+        const SEL_BG = "\x1b[48;2;38;79;120m";
+        const SEL_RESET = "\x1b[49m";
 
-        /** Walk ansi-formatted line, return byte index of visible column `visTgt` (0-indexed). */
         function byteAtVisCol(line: string, visTgt: number): number {
           let vis = 0, i = 0;
           while (i < line.length && vis < visTgt) {
@@ -561,13 +558,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
           return i;
         }
 
-        /** Apply SEL_BG to a portion of an ansi-formatted line, preserving foreground colors. */
         function applyBg(line: string, fromVis: number, toVis: number): string {
           const s = byteAtVisCol(line, fromVis);
           const e = byteAtVisCol(line, toVis);
           if (s >= e) return line;
           const mid = line.slice(s, e);
-          // Re-inject SEL_BG after every \x1b[0m (full reset) inside selection
           const midBg = SEL_BG + mid.replace(/\x1b\[0m/g, `\x1b[0m${SEL_BG}`) + SEL_RESET;
           return line.slice(0, s) + midBg + line.slice(e);
         }
@@ -579,46 +574,54 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         const maxLine = fwd ? selEndLine   : selStartLine;
         const maxC    = fwd ? selEndCol    : selStartCol;
 
-        // Convert content indices to 1-indexed screen rows (may be outside visible area).
         const minScreenRow = minLine - startLine + 1;
         const maxScreenRow = maxLine - startLine + 1;
-
-        // Clamp to the visible message area and iterate only over visible rows.
-        const loI = Math.max(0, minScreenRow - 1);   // 0-indexed, inclusive
-        const hiI = Math.min(maxScreenRow, messagesHeight); // 0-indexed, exclusive
+        const loI = Math.max(0, minScreenRow - 1);
+        const hiI = Math.min(maxScreenRow, messagesHeight);
 
         for (let i = loI; i < hiI; i++) {
-          const screenRow1 = i + 1; // 1-indexed
+          const screenRow1 = i + 1;
           const line = screenLines[i] ?? "";
           const plainLen = stripAnsi(line).trimEnd().length;
-
           if (minLine === maxLine) {
-            // Single content line — partial highlight
             screenLines[i] = applyBg(line, minC - 1, maxC - 1);
           } else if (screenRow1 === minScreenRow) {
-            // First visible row of selection
             screenLines[i] = applyBg(line, minC - 1, plainLen);
           } else if (screenRow1 === maxScreenRow) {
-            // Last row of selection
             screenLines[i] = applyBg(line, 0, maxC - 1);
           } else {
-            // Middle rows (or first visible row when selection started above viewport)
             screenLines[i] = applyBg(line, 0, plainLen);
           }
         }
       }
 
-      // Emit only changed rows using absolute cursor addressing.
-      for (let row = 0; row < h; row++) {
-        if (screenLines[row] !== prevScreenLines[row]) {
-          buf += `\x1b[${row + 1};1H\x1b[2K${screenLines[row] ?? ""}`;
-        }
+      // Write message lines sequentially.
+      for (let i = 0; i < messagesHeight; i++) {
+        buf += `\r${screenLines[i] ?? ""}\r\n`;
       }
-      prevScreenLines = screenLines;
 
-      if (cursorRow >= 0) {
-        buf += `\x1b[${panelStartRow(messagesHeight) + cursorRow};${cursorCol + 1}H`;
+      // Write panel lines sequentially.
+      for (let i = 0; i < panel.length; i++) {
+        buf += `\r${panel[i]}`;
+        if (i < panel.length - 1) buf += "\r\n";
       }
+
+      // Position cursor within panel using relative movement.
+      if (cursorRow >= 0) {
+        const rowsUp = panel.length - 1 - cursorRow;
+        if (rowsUp > 0) buf += `\x1b[${rowsUp}A`;
+        buf += `\x1b[${cursorCol + 1}G`;
+      }
+    }
+
+    // prevTotalHeight must equal the distance from content_start to the cursor
+    // (not totalHeight). After positioning, cursor is at:
+    //   content_start + messagesHeight + borderOffset + cursorRow
+    // So the next doRefresh must go up exactly that many lines to reach content_start.
+    if (cursorRow >= 0) {
+      prevTotalHeight = messagesHeight + Math.max(0, borderRows() - 1) + cursorRow;
+    } else {
+      prevTotalHeight = totalHeight - 1;
     }
 
     buf += "\x1b[?25h\x1b[?2026l";
@@ -627,52 +630,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // Partial refresh — rewrites only the editor + status-bar rows in the panel
   // using absolute cursor addressing. Avoids a full repaint on every keystroke.
-  function doEditorRefresh(): void {
-    if (stopped || viewMode || currentBottomHeight === 0) return;
-    const state = chatTerminal.store.getState();
-    debugMode = state.debug;
-    planMode = state.planMode;
-    const h = R();
-    const iw = innerWidth();
-
-    const { lines: editorLines, cursorRow, cursorCol } =
-      renderEditor(editor, iw, editorStartInPanel, shellMode, debugMode);
-    const newEditorAndBelow = editorLines.length + 1; // +1 for status bar
-    const oldEditorAndBelow = currentBottomHeight - editorStartInPanel;
-
-    const messagesHeight = Math.max(1, h - currentBottomHeight - borderRows());
-    const editorAbsRow = panelStartRow(messagesHeight) + editorStartInPanel;
-
-    let buf = "\x1b[?2026h\x1b[?25l";
-    buf += `\x1b[${editorAbsRow};1H`;
-
-    if (copyMode) {
-      const bc = C_YELLOW;
-      for (const l of editorLines) {
-        buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(l, iw)}${bc}${BDR.v}${RESET}\r\n`;
-      }
-      buf += `\x1b[2K${bc}${BDR.v}${RESET}${fitLine(buildStatusBar(state, iw, copyMode, debugMode, statusMessage), iw)}${bc}${BDR.v}${RESET}`;
-    } else {
-      for (const l of editorLines) buf += `\x1b[2K\r${l}\r\n`;
-      buf += `\x1b[2K\r${buildStatusBar(state, iw, copyMode, debugMode, statusMessage)}`;
-    }
-
-    if (newEditorAndBelow < oldEditorAndBelow) buf += "\x1b[J";
-
-    const delta = newEditorAndBelow - oldEditorAndBelow;
-    currentBottomHeight = editorStartInPanel + newEditorAndBelow;
-    if (delta !== 0) scheduleRefresh();
-
-    if (cursorRow >= 0) {
-      const absRow = panelStartRow(messagesHeight) + cursorRow;
-      const absCol = copyMode ? cursorCol + 2 : cursorCol + 1;
-      buf += `\x1b[${absRow};${absCol}H`;
-    }
-
-    buf += "\x1b[?25h\x1b[?2026l";
-    process.stdout.write(buf);
-  }
-
   // ── input ─────────────────────────────────────────────────────────────────
 
   function selectTokenAt(lineIndex: number, col: number): boolean {
@@ -786,7 +743,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     const msg = messages[messageIndex];
     if (!msg) return false;
     viewMode = { messageIndex, scroll: 0 };
-    prevScreenLines = [];
     scheduleRefresh(true);
     return true;
   }
@@ -795,7 +751,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     if (viewMode) {
       if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("o"))) {
         viewMode = undefined;
-        prevScreenLines = [];
         scheduleRefresh(true);
         return;
       }
@@ -937,7 +892,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     // Ctrl+T: toggle copy mode.
     if (matchesKey(data, Key.ctrl("t"))) {
       copyMode = !copyMode;
-      prevScreenLines = []; // copy mode uses different rendering path
       process.stdout.write(copyMode ? DISABLE_MOUSE_TRACKING : ENABLE_MOUSE_TRACKING);
       scheduleRefresh();
       return;
@@ -1018,7 +972,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         pendingImages.push(image);
         const current = editor.getText();
         editor.setText(current ? `${current} ${image.marker}` : image.marker);
-        doEditorRefresh();
+        scheduleRefresh(true);
         return;
       }
     } catch (err) {
@@ -1035,19 +989,19 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     editor.handleInput(data);
     shellMode = editor.getText().startsWith("!");
-    doEditorRefresh();
+    scheduleRefresh(true);
   }
 
   function onResize(): void {
     currentBottomHeight = 0;
-    prevScreenLines = []; // force full redraw after resize
+    prevTotalHeight = 0;
     doRefresh();
   }
 
   terminal.start(onInput, onResize);
 
-  // Enter alternate screen + enable mouse tracking.
-  process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H\x1b[?25l" + ENABLE_MOUSE_TRACKING);
+  // Inline rendering (no alternate screen) — ensure we start on a fresh line.
+  process.stdout.write("\n\r\x1b[?25l" + ENABLE_MOUSE_TRACKING);
 
   // ── spinner tick ──────────────────────────────────────────────────────────
 
@@ -1071,7 +1025,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         shellMode = canceledPrompt.startsWith("!");
       }
       clearExitConfirm();
-      doEditorRefresh();
+      scheduleRefresh(true);
       return;
     }
     if (copyMode) {
@@ -1087,7 +1041,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       scheduleRefresh();
       return;
     }
-    if (editor.getText().length > 0) { editor.setText(""); shellMode = false; clearExitConfirm(); doEditorRefresh(); return; }
+    if (editor.getText().length > 0) { editor.setText(""); shellMode = false; clearExitConfirm(); scheduleRefresh(true); return; }
     requestExit();
   }
 
@@ -1119,7 +1073,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     unsubscribe();
     terminal.stop();
     process.off("SIGINT", handleInterrupt);
-    process.stdout.write(DISABLE_MOUSE_TRACKING + "\x1b[?1049l\r\n");
+    process.stdout.write(DISABLE_MOUSE_TRACKING + "\x1b[?25h\r\n");
   }
 
   process.once("exit", cleanup);

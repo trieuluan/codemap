@@ -41,12 +41,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
 }
 
 function parseUiMode(value: string | undefined): ChatUiMode | undefined {
-  if (
-    value === "tui" ||
-    value === "classic" ||
-    value === "inline" ||
-    value === "mastra"
-  ) {
+  if (value === "tui") {
     return value;
   }
   return undefined;

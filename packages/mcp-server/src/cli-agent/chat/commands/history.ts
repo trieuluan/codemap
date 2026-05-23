@@ -4,12 +4,13 @@ export const historyCommand: Command = {
   name: "history",
   description: "Show conversation stats",
   execute: (_args, ctx) => {
-    const turns = ctx.history.filter((m) => m.role === "user").length;
+    const msgs = ctx.getMessages();
+    const turns = msgs.filter((m) => m.role === "user").length;
     ctx.setMessages((prev) => [
       ...prev,
       {
         role: "system",
-        content: `Conversation: ${turns} user turns, ${ctx.history.length} total messages`,
+        content: `Conversation: ${turns} user turns, ${msgs.length} total messages`,
       },
     ]);
   },

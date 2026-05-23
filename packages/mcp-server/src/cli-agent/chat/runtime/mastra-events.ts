@@ -9,6 +9,8 @@ export interface BridgeCallbacks {
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
   onDebug?: (info: Record<string, unknown>) => void;
+  onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
+  onOMReflection?: (compressedTokens: number) => void;
   confirmEdit?: SingleAgentRuntimeInput["confirmEdit"];
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
@@ -100,6 +102,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
       cb.currentStreamTextRef.set(lastText);
       if (delta) cb.onToken?.(delta);
     }
+
     return;
   }
 
@@ -146,6 +149,18 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     return;
   }
 
+  if (event.type === "om_observation_end") {
+    const ev = event as OMObservationEndEvent;
+    cb.onOMObservation?.(ev.tokensObserved ?? 0, ev.observationTokens ?? 0);
+    return;
+  }
+
+  if (event.type === "om_reflection_end") {
+    const ev = event as OMReflectionEndEvent;
+    cb.onOMReflection?.(ev.compressedTokens ?? 0);
+    return;
+  }
+
   if (event.type === "error") {
     const ev = event as HarnessErrorEvent;
     cb.onError(ev.error);
@@ -172,7 +187,7 @@ function describeMessageContent(content: HarnessMessageContent[] | string | unde
   if (typeof content === "string") return { kind: "string", length: content.length };
   return content.map((part) => ({
     type: part.type,
-    textLength: typeof part.text === "string" ? part.text.length : undefined,
+    textLength: part.type === "text" ? (part as { type: "text"; text: string }).text.length : undefined,
   }));
 }
 
@@ -192,10 +207,40 @@ function extractLastText(content: HarnessMessageContent[] | string | undefined):
   return "";
 }
 
+export interface HarnessThread {
+  id: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  tokenUsage?: { totalTokens?: number };
+}
+
+export type HarnessMessageContent =
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string }
+  | { type: 'tool_call'; id: string; name: string; args: unknown }
+  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | { type: 'system_reminder'; message: string }
+  | { type: string; [key: string]: unknown };
+
+export interface HarnessMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: HarnessMessageContent[];
+  createdAt: Date;
+  stopReason?: string;
+}
+
 export interface HarnessLike {
   init(): Promise<void>;
   selectOrCreateThread(): Promise<unknown>;
   createThread(opts?: { title?: string }): Promise<unknown>;
+  getCurrentThreadId?(): string | null;
+  getDisplayState?(): { omProgress?: { observationTokens?: number; status?: string; preReflectionTokens?: number } };
+  listMessages(options?: { limit?: number }): Promise<HarnessMessage[]>;
+  listMessagesForThread(options: { threadId: string; limit?: number }): Promise<HarnessMessage[]>;
+  listThreads(options?: { includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  switchThread(options: { threadId: string }): Promise<void>;
   getCurrentModelId?(): string;
   getTokenUsage?(): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
   setState?(updates: Record<string, unknown>): Promise<void>;
@@ -217,7 +262,6 @@ export interface HarnessLike {
   destroy?(): Promise<void>;
 }
 
-type HarnessMessageContent = { type: string; [key: string]: unknown };
 export interface HarnessEvent { type: string }
 
 interface MessageEvent extends HarnessEvent {
@@ -261,4 +305,15 @@ interface PlanApprovalEvent extends HarnessEvent {
   planId: string;
   title: string;
   plan: string;
+}
+interface OMObservationEndEvent extends HarnessEvent {
+  type: "om_observation_end";
+  tokensObserved?: number;
+  observationTokens?: number;
+  observations?: string;
+}
+interface OMReflectionEndEvent extends HarnessEvent {
+  type: "om_reflection_end";
+  compressedTokens?: number;
+  observations?: string;
 }

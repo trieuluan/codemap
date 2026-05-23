@@ -12,13 +12,16 @@ export const statusCommand: Command = {
         role: "system",
         content: [
           `Model:   ${ctx.currentModel}`,
-          `History: ${ctx.history.length} messages`,
+          `History: ${ctx.getMessages().length} messages`,
           ctx.availableModels?.length
             ? `Gateway: ${ctx.availableModels.length} models available`
             : "Gateway: not available",
+          ctx.getSessionTokens() > 0
+            ? `Tokens:  ${ctx.getSessionTokens().toLocaleString()} total (thread)`
+            : "",
           "",
           ...workspaceStatus,
-        ].join("\n"),
+        ].filter((l, i, arr) => l !== "" || arr[i - 1] !== "").join("\n"),
       },
     ]);
   },

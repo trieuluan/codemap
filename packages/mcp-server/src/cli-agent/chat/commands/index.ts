@@ -9,7 +9,6 @@ import { diffCommand } from "./diff.js";
 import { historyCommand } from "./history.js";
 import { debugCommand } from "./debug.js";
 import { mcpCommand } from "./mcp.js";
-import { compactCommand } from "./compact.js";
 import { gitCommitCommand } from "./git-commit.js";
 import { gitPushCommand } from "./git-push.js";
 import { gitPrCommand } from "./git-pr.js";
@@ -35,7 +34,6 @@ const commands: Command[] = [
   clearCommand,
   historyCommand,
   debugCommand,
-  compactCommand,
   mcpCommand,
   exitCommand,
 ];

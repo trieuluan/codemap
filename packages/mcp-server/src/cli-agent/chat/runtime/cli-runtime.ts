@@ -4,7 +4,7 @@ import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { AgentLoopResult, ConfirmEditFn } from "../agent/agent-loop.js";
 import { runWithMastraHarness, runMultiPhaseWithMastra } from "./mastra-harness-runtime.js";
 
-export type ChatUiMode = "tui" | "classic" | "inline" | "mastra";
+export type ChatUiMode = "tui";
 
 export type AgentPhase = "planning" | "executing" | "reviewing";
 export type PlanReviewAction = "implement" | "cancel" | string;
@@ -24,7 +24,8 @@ export interface SingleAgentRuntimeInput {
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
-  onRefreshWorkspaceCommits?: () => Promise<void> | void;
+  onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
+  onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
   confirmEdit?: ConfirmEditFn;
 }
@@ -46,7 +47,8 @@ export interface MultiPhaseLoopInput {
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
-  onRefreshWorkspaceCommits?: () => Promise<void> | void;
+  onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
+  onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
   confirmEdit?: ConfirmEditFn;
 }

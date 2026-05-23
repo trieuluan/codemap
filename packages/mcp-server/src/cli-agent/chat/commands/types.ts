@@ -1,8 +1,6 @@
-import type { ChatMessage } from "../../types.js";
 import type { ChatEntry } from "../ui/chat-terminal.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import type { NineRouterProvider } from "../../provider.js";
-import type { AutoCompactPolicy, ContextCompactionState } from "../agent/context-compactor.js";
 
 export interface CommandContext {
   currentModel: string;
@@ -10,13 +8,11 @@ export interface CommandContext {
   reviewerModel: string;
   coderModel: string;
   plannerModel: string;
-  history: ChatMessage[];
   availableModels?: string[];
   toolClient: CodeMapMcpToolClient;
   getMessages: () => ChatEntry[];
   appendMessage: (msg: Partial<ChatEntry> & { role: string; content: string }) => void;
   setMessages: (updater: ChatEntry[] | ((prev: ChatEntry[]) => ChatEntry[])) => void;
-  setHistory: (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => void;
   setCurrentModel: (model: string) => void;
   setBusy: (busy: boolean) => void;
@@ -24,14 +20,13 @@ export interface CommandContext {
   setDebug: (debug: boolean) => void;
   debugLogFile: string | null;
   lastUserText: string | null;
-  compactHistory: (onProgress?: (step: string) => void) => Promise<{ beforeMessages: number; afterMessages: number; beforeTokens: number; afterTokens: number; compacted: boolean; summaryText?: string }>;
   persistSession: () => void;
-  getCompactionStatus: () => { policy: AutoCompactPolicy; state: ContextCompactionState };
+  getSessionTokens: () => number;
   resend: () => void;
   exit: () => void;
-  currentSessionId?: string;
   newSession?: () => void;
-  loadSessionById?: (sessionId: string) => void;
+  getMastraThreadId?: () => string | null;
+  loadThreadById?: (threadId: string) => Promise<void>;
   /** Show a running indicator in the panel while a shell command is in progress. */
   startSubprocess: (command: string) => void;
   /** Append a log line to the running subprocess indicator. */

@@ -3,7 +3,7 @@ import path from "node:path";
 import type { AgentLoopResult } from "../agent/agent-loop.js";
 import type { SingleAgentRuntimeInput, MultiPhaseLoopInput } from "./cli-runtime.js";
 import { bridgeCommonEvent, type BridgeCallbacks, type HarnessEvent, type HarnessLike, summarizeHarnessEvent } from "./mastra-events.js";
-import { resolveHarnessModelId } from "./mastra-models.js";
+import { resolveHarnessModelId, stripNineRouterPrefix } from "./mastra-models.js";
 import { createManagedMastraSettings, upsertGlobalMastraProvider } from "./mastra-settings.js";
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
@@ -105,6 +105,10 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
     initialState: {
       currentModelId: harnessModelId,
       permissionRules: { categories: {}, tools: {} },
+      // Use the same 9router model for OM observation/reflection instead of the
+      // default google/gemini-2.5-flash which requires a separate API key.
+      observerModelId: harnessModelId,
+      reflectorModelId: harnessModelId,
     },
   });
 
@@ -177,6 +181,8 @@ export async function runWithMastraHarness(
     onToolResult: input.onToolResult,
     onUsage: input.onUsage,
     onDebug: input.onDebug,
+    onOMObservation: input.onOMObservation,
+    onOMReflection: input.onOMReflection,
   };
 
   const result = await runHarness(harness, input.userMessage, input.signal, input.confirmEdit, callbacks);
@@ -330,6 +336,8 @@ export async function runMultiPhaseWithMastra(
         onToolResult: input.onToolResult,
         onUsage: input.onUsage,
         onDebug: input.onDebug,
+        onOMObservation: input.onOMObservation,
+        onOMReflection: input.onOMReflection,
         confirmEdit: input.confirmEdit,
         harness,
         currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
@@ -505,4 +513,67 @@ function createAbortError(): Error {
   const err = new Error("Aborted");
   err.name = "AbortError";
   return err;
+}
+
+export function getMastraCurrentModelId(): string | null {
+  if (!_singleton) return null;
+  const raw = _singleton.harness.getCurrentModelId?.() ?? null;
+  return raw ? stripNineRouterPrefix(raw) : null;
+}
+
+export function getMastraThreadId(): string | null {
+  return _singleton?.harness.getCurrentThreadId?.() ?? null;
+}
+
+export async function getMastraThreadTokenUsage(): Promise<{ promptTokens: number; completionTokens: number; totalTokens: number } | null> {
+  if (!_singleton) return null;
+  try {
+    const threadId = _singleton.harness.getCurrentThreadId?.();
+    if (!threadId) return null;
+    const threads = await _singleton.harness.listThreads();
+    const thread = threads.find(t => t.id === threadId);
+    const u = thread?.tokenUsage;
+    if (!u) return null;
+    return {
+      promptTokens: (u as unknown as { promptTokens?: number }).promptTokens ?? 0,
+      completionTokens: (u as unknown as { completionTokens?: number }).completionTokens ?? 0,
+      totalTokens: u.totalTokens ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getMastraMessages(limit?: number): Promise<import("./mastra-events.js").HarnessMessage[]> {
+  if (!_singleton) return [];
+  try { return await _singleton.harness.listMessages({ limit }); } catch { return []; }
+}
+
+export async function listMastraThreads(): Promise<import("./mastra-events.js").HarnessThread[]> {
+  if (!_singleton) return [];
+  try { return await _singleton.harness.listThreads(); } catch { return []; }
+}
+
+export async function listMastraThreadMessages(threadId: string, limit?: number): Promise<import("./mastra-events.js").HarnessMessage[]> {
+  if (!_singleton) return [];
+  try { return await _singleton.harness.listMessagesForThread({ threadId, limit }); } catch { return []; }
+}
+
+export async function switchMastraThread(threadId: string): Promise<void> {
+  if (!_singleton) return;
+  await _singleton.harness.switchThread({ threadId });
+}
+
+export function getMastraOMStatus(): { observationTokens: number; status: string } | null {
+  if (!_singleton) return null;
+  try {
+    const ds = _singleton.harness.getDisplayState?.();
+    if (!ds?.omProgress) return null;
+    return {
+      observationTokens: ds.omProgress.observationTokens ?? 0,
+      status: ds.omProgress.status ?? "idle",
+    };
+  } catch {
+    return null;
+  }
 }
