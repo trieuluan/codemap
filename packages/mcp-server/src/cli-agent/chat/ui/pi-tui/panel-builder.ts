@@ -46,7 +46,6 @@ export interface PanelContext {
   frame: number;
   shellMode: boolean;
   debugMode: boolean;
-  copyMode: boolean;
   confirmSelection: number;
   confirmSignature: string;
   statusMessage?: string;
@@ -54,9 +53,6 @@ export interface PanelContext {
 
 export interface PanelResult {
   lines: string[];
-  cursorRow: number;
-  cursorCol: number;
-  editorStart: number;
   /** Possibly updated when a new confirm dialog appears. */
   confirmSignature: string;
   confirmSelection: number;
@@ -65,7 +61,6 @@ export interface PanelResult {
 export function buildStatusBar(
   state: UIState,
   w: number,
-  copyMode: boolean,
   debugMode: boolean,
   statusMessage = "",
 ): string {
@@ -74,13 +69,11 @@ export function buildStatusBar(
 
   const right = statusMessage
     ? `${C_WARNING}${statusMessage}${RESET}`
-    : copyMode
-      ? `${C_WARNING}✎ COPY MODE${RESET}${C_MUTED} · Ctrl+T to scroll${RESET}`
-      : state.planMode
-        ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
-        : debugMode
-          ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
-          : `${C_ACTION}MCP connected${RESET}`;
+    : state.planMode
+      ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
+      : debugMode
+        ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
+        : `${C_ACTION}MCP connected${RESET}`;
 
   const reimportHint = commitsDiffer(
     state.workspace?.localCommit,
@@ -112,13 +105,11 @@ export function buildPanel(
   w: number,
   ctx: PanelContext,
 ): PanelResult {
-  const { editor, frame, shellMode, debugMode, copyMode, statusMessage } = ctx;
+  const { editor, frame, shellMode, debugMode, statusMessage } = ctx;
 
   let { confirmSelection, confirmSignature } = ctx;
 
   const out: string[] = [];
-  let cursorRow = -1;
-  let cursorCol = 0;
 
   // /help overlay — generated dynamically so it's always in sync with registered commands.
   if (state.screen === "help") {
@@ -149,7 +140,6 @@ export function buildPanel(
       fitLine(
         `  ${C_ACTION}@${RESET} ${C_GRAY}mention file${RESET}  ` +
           `${C_ACTION}!<cmd>${RESET} ${C_GRAY}shell${RESET}  ` +
-          `${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy mode${RESET}  ` +
           `${C_ACTION}PgUp/Dn${RESET} ${C_GRAY}scroll${RESET}`,
         w,
       ),
@@ -274,7 +264,6 @@ export function buildPanel(
           `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
           `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
           `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
-          `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}copy${RESET}` +
           `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
         w,
       ),
@@ -282,14 +271,7 @@ export function buildPanel(
   }
 
   // Editor + autocomplete.
-  const editorStart = out.length;
-  const {
-    lines: editorLines,
-    cursorRow: eCursorRow,
-    cursorCol: eCursorCol,
-  } = renderEditor(editor, w, editorStart, shellMode, debugMode);
-  cursorRow = eCursorRow;
-  cursorCol = eCursorCol;
+  const editorLines = renderEditor(editor, w, shellMode, debugMode);
   out.push(...editorLines);
 
   // Confirm dialog.
@@ -325,13 +307,10 @@ export function buildPanel(
   }
 
   // Status bar.
-  out.push(buildStatusBar(state, w, copyMode, debugMode, statusMessage));
+  out.push(buildStatusBar(state, w, debugMode, statusMessage));
 
   return {
     lines: out,
-    cursorRow,
-    cursorCol,
-    editorStart,
     confirmSignature,
     confirmSelection,
   };

@@ -22,7 +22,43 @@ const CANCEL_SYNONYMS = new Set([
   "không", "thôi", "dừng", "hủy",
 ]);
 
-const MASTRA_AGENT_TIMEOUT_MS = 120_000;
+const CODEMAP_MASTRA_AGENT_TIMEOUT_ENV = "CODEMAP_MASTRA_AGENT_TIMEOUT_MS";
+export const DEFAULT_MASTRA_AGENT_TIMEOUT_MS = 600_000;
+
+export interface MastraAgentTimeoutConfig {
+  timeoutMs: number;
+  timeoutSource: "default" | "env";
+}
+
+export function resolveMastraAgentTimeout(
+  env: NodeJS.ProcessEnv = process.env,
+): MastraAgentTimeoutConfig {
+  const raw = env[CODEMAP_MASTRA_AGENT_TIMEOUT_ENV];
+  if (!raw) {
+    return { timeoutMs: DEFAULT_MASTRA_AGENT_TIMEOUT_MS, timeoutSource: "default" };
+  }
+
+  const parsed = Number(raw);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return { timeoutMs: parsed, timeoutSource: "env" };
+  }
+
+  return { timeoutMs: DEFAULT_MASTRA_AGENT_TIMEOUT_MS, timeoutSource: "default" };
+}
+
+export function formatMastraTimeoutDuration(timeoutMs: number): string {
+  const minutes = timeoutMs / 60_000;
+  if (Number.isInteger(minutes)) {
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+
+  const seconds = Math.round(timeoutMs / 1_000);
+  return `${seconds} ${seconds === 1 ? "second" : "seconds"}`;
+}
+
+function createMastraTimeoutText(timeoutMs: number): string {
+  return `(agent timed out after ${formatMastraTimeoutDuration(timeoutMs)})`;
+}
 
 const MASTRA_DISABLED_TOOLS = [
   "request_access",
@@ -225,6 +261,8 @@ export async function runMultiPhaseWithMastra(
     availableCount: input.availableModels?.length ?? 0,
   });
 
+  const timeoutConfig = resolveMastraAgentTimeout();
+
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
     let currentStreamText = "";
@@ -304,21 +342,28 @@ export async function runMultiPhaseWithMastra(
     };
 
     timeoutId = setTimeout(() => {
+      const hasPartialText = Boolean(finalText || currentStreamText);
       input.onDebug?.({
         event: "mastra_run_timeout",
         mode: "multi",
         finalTextLength: finalText.length,
         currentStreamTextLength: currentStreamText.length,
         usedTools,
+        timeoutMs: timeoutConfig.timeoutMs,
+        timeoutSource: timeoutConfig.timeoutSource,
+        hasPartialText,
       });
       harness.abort?.();
       finish({
-        text: finalText || currentStreamText || "(agent timed out after 2 minutes)",
+        text: finalText || currentStreamText || createMastraTimeoutText(timeoutConfig.timeoutMs),
         messages: [input.userMessage],
         usedTools,
         unsupportedToolCalling: false,
+        timedOut: true,
+        timeoutMs: timeoutConfig.timeoutMs,
+        timeoutSource: timeoutConfig.timeoutSource,
       }, unsubscribe, onAbort, timeoutId);
-    }, MASTRA_AGENT_TIMEOUT_MS);
+    }, timeoutConfig.timeoutMs);
 
     unsubscribe = harness.subscribe((event: HarnessEvent) => {
       input.onDebug?.(summarizeHarnessEvent(event, currentStreamText, finalText));
@@ -377,6 +422,8 @@ function runHarness(
   confirmEdit: SingleAgentRuntimeInput["confirmEdit"],
   callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError" | "confirmEdit">,
 ): Promise<AgentLoopResult> {
+  const timeoutConfig = resolveMastraAgentTimeout();
+
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
     let currentStreamText = "";
@@ -470,21 +517,28 @@ function runHarness(
     // Safety timeout: if agent_end never fires (agent stuck in a tool loop),
     // abort and return whatever text we've accumulated so far.
     timeoutId = setTimeout(() => {
+      const hasPartialText = Boolean(finalText || currentStreamText);
       callbacks.onDebug?.({
         event: "mastra_run_timeout",
         mode: "single",
         finalTextLength: finalText.length,
         currentStreamTextLength: currentStreamText.length,
         usedTools,
+        timeoutMs: timeoutConfig.timeoutMs,
+        timeoutSource: timeoutConfig.timeoutSource,
+        hasPartialText,
       });
       harness.abort?.();
       finish({
-        text: finalText || currentStreamText || "(agent timed out after 2 minutes)",
+        text: finalText || currentStreamText || createMastraTimeoutText(timeoutConfig.timeoutMs),
         messages: [userMessage as { role: "user"; content: string }],
         usedTools,
         unsupportedToolCalling: false,
+        timedOut: true,
+        timeoutMs: timeoutConfig.timeoutMs,
+        timeoutSource: timeoutConfig.timeoutSource,
       });
-    }, MASTRA_AGENT_TIMEOUT_MS);
+    }, timeoutConfig.timeoutMs);
 
     sendHarnessInput(harness, userMessage.content, callbacks.onDebug).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));

@@ -6,6 +6,9 @@ export interface AgentLoopResult {
   usedTools: boolean;
   unsupportedToolCalling: boolean;
   usage?: TokenUsage;
+  timedOut?: boolean;
+  timeoutMs?: number;
+  timeoutSource?: "default" | "env";
 }
 
 export type ConfirmEditFn = (

@@ -17,6 +17,7 @@ import {
   getMastraThreadId,
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
+  formatMastraTimeoutDuration,
   switchMastraThread,
 } from "../runtime/mastra-harness-runtime.js";
 import { resolveGatewayModel } from "../runtime/mastra-models.js";
@@ -925,6 +926,12 @@ export class ChatTerminal {
         this.appendMessage({
           role: "assistant",
           content: result.text || "(no response)",
+        });
+      }
+      if (result.timedOut && result.timeoutMs && hasStreamingEntry && result.text) {
+        this.appendMessage({
+          role: "system",
+          content: `⚠ Agent timed out after ${formatMastraTimeoutDuration(result.timeoutMs)}; partial response preserved.`,
         });
       }
       resetStreaming();

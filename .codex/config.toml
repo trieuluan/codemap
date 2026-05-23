@@ -53,6 +53,9 @@ approval_mode = "approve"
 [mcp_servers.codemap-mcp-dev.tools.web_search]
 approval_mode = "approve"
 
+[mcp_servers.codemap-mcp-dev.tools.suggest_edit_locations]
+approval_mode = "approve"
+
 [mcp_servers.codemap_mcp_dev]
 args = [
     "tsx",

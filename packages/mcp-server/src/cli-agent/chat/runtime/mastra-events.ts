@@ -2,6 +2,9 @@ import type { SingleAgentRuntimeInput } from "./cli-runtime.js";
 
 interface Ref<T> { get(): T; set(v: T): void }
 
+const SCRATCH_TEXT_PREFIXES = ["Need final answer", "Need enough"];
+const SCRATCH_TEXT_MAX_LENGTH = 120;
+
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
@@ -88,6 +91,9 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const message = (event as MessageEvent).message;
     if (message?.role !== "assistant") return;
     const lastText = extractLastText(message.content);
+    if (isSuppressedScratchAssistantText(lastText)) {
+      return;
+    }
     const prev = cb.currentStreamTextRef.get();
 
     if (lastText.length < prev.length) {
@@ -109,7 +115,8 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   if (event.type === "message_end") {
     const message = (event as MessageEvent).message;
     if (message?.role !== "assistant") return;
-    cb.finalTextRef.set(extractLastText(message.content));
+    const lastText = extractLastText(message.content);
+    cb.finalTextRef.set(isSuppressedScratchAssistantText(lastText) ? "" : lastText);
     cb.currentStreamTextRef.set("");
     cb.onStreamReset?.();
     return;
@@ -179,6 +186,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
 }
 
 function stripServerPrefix(name: string): string {
+  if (!name) return name ?? "";
   return name.startsWith("codemap_") ? name.slice("codemap_".length) : name;
 }
 
@@ -194,6 +202,14 @@ function describeMessageContent(content: HarnessMessageContent[] | string | unde
 function previewText(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
+}
+
+export function isSuppressedScratchAssistantText(text: string): boolean {
+  if (!text || text.length > SCRATCH_TEXT_MAX_LENGTH || text.includes("\n")) {
+    return false;
+  }
+  const trimmedStart = text.trimStart();
+  return SCRATCH_TEXT_PREFIXES.some((prefix) => trimmedStart.startsWith(prefix));
 }
 
 function extractLastText(content: HarnessMessageContent[] | string | undefined): string {
