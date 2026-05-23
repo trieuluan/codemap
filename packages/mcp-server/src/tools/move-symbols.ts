@@ -222,7 +222,6 @@ export function registerMoveSymbolsTool(
             "Symbol names to move. Case-insensitive. E.g. ['parseDartFile', 'DartAstNode'].",
           ),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

@@ -55,7 +55,6 @@ export function registerCodeReviewTool(
           .default(10)
           .describe("Maximum number of files to review. Default: 10."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

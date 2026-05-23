@@ -46,7 +46,6 @@ export function registerRunTestsTool(
           .optional()
           .describe("Maximum number of workers for parallel test execution."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

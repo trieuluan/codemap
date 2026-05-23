@@ -47,7 +47,6 @@ export function registerFindUsagesTool(server: McpServer, config: McpServerConfi
           .min(1)
           .describe("Name of the symbol to find usages for."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

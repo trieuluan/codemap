@@ -17,7 +17,7 @@ export function registerWaitForAuthTool(
       description:
         "Polls CodeMap MCP login status for a previously started auth session. Saves the issued API key into the global MCP config when authorization succeeds.",
       inputSchema: {
-        sessionId: z.string().uuid(),
+        sessionId: z.uuid(),
       },
     },
     async ({ sessionId }) => {

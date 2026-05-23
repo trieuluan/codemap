@@ -2,9 +2,6 @@ import type { SingleAgentRuntimeInput } from "./cli-runtime.js";
 
 interface Ref<T> { get(): T; set(v: T): void }
 
-const SCRATCH_TEXT_PREFIXES = ["Need final answer", "Need enough"];
-const SCRATCH_TEXT_MAX_LENGTH = 120;
-
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
@@ -22,6 +19,7 @@ export interface BridgeCallbacks {
   onPlanApproval?: (planId: string, plan: string) => void;
   onEnd: (usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined) => void;
   onError: (err: unknown) => void;
+  mcpServerIds?: Set<string>;
 }
 
 export function summarizeHarnessEvent(
@@ -91,9 +89,6 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const message = (event as MessageEvent).message;
     if (message?.role !== "assistant") return;
     const lastText = extractLastText(message.content);
-    if (isSuppressedScratchAssistantText(lastText)) {
-      return;
-    }
     const prev = cb.currentStreamTextRef.get();
 
     if (lastText.length < prev.length) {
@@ -116,7 +111,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const message = (event as MessageEvent).message;
     if (message?.role !== "assistant") return;
     const lastText = extractLastText(message.content);
-    cb.finalTextRef.set(isSuppressedScratchAssistantText(lastText) ? "" : lastText);
+    cb.finalTextRef.set(lastText);
     cb.currentStreamTextRef.set("");
     cb.onStreamReset?.();
     return;
@@ -125,14 +120,14 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   if (event.type === "tool_start") {
     const ev = event as ToolStartEvent;
     cb.usedToolsRef.set(true);
-    const displayName = stripServerPrefix(ev.toolName);
+    const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
     cb.onToolStart?.(displayName, ev.args != null ? JSON.stringify(ev.args) : "{}", ev.toolCallId ?? "");
     return;
   }
 
   if (event.type === "tool_end") {
     const ev = event as ToolEndEvent;
-    const displayName = stripServerPrefix(ev.toolName);
+    const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
     const r = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? "");
     cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${r}` : r);
     return;
@@ -142,7 +137,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const ev = event as ToolApprovalEvent;
     const handleApproval = async () => {
       const accepted = cb.confirmEdit
-        ? await cb.confirmEdit(stripServerPrefix(ev.toolName), ev.args as Record<string, unknown>, null)
+        ? await cb.confirmEdit(formatToolDisplayName(ev.toolName, cb.mcpServerIds), ev.args as Record<string, unknown>, null)
         : true;
       cb.harness.respondToToolApproval?.({ decision: accepted ? "approve" : "decline" });
     };
@@ -185,9 +180,15 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   }
 }
 
-function stripServerPrefix(name: string): string {
+function formatToolDisplayName(name: string, mcpServerIds?: Set<string>): string {
   if (!name) return name ?? "";
-  return name.startsWith("codemap_") ? name.slice("codemap_".length) : name;
+  if (!mcpServerIds) return name;
+  const underscoreIdx = name.indexOf("_");
+  if (underscoreIdx > 0) {
+    const server = name.slice(0, underscoreIdx);
+    if (mcpServerIds.has(server)) return `${server} · ${name.slice(underscoreIdx + 1)}`;
+  }
+  return name;
 }
 
 function describeMessageContent(content: HarnessMessageContent[] | string | undefined): unknown {
@@ -202,14 +203,6 @@ function describeMessageContent(content: HarnessMessageContent[] | string | unde
 function previewText(text: string): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
-}
-
-export function isSuppressedScratchAssistantText(text: string): boolean {
-  if (!text || text.length > SCRATCH_TEXT_MAX_LENGTH || text.includes("\n")) {
-    return false;
-  }
-  const trimmedStart = text.trimStart();
-  return SCRATCH_TEXT_PREFIXES.some((prefix) => trimmedStart.startsWith(prefix));
 }
 
 function extractLastText(content: HarnessMessageContent[] | string | undefined): string {

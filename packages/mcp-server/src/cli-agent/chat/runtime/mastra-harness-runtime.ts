@@ -8,6 +8,49 @@ import { createManagedMastraSettings, upsertGlobalMastraProvider } from "./mastr
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
 
+export interface MastraMcpServerStatus {
+  name: string;
+  connected: boolean;
+  connecting?: boolean;
+  toolCount: number;
+  toolNames: string[];
+  transport: "stdio" | "http";
+  error?: string;
+}
+
+export interface MastraMcpSkippedServer {
+  name: string;
+  reason: string;
+}
+
+export interface MastraMcpConfigPaths {
+  project: string;
+  global: string;
+  claude: string;
+}
+
+export interface MastraMcpStatusSummary {
+  hasServers: boolean;
+  statuses: MastraMcpServerStatus[];
+  skipped: MastraMcpSkippedServer[];
+  configPaths?: MastraMcpConfigPaths;
+}
+
+interface MastraMcpInitResult {
+  connected: MastraMcpServerStatus[];
+  failed: MastraMcpServerStatus[];
+  skipped: MastraMcpSkippedServer[];
+  totalTools: number;
+}
+
+interface MastraMcpManagerLike {
+  initInBackground(): Promise<MastraMcpInitResult>;
+  hasServers(): boolean;
+  getServerStatuses(): MastraMcpServerStatus[];
+  getSkippedServers(): MastraMcpSkippedServer[];
+  getConfigPaths?(): MastraMcpConfigPaths;
+}
+
 const dynamicImport = new Function(
   "specifier",
   "return import(specifier)",
@@ -22,43 +65,6 @@ const CANCEL_SYNONYMS = new Set([
   "không", "thôi", "dừng", "hủy",
 ]);
 
-const CODEMAP_MASTRA_AGENT_TIMEOUT_ENV = "CODEMAP_MASTRA_AGENT_TIMEOUT_MS";
-export const DEFAULT_MASTRA_AGENT_TIMEOUT_MS = 600_000;
-
-export interface MastraAgentTimeoutConfig {
-  timeoutMs: number;
-  timeoutSource: "default" | "env";
-}
-
-export function resolveMastraAgentTimeout(
-  env: NodeJS.ProcessEnv = process.env,
-): MastraAgentTimeoutConfig {
-  const raw = env[CODEMAP_MASTRA_AGENT_TIMEOUT_ENV];
-  if (!raw) {
-    return { timeoutMs: DEFAULT_MASTRA_AGENT_TIMEOUT_MS, timeoutSource: "default" };
-  }
-
-  const parsed = Number(raw);
-  if (Number.isInteger(parsed) && parsed > 0) {
-    return { timeoutMs: parsed, timeoutSource: "env" };
-  }
-
-  return { timeoutMs: DEFAULT_MASTRA_AGENT_TIMEOUT_MS, timeoutSource: "default" };
-}
-
-export function formatMastraTimeoutDuration(timeoutMs: number): string {
-  const minutes = timeoutMs / 60_000;
-  if (Number.isInteger(minutes)) {
-    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
-  }
-
-  const seconds = Math.round(timeoutMs / 1_000);
-  return `${seconds} ${seconds === 1 ? "second" : "seconds"}`;
-}
-
-function createMastraTimeoutText(timeoutMs: number): string {
-  return `(agent timed out after ${formatMastraTimeoutDuration(timeoutMs)})`;
-}
 
 const MASTRA_DISABLED_TOOLS = [
   "request_access",
@@ -96,9 +102,12 @@ interface CreateHarnessOptions {
 
 interface HarnessSingleton {
   harness: HarnessLike;
+  mcpManager: MastraMcpManagerLike | undefined;
+  mcpInitPromise: Promise<MastraMcpInitResult> | undefined;
   baseUrl: string;
   apiKey: string | undefined;
   settingsPath: string;
+  mcpServerIds: Set<string>;
 }
 
 let _singleton: HarnessSingleton | null = null;
@@ -106,9 +115,10 @@ let _singleton: HarnessSingleton | null = null;
 /** Destroy and forget the current harness — call when starting a new chat session. */
 export async function resetHarnessSingleton(): Promise<void> {
   if (!_singleton) return;
-  try { await _singleton.harness.destroy?.(); } catch { /* best-effort */ }
-  try { await rm(path.dirname(_singleton.settingsPath), { recursive: true, force: true }); } catch { /* best-effort */ }
+  const old = _singleton;
   _singleton = null;
+  try { await old.harness.destroy?.(); } catch { /* best-effort */ }
+  try { await rm(path.dirname(old.settingsPath), { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
 /** Create a brand-new harness and store it as the singleton. */
@@ -116,7 +126,7 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
   const mod = await dynamicImport("mastracode");
   const createMastraCode = mod.createMastraCode as (
     config?: Record<string, unknown>,
-  ) => Promise<{ harness: HarnessLike }>;
+  ) => Promise<{ harness: HarnessLike; mcpManager?: MastraMcpManagerLike }>;
 
   const serverConfig = opts.toolClient.getServerConfig();
 
@@ -130,7 +140,7 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
     settingsPath,
     globalSettingsPath,
   });
-  const { harness } = await createMastraCode({
+  const { harness, mcpManager } = await createMastraCode({
     settingsPath,
     mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
     // Disable orchestration/status tools that cause Mastra's build agent to loop:
@@ -154,12 +164,43 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
   await harness.createThread();
   await forceHarnessModel(harness, harnessModelId);
 
-  _singleton = { harness, baseUrl: opts.baseUrl, apiKey: opts.apiKey, settingsPath };
+  const mcpInitPromise = startMastraMcpInitialization(mcpManager, opts.onDebug);
+
+  const mcpServerIds = new Set(["codemap", ...Object.keys(opts.extraServerConfigs ?? {})]);
+  _singleton = { harness, mcpManager, mcpInitPromise, baseUrl: opts.baseUrl, apiKey: opts.apiKey, settingsPath, mcpServerIds };
 
   // Best-effort cleanup when the process exits.
   process.once("exit", () => { try { _singleton?.harness.destroy?.(); } catch { /* ignore */ } });
 
   return harness;
+}
+
+function startMastraMcpInitialization(
+  mcpManager: MastraMcpManagerLike | undefined,
+  onDebug?: (info: Record<string, unknown>) => void,
+): Promise<MastraMcpInitResult> | undefined {
+  if (!mcpManager?.hasServers()) return undefined;
+
+  onDebug?.({ event: "mastra_mcp_init_start" });
+  return mcpManager.initInBackground().then((result) => {
+    onDebug?.({
+      event: "mastra_mcp_init_done",
+      connectedCount: result.connected.length,
+      failedCount: result.failed.length,
+      skippedCount: result.skipped.length,
+      totalTools: result.totalTools,
+    });
+    return result;
+  }).catch((err: unknown) => {
+    const error = err instanceof Error ? err.message : String(err);
+    onDebug?.({ event: "mastra_mcp_init_failed", error });
+    return {
+      connected: [],
+      failed: mcpManager.getServerStatuses(),
+      skipped: mcpManager.getSkippedServers(),
+      totalTools: 0,
+    };
+  });
 }
 
 async function forceHarnessModel(harness: HarnessLike, modelId: string): Promise<void> {
@@ -219,6 +260,7 @@ export async function runWithMastraHarness(
     onDebug: input.onDebug,
     onOMObservation: input.onOMObservation,
     onOMReflection: input.onOMReflection,
+    mcpServerIds: _singleton?.mcpServerIds,
   };
 
   const result = await runHarness(harness, input.userMessage, input.signal, input.confirmEdit, callbacks);
@@ -261,20 +303,15 @@ export async function runMultiPhaseWithMastra(
     availableCount: input.availableModels?.length ?? 0,
   });
 
-  const timeoutConfig = resolveMastraAgentTimeout();
-
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
     let currentStreamText = "";
     let usedTools = false;
     let settled = false;
 
-    const finish = (
-      result: AgentLoopResult,
-      unsubscribe: () => void,
-      onAbort: () => void,
-      timeoutId: ReturnType<typeof setTimeout>,
-    ) => {
+    let unsubscribe = () => {};
+
+    const finish = (result: AgentLoopResult) => {
       if (settled) return;
       settled = true;
       input.onDebug?.({
@@ -284,18 +321,12 @@ export async function runMultiPhaseWithMastra(
         usedTools: result.usedTools,
         unsupportedToolCalling: result.unsupportedToolCalling,
       });
-      clearTimeout(timeoutId);
       input.signal?.removeEventListener("abort", onAbort);
       unsubscribe();
       resolve(result);
     };
 
-    const fail = (
-      err: unknown,
-      unsubscribe: () => void,
-      onAbort: () => void,
-      timeoutId: ReturnType<typeof setTimeout>,
-    ) => {
+    const fail = (err: unknown) => {
       if (settled) return;
       settled = true;
       input.onDebug?.({
@@ -303,7 +334,6 @@ export async function runMultiPhaseWithMastra(
         mode: "multi",
         error: err instanceof Error ? err.message : String(err),
       });
-      clearTimeout(timeoutId);
       input.signal?.removeEventListener("abort", onAbort);
       unsubscribe();
       reject(err);
@@ -319,12 +349,7 @@ export async function runMultiPhaseWithMastra(
       const action = normalizePlanAction(raw);
       if (action === "cancel") {
         harness.abort?.();
-        finish({
-          text: "Plan cancelled.",
-          messages: [],
-          usedTools: false,
-          unsupportedToolCalling: false,
-        }, unsubscribe, onAbort, timeoutId);
+        finish({ text: "Plan cancelled.", messages: [], usedTools: false, unsupportedToolCalling: false });
         return;
       }
       if (action === "implement") {
@@ -334,36 +359,7 @@ export async function runMultiPhaseWithMastra(
       }
     };
 
-    let unsubscribe = () => {};
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const onAbort = () => {
-      harness.abort?.();
-      fail(createAbortError(), unsubscribe, onAbort, timeoutId);
-    };
-
-    timeoutId = setTimeout(() => {
-      const hasPartialText = Boolean(finalText || currentStreamText);
-      input.onDebug?.({
-        event: "mastra_run_timeout",
-        mode: "multi",
-        finalTextLength: finalText.length,
-        currentStreamTextLength: currentStreamText.length,
-        usedTools,
-        timeoutMs: timeoutConfig.timeoutMs,
-        timeoutSource: timeoutConfig.timeoutSource,
-        hasPartialText,
-      });
-      harness.abort?.();
-      finish({
-        text: finalText || currentStreamText || createMastraTimeoutText(timeoutConfig.timeoutMs),
-        messages: [input.userMessage],
-        usedTools,
-        unsupportedToolCalling: false,
-        timedOut: true,
-        timeoutMs: timeoutConfig.timeoutMs,
-        timeoutSource: timeoutConfig.timeoutSource,
-      }, unsubscribe, onAbort, timeoutId);
-    }, timeoutConfig.timeoutMs);
+    const onAbort = () => { harness.abort?.(); fail(createAbortError()); };
 
     unsubscribe = harness.subscribe((event: HarnessEvent) => {
       input.onDebug?.(summarizeHarnessEvent(event, currentStreamText, finalText));
@@ -388,28 +384,19 @@ export async function runMultiPhaseWithMastra(
         currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
         finalTextRef: { get: () => finalText, set: (v) => { finalText = v; currentStreamText = ""; } },
         usedToolsRef: { get: () => usedTools, set: (v) => { usedTools = v; } },
-        onPlanApproval: (planId, plan) => {
-          handlePlanApproval(planId, plan).catch((err) => {
-            fail(err, unsubscribe, onAbort, timeoutId);
-          });
-        },
+        onPlanApproval: (planId, plan) => { handlePlanApproval(planId, plan).catch(fail); },
+        mcpServerIds: _singleton?.mcpServerIds,
         onEnd: (usage) => {
-          finish({
-            text: finalText || currentStreamText,
-            messages: [input.userMessage],
-            usedTools,
-            unsupportedToolCalling: false,
-            usage,
-          }, unsubscribe, onAbort, timeoutId);
+          finish({ text: finalText || currentStreamText, messages: [input.userMessage], usedTools, unsupportedToolCalling: false, usage });
         },
-        onError: (err) => fail(err, unsubscribe, onAbort, timeoutId),
+        onError: fail,
       });
     });
 
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
     sendHarnessInput(harness, input.userMessage.content, input.onDebug).catch((err: unknown) => {
-      fail(err instanceof Error ? err : new Error(String(err)), unsubscribe, onAbort, timeoutId);
+      fail(err instanceof Error ? err : new Error(String(err)));
     });
   });
 }
@@ -422,15 +409,12 @@ function runHarness(
   confirmEdit: SingleAgentRuntimeInput["confirmEdit"],
   callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError" | "confirmEdit">,
 ): Promise<AgentLoopResult> {
-  const timeoutConfig = resolveMastraAgentTimeout();
-
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
     let currentStreamText = "";
     let usedTools = false;
     let settled = false;
 
-    let timeoutId: ReturnType<typeof setTimeout>;
     const finish = (result: AgentLoopResult) => {
       if (settled) return;
       settled = true;
@@ -441,7 +425,6 @@ function runHarness(
         usedTools: result.usedTools,
         unsupportedToolCalling: result.unsupportedToolCalling,
       });
-      clearTimeout(timeoutId);
       signal?.removeEventListener("abort", onAbort);
       unsubscribe();
       resolve(result);
@@ -454,7 +437,6 @@ function runHarness(
         mode: "single",
         error: err instanceof Error ? err.message : String(err),
       });
-      clearTimeout(timeoutId);
       signal?.removeEventListener("abort", onAbort);
       unsubscribe();
       reject(err);
@@ -514,32 +496,6 @@ function runHarness(
     const onAbort = () => { harness.abort?.(); fail(createAbortError()); };
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    // Safety timeout: if agent_end never fires (agent stuck in a tool loop),
-    // abort and return whatever text we've accumulated so far.
-    timeoutId = setTimeout(() => {
-      const hasPartialText = Boolean(finalText || currentStreamText);
-      callbacks.onDebug?.({
-        event: "mastra_run_timeout",
-        mode: "single",
-        finalTextLength: finalText.length,
-        currentStreamTextLength: currentStreamText.length,
-        usedTools,
-        timeoutMs: timeoutConfig.timeoutMs,
-        timeoutSource: timeoutConfig.timeoutSource,
-        hasPartialText,
-      });
-      harness.abort?.();
-      finish({
-        text: finalText || currentStreamText || createMastraTimeoutText(timeoutConfig.timeoutMs),
-        messages: [userMessage as { role: "user"; content: string }],
-        usedTools,
-        unsupportedToolCalling: false,
-        timedOut: true,
-        timeoutMs: timeoutConfig.timeoutMs,
-        timeoutSource: timeoutConfig.timeoutSource,
-      });
-    }, timeoutConfig.timeoutMs);
-
     sendHarnessInput(harness, userMessage.content, callbacks.onDebug).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
@@ -577,6 +533,24 @@ export function getMastraCurrentModelId(): string | null {
 
 export function getMastraThreadId(): string | null {
   return _singleton?.harness.getCurrentThreadId?.() ?? null;
+}
+
+export function getMastraMcpServerStatuses(): MastraMcpServerStatus[] | null {
+  return _singleton?.mcpManager?.getServerStatuses() ?? null;
+}
+
+export async function getMastraMcpStatusSummary(): Promise<MastraMcpStatusSummary | null> {
+  const manager = _singleton?.mcpManager;
+  if (!manager) return null;
+
+  await _singleton?.mcpInitPromise;
+
+  return {
+    hasServers: manager.hasServers(),
+    statuses: manager.getServerStatuses(),
+    skipped: manager.getSkippedServers(),
+    configPaths: manager.getConfigPaths?.(),
+  };
 }
 
 export async function getMastraThreadTokenUsage(): Promise<{ promptTokens: number; completionTokens: number; totalTokens: number } | null> {

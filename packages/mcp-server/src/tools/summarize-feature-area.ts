@@ -532,7 +532,6 @@ export function registerSummarizeFeatureAreaTool(
           .max(200)
           .describe("Feature keyword or phrase, e.g. 'billing', 'auth redirect', 'admin import history'."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

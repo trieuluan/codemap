@@ -311,7 +311,6 @@ export function registerExploreTaskTool(
           .max(500)
           .describe("Describe the task, feature, or bug to investigate."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

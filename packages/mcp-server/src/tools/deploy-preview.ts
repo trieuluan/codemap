@@ -47,7 +47,6 @@ export function registerDeployPreviewTool(
             "Force redeploy even if same branch/commit. Default: false.",
           ),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

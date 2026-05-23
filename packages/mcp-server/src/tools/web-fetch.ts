@@ -25,28 +25,36 @@ function toRawGithubUrl(url: string): string {
 
 /** Strip HTML tags and collapse whitespace to produce readable plain text. */
 function htmlToText(html: string): string {
-  return html
-    // Remove <script> and <style> blocks entirely
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    // Block elements → newlines
-    .replace(/<\/(p|div|li|h[1-6]|tr|section|article|header|footer|nav|main)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    // Remove remaining tags
-    .replace(/<[^>]+>/g, "")
-    // Decode common HTML entities
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    // Collapse 3+ blank lines to 2
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return (
+    html
+      // Remove <script> and <style> blocks entirely
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      // Block elements → newlines
+      .replace(
+        /<\/(p|div|li|h[1-6]|tr|section|article|header|footer|nav|main)>/gi,
+        "\n",
+      )
+      .replace(/<br\s*\/?>/gi, "\n")
+      // Remove remaining tags
+      .replace(/<[^>]+>/g, "")
+      // Decode common HTML entities
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      // Collapse 3+ blank lines to 2
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
-export function registerWebFetchTool(server: McpServer, _config: McpServerConfig) {
+export function registerWebFetchTool(
+  server: McpServer,
+  _config: McpServerConfig,
+) {
   server.registerTool(
     "web_fetch",
     {
@@ -59,13 +67,12 @@ export function registerWebFetchTool(server: McpServer, _config: McpServerConfig
         "For GitHub repos, pass the file URL directly — no need to manually construct raw URLs.",
       inputSchema: {
         url: z
-          .string()
           .url()
           .max(2000)
           .describe(
             "URL to fetch. GitHub blob URLs are auto-converted to raw content. " +
-            "Examples: 'https://github.com/tanstack/query/blob/main/README.md', " +
-            "'https://docs.example.com/api', 'https://raw.githubusercontent.com/...'",
+              "Examples: 'https://github.com/tanstack/query/blob/main/README.md', " +
+              "'https://docs.example.com/api', 'https://raw.githubusercontent.com/...'",
           ),
         max_chars: z
           .number()
@@ -103,14 +110,20 @@ export function registerWebFetchTool(server: McpServer, _config: McpServerConfig
       const contentType = response.headers.get("content-type") ?? "";
       const raw = await response.text();
 
-      const isHtml = contentType.includes("text/html") || raw.trimStart().startsWith("<!DOCTYPE") || raw.trimStart().startsWith("<html");
+      const isHtml =
+        contentType.includes("text/html") ||
+        raw.trimStart().startsWith("<!DOCTYPE") ||
+        raw.trimStart().startsWith("<html");
       const text = isHtml ? htmlToText(raw) : raw;
 
-      const truncated = text.length > limit
-        ? text.slice(0, limit) + `\n\n... [truncated — ${text.length - limit} chars omitted]`
-        : text;
+      const truncated =
+        text.length > limit
+          ? text.slice(0, limit) +
+            `\n\n... [truncated — ${text.length - limit} chars omitted]`
+          : text;
 
-      const sourceNote = fetchUrl !== url ? `\n(fetched raw from: ${fetchUrl})` : "";
+      const sourceNote =
+        fetchUrl !== url ? `\n(fetched raw from: ${fetchUrl})` : "";
       const summary = `${url}${sourceNote}\n\n${truncated}`;
 
       return success(summary, {

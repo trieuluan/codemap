@@ -311,7 +311,6 @@ export function registerFindRelatedFilesTool(
           .default(10)
           .describe("Maximum results to return. Default: 10."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

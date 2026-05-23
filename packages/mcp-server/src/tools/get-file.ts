@@ -339,7 +339,6 @@ export function registerGetFileTool(
           .min(1)
           .describe("Repository-relative file path, e.g. 'src/lib/utils.ts'."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

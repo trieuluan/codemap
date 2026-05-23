@@ -151,7 +151,6 @@ export function registerGetFilesTool(server: McpServer, config: McpServerConfig)
           .max(7)
           .describe("Repository-relative file paths to fetch outlines for. Maximum 7."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

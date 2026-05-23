@@ -76,7 +76,6 @@ export function registerLinkProjectTool(server: McpServer, config: McpServerConf
         "If the linked project has no repository URL, CodeMap will ask whether to update it with the workspace remote and branch.",
       inputSchema: {
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("UUID of the project to link. Omit to trigger auto-detection."),

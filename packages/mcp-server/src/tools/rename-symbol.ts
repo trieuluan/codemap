@@ -100,7 +100,6 @@ export function registerRenameSymbolTool(server: McpServer, config: McpServerCon
           .min(1)
           .describe("New name for the symbol. Must be a valid identifier."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

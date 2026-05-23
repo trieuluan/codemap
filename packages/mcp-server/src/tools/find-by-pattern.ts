@@ -127,7 +127,6 @@ export function registerFindByPatternTool(
           .min(1)
           .describe("Regex pattern to search for (JavaScript-compatible regex syntax)."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

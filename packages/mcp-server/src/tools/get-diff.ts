@@ -81,7 +81,6 @@ export function registerGetDiffTool(server: McpServer, config: McpServerConfig) 
           .optional()
           .describe("Include full patch/diff content for each file. Defaults to false."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

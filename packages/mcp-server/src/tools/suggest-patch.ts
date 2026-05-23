@@ -541,7 +541,6 @@ export function registerSuggestPatchTool(
               "Requires a linked CodeMap project with parse index. Default: true.",
           ),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

@@ -100,7 +100,6 @@ export function registerSuggestEditLocationsTool(
           .max(500)
           .describe("Natural-language implementation or investigation task."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

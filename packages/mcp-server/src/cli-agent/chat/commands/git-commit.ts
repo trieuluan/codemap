@@ -48,13 +48,8 @@ export const gitCommitCommand: Command = {
 
       ctx.logSubprocess("Generating commit message…");
       let commitMsg = "";
-      // cx/* and mimo/* models have fixed review system prompts in 9router that override
-      // COMMIT_MSG_PROMPT. Use the first vanilla cc/* or kr/* model instead.
-      const vanillaModel =
-        ctx.availableModels?.find((m) => m.startsWith("cc/") || m.startsWith("kr/")) ??
-        ctx.plannerModel;
       for await (const chunk of ctx.provider.stream({
-        model: vanillaModel,
+        model: ctx.plannerModel,
         messages: [{
           role: "user",
           content: `${COMMIT_MSG_PROMPT}\n\nDiff:\n${diff}`,

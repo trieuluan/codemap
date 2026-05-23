@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bridgeCommonEvent,
-  isSuppressedScratchAssistantText,
   type BridgeCallbacks,
   type HarnessLike,
 } from "./mastra-events.js";
@@ -29,10 +28,7 @@ function callbacks(onToken: (token: string) => void): BridgeCallbacks {
   };
 }
 
-test("suppresses short Mastra scratch assistant text", () => {
-  assert.equal(isSuppressedScratchAssistantText("Need final answer likely user asked for status."), true);
-  assert.equal(isSuppressedScratchAssistantText("Need enough. read runner snippets."), true);
-
+test("emits short Mastra scratch-looking assistant text as normal message updates", () => {
   const tokens: string[] = [];
   bridgeCommonEvent(
     {
@@ -45,12 +41,10 @@ test("suppresses short Mastra scratch assistant text", () => {
     callbacks((token) => tokens.push(token)),
   );
 
-  assert.deepEqual(tokens, []);
+  assert.deepEqual(tokens, ["Need final answer likely user asked for status."]);
 });
 
 test("does not suppress normal user-facing assistant text", () => {
-  assert.equal(isSuppressedScratchAssistantText("Mình đã đọc qua repo. Tóm tắt nhanh:"), false);
-
   const tokens: string[] = [];
   bridgeCommonEvent(
     {
@@ -64,11 +58,4 @@ test("does not suppress normal user-facing assistant text", () => {
   );
 
   assert.deepEqual(tokens, ["Mình đã đọc qua repo. Tóm tắt nhanh:"]);
-});
-
-test("does not suppress multi-line text even when it starts with a scratch prefix", () => {
-  assert.equal(
-    isSuppressedScratchAssistantText("Need final answer\nMình đã đọc qua repo."),
-    false,
-  );
 });

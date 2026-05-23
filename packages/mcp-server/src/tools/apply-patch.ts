@@ -344,7 +344,6 @@ export function registerApplyPatchTool(
           .optional()
           .describe("Alias for strip_level. Prefer strip_level."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

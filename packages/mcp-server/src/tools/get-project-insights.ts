@@ -25,7 +25,6 @@ export function registerGetProjectInsightsTool(
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

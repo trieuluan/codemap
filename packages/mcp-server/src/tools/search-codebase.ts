@@ -373,7 +373,6 @@ export function registerSearchCodebaseTool(
       inputSchema: {
         query: z.string().min(1).describe("Search query string."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

@@ -297,8 +297,29 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       return;
     }
 
+    if (matchesKey(data, Key.backspace)) {
+      const lines = editor.getLines();
+      const { line, col } = editor.getCursor();
+      const textBeforeCursor = (lines[line] ?? "").slice(0, col);
+      const markerMatch = textBeforeCursor.match(/\[image:[^\]]+\]$/);
+      if (markerMatch) {
+        const marker = markerMatch[0]!;
+        const fullText = lines.join("\n");
+        editor.setText(fullText.slice(0, fullText.lastIndexOf(marker)) + fullText.slice(fullText.lastIndexOf(marker) + marker.length));
+        for (let i = pendingImages.length - 1; i >= 0; i--) {
+          if (pendingImages[i]!.marker === marker) { pendingImages.splice(i, 1); break; }
+        }
+        tui.requestRender();
+        return;
+      }
+    }
+
     editor.handleInput(data);
-    shellMode = editor.getText().startsWith("!");
+    const currentText = editor.getText();
+    for (let i = pendingImages.length - 1; i >= 0; i--) {
+      if (!currentText.includes(pendingImages[i]!.marker)) pendingImages.splice(i, 1);
+    }
+    shellMode = currentText.startsWith("!");
     tui.requestRender();
   }
 
@@ -402,7 +423,16 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   // ── store subscription ────────────────────────────────────────────────────
 
-  unsubscribe = chatTerminal.bus.on("screen:refresh", () => tui.requestRender());
+  let _lastMessageCount = 0;
+  unsubscribe = chatTerminal.bus.on("screen:refresh", () => {
+    const count = chatTerminal.store.getState().messages.length;
+    if (count !== _lastMessageCount) {
+      _lastMessageCount = count;
+      tui.requestRender(true);
+    } else {
+      tui.requestRender();
+    }
+  });
 
   // ── wait for stop ─────────────────────────────────────────────────────────
 

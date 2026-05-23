@@ -188,7 +188,6 @@ export function registerGetSymbolContextTool(
           .optional()
           .describe("Optional file path to disambiguate the symbol."),
         project_id: z
-          .string()
           .uuid()
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),

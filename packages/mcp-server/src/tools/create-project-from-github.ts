@@ -28,7 +28,6 @@ export function registerCreateProjectFromGithubTool(
         default_branch: z.string().trim().min(1).max(255).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
         workspace_id: z
-          .string()
           .uuid()
           .optional()
           .describe(

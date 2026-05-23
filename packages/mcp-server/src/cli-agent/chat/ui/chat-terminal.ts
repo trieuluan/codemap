@@ -17,7 +17,6 @@ import {
   getMastraThreadId,
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
-  formatMastraTimeoutDuration,
   switchMastraThread,
 } from "../runtime/mastra-harness-runtime.js";
 import { resolveGatewayModel } from "../runtime/mastra-models.js";
@@ -59,6 +58,72 @@ function previewToolContent(
   };
 }
 
+function normalizeToolDisplayName(toolName: string): string {
+  return toolName.includes("__")
+    ? toolName.slice(toolName.indexOf("__") + 2)
+    : toolName;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function stringField(
+  obj: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function summarizeToolArgs(toolName: string, args: string): string {
+  const displayName = normalizeToolDisplayName(toolName);
+  const parsed = parseJsonObject(args);
+  if (!parsed) return `Call ${displayName}`;
+
+  const direct = stringField(parsed, [
+    "activeForm",
+    "content",
+    "path",
+    "query",
+    "q",
+    "url",
+    "command",
+    "id",
+  ]);
+  if (direct) return direct;
+
+  const patterns = parsed.pattern;
+  if (Array.isArray(patterns) && patterns.length > 0) {
+    return patterns.map(String).join(", ");
+  }
+
+  return `Call ${displayName}`;
+}
+
+function summarizeToolResult(resultText: string): string {
+  const errorPrefix = "[ERROR] ";
+  const isError = resultText.startsWith(errorPrefix);
+  const body = isError ? resultText.slice(errorPrefix.length) : resultText;
+  const parsed = parseJsonObject(body);
+  if (!parsed) return resultText;
+
+  const content = stringField(parsed, ["content", "message", "summary"]);
+  if (!content) return resultText;
+
+  return isError ? `${errorPrefix}${content}` : content;
+}
+
 function isToolCallSummary(msg: Message | undefined): boolean {
   return Boolean(
     msg?.role === "tool" && msg.content.includes(TOOL_CALL_SUMMARY_SUFFIX),
@@ -68,11 +133,9 @@ function isToolCallSummary(msg: Message | undefined): boolean {
 function withToolCallSummary(
   messages: Message[],
   toolName: string,
-  _args: string,
+  args: string,
 ): Message[] {
-  const displayName = toolName.includes("__")
-    ? toolName.slice(toolName.indexOf("__") + 2)
-    : toolName;
+  const displayName = normalizeToolDisplayName(toolName);
   const next = [...messages];
 
   // Look backward through tool_call messages for an existing call from the same server
@@ -88,7 +151,7 @@ function withToolCallSummary(
     // If we hit a tool result, that means we're in the old summary mode
     if (msg.role === "tool" && isToolCallSummary(msg)) {
       // Convert to interleaved mode: add tool_call before the summary
-      const childLine = `Call ${displayName}`;
+      const childLine = summarizeToolArgs(toolName, args);
       const toolCallMsg: Message = {
         role: "tool_call",
         name: displayName,
@@ -101,7 +164,7 @@ function withToolCallSummary(
   }
 
   // No tool_call for this server in current turn — create one.
-  const childLine = `Call ${displayName}`;
+  const childLine = summarizeToolArgs(toolName, args);
   const toolCallMsg: Message = {
     role: "tool_call",
     name: displayName,
@@ -120,10 +183,9 @@ function markToolDone(
 ): Message[] {
   const success = !resultText.includes("[ERROR]");
   const marker = success ? " ✓" : " ✗";
-  const displayName = toolName.includes("__")
-    ? toolName.slice(toolName.indexOf("__") + 2)
-    : toolName;
-  const preview = previewToolContent(resultText);
+  const displayName = normalizeToolDisplayName(toolName);
+  const summarizedResult = summarizeToolResult(resultText);
+  const preview = previewToolContent(summarizedResult);
   const next = [...messages];
 
   // Find the tool_call message for this tool (interleaved mode)
@@ -928,12 +990,7 @@ export class ChatTerminal {
           content: result.text || "(no response)",
         });
       }
-      if (result.timedOut && result.timeoutMs && hasStreamingEntry && result.text) {
-        this.appendMessage({
-          role: "system",
-          content: `⚠ Agent timed out after ${formatMastraTimeoutDuration(result.timeoutMs)}; partial response preserved.`,
-        });
-      }
+
       resetStreaming();
 
       this.bus.scheduleRefresh();
