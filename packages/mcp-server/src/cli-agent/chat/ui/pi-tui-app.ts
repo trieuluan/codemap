@@ -50,73 +50,85 @@ function extractToolResultText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
-async function toggleLastToolCallExpanded(chatTerminal: ChatTerminal): Promise<void> {
+async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminal): Promise<void> {
   const state = chatTerminal.store.getState();
   const messages = state.messages;
 
-  // Find the last tool_call message
-  let lastIdx = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === "tool_call") { lastIdx = i; break; }
+  // Collect all tool_call message indices
+  const toolCallIdxs: number[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]!.role === "tool_call") toolCallIdxs.push(i);
   }
 
-  if (lastIdx === -1) {
+  if (toolCallIdxs.length === 0) {
     chatTerminal.store.dispatch((prev) => ({
       messages: [...prev.messages, { role: "system" as const, content: "No tool call to expand yet.", timestamp: Date.now() }],
     }));
     return;
   }
 
-  const msg = messages[lastIdx]!;
+  // If any are expanded → collapse all; otherwise → expand all
+  const anyExpanded = toolCallIdxs.some((i) => messages[i]!.expanded);
 
-  // Collapse if already expanded
-  if (msg.expanded) {
+  if (anyExpanded) {
     chatTerminal.store.dispatch((prev) => {
       const msgs = [...prev.messages];
-      msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: false };
+      for (const idx of toolCallIdxs) {
+        msgs[idx] = { ...msgs[idx]!, expanded: false };
+      }
       return { messages: msgs };
     });
     return;
   }
 
-  // Already fetched — just expand
-  if (msg.expandedContent) {
-    chatTerminal.store.dispatch((prev) => {
-      const msgs = [...prev.messages];
-      msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: true };
-      return { messages: msgs };
-    });
-    return;
-  }
+  // Expand all — fetch content for any that don't have expandedContent yet
+  const needsFetch = toolCallIdxs.filter((i) => !messages[i]!.expandedContent);
+  let fetchedResults: Map<number, string> = new Map();
 
-  // Fetch full content from Mastra thread history
-  let content = "";
-  try {
-    const threadMessages = await getMastraMessages(300);
-    outer: for (let i = threadMessages.length - 1; i >= 0; i--) {
-      const m = threadMessages[i];
-      if (!m) continue;
-      for (const block of m.content) {
-        if (block.type === "tool_result") {
-          content = extractToolResultText((block as Record<string, unknown>).result);
-          break outer;
+  if (needsFetch.length > 0) {
+    try {
+      const threadMessages = await getMastraMessages(300);
+      // Collect all tool_result contents from thread history
+      const allResults: string[] = [];
+      for (const m of threadMessages) {
+        if (!m) continue;
+        for (const block of m.content) {
+          if (block.type === "tool_result") {
+            allResults.push(extractToolResultText((block as Record<string, unknown>).result));
+          }
         }
       }
+      // Assign results to needsFetch indices (most recent results map to most recent tool_calls)
+      for (let j = 0; j < needsFetch.length && j < allResults.length; j++) {
+        const result = allResults[allResults.length - 1 - j];
+        const msgIdx = needsFetch[needsFetch.length - 1 - j]!;
+        if (result?.trim()) fetchedResults.set(msgIdx, result);
+      }
+    } catch {
+      // fall through
     }
-  } catch {
-    // fall through to empty check below
-  }
-
-  if (!content.trim()) {
-    chatTerminal.store.dispatch((prev) => ({
-      messages: [...prev.messages, { role: "system" as const, content: "No tool result available yet.", timestamp: Date.now() }],
-    }));
-    return;
   }
 
   chatTerminal.store.dispatch((prev) => {
     const msgs = [...prev.messages];
-    msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: true, expandedContent: content };
+    for (const idx of toolCallIdxs) {
+      const existing = msgs[idx]!;
+      const latestResult = existing.toolResults?.at(-1);
+      const fetched = fetchedResults.get(idx);
+      if (existing.expandedContent) {
+        msgs[idx] = { ...existing, expanded: true };
+      } else if (latestResult?.fullContent || latestResult?.content) {
+        msgs[idx] = {
+          ...existing,
+          expanded: true,
+          expandedContent: latestResult.fullContent ?? latestResult.content,
+        };
+      } else if (fetched) {
+        msgs[idx] = { ...existing, expanded: true, expandedContent: fetched };
+      } else {
+        msgs[idx] = { ...existing, expanded: true };
+      }
+    }
     return { messages: msgs };
   });
 }
@@ -161,13 +173,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     return [
       idx,
       msg.role,
-      msg.toolName ?? "",
       msg.name ?? "",
       msg.expanded ? "1" : "0",
       msg.expandedResultIndex ?? "",
       msg.toolCalls?.length ?? 0,
       msg.toolResults?.length ?? 0,
-      spinning && msg.role === "tool" ? frame : "",
+      spinning && msg.role === "tool_call" && !msg.toolResults?.length ? frame : "",
     ].join(":");
   }
 
@@ -450,7 +461,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     // Ctrl+O — open last tool result in pager
     if (matchesKey(data, Key.ctrl("o"))) {
-      void toggleLastToolCallExpanded(chatTerminal);
+      void toggleAllToolCallsExpanded(chatTerminal);
       return { consume: true };
     }
 

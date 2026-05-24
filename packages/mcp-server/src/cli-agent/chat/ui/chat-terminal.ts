@@ -1,4 +1,3 @@
-import { appendFileSync } from "node:fs";
 import type { NineRouterProvider } from "../../provider.js";
 import type { ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
@@ -34,19 +33,18 @@ import { warmupFileSearch } from "../file-search.js";
 import { loadOrSynthesizeAll } from "../../convention-synthesizer.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
-import { Store, createInitialState, type Message } from "./store.js";
+import {
+  Store,
+  createInitialState,
+  type Message,
+  type ToolResult,
+} from "./store.js";
 import { loadThreadIntoUI } from "../commands/sessions.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
 
 
-const DEBUG_TOOL_LOG = "/tmp/codemap-tool-debug.log";
-function debugToolLog(msg: string): void {
-  try { appendFileSync(DEBUG_TOOL_LOG, `${new Date().toISOString()} ${msg}\n`); } catch {}
-}
-
-const TOOL_CALL_SUMMARY_SUFFIX = " — Ctrl+O toggle";
 const TOOL_PREVIEW_LINE_LIMIT = 120;
 
 function byteLength(text: string): number {
@@ -131,16 +129,11 @@ function summarizeToolResult(resultText: string): string {
   return isError ? `${errorPrefix}${content}` : content;
 }
 
-function isToolCallSummary(msg: Message | undefined): boolean {
-  return Boolean(
-    msg?.role === "tool" && msg.content.includes(TOOL_CALL_SUMMARY_SUFFIX),
-  );
-}
-
 function withToolCallSummary(
   messages: Message[],
   toolName: string,
   args: string,
+  toolCallId?: string,
 ): Message[] {
   const displayName = normalizeToolDisplayName(toolName);
   const next = [...messages];
@@ -151,21 +144,11 @@ function withToolCallSummary(
     const msg = next[i];
     if (!msg) continue;
     if (msg.role === "user") break;
-    if (msg.role === "tool_call" && msg.name === displayName) {
-      // Tool call already exists, just return
-      return next;
-    }
-    // If we hit a tool result, that means we're in the old summary mode
-    if (msg.role === "tool" && isToolCallSummary(msg)) {
-      // Convert to interleaved mode: add tool_call before the summary
-      const childLine = summarizeToolArgs(toolName, args);
-      const toolCallMsg: Message = {
-        role: "tool_call",
-        name: displayName,
-        content: childLine,
-        timestamp: Date.now(),
-      };
-      next.splice(i, 0, toolCallMsg);
+    if (
+      msg.role === "tool_call" &&
+      msg.name === displayName &&
+      (!toolCallId || msg.toolCallId === toolCallId)
+    ) {
       return next;
     }
   }
@@ -175,6 +158,7 @@ function withToolCallSummary(
   const toolCallMsg: Message = {
     role: "tool_call",
     name: displayName,
+    toolCallId,
     content: childLine,
     timestamp: Date.now(),
   };
@@ -208,54 +192,24 @@ function markToolDone(
   }
 
   if (toolCallIndex >= 0) {
-    // Insert tool result right after tool_call
-    // For now, just add a simple tool message without fullContent
-    // (fullContent is only used in the old summary mode)
-    const toolResultMsg: Message = {
-      role: "tool",
+    // Attach tool result to the tool_call message itself
+    const toolResult: ToolResult = {
       name: displayName,
       content: preview.content,
-      timestamp: Date.now(),
+      fullContent: resultText,
+      success,
+      truncated: preview.truncated,
+      previewLineLimit: TOOL_PREVIEW_LINE_LIMIT,
+      originalBytes: byteLength(resultText),
     };
-    next.splice(toolCallIndex + 1, 0, toolResultMsg);
+    const existingResults = next[toolCallIndex].toolResults ?? [];
+    next[toolCallIndex] = {
+      ...next[toolCallIndex],
+      toolResults: [...existingResults, toolResult],
+      content: next[toolCallIndex].content + marker,
+      expandedContent: resultText,
+    };
     return next;
-  }
-
-  // Fallback: look for tool call summary (old mode)
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const msg = next[i];
-    if (!msg) continue;
-    if (msg.role === "user") break;
-    if (msg.role !== "tool") continue;
-
-    if (isToolCallSummary(msg)) {
-      const lines = msg.content.split("\n");
-      for (let j = lines.length - 1; j >= 0; j -= 1) {
-        const line = lines[j];
-        if (
-          line?.startsWith(`⎿ ${displayName}`) &&
-          !line.endsWith("✓") &&
-          !line.endsWith("✗")
-        ) {
-          lines[j] = `${line}${marker}`;
-          const toolResults = [
-            ...(msg.toolResults ?? []),
-            {
-              name: displayName,
-              content: preview.content,
-              fullContent: resultText,
-              success,
-              truncated: preview.truncated,
-              previewLineLimit: TOOL_PREVIEW_LINE_LIMIT,
-              originalBytes: byteLength(resultText),
-            },
-          ];
-          next[i] = { ...msg, content: lines.join("\n"), toolResults };
-          return next;
-        }
-      }
-      return next;
-    }
   }
   return next;
 }
@@ -272,13 +226,12 @@ function appendToLastToolCallSummary(
     if (!msg) continue;
     if (msg.role === "user") break;
     if (msg.role === "tool_call") {
-      // For tool_call, we don't append content - it's just a marker
-      // Instead, we could add metadata, but for now just return
-      return next;
-    }
-    if (msg.role !== "tool") continue;
-    if (isToolCallSummary(msg)) {
-      next[i] = { ...msg, content: `${msg.content}\n${content}` };
+      next[i] = {
+        ...msg,
+        expandedContent: msg.expandedContent
+          ? `${msg.expandedContent}\n${content}`
+          : content,
+      };
       return next;
     }
   }
@@ -747,7 +700,6 @@ export class ChatTerminal {
         this.store.dispatch((prev) => ({ task: { ...prev.task, usage } }));
       },
       onToolStart: (name: string, args: string, id: string) => {
-        debugToolLog(`onToolStart: name="${name}" active=${this.isActiveTask(taskId, taskAbort)} taskId=${taskId}/${this._activeTaskId}`);
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
@@ -767,15 +719,12 @@ export class ChatTerminal {
           },
         });
         this.store.dispatch((prev) => {
-          const newMsgs = withToolCallSummary(prev.messages, name, args);
-          const tc = newMsgs.filter(m => m.role === "tool_call").length;
-          debugToolLog(`withToolCallSummary: displayName="${normalizeToolDisplayName(name)}" tool_calls=${tc} total=${newMsgs.length}`);
+          const newMsgs = withToolCallSummary(prev.messages, name, args, id);
           return { messages: newMsgs };
         });
         this.bus.scheduleRefresh();
       },
       onToolResult: (name: string, resultText: string) => {
-        debugToolLog(`onToolResult: name="${name}" active=${this.isActiveTask(taskId, taskAbort)} taskId=${taskId}/${this._activeTaskId}`);
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolResult(name, resultText);
         resetStreaming();
@@ -788,11 +737,7 @@ export class ChatTerminal {
           },
         });
         this.store.dispatch((prev) => {
-          const beforeTR = prev.messages.filter(m => m.role === "tool").length;
-          const tcNames = prev.messages.filter(m => m.role === "tool_call").map(m => m.name ?? "?").join(",");
           const newMsgs = markToolDone(prev.messages, name, resultText);
-          const afterTR = newMsgs.filter(m => m.role === "tool").length;
-          debugToolLog(`markToolDone: searching="${normalizeToolDisplayName(name)}" tool_calls=[${tcNames}] toolResultsBefore=${beforeTR} toolResultsAfter=${afterTR}`);
           return { messages: newMsgs };
         });
         this.bus.scheduleRefresh();
@@ -938,9 +883,18 @@ export class ChatTerminal {
               }
               resetStreaming();
               this.appendMessage({
-                role: "tool",
-                content: plan,
-                toolName: "plan",
+                role: "tool_call",
+                name: "plan",
+                content: "Plan ✓",
+                toolResults: [
+                  {
+                    name: "plan",
+                    content: plan,
+                    fullContent: plan,
+                    success: true,
+                  },
+                ],
+                expandedContent: plan,
               });
               this.bus.scheduleRefresh();
             },
@@ -1132,6 +1086,7 @@ export class ChatTerminal {
     });
     const taskAbort = new AbortController();
     const taskId = this.beginTask(taskAbort);
+    this.appendMessage({ role: "tool_call", name: "bash", content: command });
 
     try {
       const result = await abortable(
@@ -1140,7 +1095,9 @@ export class ChatTerminal {
       );
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const content = result.content || "(no output)";
-      this.appendMessage({ role: "tool", content, toolName: "bash result" });
+      this.store.dispatch((prev) => ({
+        messages: markToolDone(prev.messages, "bash", content),
+      }));
       this.store.dispatch({
         task: {
           ...this.store.getState().task,
@@ -1161,6 +1118,9 @@ export class ChatTerminal {
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
+      this.store.dispatch((prev) => ({
+        messages: markToolDone(prev.messages, "bash", `[ERROR] ${message}`),
+      }));
       this.appendMessage({
         role: "system",
         content: `Shell command failed: ${message}`,
@@ -1267,7 +1227,7 @@ export class ChatTerminal {
     this.store.dispatch((prev) => {
       const msgs = [...prev.messages];
       for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i]!.role === "assistant" && !msgs[i]!.toolName) {
+        if (msgs[i]!.role === "assistant") {
           msgs[i] = { ...msgs[i]!, content };
           break;
         }

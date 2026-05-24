@@ -8,17 +8,50 @@ import {
   C_ACTION,
   C_AI,
   C_ARCH,
-  C_ERROR,
   C_GRAY,
   C_MUTED,
-  C_SUCCESS,
   C_WARNING,
   C_WHITE,
   RESET,
-  SPINNER,
 } from "./theme.js";
 import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
+import { highlightBlock } from "./shiki-highlight.js";
 import { normalizeHtml } from "../../html-utils.js";
+
+/**
+ * Format expanded tool result content.
+ * If the content is JSON with structuredContent.summary and structuredContent.data,
+ * render summary as markdown and data as highlighted JSON.
+ */
+function formatExpandedContent(content: string, width: number): string[] {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === "object" && parsed.structuredContent) {
+      const { summary, data } = parsed.structuredContent;
+      const lines: string[] = [];
+
+      // Render summary as markdown if present
+      if (summary && typeof summary === "string") {
+        const summaryLines = renderMarkdownish(summary, width);
+        lines.push(...summaryLines);
+        lines.push(""); // blank separator
+      }
+
+      // Render data as highlighted JSON if present
+      if (data !== undefined) {
+        const jsonStr = JSON.stringify(data, null, 2);
+        const highlighted = highlightBlock(jsonStr, "json");
+        lines.push(...highlighted);
+      }
+
+      return lines.length > 0 ? lines : renderMarkdownish(content, width);
+    }
+  } catch {
+    // Not JSON or parsing failed — fall through
+  }
+  // Default: render as markdown
+  return renderMarkdownish(content, width);
+}
 
 function generateBanner(): string[] {
   const result = cfonts.render("CODEMAP", {
@@ -37,20 +70,12 @@ function generateBanner(): string[] {
 
 const BANNER_LINES = generateBanner();
 
-function toolLineLimit(msg: Message): number {
-  const name = (msg.toolName ?? "").toLowerCase();
-  if (name.endsWith(" preview") || name === "plan") {
-    return Infinity;
-  }
-  if (msg.content.includes("(ctrl+o to expand)")) {
-    return Infinity;
-  }
-  const content = msg.content.toLowerCase();
+function toolResultLineLimit(content: string): number {
+  const lower = content.toLowerCase();
   if (
-    name.includes("edit_file") ||
-    name.includes("diff") ||
-    content.includes("```diff") ||
-    content.includes("@@ -")
+    lower.includes("```diff") ||
+    lower.includes("@@ -") ||
+    lower.includes("diff")
   ) {
     return 120;
   }
@@ -111,7 +136,9 @@ function safeRender(
     lines = cleaned.split("\n").flatMap((l) => wrapPlain(l, width));
   }
   // Clamp lines that exceed width (markdown tables don't always respect the width constraint)
-  return lines.map(line => visibleWidth(line) > width ? truncateToWidth(line, width) : line);
+  return lines.map((line) =>
+    visibleWidth(line) > width ? truncateToWidth(line, width) : line,
+  );
 }
 
 export function messageLines(
@@ -119,22 +146,12 @@ export function messageLines(
   width: number,
   frame = 0,
 ): string[] {
-  return renderMessageLines(messages, width, frame, false);
-}
-
-export function messageLinesFullView(
-  messages: Message[],
-  width: number,
-  frame = 0,
-): string[] {
-  return renderMessageLines(messages, width, frame, true);
+  return renderMessageLines(messages, width);
 }
 
 function renderMessageLines(
   messages: Message[],
   width: number,
-  frame = 0,
-  fullView = false,
 ): string[] {
   if (messages.length === 0) {
     return [
@@ -167,151 +184,56 @@ function renderMessageLines(
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${line}`);
     } else if (msg.role === "tool_call") {
-      // Tool call message - shown between assistant and tool result
       const toolName = truncate(msg.name ?? "tool", 20);
+      const isPlan = (msg.name ?? "").toLowerCase() === "plan";
+      const toolColor = isPlan ? C_AI : C_WARNING;
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
-      const lines = safeRender(stripAnsi(msg.content), bodyW);
       const expandIcon = msg.expanded ? "↓" : "→";
-      out.push(`${time} ${C_WARNING}${expandIcon}${RESET} ${C_WARNING}${toolName}:${RESET} ${lines[0] ?? ""}`);
+      const rawContent = stripAnsi(msg.content);
+      const hasResult = (msg.toolResults?.length ?? 0) > 0;
+      const suffix = hasResult || msg.expandedContent ? " (Ctrl+O to expand)" : "";
+
+      const lines = safeRender(rawContent, bodyW);
+      out.push(
+        `${time} ${toolColor}${expandIcon}${RESET} ${toolColor}${toolName}:${RESET} ${lines[0] ?? ""}${C_MUTED}${suffix}${RESET}`,
+      );
       for (const line of lines.slice(1))
-        out.push(`${" ".repeat(prefixW)}${C_WARNING}  ${line}${RESET}`);
-      // Expanded content (Ctrl+O toggle)
-      if (msg.expanded && msg.expandedContent) {
-        const expandedLines = safeRender(stripAnsi(msg.expandedContent), bodyW);
-        out.push(`${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`);
-        for (const line of expandedLines)
-          out.push(`${" ".repeat(prefixW)}${C_GRAY}${line}${RESET}`);
-        out.push(`${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`);
-      }
-    } else if (msg.role === "tool") {
-      const isSummary = msg.content.includes("click preview · Ctrl+O full view") || msg.content.includes("(ctrl+o to expand)");
-      const toolName = truncate(msg.toolName ?? "tool", 20);
-      const isPreview =
-        (msg.toolName ?? "").endsWith(" preview") || msg.toolName === "plan";
+        out.push(`${" ".repeat(prefixW)}${toolColor}  ${line}${RESET}`);
 
-      if (isSummary) {
-        // Tool call tree view — line-by-line state machine so ⎿ lines always render at tree
-        // level regardless of position, and fenced blocks get Shiki highlight individually.
-        const prefixW = 9;
-        const bodyW = Math.max(20, width - prefixW);
-        const metaW = Math.max(20, width - (prefixW + 3));
-
-        const spin = SPINNER[frame % SPINNER.length] ?? "⠋";
-        const colorLine = (line: string) => {
-          if (line.endsWith("✓"))
-            return `${C_GRAY}${line.slice(0, -1)}${RESET}${C_SUCCESS}✓${RESET}`;
-          if (line.endsWith("✗"))
-            return `${C_GRAY}${line.slice(0, -1)}${RESET}${C_ERROR}✗${RESET}`;
-          if (line.startsWith("⎿ "))
-            return `${C_GRAY}${line}${RESET} ${C_WHITE}${spin}${RESET}`;
-          return `${C_GRAY}${line}${RESET}`;
-        };
-
-        const renderedToolNameOccurrences = new Map<string, number>();
-        const renderExpandedResult = (line: string) => {
-          const toolMatch = line.match(/^⎿ (.+?)(?: [✓✗])?$/);
-          if (!toolMatch || !msg.toolResults?.length) return;
-          const toolName = toolMatch[1];
-          const occurrence = (renderedToolNameOccurrences.get(toolName) ?? 0) + 1;
-          renderedToolNameOccurrences.set(toolName, occurrence);
-
-          let matchingOccurrence = 0;
-          const resultIndex = msg.toolResults.findIndex((result) => {
-            if (result.name !== toolName) return false;
-            matchingOccurrence += 1;
-            return matchingOccurrence === occurrence;
-          });
-          // In fullView mode, show all tool results; otherwise only show the expanded one
-          if (resultIndex === -1 || (!fullView && msg.expandedResultIndex !== resultIndex)) return;
-
-          const result = msg.toolResults[resultIndex];
-          if (!result) return;
-          const resultContent = fullView ? (result.fullContent ?? result.content) : result.content;
-          const hasDiff = resultContent.includes("@@ -") || resultContent.includes("```diff")
-            || /^[-+]\s+\d+ \|/m.test(resultContent);
-          const contentToRender = hasDiff && !resultContent.trimStart().startsWith("```")
-            ? `\`\`\`diff\n${resultContent}\n\`\`\``
-            : resultContent;
-          const resultLines = safeRender(stripAnsi(contentToRender), bodyW, { noHighlight: !hasDiff });
-          for (const resultLine of resultLines) {
-            out.push(`${" ".repeat(prefixW)}  ${resultLine}`);
-          }
-        };
-
-        const rawLines = msg.content.split("\n");
-        let fenceBuf: string[] = [];
-        let inFence = false;
-
-        // First line is always the header "Called <server> — click preview · Ctrl+O full view"
-        out.push(`${time} ${C_MUTED}${stripAnsi(rawLines[0] ?? "")}${RESET}`);
-
-        for (let li = 1; li < rawLines.length; li++) {
-          const rawLine = rawLines[li] ?? "";
-          const clean = stripAnsi(rawLine).trimEnd();
-
-          if (inFence) {
-            if (clean.startsWith("```")) {
-              // Close fence — render accumulated content with Shiki
-              fenceBuf.push(rawLine);
-              inFence = false;
-              const rendered = safeRender(stripAnsi(fenceBuf.join("\n")), metaW, { noHighlight: false });
-              for (const rl of rendered)
-                out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${rl}`);
-              fenceBuf = [];
-            } else {
-              fenceBuf.push(rawLine);
-            }
-            continue;
-          }
-
-          if (clean.startsWith("```")) {
-            inFence = true;
-            fenceBuf = [rawLine];
-          } else if (clean.startsWith("⎿ ")) {
-            out.push(`${" ".repeat(prefixW)}${colorLine(clean)}`);
-            renderExpandedResult(clean);
-          } else if (clean === "") {
-            // skip blank lines
-          } else {
-            // Meta text (Edit preview, Mode, Changes, ...) — │ connector, no highlight
-            const rendered = safeRender(clean, metaW, { noHighlight: true });
-            for (const rl of rendered)
-              out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${C_GRAY}${rl}${RESET}`);
-          }
-        }
-
-        // Flush unclosed fence (e.g. pending diff still streaming)
-        if (fenceBuf.length > 0) {
-          const rendered = safeRender(stripAnsi(fenceBuf.join("\n")), metaW, { noHighlight: true });
-          for (const rl of rendered)
-            out.push(`${" ".repeat(prefixW)}${C_MUTED}│${RESET}  ${C_GRAY}${rl}${RESET}`);
-        }
-      } else {
-        const prefixW = Math.min(9 + toolName.length + 1, 32);
-        const bodyW = Math.max(20, width - prefixW);
-        const rawLines = safeRender(stripAnsi(msg.content), bodyW, {
-          noHighlight: !isPreview,
+      for (const result of msg.toolResults ?? []) {
+        const resultName = truncate(result.name, 20);
+        const resultPrefixW = Math.min(11 + resultName.length, 34);
+        const resultW = Math.max(20, width - resultPrefixW);
+        const rawLines = safeRender(stripAnsi(result.content), resultW, {
+          noHighlight: true,
         });
-        const limit = toolLineLimit(msg);
-        const lines =
+        const limit = result.previewLineLimit ?? toolResultLineLimit(result.content);
+        const resultLines =
           rawLines.length > limit
             ? [
                 ...rawLines.slice(0, limit),
                 `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`,
               ]
             : rawLines;
-        const toolColor =
-          msg.toolName === "plan" || toolName.includes("plan")
-            ? C_AI
-            : C_WARNING;
+        const status = result.success ? "✓" : "✗";
         out.push(
-          `${time} ${toolColor}${toolName}:${RESET} ${C_GRAY}${lines[0] ?? ""}${RESET}`,
+          `${" ".repeat(prefixW)}${C_MUTED}${status} ${resultName}:${RESET} ${C_GRAY}${resultLines[0] ?? ""}${RESET}`,
         );
-        for (const line of lines.slice(1))
-          out.push(
-            `${" ".repeat(prefixW)}${isPreview ? "" : C_GRAY}${line}${RESET}`,
-          );
+        for (const line of resultLines.slice(1))
+          out.push(`${" ".repeat(resultPrefixW)}${C_GRAY}${line}${RESET}`);
+      }
+
+      if (msg.expanded && msg.expandedContent) {
+        const expandedLines = formatExpandedContent(stripAnsi(msg.expandedContent), bodyW);
+        out.push(
+          `${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`,
+        );
+        for (const line of expandedLines)
+          out.push(`${" ".repeat(prefixW)}${C_GRAY}${line}${RESET}`);
+        out.push(
+          `${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`,
+        );
       }
     } else if (msg.role === "system") {
       const prefixW = 17;
@@ -326,17 +248,6 @@ function renderMessageLines(
     out.push("");
   }
   return out;
-}
-
-export function messageContentLineCount(
-  state: UIState,
-  width: number,
-  frame = 0,
-): number {
-  return (
-    headerLines(state).length +
-    messageLines(state.messages, width - 2, frame).length
-  );
 }
 
 export { wrapPlain };

@@ -212,7 +212,6 @@ function toMultimodalContent(text: string): string | Array<Record<string, unknow
 
 function buildModelMessages(messages: ChatMessage[]): ModelMessage[] {
   return messages
-    .filter((message) => message.role !== "tool_call")
     .flatMap((message): ModelMessage[] => {
       if (message.role === "system") {
         return [{ role: "system", content: message.content }];
@@ -227,17 +226,15 @@ function buildModelMessages(messages: ChatMessage[]): ModelMessage[] {
           ...(message.toolCalls?.length ? { toolCalls: message.toolCalls.map(toAiToolCall) } : {}),
         } as ModelMessage];
       }
-      if (message.role === "tool") {
+      if (message.role === "tool_call" && message.toolResults?.length) {
         return [{
           role: "tool",
-          content: [
-            {
+          content: message.toolResults.map((result) => ({
               type: "tool-result",
               toolCallId: message.toolCallId ?? "",
-              toolName: message.name ?? "tool",
-              output: { type: "text", value: message.content },
-            },
-          ],
+              toolName: result.name || message.name || "tool",
+              output: { type: "text", value: result.fullContent ?? result.content },
+            })),
         } as ModelMessage];
       }
       return [];

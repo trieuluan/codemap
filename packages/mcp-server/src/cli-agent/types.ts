@@ -37,6 +37,12 @@ export interface ChatMessage {
   name?: string;
   toolCallId?: string;
   toolCalls?: ChatToolCall[];
+  toolResults?: Array<{
+    name: string;
+    content: string;
+    fullContent?: string;
+    success?: boolean;
+  }>;
 }
 
 export interface ChatToolDefinition {

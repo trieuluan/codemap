@@ -6,6 +6,57 @@ import {
 } from "../runtime/mastra-harness-runtime.js";
 import type { Message } from "../ui/store.js";
 
+function stringifyToolResult(result: unknown): string {
+  return typeof result === "string" ? result : JSON.stringify(result ?? "");
+}
+
+function attachToolResult(
+  messages: Message[],
+  part: { id: string; name: string; result: unknown; isError: boolean },
+  timestamp: number,
+): void {
+  const resultText = stringifyToolResult(part.result);
+  const content = part.isError ? `[ERROR] ${resultText}` : resultText;
+  const toolResult = {
+    name: part.name,
+    content,
+    fullContent: content,
+    success: !part.isError,
+  };
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (msg.role === "user" || msg.role === "assistant" || msg.role === "system") break;
+    if (
+      msg.role === "tool_call" &&
+      (msg.toolCallId === part.id || (!msg.toolCallId && msg.name === part.name))
+    ) {
+      messages[i] = {
+        ...msg,
+        toolCallId: msg.toolCallId ?? part.id,
+        toolResults: [...(msg.toolResults ?? []), toolResult],
+        expandedContent: content,
+        content:
+          msg.content.endsWith(" ✓") || msg.content.endsWith(" ✗")
+            ? msg.content
+            : `${msg.content}${part.isError ? " ✗" : " ✓"}`,
+      };
+      return;
+    }
+  }
+
+  messages.push({
+    role: "tool_call",
+    name: part.name,
+    toolCallId: part.id,
+    content: `Call ${part.name}${part.isError ? " ✗" : " ✓"}`,
+    toolResults: [toolResult],
+    expandedContent: content,
+    timestamp,
+  });
+}
+
 function formatAge(date: Date): string {
   const diff = Date.now() - date.getTime();
   const m = Math.floor(diff / 60_000);
@@ -49,21 +100,14 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
         if (part.type === "text") {
           textParts += (part as { type: "text"; text: string }).text;
         } else if (part.type === "tool_call") {
-          const p = part as { type: "tool_call"; name: string };
+          const p = part as { type: "tool_call"; id: string; name: string };
           if (textParts.trim()) {
             result.push({ role: "assistant", content: textParts.trim(), timestamp: ts });
             textParts = "";
           }
-          result.push({ role: "tool_call", name: p.name, content: `Call ${p.name}`, timestamp: ts });
+          result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content: `Call ${p.name}`, timestamp: ts });
         } else if (part.type === "tool_result") {
-          const p = part as { type: "tool_result"; name: string; result: unknown; isError: boolean };
-          const resultText = typeof p.result === "string" ? p.result : JSON.stringify(p.result ?? "");
-          result.push({
-            role: "tool",
-            name: p.name,
-            content: p.isError ? `[ERROR] ${resultText}` : resultText,
-            timestamp: ts,
-          });
+          attachToolResult(result, part as { type: "tool_result"; id: string; name: string; result: unknown; isError: boolean }, ts);
         }
       }
       if (textParts.trim()) {

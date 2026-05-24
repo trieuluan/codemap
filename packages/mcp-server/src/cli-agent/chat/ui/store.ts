@@ -13,10 +13,9 @@ export interface ToolResult {
 }
 
 export interface Message {
-  role: "user" | "assistant" | "tool" | "tool_call" | "system" | "welcome";
+  role: "user" | "assistant" | "tool_call" | "system" | "welcome";
   content: string;
   name?: string; // for tool_call role
-  toolName?: string; // for tool role (summary)
   toolCallId?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   toolResults?: ToolResult[];
