@@ -1,7 +1,7 @@
 import type { Highlighter } from "shiki";
 import { RESET } from "./theme.js";
 
-const THEME = "github-dark";
+const THEME = "dracula";
 
 const LANGS = [
   "typescript", "javascript", "dart", "php",

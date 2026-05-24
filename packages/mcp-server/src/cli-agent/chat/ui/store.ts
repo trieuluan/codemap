@@ -7,9 +7,6 @@ export interface ToolResult {
   content: string;
   fullContent?: string;
   success: boolean;
-  truncated?: boolean;
-  previewLineLimit?: number;
-  originalBytes?: number;
 }
 
 export interface Message {

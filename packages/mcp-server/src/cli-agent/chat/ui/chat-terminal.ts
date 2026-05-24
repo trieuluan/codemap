@@ -37,206 +37,17 @@ import {
   Store,
   createInitialState,
   type Message,
-  type ToolResult,
 } from "./store.js";
+import {
+  appendToLastToolCallSummary,
+  markLastPendingToolCallCanceled,
+  markToolDone,
+  withToolCallSummary,
+} from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../commands/sessions.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
-
-
-const TOOL_PREVIEW_LINE_LIMIT = 120;
-
-function byteLength(text: string): number {
-  return Buffer.byteLength(text, "utf8");
-}
-
-function previewToolContent(
-  text: string,
-  lineLimit = TOOL_PREVIEW_LINE_LIMIT,
-): { content: string; truncated: boolean } {
-  const lines = text.split("\n");
-  if (lines.length <= lineLimit) return { content: text, truncated: false };
-  return {
-    content: `${lines.slice(0, lineLimit).join("\n")}\n… (${lines.length - lineLimit} more lines hidden; Ctrl+O for full output)`,
-    truncated: true,
-  };
-}
-
-function normalizeToolDisplayName(toolName: string): string {
-  return toolName.includes("__")
-    ? toolName.slice(toolName.indexOf("__") + 2)
-    : toolName;
-}
-
-function parseJsonObject(text: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function stringField(
-  obj: Record<string, unknown>,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function summarizeToolArgs(toolName: string, args: string): string {
-  const displayName = normalizeToolDisplayName(toolName);
-  const parsed = parseJsonObject(args);
-  if (!parsed) return `Call ${displayName}`;
-
-  const direct = stringField(parsed, [
-    "activeForm",
-    "content",
-    "path",
-    "query",
-    "q",
-    "url",
-    "command",
-    "id",
-  ]);
-  if (direct) return direct;
-
-  const patterns = parsed.pattern;
-  if (Array.isArray(patterns) && patterns.length > 0) {
-    return patterns.map(String).join(", ");
-  }
-
-  return `Call ${displayName}`;
-}
-
-function summarizeToolResult(resultText: string): string {
-  const errorPrefix = "[ERROR] ";
-  const isError = resultText.startsWith(errorPrefix);
-  const body = isError ? resultText.slice(errorPrefix.length) : resultText;
-  const parsed = parseJsonObject(body);
-  if (!parsed) return resultText;
-
-  const content = stringField(parsed, ["content", "message", "summary"]);
-  if (!content) return resultText;
-
-  return isError ? `${errorPrefix}${content}` : content;
-}
-
-function withToolCallSummary(
-  messages: Message[],
-  toolName: string,
-  args: string,
-  toolCallId?: string,
-): Message[] {
-  const displayName = normalizeToolDisplayName(toolName);
-  const next = [...messages];
-
-  // Look backward through tool_call messages for an existing call from the same server
-  // in the current turn. Stop at user/assistant/system messages (turn boundaries).
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const msg = next[i];
-    if (!msg) continue;
-    if (msg.role === "user") break;
-    if (
-      msg.role === "tool_call" &&
-      msg.name === displayName &&
-      (!toolCallId || msg.toolCallId === toolCallId)
-    ) {
-      return next;
-    }
-  }
-
-  // No tool_call for this server in current turn — create one.
-  const childLine = summarizeToolArgs(toolName, args);
-  const toolCallMsg: Message = {
-    role: "tool_call",
-    name: displayName,
-    toolCallId,
-    content: childLine,
-    timestamp: Date.now(),
-  };
-  next.push(toolCallMsg);
-  return next;
-}
-
-/** Mark the most-recent pending ⎿ line for toolName as done (✓ or ✗). */
-function markToolDone(
-  messages: Message[],
-  toolName: string,
-  resultText: string,
-): Message[] {
-  const success = !resultText.includes("[ERROR]");
-  const marker = success ? " ✓" : " ✗";
-  const displayName = normalizeToolDisplayName(toolName);
-  const summarizedResult = summarizeToolResult(resultText);
-  const preview = previewToolContent(summarizedResult);
-  const next = [...messages];
-
-  // Find the tool_call message for this tool (interleaved mode)
-  let toolCallIndex = -1;
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const msg = next[i];
-    if (!msg) continue;
-    if (msg.role === "user") break;
-    if (msg.role === "tool_call" && msg.name === displayName) {
-      toolCallIndex = i;
-      break;
-    }
-  }
-
-  if (toolCallIndex >= 0) {
-    // Attach tool result to the tool_call message itself
-    const toolResult: ToolResult = {
-      name: displayName,
-      content: preview.content,
-      fullContent: resultText,
-      success,
-      truncated: preview.truncated,
-      previewLineLimit: TOOL_PREVIEW_LINE_LIMIT,
-      originalBytes: byteLength(resultText),
-    };
-    const existingResults = next[toolCallIndex].toolResults ?? [];
-    next[toolCallIndex] = {
-      ...next[toolCallIndex],
-      toolResults: [...existingResults, toolResult],
-      content: next[toolCallIndex].content + marker,
-      expandedContent: resultText,
-    };
-    return next;
-  }
-  return next;
-}
-
-function appendToLastToolCallSummary(
-  messages: Message[],
-  content: string,
-): Message[] {
-  const next = [...messages];
-
-  // Look backward for a tool_call message (interleaved mode)
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const msg = next[i];
-    if (!msg) continue;
-    if (msg.role === "user") break;
-    if (msg.role === "tool_call") {
-      next[i] = {
-        ...msg,
-        expandedContent: msg.expandedContent
-          ? `${msg.expandedContent}\n${content}`
-          : content,
-      };
-      return next;
-    }
-  }
-  return next;
-}
 
 function createAbortError(): Error {
   const err = new Error("Task canceled.");
@@ -422,6 +233,16 @@ export class ChatTerminal {
     const state = this.store.getState();
     if (!state.input.busy) return null;
     const canceledPrompt = state.input.lastUserText;
+    const msgs = state.messages as Message[];
+    const lastUserIdx = msgs.reduce(
+      (acc, m, i) => (m.role === "user" ? i : acc),
+      -1,
+    );
+    const hasMessagesAfterLastUser =
+      lastUserIdx >= 0 && msgs.slice(lastUserIdx + 1).length > 0;
+    const hasStreamingContent = Boolean(state.streaming.content.trim());
+    const shouldRollback = !hasMessagesAfterLastUser && !hasStreamingContent;
+
     this._taskAbort?.abort();
     this._taskAbort = null;
     this._activeTaskId = 0;
@@ -431,24 +252,21 @@ export class ChatTerminal {
     this._planReviewResolve?.("cancel");
     this._planReviewResolve = null;
 
-    // Roll back UI messages to before the last user message so the conversation
-    // history is preserved and the user's prompt is returned to the input field.
-    const msgs = state.messages as Message[];
-    const lastUserIdx = msgs.reduce(
-      (acc, m, i) => (m.role === "user" ? i : acc),
-      -1,
-    );
-    const rolledBackMsgs = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx) : msgs;
+    const nextMessages = shouldRollback
+      ? lastUserIdx >= 0
+        ? msgs.slice(0, lastUserIdx)
+        : msgs
+      : markLastPendingToolCallCanceled(msgs);
 
     this.store.dispatch({
-      messages: rolledBackMsgs,
+      messages: nextMessages,
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       confirm: { active: false, toolName: "", preview: null },
       planReview: { active: false, selection: 0 },
       streaming: { active: false, content: "", entryIndex: -1 },
     });
-    return canceledPrompt;
+    return shouldRollback ? canceledPrompt : null;
   }
 
   resolveConfirm(accept: boolean): void {

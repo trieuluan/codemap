@@ -329,6 +329,13 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
   function handleInterrupt(): void {
     const state = chatTerminal.store.getState();
+    if (editor.getText().length > 0) {
+      editor.setText("");
+      shellMode = false;
+      clearExitConfirm();
+      tui.requestRender();
+      return;
+    }
     if (state.input.busy) {
       const canceledPrompt = chatTerminal.cancelTask();
       if (canceledPrompt) {
@@ -341,13 +348,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
     if (state.planMode) {
       chatTerminal.store.dispatch({ planMode: false });
-      clearExitConfirm();
-      tui.requestRender();
-      return;
-    }
-    if (editor.getText().length > 0) {
-      editor.setText("");
-      shellMode = false;
       clearExitConfirm();
       tui.requestRender();
       return;

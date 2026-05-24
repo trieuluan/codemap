@@ -20,24 +20,30 @@ import { normalizeHtml } from "../../html-utils.js";
 
 /**
  * Format expanded tool result content.
- * If the content is JSON with structuredContent.summary and structuredContent.data,
+ * If the content is JSON with summary/data or structuredContent.summary/data,
  * render summary as markdown and data as highlighted JSON.
  */
 function formatExpandedContent(content: string, width: number): string[] {
   try {
     const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === "object" && parsed.structuredContent) {
-      const { summary, data } = parsed.structuredContent;
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      const structured =
+        record.structuredContent &&
+        typeof record.structuredContent === "object" &&
+        !Array.isArray(record.structuredContent)
+          ? (record.structuredContent as Record<string, unknown>)
+          : record;
+      const summary = structured.summary;
+      const data = structured.data;
       const lines: string[] = [];
 
-      // Render summary as markdown if present
       if (summary && typeof summary === "string") {
         const summaryLines = renderMarkdownish(summary, width);
         lines.push(...summaryLines);
-        lines.push(""); // blank separator
+        lines.push("");
       }
 
-      // Render data as highlighted JSON if present
       if (data !== undefined) {
         const jsonStr = JSON.stringify(data, null, 2);
         const highlighted = highlightBlock(jsonStr, "json");
@@ -208,7 +214,7 @@ function renderMessageLines(
         const rawLines = safeRender(stripAnsi(result.content), resultW, {
           noHighlight: true,
         });
-        const limit = result.previewLineLimit ?? toolResultLineLimit(result.content);
+        const limit = toolResultLineLimit(result.content);
         const resultLines =
           rawLines.length > limit
             ? [
