@@ -16,7 +16,8 @@ const MIME_BY_EXT: Record<string, string> = {
 
 export interface PastedImage {
   marker: string;
-  markdown: string;
+  data: string;
+  mimeType: string;
 }
 
 // Read PNG image from macOS clipboard via osascript.
@@ -62,7 +63,8 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
     }
     return {
       marker: `[image: pasted ${mime.split("/")[1]}]`,
-      markdown: `![pasted image](data:${mime};base64,${base64})`,
+      data: base64,
+      mimeType: mime,
     };
   }
 
@@ -93,7 +95,8 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
       const name = basename(filePath);
       return {
         marker: `[image: ${name}]`,
-        markdown: `![${name}](data:${mime};base64,${base64})`,
+        data: base64,
+        mimeType: mime,
       };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
@@ -109,7 +112,8 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
       const name = basename(pathText);
       return {
         marker: `[image: ${name}]`,
-        markdown: `![${name}](data:image/png;base64,${clipBase64})`,
+        data: clipBase64,
+        mimeType: "image/png",
       };
     }
   }

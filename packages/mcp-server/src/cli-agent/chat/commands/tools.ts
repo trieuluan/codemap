@@ -39,8 +39,7 @@ export const toolsCommand: Command = {
       const externalTools: { server: string; tools: { name: string; description?: string }[] }[] = [];
       if (mastraStatus?.statuses) {
         for (const server of mastraStatus.statuses) {
-          if (server.toolNames.length > 0) {
-            // Mastra only provides tool names, no descriptions
+          if (server.toolNames.length > 0 && server.name !== "codemap") {
             const serverTools = server.toolNames.map((name) => ({ name }));
             externalTools.push({ server: server.name, tools: serverTools });
           }

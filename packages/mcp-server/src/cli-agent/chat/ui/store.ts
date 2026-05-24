@@ -21,6 +21,7 @@ export interface Message {
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   toolResults?: ToolResult[];
   expanded?: boolean;
+  expandedContent?: string;
   expandedResultIndex?: number;
   welcomeData?: WelcomeData;
   timestamp?: number;

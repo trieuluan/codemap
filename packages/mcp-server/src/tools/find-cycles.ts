@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 
@@ -21,8 +22,7 @@ export function registerFindCyclesTool(
         "Returns detailed information about each cycle including the files involved. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
         max_files: z

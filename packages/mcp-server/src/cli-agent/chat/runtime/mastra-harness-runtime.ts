@@ -225,6 +225,11 @@ async function getOrCreateHarness(opts: CreateHarnessOptions): Promise<HarnessLi
   return createFreshHarness(opts);
 }
 
+/** Pre-initialize the harness singleton in the background so the first chat turn has no cold-start delay. */
+export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
+  return getOrCreateHarness(opts).then(() => {});
+}
+
 /**
  * Run a single-turn agent through the Mastra Harness.
  */
@@ -263,7 +268,7 @@ export async function runWithMastraHarness(
     mcpServerIds: _singleton?.mcpServerIds,
   };
 
-  const result = await runHarness(harness, input.userMessage, input.signal, input.confirmEdit, callbacks);
+  const result = await runHarness(harness, input.userMessage, input.signal, input.confirmEdit, callbacks, input.imageFiles);
   if (!result.text.trim() && !result.usedTools && !input.signal?.aborted) {
     // Empty response with no tool calls usually means the singleton thread has
     // accumulated bad state (e.g. empty turns from previous failed runs). Reset
@@ -395,7 +400,7 @@ export async function runMultiPhaseWithMastra(
 
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
-    sendHarnessInput(harness, input.userMessage.content, input.onDebug).catch((err: unknown) => {
+    sendHarnessInput(harness, input.userMessage.content, input.imageFiles, input.onDebug).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
   });
@@ -408,6 +413,7 @@ function runHarness(
   signal: AbortSignal | undefined,
   confirmEdit: SingleAgentRuntimeInput["confirmEdit"],
   callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError" | "confirmEdit">,
+  imageFiles?: Array<{ data: string; mimeType: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
@@ -496,7 +502,7 @@ function runHarness(
     const onAbort = () => { harness.abort?.(); fail(createAbortError()); };
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    sendHarnessInput(harness, userMessage.content, callbacks.onDebug).catch((err: unknown) => {
+    sendHarnessInput(harness, userMessage.content, imageFiles, callbacks.onDebug).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
   });
@@ -505,17 +511,22 @@ function runHarness(
 async function sendHarnessInput(
   harness: HarnessLike,
   content: string,
+  imageFiles: Array<{ data: string; mimeType: string }> | undefined,
   onDebug?: (info: Record<string, unknown>) => void,
 ): Promise<void> {
-  onDebug?.({ event: "mastra_send_message_start", contentLength: content.length });
+  onDebug?.({ event: "mastra_send_message_start", contentLength: content.length, imageCount: imageFiles?.length ?? 0 });
   if (harness.sendSignal) {
-    const signal = harness.sendSignal({ content });
+    const signalContent = imageFiles?.length
+      ? { role: "user", content: [{ type: "text", text: content }, ...imageFiles.map((f) => ({ type: "file", data: f.data, mediaType: f.mimeType }))] }
+      : content;
+    const signal = harness.sendSignal({ content: signalContent as string });
     onDebug?.({ event: "mastra_send_signal_created", signalId: signal.id, signalType: signal.type });
     await signal.accepted;
     onDebug?.({ event: "mastra_send_signal_accepted", signalId: signal.id });
     return;
   }
-  await harness.sendMessage({ content });
+  const files = imageFiles?.map((f) => ({ data: f.data, mediaType: f.mimeType }));
+  await harness.sendMessage({ content, files });
   onDebug?.({ event: "mastra_send_message_done" });
 }
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -30,8 +31,7 @@ export function registerFindCallersTool(server: McpServer, config: McpServerConf
           .string()
           .min(1)
           .describe("Name of the symbol to find callers for."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },

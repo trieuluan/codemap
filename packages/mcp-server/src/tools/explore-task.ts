@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -310,8 +311,7 @@ export function registerExploreTaskTool(
           .min(1)
           .max(500)
           .describe("Describe the task, feature, or bug to investigate."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },

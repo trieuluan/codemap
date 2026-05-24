@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { success, withToolError } from "../lib/tool-response.js";
@@ -45,8 +46,7 @@ export function registerRunTestsTool(
           .number()
           .optional()
           .describe("Maximum number of workers for parallel test execution."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe(
             "CodeMap project UUID. Auto-resolved from workspace if omitted.",

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { success, withToolError } from "../lib/tool-response.js";
@@ -343,8 +344,7 @@ export function registerApplyPatchTool(
           .max(10)
           .optional()
           .describe("Alias for strip_level. Prefer strip_level."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe(
             "CodeMap project UUID. Auto-resolved from workspace if omitted.",

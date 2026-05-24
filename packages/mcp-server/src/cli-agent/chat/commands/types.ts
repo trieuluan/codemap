@@ -35,6 +35,8 @@ export interface CommandContext {
   endSubprocess: () => void;
   /** Refresh local/cloud commit metadata used by the status bar reimport hint. */
   refreshWorkspaceCommits?: () => Promise<void>;
+  /** Reset and reinitialize the Mastra harness with the current toolClient config. */
+  reinitHarness?: () => Promise<void>;
 }
 
 export interface Command {

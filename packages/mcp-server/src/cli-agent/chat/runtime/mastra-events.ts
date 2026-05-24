@@ -254,12 +254,12 @@ export interface HarnessLike {
   getTokenUsage?(): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
   setState?(updates: Record<string, unknown>): Promise<void>;
   subscribe(listener: (event: HarnessEvent) => void): () => void;
-  sendSignal?(input: { content: string }): {
+  sendSignal?(input: { content: string | { role: string; content: Array<{ type: string; [key: string]: unknown }> } }): {
     id: string;
     type: string;
     accepted: Promise<{ accepted?: boolean; runId?: string | null }>;
   };
-  sendMessage(input: { content: string }): Promise<void>;
+  sendMessage(input: { content: string; files?: Array<{ data: string; mediaType: string }> }): Promise<void>;
   abort?(): void;
   switchMode?(input: { modeId: string }): Promise<void>;
   switchModel?(input: { modelId: string; scope?: "global" | "thread" }): Promise<void>;

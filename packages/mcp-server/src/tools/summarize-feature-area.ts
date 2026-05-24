@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient, type CodeMapClient } from "../lib/codemap-api.js";
@@ -531,8 +532,7 @@ export function registerSummarizeFeatureAreaTool(
           .min(1)
           .max(200)
           .describe("Feature keyword or phrase, e.g. 'billing', 'auth redirect', 'admin import history'."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
         max_files: z

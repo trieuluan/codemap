@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -75,8 +76,7 @@ export function registerLinkProjectTool(server: McpServer, config: McpServerConf
         "Pass project_id to confirm the link directly. " +
         "If the linked project has no repository URL, CodeMap will ask whether to update it with the workspace remote and branch.",
       inputSchema: {
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("UUID of the project to link. Omit to trigger auto-detection."),
         confirm: z

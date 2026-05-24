@@ -27,10 +27,99 @@ import {
   buildPanel,
   isActiveTaskPhase,
 } from "./pi-tui/panel-builder.js";
+import { getMastraMessages } from "../runtime/mastra-harness-runtime.js";
 
 export { isActiveTaskPhase };
 
 const EXIT_CONFIRM_WINDOW_MS = 2000;
+
+// ── Tool result inline toggle (Ctrl+O) ───────────────────────────────────────
+
+function extractToolResultText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (Array.isArray(result)) {
+    return result
+      .map((r) => {
+        if (typeof r === "string") return r;
+        if (typeof r === "object" && r !== null && "text" in r)
+          return String((r as Record<string, unknown>).text);
+        return JSON.stringify(r, null, 2);
+      })
+      .join("\n");
+  }
+  return JSON.stringify(result, null, 2);
+}
+
+async function toggleLastToolCallExpanded(chatTerminal: ChatTerminal): Promise<void> {
+  const state = chatTerminal.store.getState();
+  const messages = state.messages;
+
+  // Find the last tool_call message
+  let lastIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "tool_call") { lastIdx = i; break; }
+  }
+
+  if (lastIdx === -1) {
+    chatTerminal.store.dispatch((prev) => ({
+      messages: [...prev.messages, { role: "system" as const, content: "No tool call to expand yet.", timestamp: Date.now() }],
+    }));
+    return;
+  }
+
+  const msg = messages[lastIdx]!;
+
+  // Collapse if already expanded
+  if (msg.expanded) {
+    chatTerminal.store.dispatch((prev) => {
+      const msgs = [...prev.messages];
+      msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: false };
+      return { messages: msgs };
+    });
+    return;
+  }
+
+  // Already fetched — just expand
+  if (msg.expandedContent) {
+    chatTerminal.store.dispatch((prev) => {
+      const msgs = [...prev.messages];
+      msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: true };
+      return { messages: msgs };
+    });
+    return;
+  }
+
+  // Fetch full content from Mastra thread history
+  let content = "";
+  try {
+    const threadMessages = await getMastraMessages(300);
+    outer: for (let i = threadMessages.length - 1; i >= 0; i--) {
+      const m = threadMessages[i];
+      if (!m) continue;
+      for (const block of m.content) {
+        if (block.type === "tool_result") {
+          content = extractToolResultText((block as Record<string, unknown>).result);
+          break outer;
+        }
+      }
+    }
+  } catch {
+    // fall through to empty check below
+  }
+
+  if (!content.trim()) {
+    chatTerminal.store.dispatch((prev) => ({
+      messages: [...prev.messages, { role: "system" as const, content: "No tool result available yet.", timestamp: Date.now() }],
+    }));
+    return;
+  }
+
+  chatTerminal.store.dispatch((prev) => {
+    const msgs = [...prev.messages];
+    msgs[lastIdx] = { ...msgs[lastIdx]!, expanded: true, expandedContent: content };
+    return { messages: msgs };
+  });
+}
 
 export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   const terminal = new ProcessTerminal();
@@ -177,10 +266,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
 
     if (!trimmed || state.input.busy) return;
-    const imageMarkdown = pendingImages.map((img) => img.markdown);
-    const content = imageMarkdown.length > 0
-      ? `${trimmed}\n\n${imageMarkdown.join("\n\n")}`
-      : trimmed;
+    const imageFiles = pendingImages.map((img) => ({ data: img.data, mimeType: img.mimeType }));
     pendingImages.length = 0;
     chatTerminal.store.dispatch((prev) => ({
       input: { ...prev.input, history: [...prev.input.history, trimmed] },
@@ -188,7 +274,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     editor.addToHistory(trimmed);
     editor.setText("");
     shellMode = false;
-    void chatTerminal.handleSubmitWithContent(trimmed, content);
+    void chatTerminal.handleSubmitWithContent(trimmed, false, imageFiles.length > 0 ? imageFiles : undefined);
   };
 
   // ── TUI components ────────────────────────────────────────────────────────
@@ -361,6 +447,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     }
     confirmSignature = "";
     confirmSelection = 0;
+
+    // Ctrl+O — open last tool result in pager
+    if (matchesKey(data, Key.ctrl("o"))) {
+      void toggleLastToolCallExpanded(chatTerminal);
+      return { consume: true };
+    }
 
     // Plan review inline select (only when editor is empty).
     if (state.planReview?.active && editor.getText().trim() === "") {

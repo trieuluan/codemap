@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { success, withToolError } from "../lib/tool-response.js";
@@ -46,8 +47,7 @@ export function registerDeployPreviewTool(
           .describe(
             "Force redeploy even if same branch/commit. Default: false.",
           ),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -30,8 +31,7 @@ export function registerCreateProjectTool(
         name: z.string().trim().min(1).max(120).optional(),
         description: z.string().trim().min(1).max(500).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
-        workspace_id: z
-          .uuid()
+        workspace_id: uuidSchema
           .optional()
           .describe(
             "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",

@@ -76,6 +76,14 @@ export class CodeMapMcpToolClient {
     }
   }
 
+  addExtraServer(name: string, config: ExtraServerConfig): void {
+    this._extraConfigs.set(name, config);
+  }
+
+  removeExtraServer(name: string): boolean {
+    return this._extraConfigs.delete(name);
+  }
+
   getServerStatuses(): McpServerStatus[] {
     const statuses: McpServerStatus[] = [
       { name: "codemap", connected: true, tools: this.defaultConn.tools?.length ?? 0 },

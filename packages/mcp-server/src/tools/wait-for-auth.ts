@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { pollMcpAuthUntilDone } from "../lib/mcp-auth.js";
@@ -17,7 +17,7 @@ export function registerWaitForAuthTool(
       description:
         "Polls CodeMap MCP login status for a previously started auth session. Saves the issued API key into the global MCP config when authorization succeeds.",
       inputSchema: {
-        sessionId: z.uuid(),
+        sessionId: uuidSchema,
       },
     },
     async ({ sessionId }) => {

@@ -28,6 +28,7 @@ export interface SingleAgentRuntimeInput {
   onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
   confirmEdit?: ConfirmEditFn;
+  imageFiles?: Array<{ data: string; mimeType: string }>;
 }
 
 export interface MultiPhaseLoopInput {
@@ -51,6 +52,7 @@ export interface MultiPhaseLoopInput {
   onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
   confirmEdit?: ConfirmEditFn;
+  imageFiles?: Array<{ data: string; mimeType: string }>;
 }
 
 export async function runSingleAgentRuntime(

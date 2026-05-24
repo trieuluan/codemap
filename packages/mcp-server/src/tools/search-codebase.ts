@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -372,8 +373,7 @@ export function registerSearchCodebaseTool(
         "project_id is optional if workspace is linked.",
       inputSchema: {
         query: z.string().min(1).describe("Search query string."),
-        project_id: z
-          .uuid()
+        project_id: uuidSchema
           .optional()
           .describe(
             "CodeMap project UUID. Auto-resolved from workspace if omitted.",

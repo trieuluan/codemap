@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "../lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
@@ -27,8 +28,7 @@ export function registerCreateProjectFromGithubTool(
         external_repo_id: z.string().trim().min(1).max(255).optional(),
         default_branch: z.string().trim().min(1).max(255).optional(),
         branch: z.string().trim().min(1).max(255).optional(),
-        workspace_id: z
-          .uuid()
+        workspace_id: uuidSchema
           .optional()
           .describe(
             "Optional CodeMap workspace UUID. If omitted, CodeMap uses the user's default personal workspace.",

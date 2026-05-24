@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import type { NineRouterProvider } from "../../provider.js";
 import type { ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
@@ -18,6 +19,7 @@ import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
   switchMastraThread,
+  warmupHarness,
 } from "../runtime/mastra-harness-runtime.js";
 import { resolveGatewayModel } from "../runtime/mastra-models.js";
 import { hydrateMentionContext } from "../agent/mention-context.js";
@@ -39,7 +41,12 @@ import { loadThreadIntoUI } from "../commands/sessions.js";
 export type { Message as ChatEntry } from "./store.js";
 
 
-const TOOL_CALL_SUMMARY_SUFFIX = " — click preview · Ctrl+O full view";
+const DEBUG_TOOL_LOG = "/tmp/codemap-tool-debug.log";
+function debugToolLog(msg: string): void {
+  try { appendFileSync(DEBUG_TOOL_LOG, `${new Date().toISOString()} ${msg}\n`); } catch {}
+}
+
+const TOOL_CALL_SUMMARY_SUFFIX = " — Ctrl+O toggle";
 const TOOL_PREVIEW_LINE_LIMIT = 120;
 
 function byteLength(text: string): number {
@@ -542,6 +549,21 @@ export class ChatTerminal {
     // Git workspace info + cloud import commit + session init
     await this.refreshWorkspaceCommits();
 
+    // Pre-initialize Mastra harness in background so the first chat turn has no cold-start delay.
+    const startupProfiles = this.options.profiles ?? [];
+    const startupModel =
+      startupProfiles.find((p) => p.id === "coder")?.model ??
+      this.store.getState().config.model;
+    warmupHarness({
+      toolClient: this.options.toolClient,
+      baseUrl: this.options.provider.baseUrl,
+      apiKey: this.options.provider.apiKey,
+      modelId: startupModel,
+      availableModels: this.store.getState().config.availableModels,
+      onDebug: undefined,
+      extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
+    }).catch(() => { /* best-effort startup warmup */ });
+
     // Synthesize project conventions in background (non-blocking)
     const profiles = this.options.profiles ?? [];
     const plannerModel =
@@ -600,24 +622,24 @@ export class ChatTerminal {
   // ─── Submit ──────────────────────────────────────────────
 
   async handleSubmit(text: string): Promise<void> {
-    await this.handleSubmitWithContent(text, text);
+    await this.handleSubmitWithContent(text);
   }
 
   async handleSubmitWithContent(
-    displayText: string,
-    contentText: string,
+    text: string,
     forceMultiPhase = false,
+    imageFiles?: Array<{ data: string; mimeType: string }>,
   ): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;
 
     // /plan — toggle plan mode on/off (like Claude Code's /plan)
     // /plan <message> — force multi-phase for this single message (prefix shortcut)
-    if (/^\/plan(\s|$)/i.test(displayText)) {
-      const taskText = displayText.replace(/^\/plan\s*/i, "").trim();
+    if (/^\/plan(\s|$)/i.test(text)) {
+      const taskText = text.replace(/^\/plan\s*/i, "").trim();
       if (taskText) {
         // Has message → force multi-phase for this message only
-        await this.handleSubmitWithContent(taskText, taskText, true);
+        await this.handleSubmitWithContent(taskText, true);
       } else {
         // No message → toggle plan mode
         const current = this.store.getState().planMode;
@@ -633,12 +655,12 @@ export class ChatTerminal {
     }
 
     // Command dispatch
-    if (displayText.startsWith("/")) {
-      if (displayText === "/help") {
+    if (text.startsWith("/")) {
+      if (text === "/help") {
         this.store.dispatch({ screen: "help" });
         return;
       }
-      const handled = executeCommand(displayText, this.buildCommandContext());
+      const handled = executeCommand(text, this.buildCommandContext());
       if (!handled) {
         this.appendMessage({
           role: "system",
@@ -648,15 +670,15 @@ export class ChatTerminal {
       return;
     }
 
-    if (displayText.startsWith("!")) {
-      await this.handleShellSubmit(displayText);
+    if (text.startsWith("!")) {
+      await this.handleShellSubmit(text);
       return;
     }
 
     this.store.dispatch({
-      input: { ...state.input, busy: true, lastUserText: contentText },
+      input: { ...state.input, busy: true, lastUserText: text },
     });
-    this.appendMessage({ role: "user", content: displayText });
+    this.appendMessage({ role: "user", content: text });
     this.store.dispatch({
       task: {
         phase: "thinking",
@@ -725,6 +747,7 @@ export class ChatTerminal {
         this.store.dispatch((prev) => ({ task: { ...prev.task, usage } }));
       },
       onToolStart: (name: string, args: string, id: string) => {
+        debugToolLog(`onToolStart: name="${name}" active=${this.isActiveTask(taskId, taskAbort)} taskId=${taskId}/${this._activeTaskId}`);
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
@@ -743,12 +766,16 @@ export class ChatTerminal {
             toolsCalled: s.task.toolsCalled + 1,
           },
         });
-        this.store.dispatch((prev) => ({
-          messages: withToolCallSummary(prev.messages, name, args),
-        }));
+        this.store.dispatch((prev) => {
+          const newMsgs = withToolCallSummary(prev.messages, name, args);
+          const tc = newMsgs.filter(m => m.role === "tool_call").length;
+          debugToolLog(`withToolCallSummary: displayName="${normalizeToolDisplayName(name)}" tool_calls=${tc} total=${newMsgs.length}`);
+          return { messages: newMsgs };
+        });
         this.bus.scheduleRefresh();
       },
       onToolResult: (name: string, resultText: string) => {
+        debugToolLog(`onToolResult: name="${name}" active=${this.isActiveTask(taskId, taskAbort)} taskId=${taskId}/${this._activeTaskId}`);
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolResult(name, resultText);
         resetStreaming();
@@ -760,9 +787,14 @@ export class ChatTerminal {
             toolArgs: undefined,
           },
         });
-        this.store.dispatch((prev) => ({
-          messages: markToolDone(prev.messages, name, resultText),
-        }));
+        this.store.dispatch((prev) => {
+          const beforeTR = prev.messages.filter(m => m.role === "tool").length;
+          const tcNames = prev.messages.filter(m => m.role === "tool_call").map(m => m.name ?? "?").join(",");
+          const newMsgs = markToolDone(prev.messages, name, resultText);
+          const afterTR = newMsgs.filter(m => m.role === "tool").length;
+          debugToolLog(`markToolDone: searching="${normalizeToolDisplayName(name)}" tool_calls=[${tcNames}] toolResultsBefore=${beforeTR} toolResultsAfter=${afterTR}`);
+          return { messages: newMsgs };
+        });
         this.bus.scheduleRefresh();
       },
       onOMObservation: (tokensObserved: number, observationTokens: number) => {
@@ -801,7 +833,7 @@ export class ChatTerminal {
     };
 
     try {
-      const mentionContext = await hydrateMentionContext(contentText);
+      const mentionContext = await hydrateMentionContext(text);
       if (!this.isActiveTask(taskId, taskAbort)) return;
       for (const warning of mentionContext.warnings) {
         this.appendMessage({ role: "system", content: `⚠ ${warning}` });
@@ -836,7 +868,7 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
 
         classification = await classifyTask(
-          contentText,
+          text,
           this.options.provider,
           coderProfile.model, // coder has better instruction following for JSON classification
           taskAbort.signal,
@@ -913,6 +945,7 @@ export class ChatTerminal {
               this.bus.scheduleRefresh();
             },
             onPlanWait: () => this.waitForPlanReview(),
+            imageFiles,
             ...sharedCallbacks,
           })
         : await runSingleAgentRuntime({
@@ -935,6 +968,7 @@ export class ChatTerminal {
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
             confirmEdit: this.makeConfirmEdit(),
+            imageFiles,
             ...sharedCallbacks,
           });
 
@@ -1345,6 +1379,21 @@ export class ChatTerminal {
         process.exit(0);
       },
       newSession: () => this.startNewSession(),
+      reinitHarness: async () => {
+        await resetHarnessSingleton();
+        await warmupHarness({
+          toolClient: this.options.toolClient,
+          baseUrl: this.options.provider.baseUrl,
+          apiKey: this.options.provider.apiKey,
+          modelId: (() => {
+            const p = this.options.profiles ?? [];
+            return p.find((pr) => pr.id === "coder")?.model ?? this.store.getState().config.model;
+          })(),
+          availableModels: this.store.getState().config.availableModels,
+          onDebug: undefined,
+          extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
+        });
+      },
       getMastraThreadId: () => getMastraThreadId(),
       loadThreadById: (id: string) => this.loadThreadById(id),
       startSubprocess: (command: string) => {

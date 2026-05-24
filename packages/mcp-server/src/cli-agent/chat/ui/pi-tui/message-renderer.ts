@@ -1,4 +1,5 @@
 import cfonts from "cfonts";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { Message, UIState } from "../store.js";
 import { formatTime, gradientStr, truncate } from "../ink-utils.js";
 import {
@@ -103,11 +104,14 @@ function safeRender(
   opts?: { noHighlight?: boolean },
 ): string[] {
   const cleaned = normalizeHtml(stripBase64Images(content));
+  let lines: string[];
   try {
-    return renderMarkdownish(cleaned, width, opts);
+    lines = renderMarkdownish(cleaned, width, opts);
   } catch {
-    return cleaned.split("\n").flatMap((l) => wrapPlain(l, width));
+    lines = cleaned.split("\n").flatMap((l) => wrapPlain(l, width));
   }
+  // Clamp lines that exceed width (markdown tables don't always respect the width constraint)
+  return lines.map(line => visibleWidth(line) > width ? truncateToWidth(line, width) : line);
 }
 
 export function messageLines(
@@ -168,9 +172,18 @@ function renderMessageLines(
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
       const lines = safeRender(stripAnsi(msg.content), bodyW);
-      out.push(`${time} ${C_WARNING}→${RESET} ${C_WARNING}${toolName}:${RESET} ${lines[0] ?? ""}`);
+      const expandIcon = msg.expanded ? "↓" : "→";
+      out.push(`${time} ${C_WARNING}${expandIcon}${RESET} ${C_WARNING}${toolName}:${RESET} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${C_WARNING}  ${line}${RESET}`);
+      // Expanded content (Ctrl+O toggle)
+      if (msg.expanded && msg.expandedContent) {
+        const expandedLines = safeRender(stripAnsi(msg.expandedContent), bodyW);
+        out.push(`${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`);
+        for (const line of expandedLines)
+          out.push(`${" ".repeat(prefixW)}${C_GRAY}${line}${RESET}`);
+        out.push(`${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`);
+      }
     } else if (msg.role === "tool") {
       const isSummary = msg.content.includes("click preview · Ctrl+O full view") || msg.content.includes("(ctrl+o to expand)");
       const toolName = truncate(msg.toolName ?? "tool", 20);

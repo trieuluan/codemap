@@ -28,18 +28,58 @@ export const mcpCommand: Command = {
         return;
       }
       const cmdArgs = parts.slice(3);
+      const config = { command, args: cmdArgs.length > 0 ? cmdArgs : undefined };
       const workspaceRoot = await readWorkspacePath();
-      await saveMcpServerEntry(workspaceRoot, name, {
-        command,
-        args: cmdArgs.length > 0 ? cmdArgs : undefined,
-      });
+      await saveMcpServerEntry(workspaceRoot, name, config);
+      ctx.toolClient.addExtraServer(name, config);
       ctx.setMessages((prev) => [
         ...prev,
         {
           role: "system",
-          content: `Added MCP server "${name}" → ${command} ${cmdArgs.join(" ")}\nRestart chat to connect.`,
+          content: `Added MCP server "${name}" → ${command} ${cmdArgs.join(" ")}\nConnecting…`,
         },
       ]);
+      ctx.setBusy(true);
+      try {
+        await ctx.reinitHarness?.();
+      } catch (err) {
+        ctx.setBusy(false);
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.toolClient.removeExtraServer(name);
+        await removeMcpServerEntry(workspaceRoot, name).catch(() => {});
+        ctx.setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Failed to initialize harness: ${msg.split("\n")[0]}` },
+        ]);
+        return;
+      }
+
+      // Wait for MCP connections to settle (reinitHarness resolves before MCP init completes)
+      const summary = await getMastraMcpStatusSummary();
+      ctx.setBusy(false);
+
+      const serverStatus = summary?.statuses.find((s) => s.name === name);
+      const skipped = summary?.skipped.find((s) => s.name === name);
+      if (!serverStatus?.connected || skipped) {
+        const errMsg = serverStatus?.error ?? skipped?.reason ?? "unknown error";
+        const isNotFound = errMsg.includes("ENOENT") || errMsg.includes("not found");
+        const hint = isNotFound
+          ? `\n\nTip: "${command}" was not found on PATH. Try using npx:\n  /mcp add ${name} npx ${[command, ...cmdArgs].join(" ")}`
+          : "";
+        ctx.toolClient.removeExtraServer(name);
+        await removeMcpServerEntry(workspaceRoot, name).catch(() => {});
+        ctx.setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Failed to connect MCP server "${name}": ${errMsg.split("\n")[0]}${hint}` },
+        ]);
+        // Reinit harness in background to purge the failed server from Mastra's internal MCP state
+        ctx.reinitHarness?.().catch(() => {});
+      } else {
+        ctx.setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `MCP server "${name}" connected (${serverStatus.toolCount} tools).` },
+        ]);
+      }
       return;
     }
 
@@ -61,14 +101,24 @@ export const mcpCommand: Command = {
       }
       const workspaceRoot = await readWorkspacePath();
       const removed = await removeMcpServerEntry(workspaceRoot, name);
+      if (!removed) {
+        ctx.setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `MCP server "${name}" not found in config.` },
+        ]);
+        return;
+      }
+      ctx.toolClient.removeExtraServer(name);
       ctx.setMessages((prev) => [
         ...prev,
-        {
-          role: "system",
-          content: removed
-            ? `Removed MCP server "${name}". Restart chat to disconnect.`
-            : `MCP server "${name}" not found in config.`,
-        },
+        { role: "system", content: `Removed MCP server "${name}". Reconnecting…` },
+      ]);
+      ctx.setBusy(true);
+      await ctx.reinitHarness?.();
+      ctx.setBusy(false);
+      ctx.setMessages((prev) => [
+        ...prev,
+        { role: "system", content: `Harness reinitialized without "${name}".` },
       ]);
       return;
     }
