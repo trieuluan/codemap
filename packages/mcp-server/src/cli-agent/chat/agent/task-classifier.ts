@@ -38,6 +38,21 @@ const FALLBACK: TaskClassification = {
   reason: "classification failed",
 };
 
+// Short confirmation replies mean the user is approving a previously shown plan
+// or edit preview — always continue as coder without calling the LLM.
+const CONFIRMATION_SYNONYMS = new Set([
+  "ok", "okay", "yes", "y", "go", "proceed", "sure", "do it", "implement",
+  "ừ", "ừm", "đồng ý", "được", "làm đi", "làm luôn", "tiếp tục", "ok luôn",
+  "okie", "yep", "yup", "oke",
+]);
+
+const CONFIRMATION_RESULT: TaskClassification = {
+  phase: "single",
+  tier: "coder",
+  taskType: "general",
+  reason: "confirmation — continuing coding task",
+};
+
 export async function classifyTask(
   message: string,
   provider: NineRouterProvider,
@@ -51,6 +66,10 @@ export async function classifyTask(
 
   try {
     if (signal?.aborted) return FALLBACK;
+
+    if (CONFIRMATION_SYNONYMS.has(message.trim().toLowerCase())) {
+      return CONFIRMATION_RESULT;
+    }
 
     let raw = "";
     for await (const chunk of provider.stream({

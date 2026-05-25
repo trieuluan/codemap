@@ -16,14 +16,10 @@ import {
   tryOpenLoginBrowser,
   waitForLoginAuthorization,
 } from "./lib/mcp-auth.js";
-import { registerPingTool } from "./tools/ping.js";
 import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
 import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
-import { registerDisconnectGithubTool } from "./tools/disconnect-github.js";
 import { registerCheckGitlabConnectionTool } from "./tools/check-gitlab-connection.js";
 import { registerGetGitlabConnectUrlTool } from "./tools/get-gitlab-connect-url.js";
-import { registerDisconnectGitlabTool } from "./tools/disconnect-gitlab.js";
-import { registerOpenUrlTool } from "./tools/open-url.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
 import {
   registerListGithubRepositoriesTool,
@@ -48,11 +44,8 @@ import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerCodeReviewTool } from "./tools/code-review.js";
-import { registerSuggestPatchTool } from "./tools/suggest-patch.js";
-import { registerApplyPatchTool } from "./tools/apply-patch.js";
 import { registerEditFileTool } from "./tools/edit-file.js";
 import { registerWriteFileTool } from "./tools/write-file.js";
-import { registerDeployPreviewTool } from "./tools/deploy-preview.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
@@ -73,9 +66,6 @@ import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
 import { registerLogoutTool } from "./tools/logout.js";
 import { registerWebSearchTool } from "./tools/web-search.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
-import { registerGetAgentWorkflowTool } from "./tools/get-agent-workflow.js";
-import { registerRecommendAgentWorkflowTool } from "./tools/recommend-agent-workflow.js";
-import { registerDoctorAgentPackTool } from "./tools/doctor-agent-pack.js";
 import {
   installAgentPack,
   parseAgentPackInstallArgs,
@@ -110,10 +100,6 @@ async function runMcpServer() {
   const { toolMode } = config;
 
   // ── Lite tier: core exploration + auth (always registered) ──────────────
-  registerPingTool(server, config);
-  registerGetAgentWorkflowTool(server);
-  registerRecommendAgentWorkflowTool(server);
-  registerDoctorAgentPackTool(server);
   registerCheckAuthStatusTool(server, config);
   registerStartAuthFlowTool(server, config);
   registerWaitForAuthTool(server, config);
@@ -157,18 +143,12 @@ async function runMcpServer() {
     registerRenameSymbolTool(server, config);
     registerFindCyclesTool(server, config);
     registerCodeReviewTool(server, config);
-    registerSuggestPatchTool(server, config);
-    registerApplyPatchTool(server, config);
     registerEditFileTool(server, config);
     registerWriteFileTool(server, config);
-    registerDeployPreviewTool(server, config);
     registerCheckGithubConnectionTool(server, config);
     registerGetGithubConnectUrlTool(server, config);
-    registerDisconnectGithubTool(server, config);
     registerCheckGitlabConnectionTool(server, config);
     registerGetGitlabConnectUrlTool(server, config);
-    registerDisconnectGitlabTool(server, config);
-    registerOpenUrlTool(server);
     registerGetCurrentWorkspaceInfoTool(server);
     registerListGithubRepositoriesTool(server, config);
     registerSearchGithubRepositoriesTool(server, config);

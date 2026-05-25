@@ -109,12 +109,6 @@ const MASTRA_DISABLED_TOOLS = [
   // Mastra-internal approval tool, not a CodeMap MCP tool. CodeMap handles
   // tool approval in the UI layer, so keep this unavailable to the agent.
   "request_access",
-  // Meta-orchestration tools are already represented in CodeMap's injected
-  // agent prompt. Leaving them enabled makes Mastra spend turns re-reading
-  // workflow guidance instead of doing the user's task.
-  "codemap_get_agent_workflow",
-  "codemap_recommend_agent_workflow",
-  "codemap_doctor_agent_pack",
 ];
 
 function normalizePlanAction(raw: string): "implement" | "cancel" | string {

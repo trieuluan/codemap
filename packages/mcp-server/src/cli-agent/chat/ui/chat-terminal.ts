@@ -22,7 +22,7 @@ import {
   classifyTask,
   type TaskClassification,
 } from "../agent/task-classifier.js";
-import { executeCommand } from "../commands/index.js";
+import { executeCommand, getCommandList } from "../commands/index.js";
 import { isStrongModel } from "../commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../file-search.js";
@@ -1150,6 +1150,7 @@ export class ChatTerminal {
         });
       },
       refreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
+      getCommandList,
     };
   }
 }

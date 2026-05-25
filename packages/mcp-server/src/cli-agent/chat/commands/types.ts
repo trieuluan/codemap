@@ -37,6 +37,8 @@ export interface CommandContext {
   refreshWorkspaceCommits?: () => Promise<void>;
   /** Reset and reinitialize the Mastra harness with the current toolClient config. */
   reinitHarness?: () => Promise<void>;
+  /** Get the list of available commands (injected to break circular deps with index.ts). */
+  getCommandList?: () => Command[];
 }
 
 export interface Command {
