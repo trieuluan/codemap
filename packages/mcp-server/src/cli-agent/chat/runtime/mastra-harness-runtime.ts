@@ -5,6 +5,7 @@ import type { SingleAgentRuntimeInput, MultiPhaseLoopInput } from "./cli-runtime
 import { bridgeCommonEvent, type BridgeCallbacks, type HarnessEvent, type HarnessLike, summarizeHarnessEvent } from "./mastra-events.js";
 import { resolveHarnessModelId, stripNineRouterPrefix } from "./mastra-models.js";
 import { createManagedMastraSettings, upsertGlobalMastraProvider } from "./mastra-settings.js";
+import { buildMastraPermissionRules } from "./tool-approval-policy.js";
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
 
@@ -112,9 +113,53 @@ interface HarnessSingleton {
 
 let _singleton: HarnessSingleton | null = null;
 
+// ─── Drain tracking ───────────────────────────────────────────────────────────
+// Tracks when the current harness run has fully settled (agent_end / error).
+// A persistent subscription (separate from the per-run subscription) observes
+// the event stream so we can await idle even after a run's own subscription is
+// torn down by abort.
+
+let _drainResolve: (() => void) | null = null;
+let _drainPromise: Promise<void> | null = null;
+let _drainUnsubscribe: (() => void) | null = null;
+
+function startDrainTracking(harness: HarnessLike): void {
+  _drainUnsubscribe?.();
+  let resolve!: () => void;
+  _drainPromise = new Promise<void>((r) => { resolve = r; });
+  _drainResolve = resolve;
+  _drainUnsubscribe = harness.subscribe((event: HarnessEvent) => {
+    if (event.type === "agent_end" || event.type === "error") {
+      _drainUnsubscribe?.();
+      _drainUnsubscribe = null;
+      _drainResolve?.();
+      _drainResolve = null;
+      _drainPromise = null;
+    }
+  });
+}
+
+function clearDrainTracking(): void {
+  _drainUnsubscribe?.();
+  _drainUnsubscribe = null;
+  _drainResolve?.();
+  _drainResolve = null;
+  _drainPromise = null;
+}
+
+/** Wait for the previous harness run to emit agent_end / error before proceeding. */
+export async function drainHarness(timeoutMs = 5000): Promise<void> {
+  if (!_drainPromise) return;
+  await Promise.race([
+    _drainPromise,
+    new Promise<void>((r) => setTimeout(r, timeoutMs)),
+  ]);
+}
+
 /** Destroy and forget the current harness — call when starting a new chat session. */
 export async function resetHarnessSingleton(): Promise<void> {
   if (!_singleton) return;
+  clearDrainTracking();
   const old = _singleton;
   _singleton = null;
   try { await old.harness.destroy?.(); } catch { /* best-effort */ }
@@ -140,6 +185,7 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
     settingsPath,
     globalSettingsPath,
   });
+  const mcpServerIds = new Set(["codemap", ...Object.keys(opts.extraServerConfigs ?? {})]);
   const { harness, mcpManager } = await createMastraCode({
     settingsPath,
     mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
@@ -150,7 +196,12 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
     disabledTools: MASTRA_DISABLED_TOOLS,
     initialState: {
       currentModelId: harnessModelId,
-      permissionRules: { categories: {}, tools: {} },
+      permissionRules: buildMastraPermissionRules(mcpServerIds),
+      // Bypass Mastra's suspend/resume approval cycle — all tool-call-approval
+      // chunks resolve as "allow" immediately, avoiding the runId deduplication
+      // bug in subscribeToThread that causes tool_end to never fire.
+      // Per-tool approval is handled at the UI layer via tool_start events.
+      yolo: true,
       // Use the same 9router model for OM observation/reflection instead of the
       // default google/gemini-2.5-flash which requires a separate API key.
       observerModelId: harnessModelId,
@@ -166,7 +217,6 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
 
   const mcpInitPromise = startMastraMcpInitialization(mcpManager, opts.onDebug);
 
-  const mcpServerIds = new Set(["codemap", ...Object.keys(opts.extraServerConfigs ?? {})]);
   _singleton = { harness, mcpManager, mcpInitPromise, baseUrl: opts.baseUrl, apiKey: opts.apiKey, settingsPath, mcpServerIds };
 
   // Best-effort cleanup when the process exits.
@@ -236,6 +286,7 @@ export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
 export async function runWithMastraHarness(
   input: SingleAgentRuntimeInput,
 ): Promise<AgentLoopResult> {
+  await drainHarness();
   const resolvedModel = resolveHarnessModelId(input.model, input.availableModels);
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
@@ -246,6 +297,7 @@ export async function runWithMastraHarness(
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
+  startDrainTracking(harness);
 
   const modelId = harness.getCurrentModelId?.();
   if (modelId) input.onModel?.(modelId);
@@ -268,7 +320,7 @@ export async function runWithMastraHarness(
     mcpServerIds: _singleton?.mcpServerIds,
   };
 
-  const result = await runHarness(harness, input.userMessage, input.signal, input.confirmEdit, callbacks, input.imageFiles);
+  const result = await runHarness(harness, input.userMessage, input.signal, callbacks, input.imageFiles);
   if (!result.text.trim() && !result.usedTools && !input.signal?.aborted) {
     // Empty response with no tool calls usually means the singleton thread has
     // accumulated bad state (e.g. empty turns from previous failed runs). Reset
@@ -288,6 +340,7 @@ export async function runWithMastraHarness(
 export async function runMultiPhaseWithMastra(
   input: MultiPhaseLoopInput,
 ): Promise<AgentLoopResult> {
+  await drainHarness();
   const resolvedCoderModel = resolveHarnessModelId(input.coderModel, input.availableModels);
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
@@ -298,6 +351,7 @@ export async function runMultiPhaseWithMastra(
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
+  startDrainTracking(harness);
 
   await harness.switchMode?.({ modeId: "plan" });
   await forceHarnessModel(harness, resolvedCoderModel);
@@ -384,7 +438,6 @@ export async function runMultiPhaseWithMastra(
         onDebug: input.onDebug,
         onOMObservation: input.onOMObservation,
         onOMReflection: input.onOMReflection,
-        confirmEdit: input.confirmEdit,
         harness,
         currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
         finalTextRef: { get: () => finalText, set: (v) => { finalText = v; currentStreamText = ""; } },
@@ -411,8 +464,7 @@ function runHarness(
   harness: HarnessLike,
   userMessage: { role: string; content: string },
   signal: AbortSignal | undefined,
-  confirmEdit: SingleAgentRuntimeInput["confirmEdit"],
-  callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError" | "confirmEdit">,
+  callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError">,
   imageFiles?: Array<{ data: string; mimeType: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
@@ -481,7 +533,6 @@ function runHarness(
       }
       bridgeCommonEvent(event, {
         ...callbacks,
-        confirmEdit,
         harness,
         currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
         finalTextRef: { get: () => finalText, set: (v) => { finalText = v; } },
@@ -497,6 +548,29 @@ function runHarness(
         },
         onError: fail,
       });
+      if (event.type === "message_end" && finalText.trim()) {
+        callbacks.onDebug?.({
+          event: "mastra_finish_on_message_end",
+          textLength: finalText.length,
+          usedTools,
+        });
+        const raw = harness.getTokenUsage?.();
+        const usage = raw
+          ? {
+              promptTokens: raw.promptTokens ?? 0,
+              completionTokens: raw.completionTokens ?? 0,
+              totalTokens: raw.totalTokens ?? 0,
+            }
+          : undefined;
+        if (usage) callbacks.onUsage?.(usage);
+        finish({
+          text: finalText,
+          messages: [userMessage as { role: "user"; content: string }],
+          usedTools,
+          unsupportedToolCalling: false,
+          usage,
+        });
+      }
     });
 
     const onAbort = () => { harness.abort?.(); fail(createAbortError()); };

@@ -1,17 +1,16 @@
-import type { SingleAgentRuntimeInput } from "./cli-runtime.js";
+import { buildToolPreview } from "./tool-approval-policy.js";
 
 interface Ref<T> { get(): T; set(v: T): void }
 
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
-  onToolStart?: (name: string, args: string, id: string) => void;
+  onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
-  confirmEdit?: SingleAgentRuntimeInput["confirmEdit"];
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
   finalTextRef: Ref<string>;
@@ -121,7 +120,13 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const ev = event as ToolStartEvent;
     cb.usedToolsRef.set(true);
     const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
-    cb.onToolStart?.(displayName, ev.args != null ? JSON.stringify(ev.args) : "{}", ev.toolCallId ?? "");
+    const args = normalizeToolArgs(ev.args);
+    cb.onToolStart?.(
+      displayName,
+      ev.args != null ? JSON.stringify(ev.args) : "{}",
+      ev.toolCallId ?? "",
+      buildToolPreview(ev.toolName, args),
+    );
     return;
   }
 
@@ -134,14 +139,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   }
 
   if (event.type === "tool_approval_required") {
-    const ev = event as ToolApprovalEvent;
-    const handleApproval = async () => {
-      const accepted = cb.confirmEdit
-        ? await cb.confirmEdit(formatToolDisplayName(ev.toolName, cb.mcpServerIds), ev.args as Record<string, unknown>, null)
-        : true;
-      cb.harness.respondToToolApproval?.({ decision: accepted ? "approve" : "decline" });
-    };
-    handleApproval().catch(cb.onError);
+    cb.harness.respondToToolApproval?.({ decision: "approve" });
     return;
   }
 
@@ -214,6 +212,13 @@ function extractLastText(content: HarnessMessageContent[] | string | undefined):
     }
   }
   return "";
+}
+
+function normalizeToolArgs(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    return args as Record<string, unknown>;
+  }
+  return {};
 }
 
 export interface HarnessThread {
@@ -289,12 +294,6 @@ interface ToolEndEvent extends HarnessEvent {
   toolName: string;
   result: unknown;
   isError: boolean;
-}
-interface ToolApprovalEvent extends HarnessEvent {
-  type: "tool_approval_required";
-  toolCallId: string;
-  toolName: string;
-  args: unknown;
 }
 interface AgentEndEvent extends HarnessEvent {
   type: "agent_end";

@@ -143,8 +143,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
   let debugMode = false;
   let planMode = false;
   let frame = 0;
-  let confirmSelection = 0;
-  let confirmSignature = "";
   let lastExitConfirmAt = 0;
   let exitConfirmTimer: NodeJS.Timeout | undefined;
   let statusMessage = "";
@@ -304,10 +302,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       debugMode = state.debug;
       planMode = state.planMode;
       const result = buildPanel(state, width, {
-        editor, frame, shellMode, debugMode, confirmSelection, confirmSignature, statusMessage,
+        editor, frame, shellMode, debugMode, statusMessage,
       });
-      confirmSignature = result.confirmSignature;
-      confirmSelection = result.confirmSelection;
       return result.lines;
     }
   }
@@ -435,29 +431,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       tui.requestRender();
       return { consume: true };
     }
-
-    if (state.confirm.active) {
-      if (matchesKey(data, Key.up)) {
-        confirmSelection = (confirmSelection + 2) % 3;
-        tui.requestRender();
-      } else if (matchesKey(data, Key.down) || matchesKey(data, Key.tab)) {
-        confirmSelection = (confirmSelection + 1) % 3;
-        tui.requestRender();
-      } else if (matchesKey(data, Key.enter)) {
-        if (confirmSelection === 0) chatTerminal.resolveConfirm(true);
-        else if (confirmSelection === 1) chatTerminal.resolveConfirm(false);
-        else chatTerminal.resolveConfirmAll();
-      } else if (data === "y") {
-        chatTerminal.resolveConfirm(true);
-      } else if (data === "a") {
-        chatTerminal.resolveConfirmAll();
-      } else if (data === "n" || matchesKey(data, Key.escape)) {
-        chatTerminal.resolveConfirm(false);
-      }
-      return { consume: true };
-    }
-    confirmSignature = "";
-    confirmSelection = 0;
 
     // Ctrl+O — open last tool result in pager
     if (matchesKey(data, Key.ctrl("o"))) {

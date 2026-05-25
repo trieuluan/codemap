@@ -8,11 +8,14 @@ import {
   C_ACTION,
   C_AI,
   C_ARCH,
+  C_ERROR,
   C_GRAY,
   C_MUTED,
+  C_SUCCESS,
   C_WARNING,
   C_WHITE,
   RESET,
+  SPINNER,
 } from "./theme.js";
 import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
 import { highlightBlock } from "./shiki-highlight.js";
@@ -75,6 +78,35 @@ function generateBanner(): string[] {
 }
 
 const BANNER_LINES = generateBanner();
+
+function renderPreviewLines(preview: string, bodyW: number, prefixW: number): string[] {
+  const normalized = preview.replace(/^~~~([^\n]*)/gm, "```$1").replace(/^~~~$/gm, "```");
+  const body = normalized.split("\n").filter((line) => !line.startsWith("File:"));
+  const added = body.filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
+  const removed = body.filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
+  const sourceLines = body.filter(
+    (line) =>
+      line.trim() !== "" &&
+      !line.startsWith("```") &&
+      !line.startsWith("---") &&
+      !line.startsWith("+++"),
+  ).length;
+  const summary =
+    added > 0 || removed > 0
+      ? `+${added} -${removed} lines`
+      : `${sourceLines} line${sourceLines === 1 ? "" : "s"}`;
+
+  const rendered = renderMarkdownish(normalized, bodyW);
+  const limit = 60;
+  const shown = rendered.slice(0, limit);
+  const indent = " ".repeat(prefixW);
+  const out = [`${indent}${C_MUTED}⎿  ${summary}${RESET}`];
+  out.push(...shown.map((line) => `${indent}   ${line}`));
+  if (rendered.length > limit) {
+    out.push(`${indent}   ${C_MUTED}… ${rendered.length - limit} more lines${RESET}`);
+  }
+  return out;
+}
 
 function toolResultLineLimit(content: string): number {
   const lower = content.toLowerCase();
@@ -152,12 +184,13 @@ export function messageLines(
   width: number,
   frame = 0,
 ): string[] {
-  return renderMessageLines(messages, width);
+  return renderMessageLines(messages, width, frame);
 }
 
 function renderMessageLines(
   messages: Message[],
   width: number,
+  frame = 0,
 ): string[] {
   if (messages.length === 0) {
     return [
@@ -192,42 +225,64 @@ function renderMessageLines(
     } else if (msg.role === "tool_call") {
       const toolName = truncate(msg.name ?? "tool", 20);
       const isPlan = (msg.name ?? "").toLowerCase() === "plan";
-      const toolColor = isPlan ? C_AI : C_WARNING;
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
-      const expandIcon = msg.expanded ? "↓" : "→";
       const rawContent = stripAnsi(msg.content);
       const hasResult = (msg.toolResults?.length ?? 0) > 0;
-      const suffix = hasResult || msg.expandedContent ? " (Ctrl+O to expand)" : "";
+      const hasFailed = (msg.toolResults ?? []).some((r) => !r.success);
+      const allSucceeded = hasResult && !hasFailed;
+
+      let icon: string;
+      let toolColor: string;
+      if (msg.expanded) {
+        icon = "↓";
+        toolColor = isPlan ? C_AI : C_WARNING;
+      } else if (hasFailed) {
+        icon = "✗";
+        toolColor = C_ERROR;
+      } else if (allSucceeded) {
+        icon = "✓";
+        toolColor = C_SUCCESS;
+      } else {
+        icon = SPINNER[frame % SPINNER.length] ?? "…";
+        toolColor = isPlan ? C_AI : C_WARNING;
+      }
+
+      const canExpand = !hasFailed && (hasResult || !!msg.expandedContent);
+      const suffix = canExpand ? " (Ctrl+O to expand)" : "";
 
       const lines = safeRender(rawContent, bodyW);
       out.push(
-        `${time} ${toolColor}${expandIcon}${RESET} ${toolColor}${toolName}:${RESET} ${lines[0] ?? ""}${C_MUTED}${suffix}${RESET}`,
+        `${time} ${toolColor}${icon}${RESET} ${toolColor}${toolName}:${RESET} ${lines[0] ?? ""}${C_MUTED}${suffix}${RESET}`,
       );
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${toolColor}  ${line}${RESET}`);
 
-      for (const result of msg.toolResults ?? []) {
-        const resultName = truncate(result.name, 20);
-        const resultPrefixW = Math.min(11 + resultName.length, 34);
-        const resultW = Math.max(20, width - resultPrefixW);
-        const rawLines = safeRender(stripAnsi(result.content), resultW, {
-          noHighlight: true,
-        });
-        const limit = toolResultLineLimit(result.content);
-        const resultLines =
-          rawLines.length > limit
-            ? [
-                ...rawLines.slice(0, limit),
-                `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`,
-              ]
-            : rawLines;
-        const status = result.success ? "✓" : "✗";
-        out.push(
-          `${" ".repeat(prefixW)}${C_MUTED}${status} ${resultName}:${RESET} ${C_GRAY}${resultLines[0] ?? ""}${RESET}`,
-        );
-        for (const line of resultLines.slice(1))
-          out.push(`${" ".repeat(resultPrefixW)}${C_GRAY}${line}${RESET}`);
+      if (msg.previewContent && !msg.expanded)
+        out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW));
+
+      if (!hasFailed) {
+        for (const result of msg.toolResults ?? []) {
+          const resultName = truncate(result.name, 20);
+          const resultPrefixW = Math.min(11 + resultName.length, 34);
+          const resultW = Math.max(20, width - resultPrefixW);
+          const rawLines = safeRender(stripAnsi(result.content), resultW, {
+            noHighlight: true,
+          });
+          const limit = toolResultLineLimit(result.content);
+          const resultLines =
+            rawLines.length > limit
+              ? [
+                  ...rawLines.slice(0, limit),
+                  `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`,
+                ]
+              : rawLines;
+          out.push(
+            `${" ".repeat(prefixW)}${C_MUTED}✓ ${resultName}:${RESET} ${C_GRAY}${resultLines[0] ?? ""}${RESET}`,
+          );
+          for (const line of resultLines.slice(1))
+            out.push(`${" ".repeat(resultPrefixW)}${C_GRAY}${line}${RESET}`);
+        }
       }
 
       if (msg.expanded && msg.expandedContent) {

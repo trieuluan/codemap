@@ -14,13 +14,6 @@ type ExtraServerConfig = { command: string; args?: string[]; env?: Record<string
 
 const require = createRequire(import.meta.url);
 
-const CONFIRM_PATTERNS =
-  /(^|_)(patch|edit|write|delete|remove|rename|move|create|update|insert|drop|truncate)/i;
-
-export function isConfirmTool(name: string): boolean {
-  return CONFIRM_PATTERNS.test(name);
-}
-
 export interface AgentTool {
   name: string;
   description?: string;

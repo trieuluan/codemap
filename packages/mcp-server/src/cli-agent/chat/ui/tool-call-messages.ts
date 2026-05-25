@@ -142,6 +142,20 @@ export function markToolDone(
   return next;
 }
 
+export function setToolCallPreview(messages: Message[], preview: string): Message[] {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (!msg) continue;
+    if (msg.role === "user") break;
+    if (msg.role === "tool_call") {
+      next[i] = { ...msg, previewContent: preview };
+      return next;
+    }
+  }
+  return next;
+}
+
 export function appendToLastToolCallSummary(
   messages: Message[],
   content: string,

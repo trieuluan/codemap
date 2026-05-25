@@ -19,6 +19,7 @@ export interface Message {
   expanded?: boolean;
   expandedContent?: string;
   expandedResultIndex?: number;
+  previewContent?: string; // passive tool preview shown inline
   welcomeData?: WelcomeData;
   timestamp?: number;
 }
@@ -98,19 +99,11 @@ export interface UIState {
     entryIndex: number; // index into messages[]
   };
 
-  // Confirm dialog
-  confirm: {
-    active: boolean;
-    toolName: string;
-    preview: string | null;
-  };
-
   // Input
   input: {
     busy: boolean;
     history: string[];
     lastUserText: string | null;
-    autoAccept: boolean;
   };
 
   // Subprocess
@@ -175,16 +168,10 @@ export function createInitialState(opts: {
       content: "",
       entryIndex: -1,
     },
-    confirm: {
-      active: false,
-      toolName: "",
-      preview: null,
-    },
     input: {
       busy: false,
       history: [],
       lastUserText: null,
-      autoAccept: false,
     },
     subprocess: {
       active: false,

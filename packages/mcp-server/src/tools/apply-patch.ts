@@ -199,20 +199,15 @@ function formatPatchPreviewMessage(result: ApplyPatchResult): string {
     result.filesModified.length +
     result.filesCreated.length +
     result.filesDeleted.length;
-  const mode = result.dryRun ? "Dry run preview" : "Confirmation preview";
-  const reason = result.dryRun
-    ? "Not applied because dry_run=true."
-    : "Not applied because confirm_apply=true was not provided.";
-  const next = result.dryRun
-    ? "To apply this patch, call apply_patch again with dry_run=false and confirm_apply=true."
-    : "To apply this patch, call apply_patch again with confirm_apply=true.";
+  const mode = "Dry run preview";
+  const reason = "Not applied because dry_run=true.";
+  const next = "To apply this patch, call apply_patch again with dry_run=false.";
 
   return (
     `### Patch Preview - Preflight passed\n\n` +
     `Mode: ${mode}\n` +
     `Applied: no\n` +
     `Reason: ${reason}\n` +
-    `Requires confirmation to apply: ${result.requiresConfirmation ? "yes" : "no"}\n` +
     `Next: ${next}\n` +
     `Files touched: ${changedCount}\n` +
     `${formatFileList("Changed", result.filesModified)}\n` +
@@ -273,7 +268,7 @@ export function registerApplyPatchTool(
       title: "Apply Patch",
       description:
         "Preview or apply a unified diff patch after a successful dry-run preflight. " +
-        "By default, apply_patch returns a diff preview and requires confirm_apply=true before modifying files. " +
+        "Set dry_run=true to preview without modifying files. " +
         "Supports raw unified diffs and base64-encoded patches.",
       inputSchema: {
         patch: z
@@ -308,17 +303,6 @@ export function registerApplyPatchTool(
           .boolean()
           .optional()
           .describe("Alias for dry_run. Prefer dry_run."),
-        confirm_apply: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe(
-            "Required to actually modify files. If false, returns a preview even when dry_run is false.",
-          ),
-        confirmApply: z
-          .boolean()
-          .optional()
-          .describe("Alias for confirm_apply. Prefer confirm_apply."),
         fuzz: z
           .number()
           .int()
@@ -356,13 +340,10 @@ export function registerApplyPatchTool(
       const camelArgs = args as {
         base64Patch?: string;
         dryRun?: boolean;
-        confirmApply?: boolean;
         stripLevel?: number;
       };
       const base64_patch = args.base64_patch ?? camelArgs.base64Patch;
       const dry_run = args.dry_run === true || camelArgs.dryRun === true;
-      const confirm_apply =
-        args.confirm_apply === true || camelArgs.confirmApply === true;
       const strip_level = args.strip_level ?? camelArgs.stripLevel;
 
       if (patch && base64_patch) {
@@ -412,7 +393,6 @@ export function registerApplyPatchTool(
       const stripLevel = strip_level ?? 1;
       const fuzzFactor = fuzz ?? 2;
       const reversePatch = Boolean(reverse);
-      const confirmed = Boolean(confirm_apply);
       const parsedChanges = parsePatchChanges(
         patchContent,
         stripLevel,
@@ -422,8 +402,8 @@ export function registerApplyPatchTool(
         applied: false,
         dryRun: Boolean(dry_run),
         reverse: reversePatch,
-        requiresConfirmation: !confirmed,
-        confirmed,
+        requiresConfirmation: false,
+        confirmed: true,
         filesModified: parsedChanges.filesModified,
         filesCreated: parsedChanges.filesCreated,
         filesDeleted: parsedChanges.filesDeleted,
@@ -448,7 +428,7 @@ export function registerApplyPatchTool(
         result.preflightOutput = dry.stdout + dry.stderr;
         result.output = result.preflightOutput;
 
-        if (dry_run || !confirmed) {
+        if (dry_run) {
           return success(formatPatchPreviewMessage(result), result);
         }
 

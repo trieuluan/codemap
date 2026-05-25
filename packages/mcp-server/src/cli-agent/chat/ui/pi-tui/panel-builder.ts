@@ -46,16 +46,11 @@ export interface PanelContext {
   frame: number;
   shellMode: boolean;
   debugMode: boolean;
-  confirmSelection: number;
-  confirmSignature: string;
   statusMessage?: string;
 }
 
 export interface PanelResult {
   lines: string[];
-  /** Possibly updated when a new confirm dialog appears. */
-  confirmSignature: string;
-  confirmSelection: number;
 }
 
 export function buildStatusBar(
@@ -106,8 +101,6 @@ export function buildPanel(
   ctx: PanelContext,
 ): PanelResult {
   const { editor, frame, shellMode, debugMode, statusMessage } = ctx;
-
-  let { confirmSelection, confirmSignature } = ctx;
 
   const out: string[] = [];
 
@@ -274,44 +267,8 @@ export function buildPanel(
   const editorLines = renderEditor(editor, w, shellMode, debugMode);
   out.push(...editorLines);
 
-  // Confirm dialog.
-  if (state.confirm.active) {
-    const signature = `${state.confirm.toolName}\n${state.confirm.preview ?? ""}`;
-    if (signature !== confirmSignature) {
-      confirmSignature = signature;
-      confirmSelection = 0;
-    }
-    out.push(
-      fitLine(`${C_WARNING}Confirm edit:${RESET} ${state.confirm.toolName}`, w),
-      fitLine(
-        `${C_MUTED}↑↓ select  Enter confirm  y/n/a shortcuts  Esc reject${RESET}`,
-        w,
-      ),
-    );
-    const options = [
-      { label: "Apply", desc: "Apply this change" },
-      { label: "Reject", desc: "Skip this change" },
-      { label: "Accept all", desc: "Apply this and future edits" },
-    ];
-    for (const [idx, option] of options.entries()) {
-      const selected = idx === confirmSelection;
-      const isReject = option.label === "Reject";
-      const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
-      const label = selected
-        ? `${isReject ? C_ERROR : C_WHITE}${BOLD}${option.label}${RESET}`
-        : `${isReject ? C_ERROR : C_WHITE}${option.label}${RESET}`;
-      out.push(
-        fitLine(`  ${prefix} ${label}  ${C_GRAY}${option.desc}${RESET}`, w),
-      );
-    }
-  }
-
   // Status bar.
   out.push(buildStatusBar(state, w, debugMode, statusMessage));
 
-  return {
-    lines: out,
-    confirmSignature,
-    confirmSelection,
-  };
+  return { lines: out };
 }

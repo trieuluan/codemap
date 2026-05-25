@@ -4,10 +4,6 @@ import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
 import { getCachedContext } from "../../convention-synthesizer.js";
 import {
-  type ConfirmEditFn,
-  isUserRejectedError,
-} from "../agent/agent-loop.js";
-import {
   runMultiPhaseAgentRuntime,
   runSingleAgentRuntime,
   type ChatUiMode,
@@ -39,9 +35,9 @@ import {
   type Message,
 } from "./store.js";
 import {
-  appendToLastToolCallSummary,
   markLastPendingToolCallCanceled,
   markToolDone,
+  setToolCallPreview,
   withToolCallSummary,
 } from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../commands/sessions.js";
@@ -150,7 +146,6 @@ export class ChatTerminal {
   readonly bus: EventBus;
   readonly store: Store;
 
-  private _confirmResolve: ((accept: boolean) => void) | null = null;
   private _planReviewResolve: ((action: string) => void) | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
@@ -246,9 +241,6 @@ export class ChatTerminal {
     this._taskAbort?.abort();
     this._taskAbort = null;
     this._activeTaskId = 0;
-    // Also cancel any pending confirm dialog
-    this._confirmResolve?.(false);
-    this._confirmResolve = null;
     this._planReviewResolve?.("cancel");
     this._planReviewResolve = null;
 
@@ -262,19 +254,10 @@ export class ChatTerminal {
       messages: nextMessages,
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
-      confirm: { active: false, toolName: "", preview: null },
       planReview: { active: false, selection: 0 },
       streaming: { active: false, content: "", entryIndex: -1 },
     });
     return shouldRollback ? canceledPrompt : null;
-  }
-
-  resolveConfirm(accept: boolean): void {
-    this._confirmResolve?.(accept);
-    this._confirmResolve = null;
-    this.store.dispatch({
-      confirm: { active: false, toolName: "", preview: null },
-    });
   }
 
   /** Called by the multi-phase loop: pause and wait for user plan review. */
@@ -294,12 +277,6 @@ export class ChatTerminal {
     this.bus.scheduleRefresh();
   }
 
-  resolveConfirmAll(): void {
-    this.store.dispatch((prev) => ({
-      input: { ...prev.input, autoAccept: true },
-    }));
-    this.resolveConfirm(true);
-  }
 
   // ─── Start ───────────────────────────────────────────────
 
@@ -506,7 +483,14 @@ export class ChatTerminal {
             },
           }));
         }
-        this.store.dispatch({ task: { ...s.task, phase: "streaming" } });
+        this.store.dispatch({
+          task: {
+            ...s.task,
+            phase: "streaming",
+            toolName: undefined,
+            toolArgs: undefined,
+          },
+        });
         this.bus.scheduleRefresh();
       },
       onModel: (model: string) => {
@@ -517,7 +501,7 @@ export class ChatTerminal {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.store.dispatch((prev) => ({ task: { ...prev.task, usage } }));
       },
-      onToolStart: (name: string, args: string, id: string) => {
+      onToolStart: (name: string, args: string, id: string, preview?: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
@@ -538,7 +522,11 @@ export class ChatTerminal {
         });
         this.store.dispatch((prev) => {
           const newMsgs = withToolCallSummary(prev.messages, name, args, id);
-          return { messages: newMsgs };
+          return {
+            messages: preview
+              ? setToolCallPreview(newMsgs, preview)
+              : newMsgs,
+          };
         });
         this.bus.scheduleRefresh();
       },
@@ -637,6 +625,10 @@ export class ChatTerminal {
           taskAbort.signal,
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.store.dispatch({
+          task: { ...this.store.getState().task, phase: "thinking" },
+        });
+        this.bus.scheduleRefresh();
       }
 
       const useMultiPhase =
@@ -677,7 +669,6 @@ export class ChatTerminal {
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
-            confirmEdit: this.makeConfirmEdit(),
             onPhaseStart: (phase, model) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
@@ -739,7 +730,6 @@ export class ChatTerminal {
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
-            confirmEdit: this.makeConfirmEdit(),
             imageFiles,
             ...sharedCallbacks,
           });
@@ -818,15 +808,6 @@ export class ChatTerminal {
       }
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
-      if (isUserRejectedError(err)) {
-        this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
-        this.appendMessage({
-          role: "system",
-          content:
-            "Edit rejected — stream stopped. Continue chatting to try a different approach.",
-        });
-        return;
-      }
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
       this.logger?.logError(err);
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -925,16 +906,6 @@ export class ChatTerminal {
       });
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
-      if (isUserRejectedError(err)) {
-        this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
-        this.appendMessage({
-          role: "system",
-          content:
-            "Edit rejected — stream stopped. Continue chatting to try a different approach.",
-        });
-        this.persistSession();
-        return;
-      }
       const message = err instanceof Error ? err.message : String(err);
       this.store.dispatch((prev) => ({
         messages: markToolDone(prev.messages, "bash", `[ERROR] ${message}`),
@@ -950,50 +921,6 @@ export class ChatTerminal {
       }
       this.bus.scheduleRefresh();
     }
-  }
-
-  // ─── Confirm edit ─────────────────────────────────────────
-
-  private makeConfirmEdit(): ConfirmEditFn {
-    return async (name, args, preview) => {
-      // Show preview below the ⎿ toolName line in the summary.
-      if (preview) {
-        this.store.dispatch((prev) => ({
-          messages: appendToLastToolCallSummary(
-            prev.messages,
-            // Don't double-wrap: write-file preview already has a ```diff block inside metadata.
-            preview.includes("@@ -") && !preview.includes("```diff")
-              ? `\`\`\`diff\n${preview}\n\`\`\``
-              : preview,
-          ),
-        }));
-        this.bus.scheduleRefresh();
-      }
-
-      if (this.store.getState().input.autoAccept) return true;
-
-      // Manual confirm: wait for user yes/no.
-      this.store.dispatch({
-        confirm: { active: true, toolName: name, preview },
-      });
-      const accepted = await new Promise<boolean>((resolve) => {
-        this._confirmResolve = resolve;
-      });
-
-      if (!accepted) {
-        // Mark ✗ immediately — onToolResult won't fire on rejection.
-        this.store.dispatch((prev) => ({
-          messages: markToolDone(
-            prev.messages,
-            name,
-            "[ERROR] User rejected tool execution.",
-          ),
-        }));
-        this.bus.scheduleRefresh();
-      }
-
-      return accepted;
-    };
   }
 
   // ─── Session context cache ────────────────────────────────

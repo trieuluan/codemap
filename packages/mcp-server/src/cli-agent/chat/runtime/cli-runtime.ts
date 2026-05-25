@@ -1,7 +1,7 @@
 import type { NineRouterProvider } from "../../provider.js";
 import type { ChatMessage, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
-import type { AgentLoopResult, ConfirmEditFn } from "../agent/agent-loop.js";
+import type { AgentLoopResult } from "../agent/agent-loop.js";
 import { runWithMastraHarness, runMultiPhaseWithMastra } from "./mastra-harness-runtime.js";
 
 export type ChatUiMode = "tui";
@@ -20,14 +20,13 @@ export interface SingleAgentRuntimeInput {
   /** Called when an intermediate agent message completes (before more tool calls follow). */
   onStreamReset?: () => void;
   onModel?: (model: string) => void;
-  onToolStart?: (name: string, args: string, id: string) => void;
+  onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
-  confirmEdit?: ConfirmEditFn;
   imageFiles?: Array<{ data: string; mimeType: string }>;
 }
 
@@ -44,14 +43,13 @@ export interface MultiPhaseLoopInput {
   onPlanWait?: () => Promise<PlanReviewAction>;
   onToken?: (text: string) => void;
   onModel?: (model: string) => void;
-  onToolStart?: (name: string, args: string, id: string) => void;
+  onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
   onToolResult?: (name: string, result: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
   signal?: AbortSignal;
-  confirmEdit?: ConfirmEditFn;
   imageFiles?: Array<{ data: string; mimeType: string }>;
 }
 

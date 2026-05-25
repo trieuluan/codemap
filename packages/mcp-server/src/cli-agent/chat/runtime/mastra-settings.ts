@@ -45,7 +45,7 @@ export async function createManagedMastraSettings(
       createdAt: new Date().toISOString(),
     }],
     preferences: {
-      yolo: true,
+      yolo: false,
       thinkingLevel: "medium",
       quietMode: false,
     },

@@ -8,28 +8,7 @@ export interface AgentLoopResult {
   usage?: TokenUsage;
 }
 
-export type ConfirmEditFn = (
-  name: string,
-  args: Record<string, unknown>,
-  preview: string | null,
-) => Promise<boolean>;
-
 export type CancelTaskStreamFn = (reason?: string) => void;
-
-export function createUserRejectedError(toolName: string): Error {
-  return Object.assign(
-    new Error(`User rejected ${toolName}. Stream stopped.`),
-    { name: "UserRejectedError", code: "USER_REJECTED" },
-  );
-}
-
-export function isUserRejectedError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  return (
-    err.name === "UserRejectedError" ||
-    (err as { code?: string }).code === "USER_REJECTED"
-  );
-}
 
 export function formatToolUiResult(name: string, result: string): string {
   if (!isFileWriteTool(name)) return result;
