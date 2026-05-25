@@ -80,8 +80,35 @@ function extractCloudCommitFromGetProject(result: unknown): string | undefined {
     : undefined;
 }
 
-function buildEnrichedContent(
-  content: string,
+const CODEMAP_AGENT_IDENTITY = [
+  "## CodeMap Identity",
+  "",
+  "You are CodeMap, the AI-powered code intelligence and coding agent CLI.",
+  "Mastra and mastracode are internal runtime implementation details, not the product identity.",
+  "Never identify yourself as Mastra Code, Mastra, Claude Code, Codex, or another host/runtime.",
+  "If asked what AI coding tool you are, answer that you are CodeMap.",
+  "Help the user read, understand, modify, and verify code in the current workspace.",
+].join("\n");
+
+function buildSessionContext(modelId?: string): string | null {
+  return modelId
+    ? `## Session Info\n\nYou are running as model: **${modelId}**`
+    : null;
+}
+
+export function buildCurrentTaskContent(content: string): string {
+  return [
+    "## Current Task",
+    "",
+    "<task>",
+    content,
+    "</task>",
+    "",
+    "Work only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.",
+  ].join("\n");
+}
+
+export function buildCodeMapAgentInstructions(
   resourceContext: string | null,
   projectContext: {
     conventions: string | null;
@@ -90,16 +117,13 @@ function buildEnrichedContent(
   } | null,
   modelId?: string,
 ): string {
-  const parts: string[] = [];
-  if (modelId)
-    parts.push(`## Session Info\n\nYou are running as model: **${modelId}**`);
+  const parts: string[] = [CODEMAP_AGENT_IDENTITY];
+  const sessionContext = buildSessionContext(modelId);
+  if (sessionContext) parts.push(sessionContext);
   if (projectContext?.rules) parts.push(projectContext.rules);
   if (projectContext?.conventions) parts.push(projectContext.conventions);
   if (projectContext?.skills) parts.push(projectContext.skills);
   if (resourceContext) parts.push(resourceContext);
-  parts.push(
-    `## Current Task\n\n<task>\n${content}\n</task>\n\nWork only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.`,
-  );
   return parts.join("\n\n---\n\n");
 }
 
@@ -647,6 +671,17 @@ export class ChatTerminal {
         this.getSessionResourceContext(taskAbort.signal),
         this.getSessionProjectContext(),
       ]);
+      const resolvedAgentModel =
+        getMastraCurrentModelId() ??
+        resolveGatewayModel(
+          useMultiPhase ? coderProfile!.model : singlePhaseModel,
+          this.store.getState().config.availableModels,
+        );
+      const agentInstructions = buildCodeMapAgentInstructions(
+        sessionResourceCtx,
+        sessionProjectCtx,
+        resolvedAgentModel,
+      );
 
       const result = useMultiPhase
         ? await runMultiPhaseAgentRuntime({
@@ -654,18 +689,10 @@ export class ChatTerminal {
             availableModels: this.store.getState().config.availableModels,
             coderModel: coderProfile!.model,
             reviewerModel: reviewerProfile!.model,
+            agentInstructions,
             userMessage: {
               role: "user",
-              content: buildEnrichedContent(
-                mentionContext.content,
-                sessionResourceCtx,
-                sessionProjectCtx,
-                getMastraCurrentModelId() ??
-                  resolveGatewayModel(
-                    coderProfile!.model,
-                    this.store.getState().config.availableModels,
-                  ),
-              ),
+              content: buildCurrentTaskContent(mentionContext.content),
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
@@ -715,18 +742,10 @@ export class ChatTerminal {
             provider: this.options.provider,
             model: singlePhaseModel,
             availableModels: this.store.getState().config.availableModels,
+            agentInstructions,
             userMessage: {
               role: "user",
-              content: buildEnrichedContent(
-                mentionContext.content,
-                sessionResourceCtx,
-                sessionProjectCtx,
-                getMastraCurrentModelId() ??
-                  resolveGatewayModel(
-                    singlePhaseModel,
-                    this.store.getState().config.availableModels,
-                  ),
-              ),
+              content: buildCurrentTaskContent(mentionContext.content),
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,

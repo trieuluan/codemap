@@ -14,6 +14,7 @@ export interface SingleAgentRuntimeInput {
   model: string;
   /** Real model IDs from the gateway — used to resolve profile aliases like "coder". */
   availableModels?: string[];
+  agentInstructions?: string;
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
   onToken?: (text: string) => void;
@@ -35,6 +36,7 @@ export interface MultiPhaseLoopInput {
   coderModel: string;
   reviewerModel: string;
   availableModels?: string[];
+  agentInstructions?: string;
   onStreamReset?: () => void;
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;

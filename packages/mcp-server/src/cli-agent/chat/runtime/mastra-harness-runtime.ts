@@ -112,6 +112,11 @@ interface HarnessSingleton {
 }
 
 let _singleton: HarnessSingleton | null = null;
+const ORIGINAL_AGENT_INSTRUCTIONS = new WeakMap<
+  object,
+  (options?: { requestContext?: unknown }) => unknown
+>();
+const APPLIED_AGENT_INSTRUCTIONS = new WeakMap<object, string>();
 
 // ─── Drain tracking ───────────────────────────────────────────────────────────
 // Tracks when the current harness run has fully settled (agent_end / error).
@@ -258,6 +263,77 @@ async function forceHarnessModel(harness: HarnessLike, modelId: string): Promise
   await harness.setState?.({ currentModelId: modelId });
 }
 
+function stringifyInstructions(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(stringifyInstructions).filter(Boolean).join("\n\n");
+  }
+  if (typeof value === "object") {
+    const content = (value as { content?: unknown }).content;
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) return stringifyInstructions(content);
+  }
+  return String(value);
+}
+
+async function resolveAgentInstructions(
+  instructions: unknown,
+  options?: { requestContext?: unknown },
+): Promise<unknown> {
+  if (typeof instructions === "function") {
+    return (instructions as (options?: { requestContext?: unknown }) => unknown)(options);
+  }
+  return instructions;
+}
+
+function getModeAgents(harness: HarnessLike): object[] {
+  const maybeHarness = harness as HarnessLike & {
+    listModes?: () => Array<{ agent?: unknown }>;
+    getState?: () => unknown;
+  };
+  const state = maybeHarness.getState?.();
+  const agents: object[] = [];
+  for (const mode of maybeHarness.listModes?.() ?? []) {
+    const rawAgent = typeof mode.agent === "function"
+      ? (mode.agent as (state: unknown) => unknown)(state)
+      : mode.agent;
+    if (rawAgent && typeof rawAgent === "object") agents.push(rawAgent);
+  }
+  return [...new Set(agents)];
+}
+
+function applyAgentInstructions(harness: HarnessLike, instructions?: string): void {
+  if (!instructions?.trim()) return;
+
+  for (const agent of getModeAgents(harness)) {
+    const writableAgent = agent as {
+      __getOverridableFields?: () => { instructions?: unknown };
+      __updateInstructions?: (instructions: unknown) => void;
+    };
+    if (!writableAgent.__updateInstructions) continue;
+    if (APPLIED_AGENT_INSTRUCTIONS.get(agent) === instructions) continue;
+
+    const originalInstructions = writableAgent.__getOverridableFields?.().instructions;
+    const original = ORIGINAL_AGENT_INSTRUCTIONS.get(agent) ??
+      ((options?: { requestContext?: unknown }) =>
+        resolveAgentInstructions(originalInstructions, options));
+    if (!original) continue;
+    ORIGINAL_AGENT_INSTRUCTIONS.set(agent, original);
+    APPLIED_AGENT_INSTRUCTIONS.set(agent, instructions);
+
+    writableAgent.__updateInstructions(async (options?: { requestContext?: unknown }) => {
+      const base = stringifyInstructions(await original(options));
+      return [
+        instructions,
+        "# CodeMap Instruction Priority",
+        "The CodeMap identity and instructions above override any internal runtime/product names in the base prompt below.",
+        base,
+      ].filter(Boolean).join("\n\n---\n\n");
+    });
+  }
+}
+
 async function getOrCreateHarness(opts: CreateHarnessOptions): Promise<HarnessLike> {
   const wanted = resolveHarnessModelId(opts.modelId, opts.availableModels);
   if (_singleton && _singleton.baseUrl === opts.baseUrl && _singleton.apiKey === opts.apiKey) {
@@ -307,6 +383,7 @@ export async function runWithMastraHarness(
     resolved: resolvedModel,
     availableCount: input.availableModels?.length ?? 0,
   });
+  applyAgentInstructions(harness, input.agentInstructions);
 
   const callbacks = {
     onToken: input.onToken,
@@ -355,6 +432,7 @@ export async function runMultiPhaseWithMastra(
 
   await harness.switchMode?.({ modeId: "plan" });
   await forceHarnessModel(harness, resolvedCoderModel);
+  applyAgentInstructions(harness, input.agentInstructions);
   input.onDebug?.({
     event: "mastra_model_resolved",
     requested: input.coderModel,
