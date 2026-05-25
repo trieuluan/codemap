@@ -24,9 +24,14 @@ import { normalizeHtml } from "../../html-utils.js";
 /**
  * Format expanded tool result content.
  * If the content is JSON with summary/data or structuredContent.summary/data,
- * render summary as markdown and data as highlighted JSON.
+ * render summary as markdown. Raw structured data is shown only in debug mode
+ * or when the tool result explicitly requested verbose/debug output.
  */
-function formatExpandedContent(content: string, width: number): string[] {
+function formatExpandedContent(
+  content: string,
+  width: number,
+  opts: { showRawData?: boolean } = {},
+): string[] {
   try {
     const parsed = JSON.parse(content);
     if (parsed && typeof parsed === "object") {
@@ -39,27 +44,46 @@ function formatExpandedContent(content: string, width: number): string[] {
           : record;
       const summary = structured.summary;
       const data = structured.data;
+      const error = structured.error;
       const lines: string[] = [];
 
-      if (summary && typeof summary === "string") {
+      if (typeof summary === "string" && (data !== undefined || error !== undefined)) {
         const summaryLines = renderMarkdownish(summary, width);
         lines.push(...summaryLines);
-        lines.push("");
+        const raw = data !== undefined ? data : error;
+        const verbosity = getToolResultVerbosity(structured, raw);
+        const showRaw =
+          opts.showRawData || verbosity === "verbose" || verbosity === "debug";
+        if (showRaw) {
+          lines.push("");
+          lines.push(`${C_MUTED}Raw data${RESET}`);
+          const jsonStr = JSON.stringify(raw, null, 2);
+          lines.push(...highlightBlock(jsonStr, "json"));
+        }
+        return lines;
       }
-
-      if (data !== undefined) {
-        const jsonStr = JSON.stringify(data, null, 2);
-        const highlighted = highlightBlock(jsonStr, "json");
-        lines.push(...highlighted);
-      }
-
-      return lines.length > 0 ? lines : renderMarkdownish(content, width);
     }
   } catch {
     // Not JSON or parsing failed — fall through
   }
   // Default: render as markdown
   return renderMarkdownish(content, width);
+}
+
+function getToolResultVerbosity(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const record = value as Record<string, unknown>;
+    const direct = record.verbosity;
+    if (typeof direct === "string") return direct;
+    if (record.verbose === true) return "verbose";
+    const meta = record.meta;
+    if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+      const metaVerbosity = (meta as Record<string, unknown>).verbosity;
+      if (typeof metaVerbosity === "string") return metaVerbosity;
+    }
+  }
+  return undefined;
 }
 
 function generateBanner(): string[] {
@@ -179,14 +203,16 @@ export function messageLines(
   messages: Message[],
   width: number,
   frame = 0,
+  opts: { showRawToolData?: boolean } = {},
 ): string[] {
-  return renderMessageLines(messages, width, frame);
+  return renderMessageLines(messages, width, frame, opts);
 }
 
 function renderMessageLines(
   messages: Message[],
   width: number,
   frame = 0,
+  opts: { showRawToolData?: boolean } = {},
 ): string[] {
   if (messages.length === 0) {
     return [
@@ -258,7 +284,11 @@ function renderMessageLines(
         out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW));
 
       if (msg.expanded && msg.expandedContent) {
-        const expandedLines = formatExpandedContent(stripAnsi(msg.expandedContent), bodyW);
+        const expandedLines = formatExpandedContent(
+          stripAnsi(msg.expandedContent),
+          bodyW,
+          { showRawData: opts.showRawToolData },
+        );
         out.push(
           `${" ".repeat(prefixW)}${C_MUTED}${"─".repeat(Math.min(bodyW, 60))}${RESET}`,
         );

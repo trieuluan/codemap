@@ -171,7 +171,10 @@ export function buildPanel(
             .filter(Boolean)
             .join(" ")} tok`
         : "";
-    const tool = state.task.toolName ? ` · ${state.task.toolName}` : "";
+    const tool =
+      state.task.phase === "tool" && state.task.toolName
+        ? ` · ${state.task.toolName}`
+        : "";
     const displayModel = state.task.model ?? "";
     const model = displayModel
       ? ` ${C_GRAY}${truncate(displayModel, 28)}${RESET}`

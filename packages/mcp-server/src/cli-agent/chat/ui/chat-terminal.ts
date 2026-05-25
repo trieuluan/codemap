@@ -756,7 +756,13 @@ export class ChatTerminal {
       if (!this.isActiveTask(taskId, taskAbort)) return;
       const s = this.store.getState();
       this.store.dispatch({
-        task: { ...s.task, phase: "done", endTime: Date.now() },
+        task: {
+          ...s.task,
+          phase: "done",
+          toolName: undefined,
+          toolArgs: undefined,
+          endTime: Date.now(),
+        },
       });
 
       // Auto-exit plan mode after one multi-phase run.
@@ -920,6 +926,8 @@ export class ChatTerminal {
         task: {
           ...this.store.getState().task,
           phase: "done",
+          toolName: undefined,
+          toolArgs: undefined,
           endTime: Date.now(),
         },
       });
@@ -1083,7 +1091,10 @@ export class ChatTerminal {
       },
       debug: s.debug,
       setDebug: (d: boolean) => {
-        this.store.dispatch({ debug: d });
+        this.store.dispatch((prev) => ({
+          debug: d,
+          config: { ...prev.config, debug: d },
+        }));
         if (d && !this.logger) this.logger = createDebugLogger();
         if (!d) this.logger = null;
       },

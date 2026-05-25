@@ -11,6 +11,7 @@ import {
 } from "../lib/local-index.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import { markdownFenceStart } from "../lib/markdown-fence.js";
 
 interface ParseFileInfo {
   path: string;
@@ -118,7 +119,7 @@ function buildOutlineSection(parse: FileParseResponse): string {
       const exp = sym.isExported ? " · exported" : "";
       lines.push(`#### ${sym.displayName} · ${sym.kind}${exp}${loc}`);
       if (sym.signature) {
-        lines.push("```");
+        lines.push(markdownFenceStart(file));
         lines.push(sym.signature);
         lines.push("```");
       }

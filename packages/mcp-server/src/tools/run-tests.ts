@@ -355,7 +355,7 @@ function buildSummary(
   if (stderr) {
     lines.push("### Stderr");
     lines.push("");
-    lines.push("```");
+    lines.push("```text");
     lines.push(stderr);
     lines.push("```");
     lines.push("");

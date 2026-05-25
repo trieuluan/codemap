@@ -174,6 +174,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       msg.name ?? "",
       msg.expanded ? "1" : "0",
       msg.expandedResultIndex ?? "",
+      chatTerminal.store.getState().config.debug ? "debug" : "",
       msg.toolCalls?.length ?? 0,
       msg.toolResults?.length ?? 0,
       spinning && msg.role === "tool_call" && !msg.toolResults?.length ? frame : "",
@@ -223,7 +224,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       const prev = !widthChanged ? _cachedBlocks[idx] : undefined;
       const lines = (prev?.signature === signature && prev.contentRef === msg.content)
         ? prev.lines
-        : messageLines([msg], contentWidth, frame);
+        : messageLines([msg], contentWidth, frame, {
+          showRawToolData: state.config.debug,
+        });
       nextBlocks[idx] = { signature, contentRef: msg.content, lines };
     }
 

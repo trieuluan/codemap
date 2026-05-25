@@ -15,6 +15,7 @@ import {
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
+import { markdownFenceStart } from "../lib/markdown-fence.js";
 
 interface ParseImport {
   moduleSpecifier: string;
@@ -101,7 +102,7 @@ function buildOutput(input: {
   lines.push("");
   lines.push("## Body");
   if (content?.content) {
-    lines.push("```");
+    lines.push(markdownFenceStart(content));
     lines.push(content.content.trimEnd());
     lines.push("```");
   } else {

@@ -13,6 +13,7 @@ import {
   shouldUseLocalIndexBeforeRemote,
   toRepoRelativePath,
 } from "../lib/local-index.js";
+import { markdownFenceStart } from "../lib/markdown-fence.js";
 
 // ─── types from /map/files/parse ─────────────────────────────────────────────
 
@@ -99,8 +100,6 @@ function buildContentSection(file: FileContent, startLine?: number, endLine?: nu
     case "ready": {
       const allLines = (file.content ?? "").split("\n");
       const totalLines = allLines.length;
-      const lang = file.extension?.replace(".", "") ?? "";
-
       // Apply line range, then cap at CONTENT_MAX_LINES if no explicit range given.
       const from = startLine != null ? startLine - 1 : 0;
       const to = endLine != null ? endLine : totalLines;
@@ -119,7 +118,7 @@ function buildContentSection(file: FileContent, startLine?: number, endLine?: nu
       return [
         meta ? `${meta}${rangeLabel}` : `Lines: ${shownLines}/${totalLines}`,
         "",
-        `\`\`\`${lang}`,
+        markdownFenceStart(file),
         content + truncatedNote,
         "```",
       ].join("\n");
@@ -213,7 +212,7 @@ function buildOutlineSection(parse: FileParseResponse): string {
         lines.push(`> ${sym.doc.replace(/\n/g, "\n> ")}`);
       }
       if (sym.signature) {
-        lines.push("```");
+        lines.push(markdownFenceStart(file));
         lines.push(sym.signature);
         lines.push("```");
       }
@@ -271,10 +270,8 @@ function buildSymbolBodiesSection(
     const startIdx = sym.startLine - 1;
     const endIdx = Math.min(endLine - 1, totalLines - 1);
     const body = lines.slice(startIdx, endIdx + 1).join("\n");
-    const lang = parse.file.language?.toLowerCase().replace("typescript", "ts").replace("javascript", "js") ?? "";
-
     output.push(`### ${sym.displayName} · ${sym.kind} · line ${sym.startLine}–${endLine}`);
-    output.push("```" + lang);
+    output.push(markdownFenceStart(parse.file));
     output.push(body);
     output.push("```");
     output.push("");
