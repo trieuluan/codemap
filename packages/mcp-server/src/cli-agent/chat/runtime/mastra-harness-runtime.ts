@@ -106,9 +106,21 @@ const CANCEL_SYNONYMS = new Set([
 ]);
 
 const MASTRA_DISABLED_TOOLS = [
-  // Mastra-internal approval tool, not a CodeMap MCP tool. CodeMap handles
-  // tool approval in the UI layer, so keep this unavailable to the agent.
+  // Mastra-internal approval tool — tool approval is handled in the UI layer.
   "request_access",
+  // Auth/setup flows are handled by built-in CLI /commands (/login, /logout,
+  // /link, /create, /import, /projects). Hiding these keeps them off the
+  // agent's tool list and prevents wasted turns on infrastructure concerns.
+  "codemap_start_auth_flow",
+  "codemap_check_auth_status",
+  "codemap_wait_for_auth",
+  "codemap_logout",
+  "codemap_link_project",
+  "codemap_wait_for_import",
+  "codemap_create_project",
+  "codemap_create_project_from_github",
+  "codemap_create_project_from_gitlab",
+  "codemap_list_projects",
 ];
 
 function normalizePlanAction(raw: string): "implement" | "cancel" | string {

@@ -1,0 +1,52 @@
+import { loadConfig } from "../../../config.js";
+import { createCodeMapClient } from "../../../lib/codemap-api.js";
+import {
+  startMcpLogin,
+  tryOpenLoginBrowser,
+  waitForLoginAuthorization,
+} from "../../../lib/mcp-auth.js";
+import type { Command } from "./types.js";
+
+export const loginCommand: Command = {
+  name: "login",
+  description: "Log in to CodeMap (opens browser for authorization)",
+  execute: async (_args, ctx) => {
+    ctx.setMessages((prev) => [
+      ...prev,
+      { role: "system", content: "Starting CodeMap login..." },
+    ]);
+    ctx.setBusy(true);
+    try {
+      const config = await loadConfig();
+      const client = createCodeMapClient(config);
+      const startResponse = await startMcpLogin(client);
+      const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);
+
+      const urlMsg = openedBrowser
+        ? "Browser opened for CodeMap authorization.\nWaiting for you to approve access..."
+        : `Open this URL to log in:\n${startResponse.authorizeUrl}\n\nWaiting for authorization...`;
+
+      ctx.setMessages((prev) => [...prev, { role: "system", content: urlMsg }]);
+
+      const result = await waitForLoginAuthorization(config, startResponse);
+
+      const lines = ["Logged in successfully."];
+      if (result.user?.email) lines.push(`Account: ${result.user.email}`);
+      if (result.user?.name) lines.push(`Name:    ${result.user.name}`);
+      lines.push(`API:     ${result.apiUrl || config.apiUrl}`);
+      ctx.setMessages((prev) => [...prev, { role: "system", content: lines.join("\n") }]);
+
+      await ctx.reinitHarness?.();
+    } catch (err) {
+      ctx.setMessages((prev) => [
+        ...prev,
+        {
+          role: "system",
+          content: `Login failed: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      ]);
+    } finally {
+      ctx.setBusy(false);
+    }
+  },
+};

@@ -25,7 +25,8 @@ function buildBannerLines(): string[] {
   try {
     const result = cfonts.render("CODEMAP", {
       font: "simple3d",
-      gradient: ["cyan", "blue", "magenta"],
+      gradient: ["cyan", "magenta"],
+      transitionColors: true,
       env: "node",
     });
     const raw: string = (result as { string: string }).string ?? "";
