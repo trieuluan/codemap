@@ -17,7 +17,7 @@ import {
   RESET,
   SPINNER,
 } from "./theme.js";
-import { padToWidth, renderMarkdownish, stripAnsi, wrapPlain } from "./text.js";
+import { padToWidth, renderMarkdownish, stripAnsi, truncateVisible, wrapPlain } from "./text.js";
 import { highlightBlock } from "./shiki-highlight.js";
 import { normalizeHtml } from "../../html-utils.js";
 
@@ -96,28 +96,24 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number): st
       ? `+${added} -${removed} lines`
       : `${sourceLines} line${sourceLines === 1 ? "" : "s"}`;
 
-  const rendered = renderMarkdownish(normalized, bodyW);
+  const previewIndentW = 3;
+  const renderW = Math.max(20, bodyW - previewIndentW);
+  const rendered = renderMarkdownish(normalized, renderW);
   const limit = 60;
   const shown = rendered.slice(0, limit);
   const indent = " ".repeat(prefixW);
-  const out = [`${indent}${C_MUTED}⎿  ${summary}${RESET}`];
-  out.push(...shown.map((line) => `${indent}   ${line}`));
+  const fitPreviewLine = (line: string) =>
+    truncateVisible(`${indent}${line}`, prefixW + bodyW);
+  const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
+  out.push(...shown.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
   if (rendered.length > limit) {
-    out.push(`${indent}   ${C_MUTED}… ${rendered.length - limit} more lines${RESET}`);
+    out.push(
+      fitPreviewLine(
+        `${" ".repeat(previewIndentW)}${C_MUTED}… ${rendered.length - limit} more lines${RESET}`,
+      ),
+    );
   }
   return out;
-}
-
-function toolResultLineLimit(content: string): number {
-  const lower = content.toLowerCase();
-  if (
-    lower.includes("```diff") ||
-    lower.includes("@@ -") ||
-    lower.includes("diff")
-  ) {
-    return 120;
-  }
-  return 6;
 }
 
 export function headerLines(state: UIState): string[] {
@@ -258,32 +254,8 @@ function renderMessageLines(
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${toolColor}  ${line}${RESET}`);
 
-      if (msg.previewContent && !msg.expanded)
+      if (msg.previewContent)
         out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW));
-
-      if (!hasFailed) {
-        for (const result of msg.toolResults ?? []) {
-          const resultName = truncate(result.name, 20);
-          const resultPrefixW = Math.min(11 + resultName.length, 34);
-          const resultW = Math.max(20, width - resultPrefixW);
-          const rawLines = safeRender(stripAnsi(result.content), resultW, {
-            noHighlight: true,
-          });
-          const limit = toolResultLineLimit(result.content);
-          const resultLines =
-            rawLines.length > limit
-              ? [
-                  ...rawLines.slice(0, limit),
-                  `${C_MUTED}... ${rawLines.length - limit} more lines${RESET}`,
-                ]
-              : rawLines;
-          out.push(
-            `${" ".repeat(prefixW)}${C_MUTED}✓ ${resultName}:${RESET} ${C_GRAY}${resultLines[0] ?? ""}${RESET}`,
-          );
-          for (const line of resultLines.slice(1))
-            out.push(`${" ".repeat(resultPrefixW)}${C_GRAY}${line}${RESET}`);
-        }
-      }
 
       if (msg.expanded && msg.expandedContent) {
         const expandedLines = formatExpandedContent(stripAnsi(msg.expandedContent), bodyW);

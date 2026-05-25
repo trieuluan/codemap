@@ -47,6 +47,21 @@ test("markToolDone attaches a tool result to the latest matching tool_call", () 
   assert.equal(toolCall?.toolResults?.[0]?.success, true);
 });
 
+test("markToolDone matches by toolCallId when tool_end has no name", () => {
+  const messages: Message[] = [
+    { role: "user", content: "go" },
+    { role: "tool_call", name: "write_file", toolCallId: "call_1", content: "a.txt" },
+  ];
+
+  const next = markToolDone(messages, "", JSON.stringify({ summary: "done" }), "call_1");
+  const toolCall = next[1];
+
+  assert.equal(toolCall?.role, "tool_call");
+  assert.equal(toolCall?.content, "a.txt ✓");
+  assert.equal(toolCall?.toolResults?.[0]?.name, "write_file");
+  assert.equal(toolCall?.toolResults?.[0]?.content, "done");
+});
+
 test("markLastPendingToolCallCanceled only marks pending tool calls", () => {
   const messages: Message[] = [
     { role: "user", content: "go" },

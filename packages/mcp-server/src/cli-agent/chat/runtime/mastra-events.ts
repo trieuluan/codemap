@@ -6,7 +6,7 @@ export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
   onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
-  onToolResult?: (name: string, result: string) => void;
+  onToolResult?: (name: string, result: string, id?: string) => void;
   onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
@@ -134,7 +134,7 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const ev = event as ToolEndEvent;
     const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
     const r = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? "");
-    cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${r}` : r);
+    cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${r}` : r, ev.toolCallId);
     return;
   }
 

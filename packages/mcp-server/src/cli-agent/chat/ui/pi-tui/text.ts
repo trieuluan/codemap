@@ -146,7 +146,6 @@ const KEYWORD_LANGS = new Set(["ts", "js", "dart", "java", "kt", "kotlin"]);
 const KEYWORDS =
   /\b(abstract|as|async|await|break|case|catch|class|const|continue|default|do|else|enum|export|extends|final|finally|for|fun|function|if|implements|import|in|interface|let|new|null|override|package|private|protected|public|return|static|super|switch|this|throw|throws|try|type|val|var|void|when|while|yield)\b/g;
 const STRING_RE = /("([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`)/g;
-const NUMBER_RE = /\b(\d+(?:\.\d+)?)\b/g;
 const COMMENT_RE = /(\/\/.*|#.*)$/;
 
 function normalizeLang(lang: string): string {
@@ -224,7 +223,7 @@ function highlightCodeLineFallback(raw: string, lang: string): string {
             : `${C_SUCCESS}${key}${RESET}`,
       )
       .replace(/\b(true|false|null)\b/g, `${C_WARNING}$1${RESET}`)
-      .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`);
+      ;
   }
 
   if (normalized === "sh") {
@@ -240,8 +239,7 @@ function highlightCodeLineFallback(raw: string, lang: string): string {
           /\b(cd|cp|echo|export|find|git|grep|ls|mkdir|npm|pnpm|rm|sed|yarn)\b/g,
           `${C_ACTION}$1${RESET}`,
         )
-        .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
-        .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix
+        .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`) + suffix
     );
   }
 
@@ -255,8 +253,7 @@ function highlightCodeLineFallback(raw: string, lang: string): string {
     return (
       body
         .replace(STRING_RE, `${C_SUCCESS}$1${RESET}`)
-        .replace(KEYWORDS, `${C_ACTION}$1${RESET}`)
-        .replace(NUMBER_RE, `${C_WARNING}$1${RESET}`) + suffix
+        .replace(KEYWORDS, `${C_ACTION}$1${RESET}`) + suffix
     );
   }
 

@@ -530,7 +530,7 @@ export class ChatTerminal {
         });
         this.bus.scheduleRefresh();
       },
-      onToolResult: (name: string, resultText: string) => {
+      onToolResult: (name: string, resultText: string, id?: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolResult(name, resultText);
         resetStreaming();
@@ -543,7 +543,7 @@ export class ChatTerminal {
           },
         });
         this.store.dispatch((prev) => {
-          const newMsgs = markToolDone(prev.messages, name, resultText);
+          const newMsgs = markToolDone(prev.messages, name, resultText, id);
           return { messages: newMsgs };
         });
         this.bus.scheduleRefresh();

@@ -21,7 +21,7 @@ export interface SingleAgentRuntimeInput {
   onStreamReset?: () => void;
   onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
-  onToolResult?: (name: string, result: string) => void;
+  onToolResult?: (name: string, result: string, id?: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
@@ -44,7 +44,7 @@ export interface MultiPhaseLoopInput {
   onToken?: (text: string) => void;
   onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
-  onToolResult?: (name: string, result: string) => void;
+  onToolResult?: (name: string, result: string, id?: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;

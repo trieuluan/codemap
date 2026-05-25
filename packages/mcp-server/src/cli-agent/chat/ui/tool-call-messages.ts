@@ -105,6 +105,7 @@ export function markToolDone(
   messages: Message[],
   toolName: string,
   resultText: string,
+  toolCallId?: string,
 ): Message[] {
   const success = !resultText.includes("[ERROR]");
   const marker = success ? " ✓" : " ✗";
@@ -113,19 +114,28 @@ export function markToolDone(
   const next = [...messages];
 
   let toolCallIndex = -1;
-  for (let i = next.length - 1; i >= 0; i -= 1) {
-    const msg = next[i];
-    if (!msg) continue;
-    if (msg.role === "user") break;
-    if (msg.role === "tool_call" && msg.name === displayName) {
-      toolCallIndex = i;
-      break;
+  for (const mode of ["id", "name"] as const) {
+    if (toolCallIndex >= 0) break;
+    if (mode === "id" && !toolCallId) continue;
+    for (let i = next.length - 1; i >= 0; i -= 1) {
+      const msg = next[i];
+      if (!msg) continue;
+      if (msg.role === "user") break;
+      if (
+        msg.role === "tool_call" &&
+        ((mode === "id" && msg.toolCallId === toolCallId) ||
+          (mode === "name" && msg.name === displayName))
+      ) {
+        toolCallIndex = i;
+        break;
+      }
     }
   }
 
   if (toolCallIndex >= 0) {
+    const resultName = displayName || next[toolCallIndex]?.name || displayName;
     const toolResult: ToolResult = {
-      name: displayName,
+      name: resultName,
       content: summarizedResult,
       fullContent: resultText,
       success,

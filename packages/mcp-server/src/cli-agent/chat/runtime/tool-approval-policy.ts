@@ -65,8 +65,7 @@ export function buildToolPreview(
     const filePath = getStringArg(args, ["path", "filePath", "file_path", "filename", "file"]);
     const content = getStringArg(args, ["content", "text", "data"]);
     if (content != null) {
-      const lang = languageForPath(filePath);
-      return [`File: ${filePath ?? "(unknown)"}`, fenced(lang, content)].join("\n\n");
+      return fenced("diff", buildUnifiedDiff(filePath, "", content));
     }
   }
 
@@ -78,10 +77,7 @@ export function buildToolPreview(
     const oldText = getStringArg(args, ["oldString", "old_string", "search", "find", "target"]);
     const newText = getStringArg(args, ["newString", "new_string", "replace", "replacement", "insert"]);
     if (oldText != null || newText != null) {
-      return [
-        `File: ${filePath ?? "(unknown)"}`,
-        fenced("diff", buildMiniDiff(oldText ?? "", newText ?? "")),
-      ].join("\n\n");
+      return fenced("diff", buildUnifiedDiff(filePath, oldText ?? "", newText ?? ""));
     }
   }
 
@@ -103,10 +99,32 @@ function fenced(language: string, content: string): string {
   return `~~~${language}\n${content.trimEnd()}\n~~~`;
 }
 
-function buildMiniDiff(oldText: string, newText: string): string {
-  const oldLines = oldText.split("\n").map((line) => `-${line}`);
-  const newLines = newText.split("\n").map((line) => `+${line}`);
-  return ["--- old", "+++ new", ...oldLines, ...newLines].join("\n");
+function buildUnifiedDiff(
+  filePath: string | null,
+  oldText: string,
+  newText: string,
+): string {
+  const path = filePath || "(unknown)";
+  const oldLines = splitPreviewLines(oldText);
+  const newLines = splitPreviewLines(newText);
+  const oldRange = oldLines.length > 0 ? `1,${oldLines.length}` : "0,0";
+  const newRange = newLines.length > 0 ? `1,${newLines.length}` : "0,0";
+
+  return [
+    `diff --git a/${path} b/${path}`,
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -${oldRange} +${newRange} @@ ${path}`,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ].join("\n");
+}
+
+function splitPreviewLines(text: string): string[] {
+  if (!text) return [];
+  const lines = text.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
 }
 
 function compactJson(value: unknown): string {
@@ -115,42 +133,5 @@ function compactJson(value: unknown): string {
     return json.length > 4000 ? `${json.slice(0, 4000)}\n...` : json;
   } catch {
     return String(value);
-  }
-}
-
-function languageForPath(filePath: string | null): string {
-  if (!filePath) return "text";
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-      return "javascript";
-    case "ts":
-    case "tsx":
-    case "mts":
-    case "cts":
-      return "typescript";
-    case "json":
-      return "json";
-    case "md":
-    case "mdx":
-      return "markdown";
-    case "py":
-      return "python";
-    case "rs":
-      return "rust";
-    case "go":
-      return "go";
-    case "css":
-      return "css";
-    case "html":
-      return "html";
-    case "yml":
-    case "yaml":
-      return "yaml";
-    default:
-      return "text";
   }
 }

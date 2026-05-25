@@ -77,8 +77,8 @@ test("emits passive tool preview on tool_start", () => {
     cb,
   );
 
-  assert.match(preview ?? "", /File: src\/app\.ts/);
-  assert.match(preview ?? "", /~~~typescript/);
+  assert.match(preview ?? "", /~~~diff/);
+  assert.match(preview ?? "", /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
 });
 
 test("auto-approves Mastra tool approval requests", async () => {

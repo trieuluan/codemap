@@ -35,25 +35,27 @@ test("buildToolPreview renders apply_patch as diff", () => {
   assert.match(preview, /\+new/);
 });
 
-test("buildToolPreview renders write_file content with file language", () => {
+test("buildToolPreview renders write_file content as unified diff", () => {
   const preview = buildToolPreview("write_file", {
     path: "src/app.ts",
     content: "export const ok = true;\n",
   });
 
-  assert.match(preview, /File: src\/app\.ts/);
-  assert.match(preview, /~~~typescript\nexport const ok = true;/);
+  assert.match(preview, /^~~~diff\n/);
+  assert.match(preview, /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
+  assert.match(preview, /@@ -0,0 \+1,1 @@ src\/app\.ts/);
+  assert.match(preview, /\+export const ok = true;/);
 });
 
-test("buildToolPreview renders edit old and new text as mini diff", () => {
+test("buildToolPreview renders edit old and new text as unified diff", () => {
   const preview = buildToolPreview("string_replace_lsp", {
     filePath: "src/app.ts",
     oldString: "const ok = false;",
     newString: "const ok = true;",
   });
 
-  assert.match(preview, /File: src\/app\.ts/);
-  assert.match(preview, /--- old/);
+  assert.match(preview, /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
+  assert.match(preview, /@@ -1,1 \+1,1 @@ src\/app\.ts/);
   assert.match(preview, /-const ok = false;/);
   assert.match(preview, /\+const ok = true;/);
 });
