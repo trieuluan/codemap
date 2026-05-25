@@ -13,9 +13,9 @@ export function registerDoctorAgentPackTool(server: McpServer) {
     {
       title: "Doctor Agent Pack",
       description:
-        "Verifies that CodeMap Agent Pack rules and skills are installed for this workspace. " +
-        "Use this after init-agent-pack, or when an agent is unsure whether get_agent_workflow, " +
-        "recommend_agent_workflow, required skills, and verification gates are visible to the host.",
+        "Meta/debug tool. Verifies that CodeMap Agent Pack rules and skills are installed for this workspace. " +
+        "Use only when the user explicitly asks to debug/install/check Agent Pack, skills, rules, or host visibility. " +
+        "Do not call during normal coding tasks, repository exploration, or routine verification.",
       inputSchema: {
         root: z
           .string()

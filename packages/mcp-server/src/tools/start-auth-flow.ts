@@ -15,7 +15,9 @@ export function registerStartAuthFlowTool(
     {
       title: "Start Auth Flow",
       description:
-        "Starts the CodeMap MCP login flow, attempts to open the browser for authorization, and returns the auth session details needed for wait_for_auth.",
+        "Starts the CodeMap MCP login flow, attempts to open the browser for authorization, and returns the auth session details needed for wait_for_auth. " +
+        "Use only when the user explicitly asks to log in/connect CodeMap, or after check_auth_status/cloud tools show authentication is required. " +
+        "Do not start auth proactively for normal local coding tasks.",
       inputSchema: {},
     },
     async () => {

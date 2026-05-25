@@ -1,10 +1,25 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { AgentLoopResult } from "../agent/agent-loop.js";
-import type { SingleAgentRuntimeInput, MultiPhaseLoopInput } from "./cli-runtime.js";
-import { bridgeCommonEvent, type BridgeCallbacks, type HarnessEvent, type HarnessLike, summarizeHarnessEvent } from "./mastra-events.js";
-import { resolveHarnessModelId, stripNineRouterPrefix } from "./mastra-models.js";
-import { createManagedMastraSettings, upsertGlobalMastraProvider } from "./mastra-settings.js";
+import type {
+  SingleAgentRuntimeInput,
+  MultiPhaseLoopInput,
+} from "./cli-runtime.js";
+import {
+  bridgeCommonEvent,
+  type BridgeCallbacks,
+  type HarnessEvent,
+  type HarnessLike,
+  summarizeHarnessEvent,
+} from "./mastra-events.js";
+import {
+  resolveHarnessModelId,
+  stripNineRouterPrefix,
+} from "./mastra-models.js";
+import {
+  createManagedMastraSettings,
+  upsertGlobalMastraProvider,
+} from "./mastra-settings.js";
 import { buildMastraPermissionRules } from "./tool-approval-policy.js";
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
@@ -58,26 +73,48 @@ const dynamicImport = new Function(
 ) as DynamicImport;
 
 const IMPLEMENT_SYNONYMS = new Set([
-  "implement", "ok", "okay", "yes", "y", "go", "proceed", "sure", "do it",
-  "ừ", "ừm", "đồng ý", "được", "làm đi", "làm luôn", "tiếp tục", "ok luôn",
+  "implement",
+  "ok",
+  "okay",
+  "yes",
+  "y",
+  "go",
+  "proceed",
+  "sure",
+  "do it",
+  "ừ",
+  "ừm",
+  "đồng ý",
+  "được",
+  "làm đi",
+  "làm luôn",
+  "tiếp tục",
+  "ok luôn",
 ]);
 const CANCEL_SYNONYMS = new Set([
-  "cancel", "no", "n", "stop", "abort", "quit", "exit",
-  "không", "thôi", "dừng", "hủy",
+  "cancel",
+  "no",
+  "n",
+  "stop",
+  "abort",
+  "quit",
+  "exit",
+  "không",
+  "thôi",
+  "dừng",
+  "hủy",
 ]);
 
-
 const MASTRA_DISABLED_TOOLS = [
+  // Mastra-internal approval tool, not a CodeMap MCP tool. CodeMap handles
+  // tool approval in the UI layer, so keep this unavailable to the agent.
   "request_access",
+  // Meta-orchestration tools are already represented in CodeMap's injected
+  // agent prompt. Leaving them enabled makes Mastra spend turns re-reading
+  // workflow guidance instead of doing the user's task.
   "codemap_get_agent_workflow",
   "codemap_recommend_agent_workflow",
   "codemap_doctor_agent_pack",
-  "codemap_get_project",
-  "codemap_list_projects",
-  "codemap_start_auth_flow",
-  "codemap_check_auth_status",
-  "codemap_wait_for_auth",
-  "codemap_wait_for_import",
 ];
 
 function normalizePlanAction(raw: string): "implement" | "cancel" | string {
@@ -94,7 +131,10 @@ interface CreateHarnessOptions {
   modelId: string;
   availableModels?: string[];
   onDebug?: (info: Record<string, unknown>) => void;
-  extraServerConfigs?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+  extraServerConfigs?: Record<
+    string,
+    { command: string; args?: string[]; env?: Record<string, string> }
+  >;
 }
 
 // ─── Session-level harness singleton ─────────────────────────────────────────
@@ -131,7 +171,9 @@ let _drainUnsubscribe: (() => void) | null = null;
 function startDrainTracking(harness: HarnessLike): void {
   _drainUnsubscribe?.();
   let resolve!: () => void;
-  _drainPromise = new Promise<void>((r) => { resolve = r; });
+  _drainPromise = new Promise<void>((r) => {
+    resolve = r;
+  });
   _drainResolve = resolve;
   _drainUnsubscribe = harness.subscribe((event: HarnessEvent) => {
     if (event.type === "agent_end" || event.type === "error") {
@@ -167,12 +209,22 @@ export async function resetHarnessSingleton(): Promise<void> {
   clearDrainTracking();
   const old = _singleton;
   _singleton = null;
-  try { await old.harness.destroy?.(); } catch { /* best-effort */ }
-  try { await rm(path.dirname(old.settingsPath), { recursive: true, force: true }); } catch { /* best-effort */ }
+  try {
+    await old.harness.destroy?.();
+  } catch {
+    /* best-effort */
+  }
+  try {
+    await rm(path.dirname(old.settingsPath), { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
 }
 
 /** Create a brand-new harness and store it as the singleton. */
-async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLike> {
+async function createFreshHarness(
+  opts: CreateHarnessOptions,
+): Promise<HarnessLike> {
   const mod = await dynamicImport("mastracode");
   const createMastraCode = mod.createMastraCode as (
     config?: Record<string, unknown>,
@@ -180,9 +232,15 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
 
   const serverConfig = opts.toolClient.getServerConfig();
 
-  const harnessModelId = resolveHarnessModelId(opts.modelId, opts.availableModels);
+  const harnessModelId = resolveHarnessModelId(
+    opts.modelId,
+    opts.availableModels,
+  );
   const settingsPath = await createManagedMastraSettings(opts, harnessModelId);
-  const globalSettingsPath = await upsertGlobalMastraProvider(opts, harnessModelId);
+  const globalSettingsPath = await upsertGlobalMastraProvider(
+    opts,
+    harnessModelId,
+  );
   opts.onDebug?.({
     event: "mastra_9router_provider_configured",
     harnessModelId,
@@ -190,7 +248,10 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
     settingsPath,
     globalSettingsPath,
   });
-  const mcpServerIds = new Set(["codemap", ...Object.keys(opts.extraServerConfigs ?? {})]);
+  const mcpServerIds = new Set([
+    "codemap",
+    ...Object.keys(opts.extraServerConfigs ?? {}),
+  ]);
   const { harness, mcpManager } = await createMastraCode({
     settingsPath,
     mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
@@ -222,10 +283,24 @@ async function createFreshHarness(opts: CreateHarnessOptions): Promise<HarnessLi
 
   const mcpInitPromise = startMastraMcpInitialization(mcpManager, opts.onDebug);
 
-  _singleton = { harness, mcpManager, mcpInitPromise, baseUrl: opts.baseUrl, apiKey: opts.apiKey, settingsPath, mcpServerIds };
+  _singleton = {
+    harness,
+    mcpManager,
+    mcpInitPromise,
+    baseUrl: opts.baseUrl,
+    apiKey: opts.apiKey,
+    settingsPath,
+    mcpServerIds,
+  };
 
   // Best-effort cleanup when the process exits.
-  process.once("exit", () => { try { _singleton?.harness.destroy?.(); } catch { /* ignore */ } });
+  process.once("exit", () => {
+    try {
+      _singleton?.harness.destroy?.();
+    } catch {
+      /* ignore */
+    }
+  });
 
   return harness;
 }
@@ -237,28 +312,34 @@ function startMastraMcpInitialization(
   if (!mcpManager?.hasServers()) return undefined;
 
   onDebug?.({ event: "mastra_mcp_init_start" });
-  return mcpManager.initInBackground().then((result) => {
-    onDebug?.({
-      event: "mastra_mcp_init_done",
-      connectedCount: result.connected.length,
-      failedCount: result.failed.length,
-      skippedCount: result.skipped.length,
-      totalTools: result.totalTools,
+  return mcpManager
+    .initInBackground()
+    .then((result) => {
+      onDebug?.({
+        event: "mastra_mcp_init_done",
+        connectedCount: result.connected.length,
+        failedCount: result.failed.length,
+        skippedCount: result.skipped.length,
+        totalTools: result.totalTools,
+      });
+      return result;
+    })
+    .catch((err: unknown) => {
+      const error = err instanceof Error ? err.message : String(err);
+      onDebug?.({ event: "mastra_mcp_init_failed", error });
+      return {
+        connected: [],
+        failed: mcpManager.getServerStatuses(),
+        skipped: mcpManager.getSkippedServers(),
+        totalTools: 0,
+      };
     });
-    return result;
-  }).catch((err: unknown) => {
-    const error = err instanceof Error ? err.message : String(err);
-    onDebug?.({ event: "mastra_mcp_init_failed", error });
-    return {
-      connected: [],
-      failed: mcpManager.getServerStatuses(),
-      skipped: mcpManager.getSkippedServers(),
-      totalTools: 0,
-    };
-  });
 }
 
-async function forceHarnessModel(harness: HarnessLike, modelId: string): Promise<void> {
+async function forceHarnessModel(
+  harness: HarnessLike,
+  modelId: string,
+): Promise<void> {
   await harness.switchModel?.({ modelId, scope: "thread" });
   await harness.setState?.({ currentModelId: modelId });
 }
@@ -282,7 +363,9 @@ async function resolveAgentInstructions(
   options?: { requestContext?: unknown },
 ): Promise<unknown> {
   if (typeof instructions === "function") {
-    return (instructions as (options?: { requestContext?: unknown }) => unknown)(options);
+    return (
+      instructions as (options?: { requestContext?: unknown }) => unknown
+    )(options);
   }
   return instructions;
 }
@@ -295,15 +378,19 @@ function getModeAgents(harness: HarnessLike): object[] {
   const state = maybeHarness.getState?.();
   const agents: object[] = [];
   for (const mode of maybeHarness.listModes?.() ?? []) {
-    const rawAgent = typeof mode.agent === "function"
-      ? (mode.agent as (state: unknown) => unknown)(state)
-      : mode.agent;
+    const rawAgent =
+      typeof mode.agent === "function"
+        ? (mode.agent as (state: unknown) => unknown)(state)
+        : mode.agent;
     if (rawAgent && typeof rawAgent === "object") agents.push(rawAgent);
   }
   return [...new Set(agents)];
 }
 
-function applyAgentInstructions(harness: HarnessLike, instructions?: string): void {
+function applyAgentInstructions(
+  harness: HarnessLike,
+  instructions?: string,
+): void {
   if (!instructions?.trim()) return;
 
   for (const agent of getModeAgents(harness)) {
@@ -314,29 +401,41 @@ function applyAgentInstructions(harness: HarnessLike, instructions?: string): vo
     if (!writableAgent.__updateInstructions) continue;
     if (APPLIED_AGENT_INSTRUCTIONS.get(agent) === instructions) continue;
 
-    const originalInstructions = writableAgent.__getOverridableFields?.().instructions;
-    const original = ORIGINAL_AGENT_INSTRUCTIONS.get(agent) ??
+    const originalInstructions =
+      writableAgent.__getOverridableFields?.().instructions;
+    const original =
+      ORIGINAL_AGENT_INSTRUCTIONS.get(agent) ??
       ((options?: { requestContext?: unknown }) =>
         resolveAgentInstructions(originalInstructions, options));
     if (!original) continue;
     ORIGINAL_AGENT_INSTRUCTIONS.set(agent, original);
     APPLIED_AGENT_INSTRUCTIONS.set(agent, instructions);
 
-    writableAgent.__updateInstructions(async (options?: { requestContext?: unknown }) => {
-      const base = stringifyInstructions(await original(options));
-      return [
-        instructions,
-        "# CodeMap Instruction Priority",
-        "The CodeMap identity and instructions above override any internal runtime/product names in the base prompt below.",
-        base,
-      ].filter(Boolean).join("\n\n---\n\n");
-    });
+    writableAgent.__updateInstructions(
+      async (options?: { requestContext?: unknown }) => {
+        const base = stringifyInstructions(await original(options));
+        return [
+          instructions,
+          "# CodeMap Instruction Priority",
+          "The CodeMap identity and instructions above override any internal runtime/product names in the base prompt below.",
+          base,
+        ]
+          .filter(Boolean)
+          .join("\n\n---\n\n");
+      },
+    );
   }
 }
 
-async function getOrCreateHarness(opts: CreateHarnessOptions): Promise<HarnessLike> {
+async function getOrCreateHarness(
+  opts: CreateHarnessOptions,
+): Promise<HarnessLike> {
   const wanted = resolveHarnessModelId(opts.modelId, opts.availableModels);
-  if (_singleton && _singleton.baseUrl === opts.baseUrl && _singleton.apiKey === opts.apiKey) {
+  if (
+    _singleton &&
+    _singleton.baseUrl === opts.baseUrl &&
+    _singleton.apiKey === opts.apiKey
+  ) {
     if (_singleton.harness.getCurrentModelId?.() !== wanted) {
       await forceHarnessModel(_singleton.harness, wanted);
     }
@@ -345,7 +444,11 @@ async function getOrCreateHarness(opts: CreateHarnessOptions): Promise<HarnessLi
 
   // Gateway changed or first call — tear down and recreate.
   if (_singleton) {
-    try { await _singleton.harness.destroy?.(); } catch { /* best-effort */ }
+    try {
+      await _singleton.harness.destroy?.();
+    } catch {
+      /* best-effort */
+    }
     _singleton = null;
   }
   return createFreshHarness(opts);
@@ -363,7 +466,10 @@ export async function runWithMastraHarness(
   input: SingleAgentRuntimeInput,
 ): Promise<AgentLoopResult> {
   await drainHarness();
-  const resolvedModel = resolveHarnessModelId(input.model, input.availableModels);
+  const resolvedModel = resolveHarnessModelId(
+    input.model,
+    input.availableModels,
+  );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
     baseUrl: input.provider.baseUrl,
@@ -397,12 +503,21 @@ export async function runWithMastraHarness(
     mcpServerIds: _singleton?.mcpServerIds,
   };
 
-  const result = await runHarness(harness, input.userMessage, input.signal, callbacks, input.imageFiles);
+  const result = await runHarness(
+    harness,
+    input.userMessage,
+    input.signal,
+    callbacks,
+    input.imageFiles,
+  );
   if (!result.text.trim() && !result.usedTools && !input.signal?.aborted) {
     // Empty response with no tool calls usually means the singleton thread has
     // accumulated bad state (e.g. empty turns from previous failed runs). Reset
     // the singleton so the next turn starts with a clean harness and thread.
-    input.onDebug?.({ event: "mastra_empty_response_reset_singleton", model: harness.getCurrentModelId?.() });
+    input.onDebug?.({
+      event: "mastra_empty_response_reset_singleton",
+      model: harness.getCurrentModelId?.(),
+    });
     await resetHarnessSingleton();
   }
   return result;
@@ -418,7 +533,10 @@ export async function runMultiPhaseWithMastra(
   input: MultiPhaseLoopInput,
 ): Promise<AgentLoopResult> {
   await drainHarness();
-  const resolvedCoderModel = resolveHarnessModelId(input.coderModel, input.availableModels);
+  const resolvedCoderModel = resolveHarnessModelId(
+    input.coderModel,
+    input.availableModels,
+  );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
     baseUrl: input.provider.baseUrl,
@@ -479,32 +597,52 @@ export async function runMultiPhaseWithMastra(
     const handlePlanApproval = async (planId: string, plan: string) => {
       input.onPlanReady?.(plan);
       if (!input.onPlanWait) {
-        await harness.respondToPlanApproval?.({ planId, response: { action: "approved" } });
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "approved" },
+        });
         return;
       }
       const raw = await input.onPlanWait();
       const action = normalizePlanAction(raw);
       if (action === "cancel") {
         harness.abort?.();
-        finish({ text: "Plan cancelled.", messages: [], usedTools: false, unsupportedToolCalling: false });
+        finish({
+          text: "Plan cancelled.",
+          messages: [],
+          usedTools: false,
+          unsupportedToolCalling: false,
+        });
         return;
       }
       if (action === "implement") {
-        await harness.respondToPlanApproval?.({ planId, response: { action: "approved" } });
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "approved" },
+        });
       } else {
-        await harness.respondToPlanApproval?.({ planId, response: { action: "rejected", feedback: action } });
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "rejected", feedback: action },
+        });
       }
     };
 
-    const onAbort = () => { harness.abort?.(); fail(createAbortError()); };
+    const onAbort = () => {
+      harness.abort?.();
+      fail(createAbortError());
+    };
 
     unsubscribe = harness.subscribe((event: HarnessEvent) => {
-      input.onDebug?.(summarizeHarnessEvent(event, currentStreamText, finalText));
+      input.onDebug?.(
+        summarizeHarnessEvent(event, currentStreamText, finalText),
+      );
       if (event.type === "mode_changed") {
         const ev = event as HarnessEvent & { modeId?: string };
         const modelId = harness.getCurrentModelId?.() ?? "";
         if (ev.modeId === "plan") input.onPhaseStart?.("planning", modelId);
-        else if (ev.modeId === "build") input.onPhaseStart?.("executing", modelId);
+        else if (ev.modeId === "build")
+          input.onPhaseStart?.("executing", modelId);
         return;
       }
       bridgeCommonEvent(event, {
@@ -517,13 +655,37 @@ export async function runMultiPhaseWithMastra(
         onOMObservation: input.onOMObservation,
         onOMReflection: input.onOMReflection,
         harness,
-        currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
-        finalTextRef: { get: () => finalText, set: (v) => { finalText = v; currentStreamText = ""; } },
-        usedToolsRef: { get: () => usedTools, set: (v) => { usedTools = v; } },
-        onPlanApproval: (planId, plan) => { handlePlanApproval(planId, plan).catch(fail); },
+        currentStreamTextRef: {
+          get: () => currentStreamText,
+          set: (v) => {
+            currentStreamText = v;
+          },
+        },
+        finalTextRef: {
+          get: () => finalText,
+          set: (v) => {
+            finalText = v;
+            currentStreamText = "";
+          },
+        },
+        usedToolsRef: {
+          get: () => usedTools,
+          set: (v) => {
+            usedTools = v;
+          },
+        },
+        onPlanApproval: (planId, plan) => {
+          handlePlanApproval(planId, plan).catch(fail);
+        },
         mcpServerIds: _singleton?.mcpServerIds,
         onEnd: (usage) => {
-          finish({ text: finalText || currentStreamText, messages: [input.userMessage], usedTools, unsupportedToolCalling: false, usage });
+          finish({
+            text: finalText || currentStreamText,
+            messages: [input.userMessage],
+            usedTools,
+            unsupportedToolCalling: false,
+            usage,
+          });
         },
         onError: fail,
       });
@@ -531,7 +693,12 @@ export async function runMultiPhaseWithMastra(
 
     input.signal?.addEventListener("abort", onAbort, { once: true });
 
-    sendHarnessInput(harness, input.userMessage.content, input.imageFiles, input.onDebug).catch((err: unknown) => {
+    sendHarnessInput(
+      harness,
+      input.userMessage.content,
+      input.imageFiles,
+      input.onDebug,
+    ).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
   });
@@ -542,7 +709,15 @@ function runHarness(
   harness: HarnessLike,
   userMessage: { role: string; content: string },
   signal: AbortSignal | undefined,
-  callbacks: Omit<BridgeCallbacks, "harness" | "currentStreamTextRef" | "finalTextRef" | "usedToolsRef" | "onEnd" | "onError">,
+  callbacks: Omit<
+    BridgeCallbacks,
+    | "harness"
+    | "currentStreamTextRef"
+    | "finalTextRef"
+    | "usedToolsRef"
+    | "onEnd"
+    | "onError"
+  >,
   imageFiles?: Array<{ data: string; mimeType: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
@@ -579,7 +754,9 @@ function runHarness(
     };
 
     const unsubscribe = harness.subscribe((event: HarnessEvent) => {
-      callbacks.onDebug?.(summarizeHarnessEvent(event, currentStreamText, finalText));
+      callbacks.onDebug?.(
+        summarizeHarnessEvent(event, currentStreamText, finalText),
+      );
       if (
         (event.type === "usage_update" || event.type === "om_status") &&
         currentStreamText.trim() &&
@@ -612,9 +789,24 @@ function runHarness(
       bridgeCommonEvent(event, {
         ...callbacks,
         harness,
-        currentStreamTextRef: { get: () => currentStreamText, set: (v) => { currentStreamText = v; } },
-        finalTextRef: { get: () => finalText, set: (v) => { finalText = v; } },
-        usedToolsRef: { get: () => usedTools, set: (v) => { usedTools = v; } },
+        currentStreamTextRef: {
+          get: () => currentStreamText,
+          set: (v) => {
+            currentStreamText = v;
+          },
+        },
+        finalTextRef: {
+          get: () => finalText,
+          set: (v) => {
+            finalText = v;
+          },
+        },
+        usedToolsRef: {
+          get: () => usedTools,
+          set: (v) => {
+            usedTools = v;
+          },
+        },
         onEnd: (usage) => {
           finish({
             text: finalText || currentStreamText,
@@ -651,10 +843,18 @@ function runHarness(
       }
     });
 
-    const onAbort = () => { harness.abort?.(); fail(createAbortError()); };
+    const onAbort = () => {
+      harness.abort?.();
+      fail(createAbortError());
+    };
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    sendHarnessInput(harness, userMessage.content, imageFiles, callbacks.onDebug).catch((err: unknown) => {
+    sendHarnessInput(
+      harness,
+      userMessage.content,
+      imageFiles,
+      callbacks.onDebug,
+    ).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
   });
@@ -666,18 +866,39 @@ async function sendHarnessInput(
   imageFiles: Array<{ data: string; mimeType: string }> | undefined,
   onDebug?: (info: Record<string, unknown>) => void,
 ): Promise<void> {
-  onDebug?.({ event: "mastra_send_message_start", contentLength: content.length, imageCount: imageFiles?.length ?? 0 });
+  onDebug?.({
+    event: "mastra_send_message_start",
+    contentLength: content.length,
+    imageCount: imageFiles?.length ?? 0,
+  });
   if (harness.sendSignal) {
     const signalContent = imageFiles?.length
-      ? { role: "user", content: [{ type: "text", text: content }, ...imageFiles.map((f) => ({ type: "file", data: f.data, mediaType: f.mimeType }))] }
+      ? {
+          role: "user",
+          content: [
+            { type: "text", text: content },
+            ...imageFiles.map((f) => ({
+              type: "file",
+              data: f.data,
+              mediaType: f.mimeType,
+            })),
+          ],
+        }
       : content;
     const signal = harness.sendSignal({ content: signalContent as string });
-    onDebug?.({ event: "mastra_send_signal_created", signalId: signal.id, signalType: signal.type });
+    onDebug?.({
+      event: "mastra_send_signal_created",
+      signalId: signal.id,
+      signalType: signal.type,
+    });
     await signal.accepted;
     onDebug?.({ event: "mastra_send_signal_accepted", signalId: signal.id });
     return;
   }
-  const files = imageFiles?.map((f) => ({ data: f.data, mediaType: f.mimeType }));
+  const files = imageFiles?.map((f) => ({
+    data: f.data,
+    mediaType: f.mimeType,
+  }));
   await harness.sendMessage({ content, files });
   onDebug?.({ event: "mastra_send_message_done" });
 }
@@ -716,18 +937,24 @@ export async function getMastraMcpStatusSummary(): Promise<MastraMcpStatusSummar
   };
 }
 
-export async function getMastraThreadTokenUsage(): Promise<{ promptTokens: number; completionTokens: number; totalTokens: number } | null> {
+export async function getMastraThreadTokenUsage(): Promise<{
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+} | null> {
   if (!_singleton) return null;
   try {
     const threadId = _singleton.harness.getCurrentThreadId?.();
     if (!threadId) return null;
     const threads = await _singleton.harness.listThreads();
-    const thread = threads.find(t => t.id === threadId);
+    const thread = threads.find((t) => t.id === threadId);
     const u = thread?.tokenUsage;
     if (!u) return null;
     return {
-      promptTokens: (u as unknown as { promptTokens?: number }).promptTokens ?? 0,
-      completionTokens: (u as unknown as { completionTokens?: number }).completionTokens ?? 0,
+      promptTokens:
+        (u as unknown as { promptTokens?: number }).promptTokens ?? 0,
+      completionTokens:
+        (u as unknown as { completionTokens?: number }).completionTokens ?? 0,
       totalTokens: u.totalTokens ?? 0,
     };
   } catch {
@@ -735,19 +962,38 @@ export async function getMastraThreadTokenUsage(): Promise<{ promptTokens: numbe
   }
 }
 
-export async function getMastraMessages(limit?: number): Promise<import("./mastra-events.js").HarnessMessage[]> {
+export async function getMastraMessages(
+  limit?: number,
+): Promise<import("./mastra-events.js").HarnessMessage[]> {
   if (!_singleton) return [];
-  try { return await _singleton.harness.listMessages({ limit }); } catch { return []; }
+  try {
+    return await _singleton.harness.listMessages({ limit });
+  } catch {
+    return [];
+  }
 }
 
-export async function listMastraThreads(): Promise<import("./mastra-events.js").HarnessThread[]> {
+export async function listMastraThreads(): Promise<
+  import("./mastra-events.js").HarnessThread[]
+> {
   if (!_singleton) return [];
-  try { return await _singleton.harness.listThreads(); } catch { return []; }
+  try {
+    return await _singleton.harness.listThreads();
+  } catch {
+    return [];
+  }
 }
 
-export async function listMastraThreadMessages(threadId: string, limit?: number): Promise<import("./mastra-events.js").HarnessMessage[]> {
+export async function listMastraThreadMessages(
+  threadId: string,
+  limit?: number,
+): Promise<import("./mastra-events.js").HarnessMessage[]> {
   if (!_singleton) return [];
-  try { return await _singleton.harness.listMessagesForThread({ threadId, limit }); } catch { return []; }
+  try {
+    return await _singleton.harness.listMessagesForThread({ threadId, limit });
+  } catch {
+    return [];
+  }
 }
 
 export async function switchMastraThread(threadId: string): Promise<void> {
@@ -755,7 +1001,10 @@ export async function switchMastraThread(threadId: string): Promise<void> {
   await _singleton.harness.switchThread({ threadId });
 }
 
-export function getMastraOMStatus(): { observationTokens: number; status: string } | null {
+export function getMastraOMStatus(): {
+  observationTokens: number;
+  status: string;
+} | null {
   if (!_singleton) return null;
   try {
     const ds = _singleton.harness.getDisplayState?.();

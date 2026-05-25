@@ -26,10 +26,10 @@ export function registerGetAgentWorkflowTool(server: McpServer) {
     {
       title: "Get Agent Workflow",
       description:
-        "CALL THIS FIRST at the start of every new coding session. " +
+        "Meta/workflow tool. Use only when CodeMap workflow context is missing, the host has not injected CodeMap agent instructions, " +
+        "or the user explicitly asks for the agent workflow/rules. Do not call during ordinary chat, simple questions, or after workflow context is already known. " +
         "Returns MCP-first workflow rules, exact tool routing guide, skill URIs, hard gates, and artifact templates. " +
-        "Required before explore_task, search_codebase, or any other CodeMap tool in a fresh context. " +
-        "Skipping this step means missing the recommended tool sequence and verification gates.",
+        "Call at most once per fresh coding session unless context was reset.",
       inputSchema: {},
     },
     withToolError(async () => {

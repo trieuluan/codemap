@@ -67,8 +67,9 @@ export function registerListProjectsTool(
     {
       title: "List Projects",
       description:
-        "Lists all CodeMap projects accessible to the authenticated user, " +
-        "including their status, provider, and latest import state.",
+        "Lists all CodeMap cloud projects accessible to the authenticated user. " +
+        "Use only when the user asks to list/select/link projects or when get_project indicates the workspace is not linked. " +
+        "Do not call during normal local coding or as a generic status check.",
       inputSchema: {
         status: z
           .enum(["draft", "importing", "ready", "failed", "archived"])

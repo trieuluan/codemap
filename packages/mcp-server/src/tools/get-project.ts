@@ -90,8 +90,9 @@ export function registerGetProjectTool(
       title: "Get Project",
       description:
         "Returns the current linked CodeMap cloud project for this workspace (read from .codemap/mcp.json). " +
-        "Call this with no arguments. A linked project is only needed for cloud features (graph, insights, web dashboard). " +
-        "Local tools work without a project — use refresh_local_index to build the local index.",
+        "Use only when the user asks about cloud project/import/index status, when a cloud tool reports a missing/stale project, " +
+        "or before cloud-only features such as graph, insights, dashboard, trigger_reimport, or wait_for_import. " +
+        "Do not call as setup for normal local coding: local tools work without a cloud project — use refresh_local_index for the local index.",
       inputSchema: {
         verbose: z
           .boolean()

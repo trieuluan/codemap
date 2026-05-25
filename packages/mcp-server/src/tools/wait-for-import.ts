@@ -137,10 +137,11 @@ export function registerWaitForImportTool(
       title: "Wait For Import",
       description:
         "Polls the latest CodeMap import for a project until it completes or times out. " +
-        "Call this immediately after create_project to know when the codebase is ready to query. " +
+        "Use after create_project, trigger_reimport, an 'import already running' response, or when the user asks for cloud import progress. " +
+        "Do not call for local-only coding/indexing; use refresh_local_index for the local SQLite index. " +
         "Always uses the most recent import — no need to track import IDs. " +
         "IMPORTANT: timedOut=true is a normal checkpoint, NOT a failure — the import is still running. " +
-        "When timedOut=true, call wait_for_import again immediately to keep polling. " +
+        "In interactive chat, prefer a short timeout and summarize progress; call again only if the user wants continued polling. " +
         "Only stop when completed=true or data.status === 'failed'. " +
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {

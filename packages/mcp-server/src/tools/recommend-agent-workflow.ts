@@ -14,11 +14,11 @@ export function registerRecommendAgentWorkflowTool(server: McpServer) {
     {
       title: "Recommend Agent Workflow",
       description:
-        "CALL THIS BEFORE starting any implementation, debugging, review, refactor, test, or research task. " +
+        "Meta/task-planning tool. Use only for broad implementation, debugging, review, refactor, test, or research tasks where the correct workflow is unclear. " +
+        "Do not call for normal chat, identity questions, small direct lookups, or when the next concrete tool is already obvious. " +
         "Returns the required skill sequence, hard gates, first tool to call, artifact templates, " +
         "and verification checklist tailored to the specific task type. " +
-        "Prevents common mistakes like editing without context, missing verification steps, or skipping design gates. " +
-        "Use explore_task for file/symbol lookup; use this for task-level workflow planning.",
+        "Use explore_task/search_codebase for repository lookup; use this only for task-level workflow planning.",
       inputSchema: {
         task: z
           .string()

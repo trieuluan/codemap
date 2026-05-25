@@ -15,7 +15,9 @@ export function registerWaitForAuthTool(
     {
       title: "Wait For Auth",
       description:
-        "Polls CodeMap MCP login status for a previously started auth session. Saves the issued API key into the global MCP config when authorization succeeds.",
+        "Polls CodeMap MCP login status for a previously started auth session. Saves the issued API key into the global MCP config when authorization succeeds. " +
+        "Use only after start_auth_flow returned a sessionId and the user has had a chance to approve browser authorization. " +
+        "If timed out or still pending, report that status instead of looping indefinitely.",
       inputSchema: {
         sessionId: uuidSchema,
       },
