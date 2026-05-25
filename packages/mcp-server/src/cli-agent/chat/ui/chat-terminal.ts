@@ -23,6 +23,7 @@ import {
   type TaskClassification,
 } from "../agent/task-classifier.js";
 import { executeCommand, getCommandList } from "../commands/index.js";
+import { runShell } from "../commands/shell.js";
 import { isStrongModel } from "../commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../file-search.js";
@@ -913,12 +914,9 @@ export class ChatTerminal {
     this.appendMessage({ role: "tool_call", name: "bash", content: command });
 
     try {
-      const result = await abortable(
-        this.options.toolClient.callTool("bash", { command }),
-        taskAbort.signal,
-      );
+      const result = await abortable(runShell(command), taskAbort.signal);
       if (!this.isActiveTask(taskId, taskAbort)) return;
-      const content = result.content || "(no output)";
+      const content = result || "(no output)";
       this.store.dispatch((prev) => ({
         messages: markToolDone(prev.messages, "bash", content),
       }));

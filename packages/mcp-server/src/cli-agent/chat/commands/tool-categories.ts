@@ -11,18 +11,11 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   // ── Local-only ───────────────────────────────────────────────────────────
   refresh_local_index:      "local",
   get_working_diff:         "local",
-  edit_file:                "local",
-  write_file:               "local",
-  bash:                     "local",
   get_current_workspace_info: "local",
   get_agent_workflow:       "local",
   recommend_agent_workflow: "local",
-  open_url:                 "local",
-  ping:                     "local",
   web_search:               "local",
   web_fetch:                "local",
-  doctor_agent_pack:        "local",
-  run_tests:                "local",
 
   // ── Local index + optional cloud enhancement ─────────────────────────────
   explore_task:             "local",
@@ -32,14 +25,11 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   find_usages:              "local",
   find_callers:             "local",
   find_related_files:       "local",
-  find_by_pattern:          "local",
   get_symbol_context:       "local",
   suggest_edit_locations:   "local",
   summarize_feature_area:   "local",
   rename_symbol:            "local",
   move_symbols:             "local",
-  suggest_patch:            "local",
-  apply_patch:              "local",
   code_review:              "local",
   find_cycles:              "local",
   get_diff:                 "local",
@@ -69,8 +59,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   wait_for_import:               "cloud",
   get_project_insights:          "cloud",
   get_project_map:               "cloud",
-  deploy_preview:                "cloud",
-  integration_tools:             "cloud",
 };
 
 const BADGE: Record<ToolCategory, string> = {

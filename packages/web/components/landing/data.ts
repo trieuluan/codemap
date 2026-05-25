@@ -91,16 +91,6 @@ export const mcpTools: McpTool[] = [
       ["clue", "src/legacy/*",     "0 inbound refs · safe to delete"],
     ],
   },
-  {
-    name: "suggest_patch",
-    sub: "Proposes a minimal diff with affected callers + test plan.",
-    args: 'goal: "rename User.email → User.contactEmail"',
-    output: [
-      ["plan", "47 callers", "across 12 files"],
-      ["risk", "low",         "no public API change"],
-      ["diff", "+62 / -62",   "ready to apply"],
-    ],
-  },
 ];
 
 export const workflowSteps: { k: string; d: string; icon: IconName }[] = [

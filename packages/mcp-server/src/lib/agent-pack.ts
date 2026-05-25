@@ -101,7 +101,7 @@ export function buildAgentPackIndexMarkdown() {
     "codemap-mcp doctor-agent-pack --target auto",
     "```",
     "",
-    "Use `codemap-mcp doctor-agent-pack` or the MCP `doctor_agent_pack` tool to verify local rules and skills after install.",
+    "Use `codemap-mcp doctor-agent-pack` to verify local rules and skills after install.",
     "Use `codemap-mcp agent-pack-path` to print the local plugin root path.",
   ].join("\n");
 }

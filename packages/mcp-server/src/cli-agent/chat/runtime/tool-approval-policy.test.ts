@@ -15,13 +15,17 @@ test("buildMastraPermissionRules asks for mutating tools without asking for all 
   assert.equal(rules.categories.mcp, "allow");
   assert.equal(rules.tools.write_file, "ask");
   assert.equal(rules.tools.string_replace_lsp, "ask");
-  assert.equal(rules.tools.codemap_write_file, "ask");
+  assert.equal(rules.tools.codemap_rename_symbol, "ask");
+  assert.equal(rules.tools.codemap_move_symbols, "ask");
+  assert.equal(rules.tools.codemap_trigger_reimport, "ask");
   assert.equal(rules.tools.github_apply_patch, "ask");
 });
 
 test("isMutatingApprovalTool recognizes known mutating approval tools", () => {
   assert.equal(isMutatingApprovalTool("write_file"), true);
   assert.equal(isMutatingApprovalTool("codemap_apply_patch"), true);
+  assert.equal(isMutatingApprovalTool("codemap_rename_symbol"), true);
+  assert.equal(isMutatingApprovalTool("codemap_trigger_reimport"), true);
   assert.equal(isMutatingApprovalTool("search_content"), false);
   assert.equal(isMutatingApprovalTool("codemap_get_file"), false);
 });

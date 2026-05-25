@@ -1,3 +1,4 @@
+import { runShell } from "./shell.js";
 import type { Command } from "./types.js";
 
 export const gitPushCommand: Command = {
@@ -11,10 +12,8 @@ export const gitPushCommand: Command = {
 
     try {
       ctx.logSubprocess("Reading branch…");
-      const branchResult = await ctx.toolClient.callTool("bash", {
-        command: "git rev-parse --abbrev-ref HEAD",
-      });
-      const branch = branchResult.content.trim();
+      const branchOutput = await runShell("git rev-parse --abbrev-ref HEAD");
+      const branch = branchOutput.trim();
 
       if (!branch || branch === "HEAD") {
         append("Not on a branch — cannot push.");
@@ -22,11 +21,9 @@ export const gitPushCommand: Command = {
       }
 
       ctx.logSubprocess(`Pushing \`${branch}\`…`);
-      const pushResult = await ctx.toolClient.callTool("bash", {
-        command: `git push 2>&1 || git push -u origin ${branch} 2>&1`,
-      });
+      const pushOutput = await runShell(`git push 2>&1 || git push -u origin ${branch} 2>&1`);
 
-      const output = pushResult.content.trim();
+      const output = pushOutput.trim();
       if (output) ctx.logSubprocess(output.split("\n").at(-1) ?? output);
       ctx.logSubprocess("Refreshing local/cloud commit status…");
       await ctx.refreshWorkspaceCommits?.();

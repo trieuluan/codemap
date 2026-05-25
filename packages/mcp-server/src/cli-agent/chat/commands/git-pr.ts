@@ -1,3 +1,4 @@
+import { runShell } from "./shell.js";
 import type { Command } from "./types.js";
 
 const PR_PROMPT = `You are a pull request description writer. Given commits and a diff summary, write a PR title and description.
@@ -31,33 +32,25 @@ export const gitPrCommand: Command = {
 
     try {
       ctx.logSubprocess("Checking gh CLI…");
-      const ghCheck = await ctx.toolClient.callTool("bash", {
-        command: "which gh 2>&1",
-      });
-      if (!ghCheck.content.trim().startsWith("/")) {
+      const ghCheck = await runShell("which gh 2>&1");
+      if (!ghCheck.trim().startsWith("/")) {
         append("`gh` CLI not found. Install it from https://cli.github.com then run `/pr` again.");
         return;
       }
 
       ctx.logSubprocess("Reading commits…");
-      const baseResult = await ctx.toolClient.callTool("bash", {
-        command: "git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}' || echo 'main'",
-      });
-      const base = baseResult.content.trim() || "main";
+      const baseOutput = await runShell("git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}' || echo 'main'");
+      const base = baseOutput.trim() || "main";
 
-      const logResult = await ctx.toolClient.callTool("bash", {
-        command: `git log ${base}..HEAD --oneline 2>/dev/null | head -30`,
-      });
-      if (!logResult.content.trim()) {
+      const logOutput = await runShell(`git log ${base}..HEAD --oneline 2>/dev/null | head -30`);
+      if (!logOutput.trim()) {
         append(`No commits ahead of \`${base}\`. Nothing to PR.`);
         return;
       }
 
-      const diffStat = await ctx.toolClient.callTool("bash", {
-        command: `git diff ${base}..HEAD --stat 2>/dev/null | tail -20`,
-      });
+      const diffStat = await runShell(`git diff ${base}..HEAD --stat 2>/dev/null | tail -20`);
 
-      const context = `Commits:\n${logResult.content}\n\nChanged files:\n${diffStat.content}`;
+      const context = `Commits:\n${logOutput}\n\nChanged files:\n${diffStat}`;
       const extra = args.trim() ? `\nExtra context: ${args}` : "";
 
       ctx.logSubprocess("Generating PR description…");
@@ -87,13 +80,11 @@ export const gitPrCommand: Command = {
 
       ctx.logSubprocess(`→ ${title}`);
       ctx.logSubprocess("Creating PR…");
-      const prResult = await ctx.toolClient.callTool("bash", {
-        command: `gh pr create --base ${base} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)} 2>&1`,
-      });
+      const prOutput = await runShell(`gh pr create --base ${base} --title ${JSON.stringify(title)} --body ${JSON.stringify(body)} 2>&1`);
 
-      const prUrl = prResult.content.match(/https:\/\/github\.com\/\S+/)?.[0] ?? "";
+      const prUrl = prOutput.match(/https:\/\/github\.com\/\S+/)?.[0] ?? "";
       if (prUrl) ctx.logSubprocess(prUrl);
-      append(`**PR created**\n\n**${title}**\n\n${body}\n\n---\n${prResult.content}`);
+      append(`**PR created**\n\n**${title}**\n\n${body}\n\n---\n${prOutput}`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

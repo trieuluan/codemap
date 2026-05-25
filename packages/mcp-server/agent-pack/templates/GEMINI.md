@@ -28,9 +28,9 @@ For new features or vague requirements, design first — never write production 
 
 For new functionality or bug fixes, follow RED → GREEN → REFACTOR strictly.
 
-- **RED**: `search_codebase("test <feature>")` to find patterns, write a minimal failing test, run with `run_tests` and confirm it **fails**.
-- **GREEN**: Use `get_symbol_context` to read the target, implement only the minimum to pass, run `run_tests` and confirm it **passes**.
-- **REFACTOR**: Clean up, run `run_tests` again, then call `code_review` and `get_working_diff` before declaring done.
+- **RED**: `search_codebase("test <feature>")` to find patterns, write a minimal failing test, run with the host agent test runner and confirm it **fails**.
+- **GREEN**: Use `get_symbol_context` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
+- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `get_working_diff` before declaring done.
 
 No production code before a failing test exists.
 

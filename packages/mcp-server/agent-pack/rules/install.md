@@ -24,8 +24,6 @@ After install, verify the harness files and skills:
 codemap-mcp doctor-agent-pack --target auto
 ```
 
-Agents can also call the MCP tool `doctor_agent_pack` when they need to confirm that local workflow rules, skills, and verification gates are visible in the workspace.
-
 The installer writes workflow rules and skills for the chosen agent harness. Conflicting files are backed up unless `--force` is used.
 
 Codex installs `AGENTS.md`, `.codex/codemap-agent-pack.md`, and CodeMap skills under `.codex/skills/codemap-*`.

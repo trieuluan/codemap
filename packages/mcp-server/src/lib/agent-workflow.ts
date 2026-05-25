@@ -148,7 +148,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "test",
     description: "Add, repair, or improve tests.",
     requiredSkills: ["test-driven-development", "verification-before-completion"],
-    firstTools: ["recommend_agent_workflow", "search_codebase", "run_tests", "get_symbol_context"],
+    firstTools: ["recommend_agent_workflow", "search_codebase", "get_symbol_context"],
     hardGates: [
       "Find existing test patterns before adding tests.",
       "For bug coverage, confirm the test fails before the fix when feasible.",

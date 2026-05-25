@@ -143,7 +143,7 @@ export class McpServerConnection {
     const result = await this.client!.callTool(
       { name, arguments: args },
       undefined,
-      { timeout: 300_000 }, // 5 min — apply_patch and large file reads can be slow
+      { timeout: 300_000 }, // 5 min — large file reads can be slow
     );
 
     if ("toolResult" in result) {

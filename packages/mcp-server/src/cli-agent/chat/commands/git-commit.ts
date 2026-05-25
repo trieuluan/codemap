@@ -1,3 +1,4 @@
+import { runShell } from "./shell.js";
 import type { Command } from "./types.js";
 
 const COMMIT_MSG_PROMPT = `You are a git commit message generator. Given a diff, write a concise commit message.
@@ -23,28 +24,22 @@ export const gitCommitCommand: Command = {
       const manualMsg = args.trim();
       if (manualMsg) {
         ctx.logSubprocess("Committing with provided message…");
-        const result = await ctx.toolClient.callTool("bash", {
-          command: `git add -A && git commit -m ${JSON.stringify(manualMsg)}`,
-        });
+        const output = await runShell(`git add -A && git commit -m ${JSON.stringify(manualMsg)}`);
         committed = true;
-        append(result.content || "Committed.");
+        append(output || "Committed.");
         return;
       }
 
       ctx.logSubprocess("Checking status…");
-      const statusResult = await ctx.toolClient.callTool("bash", {
-        command: "git status --short",
-      });
-      if (!statusResult.content.trim()) {
+      const status = await runShell("git status --short");
+      if (!status.trim()) {
         append("Nothing to commit — working tree clean.");
         return;
       }
 
       ctx.logSubprocess("Reading diff…");
-      const diffResult = await ctx.toolClient.callTool("bash", {
-        command: "git diff HEAD --stat && echo '---' && git diff HEAD -- . ':(exclude)package-lock.json' ':(exclude)*.lock'",
-      });
-      const diff = diffResult.content.slice(0, 6000);
+      const diffOutput = await runShell("git diff HEAD --stat && echo '---' && git diff HEAD -- . ':(exclude)package-lock.json' ':(exclude)*.lock'");
+      const diff = diffOutput.slice(0, 6000);
 
       ctx.logSubprocess("Generating commit message…");
       let commitMsg = "";
@@ -65,12 +60,10 @@ export const gitCommitCommand: Command = {
       }
 
       ctx.logSubprocess(`→ ${commitMsg.split("\n")[0]}`);
-      const commitResult = await ctx.toolClient.callTool("bash", {
-        command: `git add -A && git commit -m ${JSON.stringify(commitMsg)}`,
-      });
+      const commitOutput = await runShell(`git add -A && git commit -m ${JSON.stringify(commitMsg)}`);
       committed = true;
 
-      append(`\`\`\`\n${commitMsg}\n\`\`\`\n${commitResult.content}\n\n_Undo: \`git reset --soft HEAD~1\`_`);
+      append(`\`\`\`\n${commitMsg}\n\`\`\`\n${commitOutput}\n\n_Undo: \`git reset --soft HEAD~1\`_`);
     } catch (err) {
       append(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

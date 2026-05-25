@@ -17,10 +17,13 @@ const MUTATING_TOOL_NAMES = [
   "string_replace",
   "string_replace_lsp",
   "write_file",
+  "move_symbols",
+  "rename_symbol",
+  "trigger_reimport",
 ];
 
 const MUTATING_TOOL_PATTERN =
-  /(^|_)(apply_patch|ast_smart_edit|delete_file|edit_file|mkdir|move_file|rename_file|string_replace|string_replace_lsp|write_file)$/i;
+  /(^|_)(apply_patch|ast_smart_edit|delete_file|edit_file|mkdir|move_file|move_symbols|rename_file|rename_symbol|string_replace|string_replace_lsp|trigger_reimport|write_file)$/i;
 
 export function isMutatingApprovalTool(name: string): boolean {
   return MUTATING_TOOL_PATTERN.test(name);

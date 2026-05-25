@@ -36,16 +36,12 @@ import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerGetSymbolContextTool } from "./tools/get-symbol-context.js";
 import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area.js";
 import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
-import { registerFindByPatternTool } from "./tools/find-by-pattern.js";
-import { registerRunTestsTool } from "./tools/run-tests.js";
-import { registerBashTool } from "./tools/bash.js";
+
 import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerCodeReviewTool } from "./tools/code-review.js";
-import { registerEditFileTool } from "./tools/edit-file.js";
-import { registerWriteFileTool } from "./tools/write-file.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
@@ -123,11 +119,8 @@ async function runMcpServer() {
     registerGetFilesTool(server, config);
     registerFindUsagesTool(server, config);
     registerFindCallersTool(server, config);
-    registerFindByPatternTool(server, config);
     registerGetDiffTool(server, config);
     registerGetProjectInsightsTool(server, config);
-    registerRunTestsTool(server, config);
-    registerBashTool(server, config);
     registerWebFetchTool(server, config);
     registerFindRelatedFilesTool(server, config);
     registerSummarizeFeatureAreaTool(server, config);
@@ -143,8 +136,6 @@ async function runMcpServer() {
     registerRenameSymbolTool(server, config);
     registerFindCyclesTool(server, config);
     registerCodeReviewTool(server, config);
-    registerEditFileTool(server, config);
-    registerWriteFileTool(server, config);
     registerCheckGithubConnectionTool(server, config);
     registerGetGithubConnectUrlTool(server, config);
     registerCheckGitlabConnectionTool(server, config);

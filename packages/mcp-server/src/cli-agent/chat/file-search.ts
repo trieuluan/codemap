@@ -195,6 +195,7 @@ function isSelectablePath(filePath: string): boolean {
   if (lower.includes("/node_modules/") || lower.includes("/.git/"))
     return false;
   if (lower.includes(".pnpm-store/")) return false;
+  if (lower.includes(".codemap-storage/")) return false;
   if (
     lower.includes("/dist/") ||
     lower.includes("/build/") ||

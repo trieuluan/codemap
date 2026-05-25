@@ -52,10 +52,8 @@ const TOOLS_STANDARD_EXTRA = [
   "- get_files — batch outline fetch for up to 7 files in one call; use after suggest_edit_locations to survey candidates",
   "- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase",
   "- find_callers — find static callers of a symbol from a given file; faster than find_usages when file is known",
-  "- find_by_pattern — search files by glob or regex pattern with content filtering and line range support",
   "- get_diff — show git diff between two refs (commits, branches, tags)",
   "- get_project_insights — full codebase health report: cycles, entry points, orphans, top files",
-  "- run_tests — run the project test suite (Jest, Vitest, Playwright, npm test) with pattern/name filtering",
   "- find_related_files — find files related to a query, file, or symbol using multi-signal ranking",
   "- get_symbol_context — get full body and context for a specific symbol (function, class, method) by name and file",
   "- summarize_feature_area — summarize the purpose, key files, and entry points of a feature area or directory",
@@ -71,17 +69,10 @@ const TOOLS_FULL_EXTRA = [
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call trigger_reimport after",
   "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
   "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
-  "- edit_file — replace a unique string in a file; use for targeted edits (preferred over apply_patch)",
-  "- write_file — write full content to a file, creating it if needed; use for new files or full rewrites",
-  "- bash — execute shell commands; use for builds, tests, git operations, package installs, or anything other tools don't cover; cwd defaults to workspace root, pass cwd param for sub-packages",
-  "- suggest_patch — analyze workspace changes and generate unified diffs with blast radius",
-  "- apply_patch — apply a unified diff patch to the workspace after a successful dry-run preflight; supports raw or base64 patches and configurable strip_level (-pN)",
-  "- deploy_preview — deploy a preview build of the project",
   "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
   "- check_gitlab_connection / get_gitlab_connect_url / disconnect_gitlab — manage GitLab OAuth for repository imports",
   "- list_github_repositories / search_github_repositories — discover GitHub repositories",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
-  "- open_url — open a URL in the default browser",
 ];
 
 // ── Workflow hints per tier ───────────────────────────────────────────────────
@@ -109,19 +100,14 @@ const WORKFLOW_STANDARD_EXTRA = [
   "- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
   "- Use find_related_files with a natural-language query (e.g. 'login bug') to find related files across feature boundaries.",
   "- Use get_project_insights for global signals: orphans, cycles, top fan-out/fan-in files.",
-  "- Use run_tests before committing to verify tests pass.",
-  "- Use find_by_pattern to search files by glob/regex with content filtering.",
   "- Use get_diff to compare committed refs; use get_working_diff for uncommitted local changes.",
 ];
 
 const WORKFLOW_FULL_EXTRA = [
-  "- Use bash for builds, tests, git commands, and package installs. Pass cwd param when running sub-package commands (e.g. cwd: 'packages/api').",
   "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
   "- Use rename_symbol to rename a symbol codebase-wide — call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true.",
   "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
   "- Use code_review for automated quality checks. Set focus_areas to target specific concerns (bugs, security, performance, etc.).",
-  "- Use suggest_patch to generate a unified diff for proposed changes, then apply_patch to apply it — always review the diff before applying.",
-  "- Use deploy_preview after completing a feature to share a testable build.",
 ];
 
 const MAINTENANCE_SECTION = [
@@ -381,7 +367,6 @@ export function registerProjectContextResource(
               "## What works locally (no cloud project needed)",
               "- refresh_local_index — build/refresh local SQLite index from disk; required before search/read tools work",
               "- explore_task, search_codebase, get_file, get_files, find_usages, find_callers — full codebase navigation",
-              "- edit_file, write_file, bash — code editing and shell commands",
               "- web_search, web_fetch — search the web and fetch URLs; no auth required",
               "- get_working_diff — see uncommitted changes",
               "",
@@ -409,7 +394,6 @@ export function registerProjectContextResource(
               "## What works right now (no login needed)",
               "- refresh_local_index — build local index from disk; no auth required",
               "- After indexing: explore_task, search_codebase, get_file, get_files, find_usages — full local navigation",
-              "- edit_file, write_file, bash — code editing and shell commands",
               "- web_search, web_fetch — search the web and fetch URLs; no auth required",
               "",
               "## Recommended first step",

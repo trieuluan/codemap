@@ -58,7 +58,11 @@ function formatExpandedContent(
           lines.push("");
           lines.push(`${C_MUTED}Raw data${RESET}`);
           const jsonStr = JSON.stringify(raw, null, 2);
-          lines.push(...highlightBlock(jsonStr, "json"));
+          const highlighted = highlightBlock(jsonStr, "json");
+          const codeWidth = Math.max(8, width - 4);
+          for (const line of highlighted) {
+            lines.push(...wrapPlain(line, codeWidth));
+          }
         }
         return lines;
       }
@@ -273,12 +277,15 @@ function renderMessageLines(
       const canExpand = !hasFailed && (hasResult || !!msg.expandedContent);
       const suffix = canExpand ? " (Ctrl+O to expand)" : "";
 
-      const lines = safeRender(rawContent, bodyW);
-      out.push(
-        `${time} ${toolColor}${icon}${RESET} ${toolColor}${toolName}:${RESET} ${lines[0] ?? ""}${C_MUTED}${suffix}${RESET}`,
+      const headerPrefix = `${time} ${toolColor}${icon}${RESET} ${toolColor}${toolName}:${RESET} `;
+      const headerSuffix = `${C_MUTED}${suffix}${RESET}`;
+      const headerBodyW = Math.max(
+        0,
+        width - visibleWidth(headerPrefix) - visibleWidth(headerSuffix),
       );
-      for (const line of lines.slice(1))
-        out.push(`${" ".repeat(prefixW)}${toolColor}  ${line}${RESET}`);
+      const lines = safeRender(rawContent, Math.max(20, bodyW));
+      const headerContent = truncateToWidth(lines[0] ?? "", headerBodyW);
+      out.push(`${headerPrefix}${headerContent}${headerSuffix}`);
 
       if (msg.previewContent)
         out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW));
@@ -310,7 +317,10 @@ function renderMessageLines(
     }
     out.push("");
   }
-  return out;
+  // Safety net: clamp any line that exceeds width to prevent TUI crash
+  return out.map((line) =>
+    visibleWidth(line) > width ? truncateToWidth(line, width) : line,
+  );
 }
 
 export { wrapPlain };
