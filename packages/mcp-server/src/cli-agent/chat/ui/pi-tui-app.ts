@@ -487,7 +487,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
 
     // Plan review inline select (only when editor is empty).
     if (state.planReview?.active && editor.getText().trim() === "") {
-      const PLAN_OPTIONS = ["implement", "no"] as const;
+      const PLAN_OPTIONS = ["apply", "no"] as const;
       const sel = state.planReview.selection ?? 0;
       if (matchesKey(data, Key.up)) {
         chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + PLAN_OPTIONS.length - 1) % PLAN_OPTIONS.length } });
@@ -500,7 +500,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
         return { consume: true };
       }
       if (matchesKey(data, Key.enter)) {
-        chatTerminal.resolvePlanReview(PLAN_OPTIONS[sel] ?? "implement");
+        chatTerminal.resolvePlanReview(PLAN_OPTIONS[sel] ?? "apply");
         return { consume: true };
       }
       if (matchesKey(data, Key.escape)) {

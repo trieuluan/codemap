@@ -8,7 +8,7 @@ import { runWithMastraHarness, runMultiPhaseWithMastra } from "./mastra-harness-
 export type ChatUiMode = "tui";
 
 export type AgentPhase = "planning" | "executing" | "reviewing";
-export type PlanReviewAction = "implement" | "cancel" | string;
+export type PlanReviewAction = "apply" | "cancel" | string;
 
 export interface SingleAgentRuntimeInput {
   provider: NineRouterProvider;

@@ -687,7 +687,7 @@ export async function runMultiPhaseWithMastra(
         });
         return;
       }
-      if (action === "implement") {
+      if (action === "apply") {
         await harness.respondToPlanApproval?.({
           planId,
           response: { action: "approved" },
@@ -850,7 +850,7 @@ function runHarness(
         return;
       }
 
-      if (action === "implement") {
+      if (action === "apply") {
         await harness.respondToPlanApproval?.({
           planId,
           response: { action: "approved" },

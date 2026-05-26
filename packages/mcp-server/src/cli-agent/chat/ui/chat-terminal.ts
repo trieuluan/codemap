@@ -867,6 +867,9 @@ export class ChatTerminal {
         errMsg.includes("zero-length") ||
         errMsg.includes("empty document") ||
         errMsg.includes("429");
+      const isImageUnsupported =
+        errMsg.includes("image input") ||
+        errMsg.includes("support image");
       const cs = this.store.getState().config;
 
       if (isContextFull) {
@@ -893,6 +896,13 @@ export class ChatTerminal {
             content: `Model "${cs.model}" failed and no alternative found.`,
           });
         }
+      } else if (isImageUnsupported) {
+        this.appendMessage({
+          role: "system",
+          content: imageFiles?.length
+            ? `Model "${cs.model}" does not support image input. Switch to a vision-capable model with /model, or resend without images.`
+            : `Model "${cs.model}" does not support image input.`,
+        });
       } else {
         this.appendMessage({ role: "system", content: `Error: ${errMsg}` });
       }

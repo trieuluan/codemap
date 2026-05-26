@@ -13,6 +13,7 @@ import {
   C_WARNING,
   C_ERROR,
   C_WHITE,
+  DIM,
   RESET,
   SPINNER,
 } from "./theme.js";
@@ -143,6 +144,7 @@ export function buildPanel(
   const { editor, frame, shellMode, debugMode, statusMessage } = ctx;
 
   const out: string[] = [];
+  const sep = `${DIM}${C_MUTED}${"─".repeat(Math.min(w - 4, 40))}${RESET}`;
 
   // /help overlay — generated dynamically so it's always in sync with registered commands.
   if (state.screen === "help") {
@@ -271,46 +273,78 @@ export function buildPanel(
   if (state.askQuestion?.active) {
     const { question, options, selection } = state.askQuestion;
     const questionLines = question.split("\n");
-    for (const ql of questionLines) {
-      out.push(fitLine(`  ${C_AI}? ${RESET}${C_WHITE}${ql}${RESET}`, w));
+
+    // Top separator
+    out.push(fitLine(`  ${sep}`, w));
+
+    // First line with ? prefix, subsequent lines indented
+    for (let i = 0; i < questionLines.length; i++) {
+      const ql = questionLines[i];
+      if (i === 0) {
+        out.push(fitLine(`    ${C_AI}? ${RESET}${C_WHITE}${BOLD}${ql}${RESET}`, w));
+      } else {
+        out.push(fitLine(`      ${C_WHITE}${ql}${RESET}`, w));
+      }
     }
+
+    // Sub-separator
+    out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+
     if (options && options.length > 0) {
+      for (const [idx, opt] of options.entries()) {
+        const selected = idx === (selection ?? 0);
+        const num = `${C_MUTED}${idx + 1}.${RESET}`;
+        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
+        const label = selected
+          ? `${C_WHITE}${BOLD}${opt.label}${RESET}`
+          : `${C_WHITE}${opt.label}${RESET}`;
+        const desc = opt.description
+          ? `  ${C_GRAY}${opt.description}${RESET}`
+          : "";
+        out.push(fitLine(`    ${prefix} ${num} ${label}${desc}`, w));
+      }
       out.push(
         fitLine(
-          `  ${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`,
+          `    ${C_ACTION}↑↓${RESET}${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}skip${RESET}`,
           w,
         ),
       );
-      for (const [idx, opt] of options.entries()) {
-        const selected = idx === (selection ?? 0);
-        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
-        const label = selected ? `${C_WHITE}${BOLD}${opt.label}${RESET}` : `${C_WHITE}${opt.label}${RESET}`;
-        const desc = opt.description ? `  ${C_GRAY}${opt.description}${RESET}` : "";
-        out.push(fitLine(`  ${prefix} ${label}${desc}`, w));
-      }
     } else {
-      out.push(fitLine(`  ${C_GRAY}Type answer + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to reply · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`, w));
+      out.push(
+        fitLine(
+          `    ${C_GRAY}Type answer + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to reply · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`,
+          w,
+        ),
+      );
     }
+
+    // Bottom separator
+    out.push(fitLine(`  ${sep}`, w));
   } else if (state.planReview?.active) {
     const sel = state.planReview.selection ?? 0;
     const PLAN_OPTIONS = [
       {
-        label: "implement",
+        label: "apply",
         desc: "Proceed with implementation (planner → coder → reviewer)",
       },
       { label: "no", desc: "Cancel — don't implement this plan" },
     ];
+
+    // Top separator
+    out.push(fitLine(`  ${sep}`, w));
+
+    // Header
     out.push(
-      fitLine(
-        `  ${C_AI}◈ Plan ready${RESET}  ` +
-          `${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}` +
-          `${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}` +
-          `${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to revise${RESET}`,
-        w,
-      ),
+      fitLine(`    ${C_AI}◈${RESET} ${C_WHITE}${BOLD}Plan ready${RESET}`, w),
     );
+
+    // Sub-separator
+    out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+
+    // Options
     for (const [idx, opt] of PLAN_OPTIONS.entries()) {
       const selected = idx === sel;
+      const num = `${C_MUTED}${idx + 1}.${RESET}`;
       const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
       const isNo = opt.label === "no";
       const labelColor = isNo ? C_ERROR : C_WHITE;
@@ -318,9 +352,20 @@ export function buildPanel(
         ? `${labelColor}${BOLD}${opt.label}${RESET}`
         : `${labelColor}${opt.label}${RESET}`;
       out.push(
-        fitLine(`  ${prefix} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
+        fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
       );
     }
+
+    // Help text
+    out.push(
+      fitLine(
+        `    ${C_ACTION}↑↓${RESET}${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}confirm · ${RESET}${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}revise${RESET}`,
+        w,
+      ),
+    );
+
+    // Bottom separator
+    out.push(fitLine(`  ${sep}`, w));
   } else {
     out.push(
       fitLine(
