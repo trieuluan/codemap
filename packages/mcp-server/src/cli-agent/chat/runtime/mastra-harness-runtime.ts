@@ -5,7 +5,7 @@ import type {
   SingleAgentRuntimeInput,
   MultiPhaseLoopInput,
   PlanReviewAction,
-} from "./cli-runtime.js";
+} from "./runtime-types.js";
 import {
   bridgeCommonEvent,
   type BridgeCallbacks,
