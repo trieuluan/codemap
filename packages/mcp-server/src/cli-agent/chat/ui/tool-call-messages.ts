@@ -267,9 +267,9 @@ export function syncTaskListFromTool(
   if (normalized.includes("task_write")) {
     handleTaskWrite(store, args, resultTasks);
   } else if (normalized.includes("task_update")) {
-    handleTaskUpdate(store, args);
+    handleTaskUpdate(store, args, resultTasks);
   } else if (normalized.includes("task_complete")) {
-    handleTaskComplete(store, args);
+    handleTaskComplete(store, args, resultTasks);
   } else if (normalized.includes("task_check")) {
     handleTaskCheck(store, resultTasks);
   }
@@ -279,20 +279,39 @@ function extractTasksFromResult(
   result: Record<string, unknown> | null,
 ): TaskListItem[] | null {
   if (!result) return null;
+
+  // Try structuredContent.data.tasks first (nested MCP result)
   const structured =
     result.structuredContent &&
     typeof result.structuredContent === "object" &&
     !Array.isArray(result.structuredContent)
       ? (result.structuredContent as Record<string, unknown>)
-      : result;
-  const data = structured.data;
-  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-  const tasks = (data as Record<string, unknown>).tasks;
-  if (!Array.isArray(tasks)) return null;
-  return tasks.filter(
-    (t): t is TaskListItem =>
-      typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
-  );
+      : null;
+  if (structured) {
+    const data = structured.data;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const tasks = (data as Record<string, unknown>).tasks;
+      if (Array.isArray(tasks)) {
+        const filtered = tasks.filter(
+          (t): t is TaskListItem =>
+            typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
+        );
+        if (filtered.length > 0) return filtered;
+      }
+    }
+  }
+
+  // Fallback: check top-level tasks (tool result returns tasks directly)
+  const topLevelTasks = result.tasks;
+  if (Array.isArray(topLevelTasks)) {
+    const filtered = topLevelTasks.filter(
+      (t): t is TaskListItem =>
+        typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
+    );
+    if (filtered.length > 0) return filtered;
+  }
+
+  return null;
 }
 
 function handleTaskWrite(
@@ -302,6 +321,13 @@ function handleTaskWrite(
 ): void {
   const inputTasks = extractInputTasks(args);
   if (!inputTasks && !resultTasks) return;
+
+  // Empty list means "clear all tasks"
+  const incomingTasks = resultTasks ?? inputTasks;
+  if (incomingTasks && incomingTasks.length === 0) {
+    store.dispatch({ taskList: [], taskListVisible: false });
+    return;
+  }
 
   store.dispatch((prev) => {
     const existing = new Map(prev.taskList.map((t) => [t.id, t]));
@@ -331,14 +357,21 @@ function handleTaskWrite(
       }
     }
 
-    return { taskList: [...existing.values()] };
+    return { taskList: [...existing.values()], taskListVisible: true };
   });
 }
 
 function handleTaskUpdate(
   store: Store,
   args: Record<string, unknown>,
+  resultTasks: TaskListItem[] | null,
 ): void {
+  // If tool result returns full task list, use it as authoritative source
+  if (resultTasks && resultTasks.length > 0) {
+    store.dispatch({ taskList: resultTasks });
+    return;
+  }
+
   const id = typeof args.id === "string" ? args.id : null;
   if (!id) return;
 
@@ -363,7 +396,14 @@ function handleTaskUpdate(
 function handleTaskComplete(
   store: Store,
   args: Record<string, unknown>,
+  resultTasks: TaskListItem[] | null,
 ): void {
+  // If tool result returns full task list, use it as authoritative source
+  if (resultTasks && resultTasks.length > 0) {
+    store.dispatch({ taskList: resultTasks });
+    return;
+  }
+
   const id = typeof args.id === "string" ? args.id : null;
   if (!id) return;
 

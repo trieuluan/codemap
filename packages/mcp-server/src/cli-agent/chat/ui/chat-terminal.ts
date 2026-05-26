@@ -489,8 +489,7 @@ export class ChatTerminal {
 
     let streamingContent = "";
     let hasStreamingEntry = false;
-    let lastToolRawName = "";
-    let lastToolArgsJson = "{}";
+    const toolArgsById = new Map<string, { name: string; args: string }>();
 
     const resetStreaming = () => {
       streamingContent = "";
@@ -554,8 +553,7 @@ export class ChatTerminal {
       onToolStart: (name: string, args: string, id: string, preview?: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
-        lastToolRawName = name;
-        lastToolArgsJson = args;
+        if (id) toolArgsById.set(id, { name, args });
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
         // next text response from Mastra replaces this entry instead of appending.
         streamingContent = "";
@@ -598,7 +596,11 @@ export class ChatTerminal {
           const newMsgs = markToolDone(prev.messages, name, resultText, id);
           return { messages: newMsgs };
         });
-        syncTaskListFromTool(this.store, lastToolRawName, lastToolArgsJson, resultText);
+        const toolMeta = id ? toolArgsById.get(id) : undefined;
+        const rawName = toolMeta?.name ?? name;
+        const rawArgs = toolMeta?.args ?? "{}";
+        if (id) toolArgsById.delete(id);
+        syncTaskListFromTool(this.store, rawName, rawArgs, resultText);
         this.bus.scheduleRefresh();
       },
       onOMObservation: (tokensObserved: number, observationTokens: number) => {
