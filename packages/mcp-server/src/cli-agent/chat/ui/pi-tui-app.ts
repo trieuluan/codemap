@@ -7,7 +7,7 @@ import {
   TUI,
   type Component,
 } from "@earendil-works/pi-tui";
-import type { ChatTerminal } from "./chat-terminal.js";
+import type { ChatTerminalLike } from "./ui-types.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
 import { getCommandList } from "../commands/index.js";
@@ -50,7 +50,7 @@ function extractToolResultText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
-async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminal): Promise<void> {
+async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminalLike): Promise<void> {
   const state = chatTerminal.store.getState();
   const messages = state.messages;
 
@@ -133,7 +133,7 @@ async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminal): Promise<v
   });
 }
 
-export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
+export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<void> {
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal, true);
 
