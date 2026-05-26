@@ -47,6 +47,33 @@ test("markToolDone attaches a tool result to the latest matching tool_call", () 
   assert.equal(toolCall?.toolResults?.[0]?.success, true);
 });
 
+test("markToolDone treats body containing [ERROR] without prefix as success", () => {
+  const messages: Message[] = [
+    { role: "user", content: "go" },
+    { role: "tool_call", name: "view", content: "mastra-events.ts" },
+  ];
+
+  const fileBody = "143: cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${r}` : r);";
+  const next = markToolDone(messages, "view", fileBody);
+  const toolCall = next[1];
+
+  assert.equal(toolCall?.content, "mastra-events.ts ✓");
+  assert.equal(toolCall?.toolResults?.[0]?.success, true);
+});
+
+test("markToolDone marks failure only when [ERROR] is the prefix", () => {
+  const messages: Message[] = [
+    { role: "user", content: "go" },
+    { role: "tool_call", name: "view", content: "missing.ts" },
+  ];
+
+  const next = markToolDone(messages, "view", "[ERROR] File not found");
+  const toolCall = next[1];
+
+  assert.equal(toolCall?.content, "missing.ts ✗");
+  assert.equal(toolCall?.toolResults?.[0]?.success, false);
+});
+
 test("markToolDone matches by toolCallId when tool_end has no name", () => {
   const messages: Message[] = [
     { role: "user", content: "go" },

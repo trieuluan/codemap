@@ -38,6 +38,10 @@ function isGatewayNoise(text: string): boolean {
   return (
     text.includes("[GatewayRegistry]") ||
     text.includes("[GatewaySync]") ||
-    (text.includes("models.dev") && (text.includes("fetch failed") || text.includes("ENOTFOUND")))
+    (text.includes("models.dev") && (text.includes("fetch failed") || text.includes("ENOTFOUND"))) ||
+    // Mastra logs raw LLM API errors (timeout, connection refused, etc.) directly to
+    // stderr. The actual error propagates through the harness error event and is
+    // already surfaced as a UI message — swallow the redundant raw dump here.
+    text.includes("Upstream LLM API error")
   );
 }

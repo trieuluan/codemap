@@ -3,9 +3,8 @@
 Use CodeMap MCP before raw file reads or grep.
 
 - Start with `get_agent_workflow` and `get_project`.
-- Broad implementation/debug/review/refactor/test/research tasks: call `recommend_agent_workflow`.
-- Follow returned required skills, hard gates, artifact templates, and verification checklist.
-- Broad tasks: `explore_task`.
+- Broad implementation/debug/review/refactor/test/research tasks with unclear files: `explore_task`.
+- Follow relevant skills, hard gates, artifact templates, and verification checklist.
 - Feature areas: `summarize_feature_area`.
 - Related files: `find_related_files`.
 - Known symbols/files: `search_codebase`.

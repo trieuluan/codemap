@@ -133,6 +133,6 @@ export function buildHarnessMarkdown(
     "```",
     "",
     "The doctor command verifies the installed rules and skills contain the required workflow gates.",
-    "The installed guidance tells the agent to call `recommend_agent_workflow` for broad work, use CodeMap MCP tools for exploration, and finish with verification plus index refresh/reimport decisions.",
+    "The installed guidance tells the agent to use CodeMap MCP tools for broad work, choose exploration tools based on task clarity, and finish with verification plus index refresh/reimport decisions.",
   ].join("\n");
 }

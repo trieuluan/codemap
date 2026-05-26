@@ -56,10 +56,13 @@ test("buildCurrentTaskContent keeps the current task isolated", () => {
     task,
     "</task>",
     "",
-    "Work only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.",
+    "Work only on this task. Use repository tools only when they are needed for this task; if the user already named exact files or symbols, inspect those directly.",
   ].join("\n");
 
   assert.equal(content, taskBlock);
   assert.match(content, /<task>\nfix the preview\n<\/task>/);
+  const removedWorkflowToolName = ["recommend", "agent", "workflow"].join("_");
+  assert.equal(content.includes(removedWorkflowToolName), false);
+  assert.doesNotMatch(content, /explore_task/);
   assert.doesNotMatch(content, /CodeMap Identity/);
 });

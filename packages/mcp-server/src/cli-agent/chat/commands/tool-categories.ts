@@ -13,7 +13,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   get_working_diff:         "local",
   get_current_workspace_info: "local",
   get_agent_workflow:       "local",
-  recommend_agent_workflow: "local",
   web_search:               "local",
   web_fetch:                "local",
 
@@ -26,7 +25,7 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   find_callers:             "local",
   find_related_files:       "local",
   get_symbol_context:       "local",
-  suggest_edit_locations:   "local",
+
   summarize_feature_area:   "local",
   rename_symbol:            "local",
   move_symbols:             "local",

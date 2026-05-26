@@ -92,7 +92,70 @@ export function buildToolPreview(
     }
   }
 
+  if (
+    normalizedName.endsWith("task_write") ||
+    normalizedName.endsWith("task_update") ||
+    normalizedName.endsWith("task_complete")
+  ) {
+    const taskPreview = buildTaskListPreview(args);
+    if (taskPreview) return taskPreview;
+  }
+
   return fenced("json", compactJson(args));
+}
+
+interface TaskItem {
+  id?: string;
+  content?: string;
+  activeForm?: string;
+  status?: string;
+}
+
+function buildTaskListPreview(args: Record<string, unknown>): string | null {
+  const tasks = extractTaskList(args);
+  if (!tasks) return null;
+  if (tasks.length === 0) return "_(empty task list)_";
+
+  const lines: string[] = [`**Task list (${tasks.length})**`, ""];
+  for (const task of tasks) {
+    lines.push(formatTaskLine(task));
+  }
+  return lines.join("\n");
+}
+
+function extractTaskList(args: Record<string, unknown>): TaskItem[] | null {
+  const value = args.tasks;
+  if (Array.isArray(value)) {
+    return value.filter((item): item is TaskItem => isPlainObject(item));
+  }
+  // task_update / task_complete operate on a single task — wrap into list.
+  if (typeof args.id === "string" || typeof args.content === "string") {
+    return [args as TaskItem];
+  }
+  return null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatTaskLine(task: TaskItem): string {
+  const status = (task.status ?? "pending").toLowerCase();
+  const label =
+    status === "in_progress" && task.activeForm
+      ? task.activeForm
+      : task.content ?? task.activeForm ?? "(untitled)";
+
+  const marker =
+    status === "completed"
+      ? "- [x]"
+      : status === "in_progress"
+        ? "- [~]"
+        : "- [ ]";
+
+  const display = status === "completed" ? `~~${label}~~` : label;
+  const trail = status === "in_progress" ? " _(in progress)_" : "";
+  return `${marker} ${display}${trail}`;
 }
 
 function getStringArg(

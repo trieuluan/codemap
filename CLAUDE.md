@@ -2,7 +2,7 @@
 
 Use CodeMap MCP-first workflow for this repository.
 
-For broad implementation/debug/review/refactor/test/research tasks, call `recommend_agent_workflow` before editing. Follow returned required skills, hard gates, artifact templates, and verification checklist.
+For broad implementation/debug/review/refactor/test/research tasks, use CodeMap MCP tools to gather repo context before editing. Start with `explore_task` when files are unclear, or inspect exact files/symbols directly when the user already named them.
 
 Must read:
 

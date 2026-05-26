@@ -70,3 +70,58 @@ test("buildToolPreview falls back to compact JSON", () => {
   assert.match(preview, /^~~~json\n/);
   assert.match(preview, /"path": "a\.ts"/);
 });
+
+test("buildToolPreview renders task_write tasks as a markdown checklist", () => {
+  const preview = buildToolPreview("task_write", {
+    tasks: [
+      {
+        id: "explore",
+        content: "Explore repo",
+        activeForm: "Exploring repo",
+        status: "completed",
+      },
+      {
+        id: "implement",
+        content: "Implement feature",
+        activeForm: "Implementing feature",
+        status: "in_progress",
+      },
+      {
+        id: "verify",
+        content: "Verify build",
+        activeForm: "Verifying build",
+        status: "pending",
+      },
+    ],
+  });
+
+  assert.match(preview, /\*\*Task list \(3\)\*\*/);
+  assert.match(preview, /- \[x\] ~~Explore repo~~/);
+  assert.match(preview, /- \[~\] Implementing feature _\(in progress\)_/);
+  assert.match(preview, /- \[ \] Verify build/);
+});
+
+test("buildToolPreview renders task_write with empty tasks as placeholder", () => {
+  const preview = buildToolPreview("task_write", { tasks: [] });
+
+  assert.equal(preview, "_(empty task list)_");
+});
+
+test("buildToolPreview renders task_update single task as one-line checklist", () => {
+  const preview = buildToolPreview("task_update", {
+    id: "explore",
+    content: "Explore repo",
+    activeForm: "Exploring repo",
+    status: "in_progress",
+  });
+
+  assert.match(preview, /\*\*Task list \(1\)\*\*/);
+  assert.match(preview, /- \[~\] Exploring repo _\(in progress\)_/);
+});
+
+test("buildToolPreview falls back to JSON when task_write has no tasks field", () => {
+  const preview = buildToolPreview("task_write", { foo: "bar" });
+
+  assert.match(preview, /^~~~json\n/);
+  assert.match(preview, /"foo": "bar"/);
+});

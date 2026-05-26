@@ -40,7 +40,7 @@ export async function buildSessionContext(cwd: string): Promise<string> {
   }
 
   lines.push("→ REQUIRED first step: call get_agent_workflow()");
-  lines.push("→ Before any task: call recommend_agent_workflow(task=<description>)");
+  lines.push("→ For broad tasks with unclear files: call explore_task(task=<description>)");
 
   return lines.join("\n");
 }

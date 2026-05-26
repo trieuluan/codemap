@@ -303,7 +303,7 @@ export function registerExploreTaskTool(
         "Automatically runs keyword search, edit-location analysis, and semantic embedding search in parallel — " +
         "semantic results are injected as additional low-confidence candidates when embeddings are available. " +
         "Call this BEFORE reading any file or running any command. " +
-        "Replaces grep + manual file search. Replaces search_codebase + suggest_edit_locations combined. " +
+        "Replaces grep + manual file search. Replaces search_codebase combined. " +
         "If the user asks only which files are related or which files to read, use find_related_files instead.",
       inputSchema: {
         task: z

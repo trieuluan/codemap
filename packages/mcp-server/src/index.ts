@@ -35,7 +35,7 @@ import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerGetSymbolContextTool } from "./tools/get-symbol-context.js";
 import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area.js";
-import { registerSuggestEditLocationsTool } from "./tools/suggest-edit-locations.js";
+
 
 import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
@@ -106,7 +106,7 @@ async function runMcpServer() {
   registerSearchCodebaseTool(server, config);
   registerGetSymbolContextTool(server, config);
   registerGetFileTool(server, config);
-  registerSuggestEditLocationsTool(server, config);
+
   registerGetProjectMapTool(server, config);
   registerGetWorkingDiffTool(server);
   registerRefreshLocalIndexTool(server);
@@ -449,10 +449,10 @@ async function runSessionHintCommand() {
   }
 
   if (isBroadTask) {
-    lines.push("→ REQUIRED: Call recommend_agent_workflow(task=<task description>) before reading files or editing.");
-    lines.push("  Hard gate: skip only for trivial single-symbol fixes where the file is already known.");
+    lines.push("→ REQUIRED: Gather repo context before reading files or editing.");
+    lines.push("  Use explore_task when files are unclear; inspect exact files/symbols directly when already known.");
   } else {
-    lines.push("→ For broad tasks, call recommend_agent_workflow(task) first.");
+    lines.push("→ For broad tasks with unclear files, call explore_task(task) first.");
   }
 
   console.log(lines.join("\n"));

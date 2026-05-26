@@ -109,7 +109,7 @@ export function markToolDone(
   resultText: string,
   toolCallId?: string,
 ): Message[] {
-  const success = !resultText.includes("[ERROR]");
+  const success = !resultText.startsWith("[ERROR] ");
   const marker = success ? " ✓" : " ✗";
   const displayName = normalizeToolDisplayName(toolName);
   const summarizedResult = summarizeToolResult(resultText);

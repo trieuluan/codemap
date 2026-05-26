@@ -8,8 +8,8 @@ Do not edit production files while writing the plan. Implementation starts only 
 
 ## Process
 
-1. Call `recommend_agent_workflow(task)` if it was not already called.
-2. Use recommended CodeMap tools to confirm files, symbols, risks, and verification commands.
+1. Re-ground with the narrowest CodeMap context tool for the task shape.
+2. Confirm affected files, symbols, risks, and verification commands.
 3. Use `codemap://agent-pack/templates/implementation-plan`.
 4. Write exact steps, files/modules, interfaces, edge cases, assumptions, and checks.
 5. Wait for approval when the task is high-risk or product-facing.

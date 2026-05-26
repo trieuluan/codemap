@@ -34,7 +34,7 @@ const FOOTER = [
   "",
   DIVIDER,
   "  Done! For every broad task, start with:",
-  "  recommend_agent_workflow(task=<description>)",
+  "  explore_task(task=<description>) when files are unclear",
   DIVIDER,
 ].join("\n");
 

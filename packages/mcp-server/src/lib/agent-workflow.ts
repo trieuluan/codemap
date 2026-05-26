@@ -25,7 +25,6 @@ export const TASK_TYPES = [
 ] as const;
 
 export type AgentTaskType = (typeof TASK_TYPES)[number];
-export type AgentRiskLevel = "low" | "medium" | "high";
 
 export const WORKFLOW_PHASES = [
   "orient",
@@ -67,7 +66,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "executing-plans",
       "verification-before-completion",
     ],
-    firstTools: ["recommend_agent_workflow", "explore_task", "summarize_feature_area"],
+    firstTools: ["explore_task", "summarize_feature_area"],
     hardGates: [
       "Do not edit production files before the design is approved.",
       "After design approval, write an implementation plan before code changes.",
@@ -86,7 +85,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "safe-edit-and-reimport",
       "verification-before-completion",
     ],
-    firstTools: ["recommend_agent_workflow", "explore_task", "search_codebase", "get_symbol_context"],
+    firstTools: ["explore_task", "search_codebase", "get_symbol_context"],
     hardGates: [
       "Reproduce or identify the failing path before changing code.",
       "Prefer a failing test before production changes when the repo has a matching test pattern.",
@@ -104,7 +103,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "feature-area-investigation",
       "interpreting-codemap-output",
     ],
-    firstTools: ["recommend_agent_workflow", "search_codebase", "get_symbol_context", "find_callers"],
+    firstTools: ["search_codebase", "get_symbol_context", "find_callers"],
     hardGates: [
       "Do not patch before the likely root cause is grounded in CodeMap context.",
       "Use symbol context and callers/usages before raw broad reads.",
@@ -117,7 +116,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "review",
     description: "Code review, PR review, diff review, or risk assessment.",
     requiredSkills: ["token-efficient-code-review", "interpreting-codemap-output"],
-    firstTools: ["recommend_agent_workflow", "get_working_diff", "get_diff", "find_usages"],
+    firstTools: ["get_working_diff", "get_diff", "find_usages"],
     hardGates: [
       "Lead with findings by severity.",
       "Use changed symbols and usages before summarizing broad context.",
@@ -134,7 +133,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "safe-edit-and-reimport",
       "verification-before-completion",
     ],
-    firstTools: ["recommend_agent_workflow", "find_related_files", "find_usages", "get_working_diff"],
+    firstTools: ["find_related_files", "find_usages", "get_working_diff"],
     hardGates: [
       "Confirm behavior-preserving scope before edits.",
       "Use usages/callers before moving or renaming shared symbols.",
@@ -148,7 +147,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "test",
     description: "Add, repair, or improve tests.",
     requiredSkills: ["test-driven-development", "verification-before-completion"],
-    firstTools: ["recommend_agent_workflow", "search_codebase", "get_symbol_context"],
+    firstTools: ["search_codebase", "get_symbol_context"],
     hardGates: [
       "Find existing test patterns before adding tests.",
       "For bug coverage, confirm the test fails before the fix when feasible.",
@@ -161,7 +160,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "research",
     description: "Read-only exploration, codebase explanation, feasibility analysis, or planning.",
     requiredSkills: ["mcp-first-exploration", "interpreting-codemap-output"],
-    firstTools: ["recommend_agent_workflow", "explore_task", "find_related_files", "get_files"],
+    firstTools: ["explore_task", "find_related_files", "get_files"],
     hardGates: [
       "Prefer CodeMap summaries, rankings, and next steps before opening raw files.",
       "Do not edit files for read-only research tasks.",
@@ -189,7 +188,6 @@ export const AGENT_WORKFLOW_SUMMARY = [
   "Use find_usages/find_callers for symbol impact analysis.",
   "Use get_working_diff after edits, then build/test as appropriate.",
   "Call refresh_local_index after local edits; call trigger_reimport and wait_for_import only when cloud/web indexing should refresh.",
-  "Call recommend_agent_workflow for broad tasks to get required skills, hard gates, artifact templates, and verification checks.",
   "Read required CodeMap Agent Pack skills before implementing gated work.",
 ];
 
@@ -200,13 +198,13 @@ export const AGENT_WORKFLOW_SEQUENCE = [
   "Narrow lookup by name: search_codebase -> get_file(include=[outline] or [symbols]).",
   "Conceptual lookup (no exact name): search_codebase(semantic=true) -> get_file(include=[outline]).",
   "Refactor/cleanup: find_usages or find_callers -> get_file(blast_radius if risky) -> get_working_diff.",
-  "Broad work: recommend_agent_workflow -> required skills -> design/plan gates -> implementation.",
+  "Broad work: choose CodeMap exploration tools -> required skills -> design/plan gates -> implementation.",
   "Verification: inspect diff, build/test, refresh_local_index, and decide whether cloud reimport is needed.",
 ];
 
 export const SKILL_ROUTING_RULE_MARKDOWN = `# CodeMap Skill Routing
 
-Use \`recommend_agent_workflow\` before broad implementation, debugging, review, refactor, testing, or research tasks.
+Choose the appropriate CodeMap context tool before broad implementation, debugging, review, refactor, testing, or research tasks.
 
 ## Routing Matrix
 
@@ -234,7 +232,7 @@ CodeMap Agent Pack uses Superpowers-style gates to keep agents from jumping into
 
 ## Gates
 
-1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then run the first tools from \`recommend_agent_workflow\`.
+1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then choose the narrowest CodeMap context tool: \`explore_task\` for broad unclear work, \`search_codebase\` for known names, \`find_related_files\` for related-file questions, or \`get_files\`/\`get_file\` for known paths.
 2. **Design** — for features or vague tasks, complete brainstorming and get design approval before editing production files.
 3. **Plan** — after design approval, write an implementation plan with exact files, steps, and verification commands.
 4. **Implement** — follow the plan or TDD loop; keep changes scoped.
@@ -371,89 +369,5 @@ export function buildAgentWorkflowMarkdown() {
     WORKFLOW_GATES_RULE_MARKDOWN,
     "",
     VERIFICATION_BEFORE_COMPLETION_RULE_MARKDOWN,
-  ].join("\n");
-}
-
-export function isAgentTaskType(value: string | undefined): value is AgentTaskType {
-  return TASK_TYPES.some((taskType) => taskType === value);
-}
-
-export function inferAgentTaskType(task: string): AgentTaskType {
-  const normalized = task.toLowerCase();
-  if (/\b(review|pr|diff|audit|findings)\b/.test(normalized)) return "review";
-  if (/\b(test|spec|coverage|failing test|unit test|integration test)\b/.test(normalized)) {
-    return "test";
-  }
-  if (/\b(refactor|cleanup|rename|move|restructure)\b/.test(normalized)) return "refactor";
-  if (/\b(debug|investigate|root cause|why|trace)\b/.test(normalized)) return "debugging";
-  if (/\b(fix|bug|regression|broken|error|fail|failing)\b/.test(normalized)) return "bugfix";
-  if (/\b(explain|research|explore|analyze|how does|where is)\b/.test(normalized)) return "research";
-  return "feature";
-}
-
-export function recommendAgentWorkflow(input: {
-  task: string;
-  taskType?: string;
-  risk?: AgentRiskLevel;
-}) {
-  const recommendedTaskType = isAgentTaskType(input.taskType)
-    ? input.taskType
-    : inferAgentTaskType(input.task);
-  const route = WORKFLOW_ROUTES[recommendedTaskType];
-  const risk = input.risk ?? "medium";
-  const hardGates =
-    risk === "high"
-      ? ["Treat this as high risk: require explicit user approval before edits.", ...route.hardGates]
-      : route.hardGates;
-
-  return {
-    recommendedTaskType,
-    risk,
-    phases: route.phases,
-    requiredSkills: route.requiredSkills.map((skill) => ({
-      name: `codemap-${skill}`,
-      resourceUri: skillResourceUri(skill),
-    })),
-    hardGates,
-    nextTools: route.firstTools,
-    requiredOutputs: route.requiredOutputs,
-    artifactTemplates: ARTIFACT_TEMPLATES,
-    verificationChecklist: route.completionChecks,
-    resourceUris: [
-      MCP_FIRST_RULE_URI,
-      TASK_LIFECYCLE_RULE_URI,
-      SKILL_ROUTING_RULE_URI,
-      WORKFLOW_GATES_RULE_URI,
-      VERIFICATION_BEFORE_COMPLETION_RULE_URI,
-      ...route.requiredSkills.map((skill) => skillResourceUri(skill)),
-      ...ARTIFACT_TEMPLATES.map((template) => template.resourceUri),
-    ],
-  };
-}
-
-export function buildWorkflowRecommendationMarkdown(
-  recommendation: ReturnType<typeof recommendAgentWorkflow>,
-) {
-  return [
-    `# Recommended CodeMap Workflow: ${recommendation.recommendedTaskType}`,
-    "",
-    `Risk: ${recommendation.risk}`,
-    "",
-    "## Required Skills",
-    ...recommendation.requiredSkills.map(
-      (skill) => `- ${skill.name} — ${skill.resourceUri}`,
-    ),
-    "",
-    "## Hard Gates",
-    ...recommendation.hardGates.map((gate) => `- ${gate}`),
-    "",
-    "## Next Tools",
-    ...recommendation.nextTools.map((tool) => `- ${tool}`),
-    "",
-    "## Required Outputs",
-    ...recommendation.requiredOutputs.map((output) => `- ${output}`),
-    "",
-    "## Verification",
-    ...recommendation.verificationChecklist.map((check) => `- ${check}`),
   ].join("\n");
 }

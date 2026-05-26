@@ -1,8 +1,8 @@
 # CodeMap Workflow Skills
 
-## Start Here: Workflow Recommendation
+## Start Here: Context Routing
 
-For broad work, call `recommend_agent_workflow(task)` before implementing. Follow the returned required skills, hard gates, first tools, artifact templates, and verification checklist.
+For broad work, choose the narrowest CodeMap context tool before implementing. Use `explore_task` when files are unclear, `search_codebase` for known names, `find_related_files` for related-file questions, and `get_files`/`get_file` for known paths.
 
 ## Brainstorming (design before code)
 
@@ -28,7 +28,7 @@ No production code before a failing test exists.
 
 Use after a design is approved and before implementation begins.
 
-1. Re-ground with CodeMap using the tools recommended by `recommend_agent_workflow`.
+1. Re-ground with CodeMap using the narrowest context tool for the task.
 2. Use `codemap://agent-pack/templates/implementation-plan`.
 3. Write exact steps, files/modules, interfaces, edge cases, and verification commands.
 4. Remove decisions from the implementer; record assumptions explicitly.

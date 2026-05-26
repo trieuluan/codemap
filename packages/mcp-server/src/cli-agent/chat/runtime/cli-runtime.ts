@@ -26,6 +26,8 @@ export interface SingleAgentRuntimeInput {
   onToolResult?: (name: string, result: string, id?: string) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
+  onPlanReady?: (plan: string) => void;
+  onPlanWait?: () => Promise<PlanReviewAction>;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string) => void) => void;

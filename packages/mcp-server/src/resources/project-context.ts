@@ -33,7 +33,7 @@ const TOOLS_LITE = [
   "- explore_task — starting point for any task; returns likelyFiles, entrypoints, symbols, risks, recommendedReads, and suggestedNextTools in one call",
   "- search_codebase — find files, symbols, and exports by keyword; each result includes a read hint showing the optimal get_file include mode",
   "- get_file — read a file with include modes: content, outline (symbol list), symbols (specific function bodies), blast_radius (impact analysis)",
-  "- suggest_edit_locations — candidate generator for likely files/symbols to edit for a natural-language task; each suggestion includes a readPlan",
+
   "- get_project_map — browse the full file tree",
   "- get_project — get the current linked project from .codemap/mcp.json; call with no arguments",
   "- link_project — link the workspace to an existing CodeMap project; auto-detects by git remote URL",
@@ -49,7 +49,7 @@ const TOOLS_LITE = [
 ];
 
 const TOOLS_STANDARD_EXTRA = [
-  "- get_files — batch outline fetch for up to 7 files in one call; use after suggest_edit_locations to survey candidates",
+  "- get_files — batch outline fetch for up to 7 files in one call; use after explore_task or find_related_files to survey candidates",
   "- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase",
   "- find_callers — find static callers of a symbol from a given file; faster than find_usages when file is known",
   "- get_diff — show git diff between two refs (commits, branches, tags)",
@@ -57,7 +57,7 @@ const TOOLS_STANDARD_EXTRA = [
   "- find_related_files — find files related to a query, file, or symbol using multi-signal ranking",
   "- get_symbol_context — get full body and context for a specific symbol (function, class, method) by name and file",
   "- summarize_feature_area — summarize the purpose, key files, and entry points of a feature area or directory",
-  "- recommend_agent_workflow — get a task-specific workflow recommendation with required skills, gates, and artifact templates; call before implementing a broad task",
+  "- explore_task — orient on broad tasks with unclear files; returns likely files, entry points, risks, and suggested next tools",
   "- create_project — create or reuse a CodeMap project from the current workspace",
   "- create_project_from_github — create or reuse a CodeMap project from a GitHub repository",
   "- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository",
@@ -92,8 +92,8 @@ const WORKFLOW_LITE = [
 ];
 
 const WORKFLOW_STANDARD_EXTRA = [
-  "- Call recommend_agent_workflow before implementing any broad task — it returns required skills, hard gates, and artifact templates specific to the task type.",
-  "- After suggest_edit_locations returns candidates, use get_files to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
+  "- For broad tasks with unclear files, call explore_task before implementation; if exact files or symbols are already known, inspect them directly.",
+  "- After explore_task returns candidates, use get_files to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
   "- Use get_symbol_context to read the full body of a specific function or class when you already know its name and file.",
   "- Use summarize_feature_area to get a high-level overview of a feature directory before diving into individual files.",
   "- Use find_usages to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names.",

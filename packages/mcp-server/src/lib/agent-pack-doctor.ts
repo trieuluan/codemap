@@ -60,7 +60,7 @@ const CONCRETE_TARGETS: ConcreteTarget[] = [
 const COMMON_WORKFLOW_PHRASES = [
   "get_agent_workflow",
   "get_project",
-  "recommend_agent_workflow",
+  "explore_task",
 ];
 
 function isConcreteTarget(target: string | undefined): target is ConcreteTarget {
@@ -150,7 +150,7 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Codex agent pack guide",
         relativePath: ".codex/codemap-agent-pack.md",
         required: true,
-        phrases: ["recommend_agent_workflow", "verification"],
+        phrases: ["explore_task", "verification"],
       },
       ...skillExpectations(target),
     ];
@@ -163,7 +163,7 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Claude root instructions",
         relativePath: "CLAUDE.md",
         required: true,
-        phrases: ["recommend_agent_workflow", "codemap-brainstorming"],
+        phrases: ["explore_task", "codemap-brainstorming"],
       },
       {
         target,

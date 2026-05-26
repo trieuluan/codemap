@@ -6,7 +6,7 @@ Khi cần tìm hiểu code trong project `codemap`, ưu tiên dùng MCP tools tr
 
 Chọn tool theo shape của câu hỏi, không dùng một thứ tự cứng cho mọi case:
 
-1. `explore_task` — dùng trước cho task rộng như "fix bug X", "implement Y", "investigate Z". Tool này trả về context pack đầy đủ: likely files, entrypoints, symbols, risks, recommended reads, và suggested next tools. Nó thay cho việc gọi `search_codebase` + `suggest_edit_locations` riêng lẻ.
+1. `explore_task` — dùng trước cho task rộng như "fix bug X", "implement Y", "investigate Z". Tool này trả về context pack đầy đủ: likely files, entrypoints, symbols, risks, recommended reads, và suggested next tools. Nó thay cho việc gọi `search_codebase` riêng lẻ rồi tự follow-up.
 2. `find_related_files` — dùng khi đã có anchor file/symbol, hoặc khi user hỏi "đọc file nào", "file nào liên quan", "scope quanh X". Nếu đã tìm được một file chính bằng `explore_task`/`search_codebase`, gọi `find_related_files(file_path=...)` trước khi chốt reading list.
 3. `search_codebase` — dùng khi có keyword, filename, export, hoặc symbol cụ thể. Tool này nhanh hơn `explore_task` cho lookup hẹp.
 4. `get_files` — survey outline nhiều file cùng lúc sau khi có shortlist. Dùng để xem imports/imported-by/exports/symbols, tối đa 7 file/lần.
@@ -20,7 +20,7 @@ Chọn tool theo shape của câu hỏi, không dùng một thứ tự cứng ch
 ## Lý do
 
 - `Read` load toàn bộ file vào context — tốn token ngay cả khi chỉ cần một đoạn nhỏ
-- `explore_task` gom context pack cho task rộng, tránh tự phối `search_codebase` + `suggest_edit_locations` rồi miss graph context
+- `explore_task` gom context pack cho task rộng, tránh tự phối nhiều tool rời rồi miss graph context
 - `find_related_files` dùng import graph + symbol usage + same feature domain, hợp nhất cho câu hỏi "nên đọc file nào?"
 - `search_codebase` trả về đúng symbol/location cần tìm, không load code thừa
 - `get_files` giúp survey nhiều outline song song trước khi đọc content
@@ -36,12 +36,6 @@ Chọn tool theo shape của câu hỏi, không dùng một thứ tự cứng ch
 - Cần xem ai gọi/import symbol cụ thể → `find_callers(path=..., symbol_name=...)`
 - Cần xem local changes trước commit/reimport → `get_working_diff`
 - Cần compare committed refs → `get_diff`
-
-## `suggest_edit_locations`
-
-`suggest_edit_locations` vẫn dùng được cho broad implementation/investigation, nhưng nếu `explore_task` có sẵn thì ưu tiên `explore_task` trước vì nó trả thêm entrypoints, risks, recommended reads, và suggested next tools.
-
-Nếu đã dùng `suggest_edit_locations` để tìm file chính, vẫn nên gọi `find_related_files` với anchor file trước khi kết luận reading list.
 
 ## Không dùng Agent tool cho research
 
@@ -76,7 +70,6 @@ Chỉ dùng grep khi cần tìm dynamic access (`obj["methodName"]`), string lit
 Read(repo-parse-graph.ts)  // 1900 dòng, chỉ cần sửa 3 dòng
 Agent("audit dead code")   // tốn quota, có thể làm trực tiếp bằng MCP
 Bash grep -rn "createProject" packages/api  // factory method đã được index
-suggest_edit_locations("auth redirect bug") + search_codebase(...)  // thiếu graph context nếu không follow-up
 ```
 
 **Nên:**

@@ -9,8 +9,7 @@ Do not edit production files while writing the plan. Implementation starts only 
 ## Process
 
 1. **Re-ground in CodeMap context**
-   - Call `recommend_agent_workflow(task)` if it was not already called.
-   - Use the recommended CodeMap tools to confirm affected files, symbols, and risks.
+   - Use the narrowest CodeMap context tool to confirm affected files, symbols, and risks.
    - Inspect only the outlines or symbols needed to make implementation decisions.
 
 2. **Write a concrete implementation plan**
@@ -31,4 +30,3 @@ Do not edit production files while writing the plan. Implementation starts only 
 ## Output
 
 Return a concise plan with: summary, key edits, verification, and assumptions.
-

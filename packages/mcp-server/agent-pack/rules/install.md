@@ -30,6 +30,6 @@ Codex installs `AGENTS.md`, `.codex/codemap-agent-pack.md`, and CodeMap skills u
 Claude installs `CLAUDE.md`, `.claude/rules/codemap-*`, and CodeMap skills under `.claude/skills/codemap-*`.
 Cursor installs `.cursor/rules/codemap.mdc` with MCP-first, lifecycle, and workflow-skill routing guidance.
 
-For broad implementation/debug/review/refactor/test/research work, installed guidance tells agents to call `recommend_agent_workflow` before editing and to follow returned skills, hard gates, artifact templates, and verification checks.
+For broad implementation/debug/review/refactor/test/research work, installed guidance tells agents to use CodeMap context tools before editing and to follow the relevant skills, hard gates, artifact templates, and verification checks.
 
 Use `codemap-mcp agent-pack-path` to print the local plugin root path for Codex-style plugin registration.

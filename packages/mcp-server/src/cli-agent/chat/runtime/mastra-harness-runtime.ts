@@ -4,6 +4,7 @@ import type { AgentLoopResult } from "../agent/agent-loop.js";
 import type {
   SingleAgentRuntimeInput,
   MultiPhaseLoopInput,
+  PlanReviewAction,
 } from "./cli-runtime.js";
 import {
   bridgeCommonEvent,
@@ -158,11 +159,69 @@ interface HarnessSingleton {
 }
 
 let _singleton: HarnessSingleton | null = null;
+let _uninstallFetchInterceptor: (() => void) | null = null;
+
+function installTemperatureInterceptor(baseUrl: string): void {
+  _uninstallFetchInterceptor?.();
+
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const original = globalThis.fetch;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).fetch = function (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): ReturnType<typeof fetch> {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
+
+    if (
+      url.startsWith(normalizedBase) &&
+      (init?.method ?? "GET").toUpperCase() === "POST" &&
+      typeof init?.body === "string"
+    ) {
+      try {
+        const parsed = JSON.parse(init.body) as Record<string, unknown>;
+        if ("temperature" in parsed) {
+          delete parsed.temperature;
+          init = { ...init, body: JSON.stringify(parsed) };
+        }
+      } catch {
+        // not JSON — pass through unchanged
+      }
+    }
+
+    return original.call(globalThis, input, init);
+  };
+
+  _uninstallFetchInterceptor = () => {
+    globalThis.fetch = original;
+    _uninstallFetchInterceptor = null;
+  };
+}
 const ORIGINAL_AGENT_INSTRUCTIONS = new WeakMap<
   object,
   (options?: { requestContext?: unknown }) => unknown
 >();
 const APPLIED_AGENT_INSTRUCTIONS = new WeakMap<object, string>();
+
+type RunHarnessCallbacks = Omit<
+  BridgeCallbacks,
+  | "harness"
+  | "currentStreamTextRef"
+  | "finalTextRef"
+  | "usedToolsRef"
+  | "onPlanApproval"
+  | "onEnd"
+  | "onError"
+> & {
+  onPlanReady?: (plan: string) => void;
+  onPlanWait?: () => Promise<PlanReviewAction>;
+};
 
 // ─── Drain tracking ───────────────────────────────────────────────────────────
 // Tracks when the current harness run has fully settled (agent_end / error).
@@ -213,6 +272,7 @@ export async function drainHarness(timeoutMs = 5000): Promise<void> {
 export async function resetHarnessSingleton(): Promise<void> {
   if (!_singleton) return;
   clearDrainTracking();
+  _uninstallFetchInterceptor?.();
   const old = _singleton;
   _singleton = null;
   try {
@@ -238,6 +298,8 @@ async function createFreshHarness(
 
   const serverConfig = opts.toolClient.getServerConfig();
 
+  installTemperatureInterceptor(opts.baseUrl);
+
   const harnessModelId = resolveHarnessModelId(
     opts.modelId,
     opts.availableModels,
@@ -262,8 +324,8 @@ async function createFreshHarness(
     settingsPath,
     mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
     // Disable orchestration/status tools that cause Mastra's build agent to loop:
-    // get_agent_workflow / recommend_agent_workflow return instructions like
-    // "call explore_task before broad tasks" — the agent follows them recursively.
+    // get_agent_workflow returns workflow instructions; if exposed to the build
+    // agent it can recursively re-orient instead of answering the user.
     // Project/auth status tools can similarly pull a simple answer into setup work.
     disabledTools: MASTRA_DISABLED_TOOLS,
     initialState: {
@@ -301,6 +363,7 @@ async function createFreshHarness(
 
   // Best-effort cleanup when the process exits.
   process.once("exit", () => {
+    _uninstallFetchInterceptor?.();
     try {
       _singleton?.harness.destroy?.();
     } catch {
@@ -504,6 +567,8 @@ export async function runWithMastraHarness(
     onToolResult: input.onToolResult,
     onUsage: input.onUsage,
     onDebug: input.onDebug,
+    onPlanReady: input.onPlanReady,
+    onPlanWait: input.onPlanWait,
     onOMObservation: input.onOMObservation,
     onOMReflection: input.onOMReflection,
     onAskQuestion: input.onAskQuestion,
@@ -726,15 +791,7 @@ function runHarness(
   harness: HarnessLike,
   userMessage: { role: string; content: string },
   signal: AbortSignal | undefined,
-  callbacks: Omit<
-    BridgeCallbacks,
-    | "harness"
-    | "currentStreamTextRef"
-    | "finalTextRef"
-    | "usedToolsRef"
-    | "onEnd"
-    | "onError"
-  >,
+  callbacks: RunHarnessCallbacks,
   imageFiles?: Array<{ data: string; mimeType: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
@@ -768,6 +825,51 @@ function runHarness(
       signal?.removeEventListener("abort", onAbort);
       unsubscribe();
       reject(err);
+    };
+
+    const handlePlanApproval = async (planId: string, plan: string) => {
+      callbacks.onPlanReady?.(plan);
+      if (!callbacks.onPlanWait) {
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "approved" },
+        });
+        return;
+      }
+
+      const raw = await callbacks.onPlanWait();
+      const action = normalizePlanAction(raw);
+      if (action === "cancel") {
+        harness.abort?.();
+        finish({
+          text: "Plan cancelled.",
+          messages: [],
+          usedTools: false,
+          unsupportedToolCalling: false,
+        });
+        return;
+      }
+
+      if (action === "implement") {
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "approved" },
+        });
+        try {
+          const reminder = harness.sendSignal?.({
+            type: "system-reminder",
+            contents: "The user has approved the plan, begin executing.",
+          });
+          if (reminder) await reminder.accepted;
+        } catch {
+          /* non-fatal — approval response is the important part */
+        }
+      } else {
+        await harness.respondToPlanApproval?.({
+          planId,
+          response: { action: "rejected", feedback: action },
+        });
+      }
     };
 
     const unsubscribe = harness.subscribe((event: HarnessEvent) => {
@@ -823,6 +925,9 @@ function runHarness(
           set: (v) => {
             usedTools = v;
           },
+        },
+        onPlanApproval: (planId, plan) => {
+          handlePlanApproval(planId, plan).catch(fail);
         },
         onEnd: (usage) => {
           finish({

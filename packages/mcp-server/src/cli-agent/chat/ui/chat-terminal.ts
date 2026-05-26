@@ -106,7 +106,7 @@ export function buildCurrentTaskContent(content: string): string {
     content,
     "</task>",
     "",
-    "Work only on this task. When calling recommend_agent_workflow or explore_task, use the task above as the description.",
+    "Work only on this task. Use repository tools only when they are needed for this task; if the user already named exact files or symbols, inspect those directly.",
   ].join("\n");
 }
 
@@ -713,6 +713,35 @@ export class ChatTerminal {
         sessionProjectCtx,
         resolvedAgentModel,
       );
+      const handlePlanReady = (plan: string) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        // Remove the streaming assistant message — it contains the same plan content
+        // streamed via onToken. Keeping it would show the plan twice (once as an
+        // assistant message without prefix, once as "plan: ..." below).
+        if (hasStreamingEntry) {
+          this.store.dispatch((prev) => ({
+            messages: prev.messages.filter(
+              (m) => m.role !== "assistant" || m.content !== streamingContent,
+            ),
+          }));
+        }
+        resetStreaming();
+        this.appendMessage({
+          role: "tool_call",
+          name: "plan",
+          content: "Plan ✓",
+          toolResults: [
+            {
+              name: "plan",
+              content: plan,
+              fullContent: plan,
+              success: true,
+            },
+          ],
+          expandedContent: plan,
+        });
+        this.bus.scheduleRefresh();
+      };
 
       const result = useMultiPhase
         ? await runMultiPhaseAgentRuntime({
@@ -735,36 +764,7 @@ export class ChatTerminal {
               });
               this.bus.scheduleRefresh();
             },
-            onPlanReady: (plan) => {
-              if (!this.isActiveTask(taskId, taskAbort)) return;
-              // Remove the streaming assistant message — it contains the same plan content
-              // streamed via onToken. Keeping it would show the plan twice (once as an
-              // assistant message without prefix, once as "plan: ..." below).
-              if (hasStreamingEntry) {
-                this.store.dispatch((prev) => ({
-                  messages: prev.messages.filter(
-                    (m) =>
-                      m.role !== "assistant" || m.content !== streamingContent,
-                  ),
-                }));
-              }
-              resetStreaming();
-              this.appendMessage({
-                role: "tool_call",
-                name: "plan",
-                content: "Plan ✓",
-                toolResults: [
-                  {
-                    name: "plan",
-                    content: plan,
-                    fullContent: plan,
-                    success: true,
-                  },
-                ],
-                expandedContent: plan,
-              });
-              this.bus.scheduleRefresh();
-            },
+            onPlanReady: handlePlanReady,
             onPlanWait: () => this.waitForPlanReview(),
             imageFiles,
             ...sharedCallbacks,
@@ -780,6 +780,8 @@ export class ChatTerminal {
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
+            onPlanReady: handlePlanReady,
+            onPlanWait: () => this.waitForPlanReview(),
             imageFiles,
             ...sharedCallbacks,
           });
