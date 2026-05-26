@@ -195,6 +195,17 @@ export async function ensureLocalIndexWithSummary(input?: { force?: boolean }) {
   return { store, summary };
 }
 
+/**
+ * Returns true when the cloud API served a file with status "ready" but no
+ * actual text content — which happens when the cloud index is stale relative
+ * to local uncommitted edits.  Callers should fall back to the local index.
+ */
+export function isCloudContentEmpty(
+  content: { status: string; content: string | null } | null,
+): boolean {
+  return content?.status === "ready" && !content.content;
+}
+
 export function shouldFallbackToLocal(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return (

@@ -12,6 +12,7 @@ import type {
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
+  isCloudContentEmpty,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "../lib/local-index.js";
@@ -335,6 +336,11 @@ export function registerGetSymbolContextTool(
       const content =
         contentResult.status === "fulfilled" ? contentResult.value : null;
       const parse = parseResult.status === "fulfilled" ? parseResult.value : null;
+
+      // Cloud returned "ready" but null content — stale index, use local.
+      if (isCloudContentEmpty(content)) {
+        return localResponse(resolvedProjectId, "cloud_content_unavailable");
+      }
 
       if (!content && !parse) {
         const remoteError =

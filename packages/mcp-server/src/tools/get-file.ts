@@ -9,6 +9,7 @@ import { readWorkspaceProjectId } from "../lib/workspace-project.js";
 import type { FileContent, BlastRadius } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
+  isCloudContentEmpty,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
   toRepoRelativePath,
@@ -572,9 +573,6 @@ export function registerGetFileTool(
                 ? parseResult.reason
                 : null;
           const msg = err instanceof Error ? err.message : String(err);
-          if (msg.includes("404")) {
-            return localResponse(resolvedProjectId, msg);
-          }
           if (shouldFallbackToLocal(err)) {
             return localResponse(resolvedProjectId, msg);
           }
@@ -586,6 +584,13 @@ export function registerGetFileTool(
           contentResult.status === "fulfilled" ? contentResult.value : null;
         const parse =
           parseResult.status === "fulfilled" ? parseResult.value : null;
+
+        // Cloud returned "ready" but null content — index is stale relative to
+        // local uncommitted edits.  Fall back to the local index which always
+        // reflects the current working tree after refresh_local_index.
+        if (wantContent && isCloudContentEmpty(content)) {
+          return localResponse(resolvedProjectId, "cloud_content_unavailable");
+        }
         const errors: string[] = [];
 
         // Content — skip if only fetched to support symbols section
