@@ -8,30 +8,15 @@ import {
   readPriorityResources,
 } from "../../../lib/workspace-project.js";
 import type { ChatToolDefinition } from "../../types.js";
+import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
 import { McpServerConnection } from "./mcp-server-connection.js";
+
+// Re-export types so existing consumers don't need to change imports
+export type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
 
 type ExtraServerConfig = { command: string; args?: string[]; env?: Record<string, string> };
 
 const require = createRequire(import.meta.url);
-
-export interface AgentTool {
-  name: string;
-  description?: string;
-  inputSchema: Record<string, unknown>;
-}
-
-export interface AgentToolCallResult {
-  content: string;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-}
-
-export interface McpServerStatus {
-  name: string;
-  connected: boolean;
-  tools: number;
-  error?: string;
-}
 
 const DEFAULT_PRIORITY_RESOURCES = [
   "codemap://project/context",
