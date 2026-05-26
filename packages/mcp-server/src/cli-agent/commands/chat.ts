@@ -6,6 +6,7 @@ import { NineRouterProvider } from "../provider.js";
 import type { GatewayConfig } from "../types.js";
 import { printGatewayHint } from "./gateway-hint.js";
 import { loadConfig } from "../../config.js";
+import { installStderrInterceptor } from "../chat/ui/stderr-interceptor.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const provider = new NineRouterProvider(ctx.config.baseUrl, ctx.config.apiKey);
@@ -15,6 +16,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const toolClient = new CodeMapMcpToolClient();
 
   await toolClient.connectExtras();
+
+  const cleanupInterceptor = installStderrInterceptor();
 
   try {
     const mcpConfig = await loadConfig();
@@ -36,6 +39,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       throw err;
     }
   } finally {
+    cleanupInterceptor();
     await toolClient.close();
   }
 }

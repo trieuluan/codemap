@@ -8,6 +8,7 @@ import {
   runSingleAgentRuntime,
   type ChatUiMode,
 } from "../runtime/cli-runtime.js";
+import type { AskQuestionOption } from "../runtime/mastra-events.js";
 import {
   resetHarnessSingleton,
   getMastraThreadId,
@@ -172,6 +173,7 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _planReviewResolve: ((action: string) => void) | null = null;
+  private _askQuestionResolve: ((answer: string) => void) | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
   private _activeTaskId = 0;
@@ -268,6 +270,8 @@ export class ChatTerminal {
     this._activeTaskId = 0;
     this._planReviewResolve?.("cancel");
     this._planReviewResolve = null;
+    this._askQuestionResolve?.("(skipped)");
+    this._askQuestionResolve = null;
 
     const nextMessages = shouldRollback
       ? lastUserIdx >= 0
@@ -280,6 +284,7 @@ export class ChatTerminal {
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       planReview: { active: false, selection: 0 },
+      askQuestion: null,
       streaming: { active: false, content: "", entryIndex: -1 },
     });
     return shouldRollback ? canceledPrompt : null;
@@ -299,6 +304,23 @@ export class ChatTerminal {
     this._planReviewResolve?.(action);
     this._planReviewResolve = null;
     this.store.dispatch({ planReview: { active: false, selection: 0 } });
+    this.bus.scheduleRefresh();
+  }
+
+  /** Called by the multi-phase/single loop: pause and wait for user to answer ask_user question. */
+  waitForAskQuestion(questionId: string, question: string, options?: { label: string; description?: string }[]): Promise<string> {
+    return new Promise((resolve) => {
+      this._askQuestionResolve = resolve;
+      this.store.dispatch({ askQuestion: { active: true, questionId, question, options, selection: 0 } });
+      this.bus.scheduleRefresh();
+    });
+  }
+
+  /** Called by the UI when user answers the ask_user question. */
+  resolveAskQuestion(answer: string): void {
+    this._askQuestionResolve?.(answer);
+    this._askQuestionResolve = null;
+    this.store.dispatch({ askQuestion: null });
     this.bus.scheduleRefresh();
   }
 
@@ -605,6 +627,14 @@ export class ChatTerminal {
         } else {
           this.logger?.logDebugInfo(info);
         }
+      },
+      onAskQuestion: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string) => void) => {
+        if (!this.isActiveTask(taskId, taskAbort)) return;
+        this.waitForAskQuestion(questionId, question, options).then((answer) => {
+          respond(answer);
+        }).catch(() => {
+          respond("(skipped)");
+        });
       },
     };
 

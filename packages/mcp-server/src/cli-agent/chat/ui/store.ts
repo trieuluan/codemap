@@ -142,6 +142,15 @@ export interface UIState {
   // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
   planReview: { active: boolean; selection: number };
 
+  // ask_user: AI is waiting for user to answer an inline question
+  askQuestion: {
+    active: boolean;
+    questionId: string;
+    question: string;
+    options?: { label: string; description?: string }[];
+    selection: number;
+  } | null;
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -204,6 +213,7 @@ export function createInitialState(opts: {
     synthRunning: false,
     planMode: false,
     planReview: { active: false, selection: 0 },
+    askQuestion: null,
     debug: opts.debug ?? false,
     debugLogFile: null,
   };

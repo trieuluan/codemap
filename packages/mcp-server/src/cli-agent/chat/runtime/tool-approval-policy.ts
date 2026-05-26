@@ -84,6 +84,14 @@ export function buildToolPreview(
     }
   }
 
+  if (normalizedName.includes("submit_plan")) {
+    const title = getStringArg(args, ["title"]);
+    const plan = getStringArg(args, ["plan"]);
+    if (plan) {
+      return title ? `# ${title}\n\n${plan}` : plan;
+    }
+  }
+
   return fenced("json", compactJson(args));
 }
 

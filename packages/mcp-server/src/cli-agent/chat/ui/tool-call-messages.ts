@@ -41,6 +41,8 @@ export function summarizeToolArgs(toolName: string, args: string): string {
     "q",
     "url",
     "command",
+    "title",
+    "question",
     "id",
   ]);
   if (direct) return direct;

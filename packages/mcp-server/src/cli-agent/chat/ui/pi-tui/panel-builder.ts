@@ -17,6 +17,7 @@ import {
   SPINNER,
 } from "./theme.js";
 import { fitLine, padToWidth, stripAnsi, truncateVisible } from "./text.js";
+import { isGatewayOffline } from "../stderr-interceptor.js";
 
 function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   if (!localCommit || !cloudCommit) return false;
@@ -62,13 +63,16 @@ export function buildStatusBar(
   const workspace = state.workspace?.repoName ?? state.config.profile;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
 
+  const gatewayTag = isGatewayOffline()
+    ? ` ${C_MUTED}· ✗ models.dev${RESET}`
+    : "";
   const right = statusMessage
     ? `${C_WARNING}${statusMessage}${RESET}`
     : state.planMode
       ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
       : debugMode
         ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
-        : `${C_ACTION}MCP connected${RESET}`;
+        : `${C_ACTION}MCP connected${RESET}${gatewayTag}`;
 
   const reimportHint = commitsDiffer(
     state.workspace?.localCommit,
@@ -221,8 +225,31 @@ export function buildPanel(
     );
   }
 
-  // Hint bar — shows plan review options when waiting for user approval.
-  if (state.planReview?.active) {
+  // ask_user prompt — AI is waiting for an inline answer.
+  if (state.askQuestion?.active) {
+    const { question, options, selection } = state.askQuestion;
+    const questionLines = question.split("\n");
+    for (const ql of questionLines) {
+      out.push(fitLine(`  ${C_AI}? ${RESET}${C_WHITE}${ql}${RESET}`, w));
+    }
+    if (options && options.length > 0) {
+      out.push(
+        fitLine(
+          `  ${C_ACTION}↑↓${RESET}${C_GRAY}/select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}/confirm · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`,
+          w,
+        ),
+      );
+      for (const [idx, opt] of options.entries()) {
+        const selected = idx === (selection ?? 0);
+        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
+        const label = selected ? `${C_WHITE}${BOLD}${opt.label}${RESET}` : `${C_WHITE}${opt.label}${RESET}`;
+        const desc = opt.description ? `  ${C_GRAY}${opt.description}${RESET}` : "";
+        out.push(fitLine(`  ${prefix} ${label}${desc}`, w));
+      }
+    } else {
+      out.push(fitLine(`  ${C_GRAY}Type answer + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to reply · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`, w));
+    }
+  } else if (state.planReview?.active) {
     const sel = state.planReview.selection ?? 0;
     const PLAN_OPTIONS = [
       {

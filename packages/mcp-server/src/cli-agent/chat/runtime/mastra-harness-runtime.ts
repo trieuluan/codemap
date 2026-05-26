@@ -506,6 +506,7 @@ export async function runWithMastraHarness(
     onDebug: input.onDebug,
     onOMObservation: input.onOMObservation,
     onOMReflection: input.onOMReflection,
+    onAskQuestion: input.onAskQuestion,
     mcpServerIds: _singleton?.mcpServerIds,
   };
 
@@ -626,6 +627,15 @@ export async function runMultiPhaseWithMastra(
           planId,
           response: { action: "approved" },
         });
+        try {
+          const signal = harness.sendSignal?.({
+            type: "system-reminder",
+            contents: "The user has approved the plan, begin executing.",
+          });
+          if (signal) await signal.accepted;
+        } catch {
+          /* non-fatal — harness starts build phase even if signal is not accepted */
+        }
       } else {
         await harness.respondToPlanApproval?.({
           planId,
@@ -660,6 +670,7 @@ export async function runMultiPhaseWithMastra(
         onDebug: input.onDebug,
         onOMObservation: input.onOMObservation,
         onOMReflection: input.onOMReflection,
+        onAskQuestion: input.onAskQuestion,
         harness,
         currentStreamTextRef: {
           get: () => currentStreamText,

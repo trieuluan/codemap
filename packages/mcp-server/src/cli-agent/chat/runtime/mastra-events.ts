@@ -2,6 +2,11 @@ import { buildToolPreview } from "./tool-approval-policy.js";
 
 interface Ref<T> { get(): T; set(v: T): void }
 
+export interface AskQuestionOption {
+  label: string;
+  description?: string;
+}
+
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
@@ -11,6 +16,7 @@ export interface BridgeCallbacks {
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
+  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string) => void) => void;
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
   finalTextRef: Ref<string>;
@@ -149,6 +155,13 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     return;
   }
 
+  if (event.type === "ask_question") {
+    const ev = event as AskQuestionEvent;
+    const respond = (answer: string) => cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
+    cb.onAskQuestion?.(ev.questionId, ev.question, ev.options, respond);
+    return;
+  }
+
   if (event.type === "om_observation_end") {
     const ev = event as OMObservationEndEvent;
     cb.onOMObservation?.(ev.tokensObserved ?? 0, ev.observationTokens ?? 0);
@@ -259,7 +272,7 @@ export interface HarnessLike {
   getTokenUsage?(): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
   setState?(updates: Record<string, unknown>): Promise<void>;
   subscribe(listener: (event: HarnessEvent) => void): () => void;
-  sendSignal?(input: { content: string | { role: string; content: Array<{ type: string; [key: string]: unknown }> } }): {
+  sendSignal?(input: { content?: string | { role: string; content: Array<{ type: string; [key: string]: unknown }> }; type?: string; contents?: string; [key: string]: unknown }): {
     id: string;
     type: string;
     accepted: Promise<{ accepted?: boolean; runId?: string | null }>;
@@ -272,6 +285,7 @@ export interface HarnessLike {
     planId: string;
     response: { action: "approved" | "rejected"; feedback?: string };
   }): Promise<void>;
+  respondToQuestion?(input: { questionId: string; answer: string }): void;
   respondToToolApproval?(input: { decision: "approve" | "decline" | "always_allow_category" }): void;
   destroy?(): Promise<void>;
 }
@@ -313,6 +327,12 @@ interface PlanApprovalEvent extends HarnessEvent {
   planId: string;
   title: string;
   plan: string;
+}
+interface AskQuestionEvent extends HarnessEvent {
+  type: "ask_question";
+  questionId: string;
+  question: string;
+  options?: AskQuestionOption[];
 }
 interface OMObservationEndEvent extends HarnessEvent {
   type: "om_observation_end";

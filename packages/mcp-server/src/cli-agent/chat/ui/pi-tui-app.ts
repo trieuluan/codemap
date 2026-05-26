@@ -277,6 +277,13 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       return;
     }
 
+    // ask_user free-text answer (only when there are no selection options).
+    if (state.askQuestion?.active && trimmed && !(state.askQuestion.options?.length)) {
+      editor.setText("");
+      chatTerminal.resolveAskQuestion(trimmed);
+      return;
+    }
+
     if (!trimmed || state.input.busy) return;
     const imageFiles = pendingImages.map((img) => ({ data: img.data, mimeType: img.mimeType }));
     pendingImages.length = 0;
@@ -439,6 +446,34 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
     if (matchesKey(data, Key.ctrl("o"))) {
       void toggleAllToolCallsExpanded(chatTerminal);
       return { consume: true };
+    }
+
+    // ask_user inline select (only when editor is empty and options are provided).
+    if (state.askQuestion?.active && editor.getText().trim() === "") {
+      const aq = state.askQuestion;
+      const options = aq.options ?? [];
+      const sel = aq.selection ?? 0;
+      if (options.length > 0) {
+        if (matchesKey(data, Key.up)) {
+          chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + options.length - 1) % options.length } });
+          tui.requestRender();
+          return { consume: true };
+        }
+        if (matchesKey(data, Key.down)) {
+          chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + 1) % options.length } });
+          tui.requestRender();
+          return { consume: true };
+        }
+        if (matchesKey(data, Key.enter)) {
+          const selected = options[sel];
+          if (selected) chatTerminal.resolveAskQuestion(selected.label);
+          return { consume: true };
+        }
+      }
+      if (matchesKey(data, Key.escape)) {
+        chatTerminal.resolveAskQuestion("(skipped)");
+        return { consume: true };
+      }
     }
 
     // Plan review inline select (only when editor is empty).
