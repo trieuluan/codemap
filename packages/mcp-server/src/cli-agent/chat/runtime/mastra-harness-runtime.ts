@@ -160,9 +160,11 @@ interface HarnessSingleton {
 
 let _singleton: HarnessSingleton | null = null;
 let _uninstallFetchInterceptor: (() => void) | null = null;
+let _lastModelApiError: Error | null = null;
 
 function installTemperatureInterceptor(baseUrl: string): void {
   _uninstallFetchInterceptor?.();
+  _lastModelApiError = null;
 
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   const original = globalThis.fetch;
@@ -195,7 +197,23 @@ function installTemperatureInterceptor(baseUrl: string): void {
       }
     }
 
-    return original.call(globalThis, input, init);
+    const responsePromise = original.call(globalThis, input, init);
+    if (!url.startsWith(normalizedBase)) return responsePromise;
+
+    return responsePromise.then(async (response) => {
+      if (response.ok) return response;
+      let body = "";
+      try {
+        body = await response.clone().text();
+      } catch {
+        // Ignore response body read errors; status still gives useful context.
+      }
+      const suffix = body.trim() ? `: ${body.trim()}` : "";
+      _lastModelApiError = new Error(
+        `Model API request failed [${response.status}]${suffix}`,
+      );
+      return response;
+    }) as ReturnType<typeof fetch>;
   };
 
   _uninstallFetchInterceptor = () => {
@@ -631,15 +649,24 @@ export async function runMultiPhaseWithMastra(
   });
 
   return new Promise<AgentLoopResult>((resolve, reject) => {
+    _lastModelApiError = null;
     let finalText = "";
     let currentStreamText = "";
     let usedTools = false;
     let settled = false;
+    let lastHarnessError: Error | null = null;
 
     let unsubscribe = () => {};
 
     const finish = (result: AgentLoopResult) => {
       if (settled) return;
+      // If the harness resolved with empty text but saw an upstream error,
+      // reject so the catch block can display the real error to the user.
+      const upstreamError = lastHarnessError ?? _lastModelApiError;
+      if (!result.text && !result.usedTools && upstreamError) {
+        fail(upstreamError);
+        return;
+      }
       settled = true;
       input.onDebug?.({
         event: "mastra_run_finish",
@@ -769,7 +796,10 @@ export async function runMultiPhaseWithMastra(
             usage,
           });
         },
-        onError: fail,
+        onError: (err) => {
+          lastHarnessError = err instanceof Error ? err : new Error(String(err));
+          fail(lastHarnessError);
+        },
       });
     });
 
@@ -795,13 +825,22 @@ function runHarness(
   imageFiles?: Array<{ data: string; mimeType: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
+    _lastModelApiError = null;
     let finalText = "";
     let currentStreamText = "";
     let usedTools = false;
     let settled = false;
+    let lastHarnessError: Error | null = null;
 
     const finish = (result: AgentLoopResult) => {
       if (settled) return;
+      // If the harness resolved with empty text but saw an upstream error,
+      // reject so the catch block can display the real error to the user.
+      const upstreamError = lastHarnessError ?? _lastModelApiError;
+      if (!result.text && !result.usedTools && upstreamError) {
+        fail(upstreamError);
+        return;
+      }
       settled = true;
       callbacks.onDebug?.({
         event: "mastra_run_finish",
@@ -938,7 +977,10 @@ function runHarness(
             usage,
           });
         },
-        onError: fail,
+        onError: (err) => {
+          lastHarnessError = err instanceof Error ? err : new Error(String(err));
+          fail(lastHarnessError);
+        },
       });
       if (event.type === "message_end" && finalText.trim()) {
         callbacks.onDebug?.({
