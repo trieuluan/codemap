@@ -59,6 +59,7 @@ export function buildToolPreview(
 ): string {
   const normalizedName = toolName.toLowerCase();
 
+  // ── Diff preview for mutating file tools ────────────────────────────
   if (normalizedName.includes("apply_patch")) {
     const patch = getStringArg(args, ["patch", "input", "diff", "content"]);
     if (patch) return fenced("diff", patch);
@@ -84,6 +85,7 @@ export function buildToolPreview(
     }
   }
 
+  // ── Plan preview — full markdown ────────────────────────────────────
   if (normalizedName.includes("submit_plan")) {
     const title = getStringArg(args, ["title"]);
     const plan = getStringArg(args, ["plan"]);
@@ -92,70 +94,89 @@ export function buildToolPreview(
     }
   }
 
-  if (
-    normalizedName.endsWith("task_write") ||
-    normalizedName.endsWith("task_update") ||
-    normalizedName.endsWith("task_complete")
-  ) {
-    const taskPreview = buildTaskListPreview(args);
-    if (taskPreview) return taskPreview;
+  // ── Execute command — show raw command ──────────────────────────────
+  if (normalizedName === "execute_command") {
+    const cmd = getStringArg(args, ["command"]);
+    if (cmd) return `$ ${cmd}`;
   }
 
+  // ── Task tools — compact summary ────────────────────────────────────
+  if (
+    normalizedName === "task_write" ||
+    normalizedName === "task_update" ||
+    normalizedName === "task_complete" ||
+    normalizedName === "task_check"
+  ) {
+    return buildTaskSummary(toolName, args);
+  }
+
+  // ── Subagent — show type + truncated task ───────────────────────────
+  if (normalizedName === "subagent") {
+    const agentType = getStringArg(args, ["agentType"]);
+    const task = getStringArg(args, ["task"]);
+    const parts: string[] = [];
+    if (agentType) parts.push(agentType);
+    if (task) parts.push(task.length > 120 ? `${task.slice(0, 117)}...` : task);
+    return parts.join(" · ") || compactJson(args);
+  }
+
+  // ── Read-only / MCP tools — compact JSON (truncated) ────────────────
   return fenced("json", compactJson(args));
 }
 
-interface TaskItem {
-  id?: string;
-  content?: string;
-  activeForm?: string;
-  status?: string;
-}
-
-function buildTaskListPreview(args: Record<string, unknown>): string | null {
-  const tasks = extractTaskList(args);
-  if (!tasks) return null;
-  if (tasks.length === 0) return "_(empty task list)_";
-
-  const lines: string[] = [`**Task list (${tasks.length})**`, ""];
-  for (const task of tasks) {
-    lines.push(formatTaskLine(task));
+function buildTaskSummary(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  // task_write: { tasks: [...] }
+  if (toolName === "task_write") {
+    const tasks = Array.isArray(args.tasks) ? args.tasks : [];
+    if (tasks.length === 0) return "(empty task list)";
+    const counts = countTaskStatuses(tasks);
+    return formatTaskCounts(counts, tasks.length);
   }
-  return lines.join("\n");
+
+  // task_update / task_complete: single task patch
+  const id = getStringArg(args, ["id"]);
+  const status = getStringArg(args, ["status"]);
+  const content = getStringArg(args, ["content"]);
+  const parts: string[] = [];
+  if (id) parts.push(`#${id}`);
+  if (status) parts.push(`→ ${status}`);
+  if (content) parts.push(content.length > 80 ? `${content.slice(0, 77)}...` : content);
+  return parts.join(" · ") || compactJson(args);
 }
 
-function extractTaskList(args: Record<string, unknown>): TaskItem[] | null {
-  const value = args.tasks;
-  if (Array.isArray(value)) {
-    return value.filter((item): item is TaskItem => isPlainObject(item));
+interface TaskStatusCounts {
+  completed: number;
+  inProgress: number;
+  pending: number;
+}
+
+function countTaskStatuses(
+  tasks: Array<Record<string, unknown>>,
+): TaskStatusCounts {
+  let completed = 0;
+  let inProgress = 0;
+  let pending = 0;
+  for (const t of tasks) {
+    const s = typeof t.status === "string" ? t.status : "pending";
+    if (s === "completed") completed++;
+    else if (s === "in_progress") inProgress++;
+    else pending++;
   }
-  // task_update / task_complete operate on a single task — wrap into list.
-  if (typeof args.id === "string" || typeof args.content === "string") {
-    return [args as TaskItem];
-  }
-  return null;
+  return { completed, inProgress, pending };
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function formatTaskLine(task: TaskItem): string {
-  const status = (task.status ?? "pending").toLowerCase();
-  const label =
-    status === "in_progress" && task.activeForm
-      ? task.activeForm
-      : task.content ?? task.activeForm ?? "(untitled)";
-
-  const marker =
-    status === "completed"
-      ? "- [x]"
-      : status === "in_progress"
-        ? "- [~]"
-        : "- [ ]";
-
-  const display = status === "completed" ? `~~${label}~~` : label;
-  const trail = status === "in_progress" ? " _(in progress)_" : "";
-  return `${marker} ${display}${trail}`;
+function formatTaskCounts(
+  c: TaskStatusCounts,
+  total: number,
+): string {
+  const parts: string[] = [];
+  if (c.completed) parts.push(`✓ ${c.completed}`);
+  if (c.inProgress) parts.push(`▸ ${c.inProgress}`);
+  if (c.pending) parts.push(`○ ${c.pending}`);
+  return `${total} task${total !== 1 ? "s" : ""}: ${parts.join(", ")}`;
 }
 
 function getStringArg(

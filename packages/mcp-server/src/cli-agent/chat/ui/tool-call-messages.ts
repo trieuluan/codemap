@@ -1,4 +1,6 @@
-import type { Message, ToolResult } from "./store.js";
+import type { Message, TaskListItem, ToolResult } from "./store.js";
+import type { Store } from "./store.js";
+import { C_SUCCESS, C_ERROR, RESET } from "./pi-tui/theme.js";
 
 export function normalizeToolDisplayName(toolName: string): string {
   return toolName.includes("__")
@@ -110,7 +112,7 @@ export function markToolDone(
   toolCallId?: string,
 ): Message[] {
   const success = !resultText.startsWith("[ERROR] ");
-  const marker = success ? " ✓" : " ✗";
+  const marker = success ? ` ${C_SUCCESS}✓${RESET}` : ` ${C_ERROR}✗${RESET}`;
   const displayName = normalizeToolDisplayName(toolName);
   const summarizedResult = summarizeToolResult(resultText);
   const next = [...messages];
@@ -223,4 +225,178 @@ export function markLastPendingToolCallCanceled(messages: Message[]): Message[] 
     return next;
   }
   return next;
+}
+
+// ─── Task List Sync ───────────────────────────────────────
+
+function isTaskTool(toolName: string): boolean {
+  const normalized = toolName.toLowerCase();
+  return (
+    normalized.includes("task_write") ||
+    normalized.includes("task_update") ||
+    normalized.includes("task_complete") ||
+    normalized.includes("task_check")
+  );
+}
+
+/**
+ * Update the store's taskList based on a task tool call.
+ * Called from onToolResult in chat-terminal.ts.
+ *
+ * @param store - UI store
+ * @param toolName - raw tool name (e.g. "codemap_task_write" or display name "codemap · task_write")
+ * @param argsJson - JSON string of tool arguments (from onToolStart)
+ * @param resultJson - JSON string of tool result (from onToolResult)
+ */
+export function syncTaskListFromTool(
+  store: Store,
+  toolName: string,
+  argsJson: string,
+  resultJson: string,
+): void {
+  if (!isTaskTool(toolName)) return;
+
+  const args = parseJsonObject(argsJson);
+  if (!args) return;
+
+  const result = parseJsonObject(resultJson);
+  const resultTasks = extractTasksFromResult(result);
+
+  const normalized = toolName.toLowerCase();
+
+  if (normalized.includes("task_write")) {
+    handleTaskWrite(store, args, resultTasks);
+  } else if (normalized.includes("task_update")) {
+    handleTaskUpdate(store, args);
+  } else if (normalized.includes("task_complete")) {
+    handleTaskComplete(store, args);
+  } else if (normalized.includes("task_check")) {
+    handleTaskCheck(store, resultTasks);
+  }
+}
+
+function extractTasksFromResult(
+  result: Record<string, unknown> | null,
+): TaskListItem[] | null {
+  if (!result) return null;
+  const structured =
+    result.structuredContent &&
+    typeof result.structuredContent === "object" &&
+    !Array.isArray(result.structuredContent)
+      ? (result.structuredContent as Record<string, unknown>)
+      : result;
+  const data = structured.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const tasks = (data as Record<string, unknown>).tasks;
+  if (!Array.isArray(tasks)) return null;
+  return tasks.filter(
+    (t): t is TaskListItem =>
+      typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
+  );
+}
+
+function handleTaskWrite(
+  store: Store,
+  args: Record<string, unknown>,
+  resultTasks: TaskListItem[] | null,
+): void {
+  const inputTasks = extractInputTasks(args);
+  if (!inputTasks && !resultTasks) return;
+
+  store.dispatch((prev) => {
+    const existing = new Map(prev.taskList.map((t) => [t.id, t]));
+
+    // Merge result tasks (preferred — has generated IDs)
+    if (resultTasks) {
+      for (const t of resultTasks) {
+        const prev = existing.get(t.id);
+        existing.set(t.id, {
+          id: t.id,
+          content: t.content ?? prev?.content ?? "",
+          status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
+          activeForm: t.activeForm ?? prev?.activeForm ?? "",
+        });
+      }
+    } else if (inputTasks) {
+      // Fallback: merge input tasks
+      for (const t of inputTasks) {
+        if (!t.id) continue;
+        const prev = existing.get(t.id);
+        existing.set(t.id, {
+          id: t.id,
+          content: t.content ?? prev?.content ?? "",
+          status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
+          activeForm: t.activeForm ?? prev?.activeForm ?? "",
+        });
+      }
+    }
+
+    return { taskList: [...existing.values()] };
+  });
+}
+
+function handleTaskUpdate(
+  store: Store,
+  args: Record<string, unknown>,
+): void {
+  const id = typeof args.id === "string" ? args.id : null;
+  if (!id) return;
+
+  const content = typeof args.content === "string" ? args.content : undefined;
+  const status = typeof args.status === "string" ? args.status : undefined;
+  const activeForm = typeof args.activeForm === "string" ? args.activeForm : undefined;
+
+  store.dispatch((prev) => ({
+    taskList: prev.taskList.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            ...(content !== undefined && { content }),
+            ...(status !== undefined && { status: status as TaskListItem["status"] }),
+            ...(activeForm !== undefined && { activeForm }),
+          }
+        : t,
+    ),
+  }));
+}
+
+function handleTaskComplete(
+  store: Store,
+  args: Record<string, unknown>,
+): void {
+  const id = typeof args.id === "string" ? args.id : null;
+  if (!id) return;
+
+  store.dispatch((prev) => ({
+    taskList: prev.taskList.map((t) =>
+      t.id === id ? { ...t, status: "completed" as const } : t,
+    ),
+  }));
+}
+
+function handleTaskCheck(
+  store: Store,
+  resultTasks: TaskListItem[] | null,
+): void {
+  if (!resultTasks) return;
+  store.dispatch({ taskList: resultTasks });
+}
+
+interface InputTask {
+  id?: string;
+  content?: string;
+  status?: string;
+  activeForm?: string;
+}
+
+function extractInputTasks(
+  args: Record<string, unknown>,
+): InputTask[] | null {
+  const tasks = args.tasks;
+  if (Array.isArray(tasks)) {
+    return tasks.filter(
+      (t): t is InputTask => typeof t === "object" && t !== null,
+    );
+  }
+  return null;
 }

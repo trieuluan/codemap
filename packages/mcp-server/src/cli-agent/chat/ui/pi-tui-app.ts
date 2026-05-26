@@ -448,6 +448,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminal): Promise<void> {
       return { consume: true };
     }
 
+    // Ctrl+T — toggle task list widget
+    if (matchesKey(data, Key.ctrl("t"))) {
+      chatTerminal.store.dispatch((prev) => ({
+        taskListVisible: !prev.taskListVisible,
+      }));
+      tui.requestRender();
+      return { consume: true };
+    }
+
     // ask_user inline select (only when editor is empty and options are provided).
     if (state.askQuestion?.active && editor.getText().trim() === "") {
       const aq = state.askQuestion;

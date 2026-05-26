@@ -70,12 +70,23 @@ export interface ChatContextState {
   assumptions: ChatContextItem[];
 }
 
+export interface TaskListItem {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  activeForm: string;
+}
+
 export interface UIState {
   // Current screen
   screen: Screen;
 
   // Messages
   messages: Message[];
+
+  // Global task list (from task_write/task_update/task_complete tool calls)
+  taskList: TaskListItem[];
+  taskListVisible: boolean;
 
   // Active task
   task: {
@@ -167,6 +178,8 @@ export function createInitialState(opts: {
   return {
     screen: "main",
     messages: [],
+    taskList: [],
+    taskListVisible: true,
     task: {
       phase: "idle",
       toolsCalled: 0,

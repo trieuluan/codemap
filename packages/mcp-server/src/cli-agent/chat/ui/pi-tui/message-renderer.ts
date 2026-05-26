@@ -253,7 +253,7 @@ function renderMessageLines(
       const isPlan = (msg.name ?? "").toLowerCase() === "plan";
       const prefixW = 9;
       const bodyW = Math.max(20, width - prefixW);
-      const rawContent = stripAnsi(msg.content);
+      const rawContent = msg.content;  // preserve ANSI colors in completion marker
       const hasResult = (msg.toolResults?.length ?? 0) > 0;
       const hasFailed = (msg.toolResults ?? []).some((r) => !r.success);
       const allSucceeded = hasResult && !hasFailed;

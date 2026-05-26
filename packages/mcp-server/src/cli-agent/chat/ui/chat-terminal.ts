@@ -40,6 +40,7 @@ import {
   markLastPendingToolCallCanceled,
   markToolDone,
   setToolCallPreview,
+  syncTaskListFromTool,
   withToolCallSummary,
 } from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../commands/sessions.js";
@@ -488,6 +489,8 @@ export class ChatTerminal {
 
     let streamingContent = "";
     let hasStreamingEntry = false;
+    let lastToolRawName = "";
+    let lastToolArgsJson = "{}";
 
     const resetStreaming = () => {
       streamingContent = "";
@@ -551,6 +554,8 @@ export class ChatTerminal {
       onToolStart: (name: string, args: string, id: string, preview?: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
+        lastToolRawName = name;
+        lastToolArgsJson = args;
         // Soft reset: clear buffered text but keep hasStreamingEntry=true so the
         // next text response from Mastra replaces this entry instead of appending.
         streamingContent = "";
@@ -593,6 +598,7 @@ export class ChatTerminal {
           const newMsgs = markToolDone(prev.messages, name, resultText, id);
           return { messages: newMsgs };
         });
+        syncTaskListFromTool(this.store, lastToolRawName, lastToolArgsJson, resultText);
         this.bus.scheduleRefresh();
       },
       onOMObservation: (tokensObserved: number, observationTokens: number) => {
@@ -713,34 +719,11 @@ export class ChatTerminal {
         sessionProjectCtx,
         resolvedAgentModel,
       );
-      const handlePlanReady = (plan: string) => {
+      const handlePlanReady = (_plan: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
-        // Remove the streaming assistant message — it contains the same plan content
-        // streamed via onToken. Keeping it would show the plan twice (once as an
-        // assistant message without prefix, once as "plan: ..." below).
-        if (hasStreamingEntry) {
-          this.store.dispatch((prev) => ({
-            messages: prev.messages.filter(
-              (m) => m.role !== "assistant" || m.content !== streamingContent,
-            ),
-          }));
-        }
+        // Plan content is already shown via submit_plan tool preview.
+        // No need to append a synthetic "plan" tool_call message.
         resetStreaming();
-        this.appendMessage({
-          role: "tool_call",
-          name: "plan",
-          content: "Plan ✓",
-          toolResults: [
-            {
-              name: "plan",
-              content: plan,
-              fullContent: plan,
-              success: true,
-            },
-          ],
-          expandedContent: plan,
-        });
-        this.bus.scheduleRefresh();
       };
 
       const result = useMultiPhase

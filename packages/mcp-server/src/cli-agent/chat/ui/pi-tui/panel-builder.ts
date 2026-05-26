@@ -1,5 +1,5 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import type { UIState } from "../store.js";
+import type { UIState, TaskListItem } from "../store.js";
 import { formatElapsed, formatTokenCount, truncate } from "../ink-utils.js";
 import { getCommandList } from "../../commands/index.js";
 import { renderEditor } from "./editor-renderer.js";
@@ -99,6 +99,42 @@ export function buildStatusBar(
   return fitLine(clippedLeft + " ".repeat(paddingWidth) + reimportHint, w);
 }
 
+function formatTaskStatusIcon(status: TaskListItem["status"]): string {
+  switch (status) {
+    case "completed":
+      return `${C_SUCCESS}✓${RESET}`;
+    case "in_progress":
+      return `${C_AI}●${RESET}`;
+    default:
+      return `${C_MUTED}○${RESET}`;
+  }
+}
+
+function renderTaskList(tasks: TaskListItem[], w: number): string[] {
+  const lines: string[] = [];
+  const completed = tasks.filter((t) => t.status === "completed").length;
+  const total = tasks.length;
+  const header = ` ${C_WHITE}${BOLD}Tasks${RESET} ${C_MUTED}(${completed}/${total})${RESET}`;
+  lines.push(fitLine(header, w));
+
+  for (const task of tasks) {
+    const icon = formatTaskStatusIcon(task.status);
+    const text =
+      task.status === "completed"
+        ? `${C_MUTED}${task.content}${RESET}`
+        : task.status === "in_progress"
+          ? `${C_WHITE}${BOLD}${task.content}${RESET}`
+          : `${C_WHITE}${task.content}${RESET}`;
+    const activeForm =
+      task.status === "in_progress" && task.activeForm
+        ? ` ${C_MUTED}${task.activeForm}${RESET}`
+        : "";
+    lines.push(fitLine(`  ${icon} ${text}${activeForm}`, w));
+  }
+
+  return lines;
+}
+
 export function buildPanel(
   state: UIState,
   w: number,
@@ -137,7 +173,8 @@ export function buildPanel(
       fitLine(
         `  ${C_ACTION}@${RESET} ${C_GRAY}mention file${RESET}  ` +
           `${C_ACTION}!<cmd>${RESET} ${C_GRAY}shell${RESET}  ` +
-          `${C_ACTION}PgUp/Dn${RESET} ${C_GRAY}scroll${RESET}`,
+          `${C_ACTION}PgUp/Dn${RESET} ${C_GRAY}scroll${RESET}  ` +
+          `${C_ACTION}Ctrl+T${RESET} ${C_GRAY}tasks${RESET}`,
         w,
       ),
       fitLine(`  ${C_ACTION}Esc${RESET} ${C_GRAY}to close${RESET}`, w),
@@ -215,6 +252,11 @@ export function buildPanel(
     );
   }
 
+  // Task list widget — shows tracked tasks when visible.
+  if (state.taskListVisible && state.taskList.length > 0) {
+    out.push(...renderTaskList(state.taskList, w));
+  }
+
   // Background synthesis indicator.
   if (state.synthRunning) {
     out.push(
@@ -287,6 +329,7 @@ export function buildPanel(
           `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
           `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
           `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
+          `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}tasks${RESET}` +
           `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
         w,
       ),

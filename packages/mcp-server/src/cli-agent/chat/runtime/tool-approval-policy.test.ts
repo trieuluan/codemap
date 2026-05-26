@@ -71,7 +71,7 @@ test("buildToolPreview falls back to compact JSON", () => {
   assert.match(preview, /"path": "a\.ts"/);
 });
 
-test("buildToolPreview renders task_write tasks as a markdown checklist", () => {
+test("buildToolPreview returns compact summary for task_write", () => {
   const preview = buildToolPreview("task_write", {
     tasks: [
       {
@@ -95,19 +95,16 @@ test("buildToolPreview renders task_write tasks as a markdown checklist", () => 
     ],
   });
 
-  assert.match(preview, /\*\*Task list \(3\)\*\*/);
-  assert.match(preview, /- \[x\] ~~Explore repo~~/);
-  assert.match(preview, /- \[~\] Implementing feature _\(in progress\)_/);
-  assert.match(preview, /- \[ \] Verify build/);
+  assert.equal(preview, "3 tasks: ✓ 1, ▸ 1, ○ 1");
 });
 
-test("buildToolPreview renders task_write with empty tasks as placeholder", () => {
+test("buildToolPreview returns empty notice for task_write with empty tasks", () => {
   const preview = buildToolPreview("task_write", { tasks: [] });
 
-  assert.equal(preview, "_(empty task list)_");
+  assert.equal(preview, "(empty task list)");
 });
 
-test("buildToolPreview renders task_update single task as one-line checklist", () => {
+test("buildToolPreview returns compact summary for task_update", () => {
   const preview = buildToolPreview("task_update", {
     id: "explore",
     content: "Explore repo",
@@ -115,13 +112,29 @@ test("buildToolPreview renders task_update single task as one-line checklist", (
     status: "in_progress",
   });
 
-  assert.match(preview, /\*\*Task list \(1\)\*\*/);
-  assert.match(preview, /- \[~\] Exploring repo _\(in progress\)_/);
+  assert.equal(preview, "#explore · → in_progress · Explore repo");
 });
 
-test("buildToolPreview falls back to JSON when task_write has no tasks field", () => {
+test("buildToolPreview returns empty notice for task_write with no tasks field", () => {
   const preview = buildToolPreview("task_write", { foo: "bar" });
 
-  assert.match(preview, /^~~~json\n/);
-  assert.match(preview, /"foo": "bar"/);
+  assert.equal(preview, "(empty task list)");
+});
+
+test("buildToolPreview shows raw command for execute_command", () => {
+  const preview = buildToolPreview("execute_command", {
+    command: "npm run build",
+  });
+
+  assert.equal(preview, "$ npm run build");
+});
+
+test("buildToolPreview shows subagent type and truncated task", () => {
+  const longTask = "A".repeat(200);
+  const preview = buildToolPreview("subagent", {
+    agentType: "explore",
+    task: longTask,
+  });
+
+  assert.match(preview, /^explore · A{117}\.\.\.$/);
 });
