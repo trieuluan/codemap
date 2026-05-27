@@ -18,7 +18,6 @@ export async function buildSessionContext(cwd: string): Promise<string> {
     return [
       "[CodeMap] No local index found.",
       "→ Call refresh_local_index before reading or editing files.",
-      "→ FIRST: call get_agent_workflow() to load session rules.",
     ].join("\n");
   }
 
@@ -39,7 +38,6 @@ export async function buildSessionContext(cwd: string): Promise<string> {
     }
   }
 
-  lines.push("→ REQUIRED first step: call get_agent_workflow()");
   lines.push("→ For broad tasks with unclear files: call explore_task(task=<description>)");
 
   return lines.join("\n");

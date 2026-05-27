@@ -58,7 +58,6 @@ const CONCRETE_TARGETS: ConcreteTarget[] = [
 ];
 
 const COMMON_WORKFLOW_PHRASES = [
-  "get_agent_workflow",
   "get_project",
   "explore_task",
 ];
@@ -170,7 +169,7 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Claude MCP-first rule",
         relativePath: ".claude/rules/codemap-mcp-first.md",
         required: true,
-        phrases: ["get_agent_workflow", "get_project"],
+        phrases: ["explore_task", "get_project"],
       },
       {
         target,
@@ -328,7 +327,7 @@ interface AgentPackDoctorSuggestionContext {
 function buildSuggestions(result: AgentPackDoctorSuggestionContext): string[] {
   const suggestions: string[] = [];
   if (result.status === "pass") {
-    suggestions.push("Agent Pack doctor passed. Agents should still start sessions with get_agent_workflow.");
+    suggestions.push("Agent Pack doctor passed. Agents should start broad tasks with explore_task.");
     return suggestions;
   }
 

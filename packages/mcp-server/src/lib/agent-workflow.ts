@@ -192,7 +192,7 @@ export const AGENT_WORKFLOW_SUMMARY = [
 ];
 
 export const AGENT_WORKFLOW_SEQUENCE = [
-  "New session: get_agent_workflow, then check project-context resource. If no local index exists yet, call refresh_local_index first (no auth required).",
+  "New session: check project-context resource. If no local index exists yet, call refresh_local_index first (no auth required).",
   "Broad task: explore_task -> follow suggestedNextTools -> get_file. Semantic search runs automatically.",
   "Related-file question: find_related_files(query/file_path/symbol_name) -> get_file -> get_file. Semantic signal is built in.",
   "Narrow lookup by name: search_codebase -> get_file(include=[outline] or [symbols]).",
@@ -232,7 +232,7 @@ CodeMap Agent Pack uses Superpowers-style gates to keep agents from jumping into
 
 ## Gates
 
-1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then choose the narrowest CodeMap context tool: \`explore_task\` for broad unclear work, \`search_codebase\` for known names, \`find_related_files\` for related-file questions, or \`get_file\`/\`get_file\` for known paths.
+1. **Orient** — The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then choose the narrowest CodeMap context tool: \`explore_task\` for broad unclear work, \`search_codebase\` for known names, \`find_related_files\` for related-file questions, or \`get_file\`/\`get_file\` for known paths.
 2. **Design** — for features or vague tasks, complete brainstorming and get design approval before editing production files.
 3. **Plan** — after design approval, write an implementation plan with exact files, steps, and verification commands.
 4. **Implement** — follow the plan or TDD loop; keep changes scoped.
@@ -263,8 +263,7 @@ When working in a CodeMap-indexed repository, prefer CodeMap MCP tools before ra
 
 Choose the tool based on the shape of the question:
 
-1. \`get_agent_workflow\` — call at the start of a new CodeMap MCP session to learn the recommended workflow and available rule resources.
-2. \`explore_task\` — use first for broad tasks such as "fix bug X", "implement Y", or "investigate Z". It returns likely files, entrypoints, symbols, risks, recommended reads, and suggested next tools.
+1. \`explore_task\` — use first for broad tasks such as "fix bug X", "implement Y", or "investigate Z". It returns likely files, entrypoints, symbols, risks, recommended reads, and suggested next tools.
 3. \`find_related_files\` — use when you already have an anchor file/symbol, or when the user asks "which files should I read?", "what is related to X?", or "what is the scope around X?".
 4. \`search_codebase\` — use for known keywords, filenames, exports, or symbols. Pass \`semantic=true\` for conceptual queries where you do not know the exact symbol name (e.g. "authentication flow", "error handling logic").
 5. \`get_file\` — fetch outlines for several candidate files in one call. Use after \`explore_task\`, \`find_related_files\`, or \`search_codebase\`.
@@ -290,7 +289,6 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 ## 1. Orient
 
-- Call \`get_agent_workflow\` at the start of a new session if workflow is unknown.
 - The project-context resource is already loaded in your context — skip \`get_project\` and \`list_projects\` unless the user explicitly asks for project or account info.
 - Use \`explore_task\`, \`find_related_files\`, or \`search_codebase\` according to the task shape.
 

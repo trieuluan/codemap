@@ -118,8 +118,6 @@ export const MASTRA_DISABLED_TOOLS = [
   "codemap_link_project",
   "codemap_reimport",
   "codemap_create_project",
-  "codemap_create_project_from_github",
-  "codemap_create_project_from_gitlab",
   "codemap_list_projects",
 ];
 
@@ -340,10 +338,8 @@ async function createFreshHarness(
   const { harness, mcpManager } = await createMastraCode({
     settingsPath,
     mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
-    // Disable orchestration/status tools that cause Mastra's build agent to loop:
-    // get_agent_workflow returns workflow instructions; if exposed to the build
-    // agent it can recursively re-orient instead of answering the user.
-    // Project/auth status tools can similarly pull a simple answer into setup work.
+    // Disable project/auth setup tools — these are handled by built-in CLI /commands.
+    // Hiding them prevents the agent from wasting turns on infrastructure concerns.
     disabledTools: MASTRA_DISABLED_TOOLS,
     initialState: {
       currentModelId: harnessModelId,
@@ -599,10 +595,11 @@ export async function runWithMastraHarness(
     callbacks,
     input.imageFiles,
   );
-  if (!result.text.trim() && !result.usedTools && !input.signal?.aborted) {
-    // Empty response with no tool calls usually means the singleton thread has
-    // accumulated bad state (e.g. empty turns from previous failed runs). Reset
-    // the singleton so the next turn starts with a clean harness and thread.
+  if (!result.text.trim() && !input.signal?.aborted) {
+    // Empty response usually means the singleton thread has accumulated bad
+    // state (e.g. empty turns from previous failed runs, or the model returned
+    // empty content after a tool validation error). Reset the singleton so the
+    // next turn starts with a clean harness and thread.
     input.onDebug?.({
       event: "mastra_empty_response_reset_singleton",
       model: harness.getCurrentModelId?.(),
@@ -662,7 +659,7 @@ export async function runMultiPhaseWithMastra(
       // If the harness resolved with empty text but saw an upstream error,
       // reject so the catch block can display the real error to the user.
       const upstreamError = lastHarnessError ?? _lastModelApiError;
-      if (!result.text && !result.usedTools && upstreamError) {
+      if (!result.text && upstreamError) {
         fail(upstreamError);
         return;
       }
@@ -835,8 +832,11 @@ function runHarness(
       if (settled) return;
       // If the harness resolved with empty text but saw an upstream error,
       // reject so the catch block can display the real error to the user.
+      // This covers both "no tools used" and "tools used but model returned
+      // empty content" (e.g. after a tool validation error confuses the model
+      // into returning nothing, which the API provider rejects with 400).
       const upstreamError = lastHarnessError ?? _lastModelApiError;
-      if (!result.text && !result.usedTools && upstreamError) {
+      if (!result.text && upstreamError) {
         fail(upstreamError);
         return;
       }

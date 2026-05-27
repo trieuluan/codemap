@@ -12,11 +12,7 @@ export const createCommand: Command = {
       let toolName = "create_project";
       const toolArgs: Record<string, unknown> = {};
 
-      if (parts[0] === "github" && parts[1]) {
-        toolName = "create_project_from_github";
-        toolArgs.repository_url = parts[1];
-      } else if (parts[0] === "gitlab" && parts[1]) {
-        toolName = "create_project_from_gitlab";
+      if ((parts[0] === "github" || parts[0] === "gitlab") && parts[1]) {
         toolArgs.repository_url = parts[1];
         const tokenIdx = parts.indexOf("--token");
         if (tokenIdx >= 0 && parts[tokenIdx + 1]) {

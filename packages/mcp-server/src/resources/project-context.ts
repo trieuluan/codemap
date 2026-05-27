@@ -44,7 +44,6 @@ const TOOLS_LITE = [
   "- login / logout — browser login with API key claim, and local credential reset",
   "- web_search — search the web for documentation, library APIs, changelogs, or error solutions; returns ranked results with URLs",
   "- web_fetch — fetch and read a URL as plain text; auto-converts GitHub blob URLs to raw content and strips HTML; flow: web_search → web_fetch",
-  "- get_agent_workflow — load the full agent workflow rules and tool routing guide; call at the start of any broad or multi-step task",
 ];
 
 const TOOLS_STANDARD_EXTRA = [
@@ -75,7 +74,6 @@ const TOOLS_FULL_EXTRA = [
 
 const WORKFLOW_LITE = [
   "- Start with check_auth_status if API calls fail or auth is unclear.",
-  "- Use get_agent_workflow at the start of any broad or multi-step task to load workflow rules and tool routing.",
   "- Use get_project to confirm the current linked project. If no project is linked, call link_project first (no arguments) — it auto-detects by git remote.",
   "- Use explore_task first for any coding task — returns likelyFiles, entrypoints, symbols, risks, and suggestedNextTools in one call.",
   "- Follow suggestedNextTools returned by explore_task — it provides exact get_file calls to make next.",

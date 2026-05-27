@@ -4,11 +4,10 @@ You are working in a CodeMap-indexed repository.
 
 ## MANDATORY WORKFLOW
 
-1. START OF EVERY SESSION → call \`get_agent_workflow\` to load rules and tool routing.
-2. BEFORE ANY BROAD TASK WITH UNCLEAR FILES → call \`explore_task(task=<description>)\`.
-3. BEFORE READING FILES → call \`explore_task\` or \`search_codebase\`. Never read files blindly.
-4. BEFORE EDITING HIGH-BLAST FILES (blast_radius ≥ 10) → call \`find_related_files\` first.
-5. AFTER EDITS → call \`diff\` to verify scope, then \`reimport(wait=true)\` if index changed.
+1. BEFORE ANY BROAD TASK WITH UNCLEAR FILES → call \`explore_task(task=<description>)\`.
+2. BEFORE READING FILES → call \`explore_task\` or \`search_codebase\`. Never read files blindly.
+3. BEFORE EDITING HIGH-BLAST FILES (blast_radius ≥ 10) → call \`find_related_files\` first.
+4. AFTER EDITS → call \`diff\` to verify scope, then \`reimport(wait=true)\` if index changed.
 
 ## TOOL ROUTING (quick reference)
 

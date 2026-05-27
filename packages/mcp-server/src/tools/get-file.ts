@@ -522,7 +522,7 @@ export function registerGetFileTool(
         if (wantContent && !wantSymbols && sessionTracker.getContextScore() < 30) {
           contextWarnings.push(
             `Reading full file content (contextScore=${sessionTracker.getContextScore()}/100). ` +
-            "Consider calling explore_task or get_agent_workflow first to orient with the codebase.",
+            "Consider calling explore_task first to orient with the codebase.",
           );
         }
         const wantParse =

@@ -64,7 +64,6 @@ function buildRecommendedWorkflow(
   }
 
   return [
-    "Call get_agent_workflow at the start of a new session if the CodeMap workflow is unclear.",
     "Use explore_task first for broad implementation or debugging tasks.",
     "Use find_related_files when the user asks which files are related or what to read.",
     "Use search_codebase for known files, symbols, or exports.",

@@ -12,7 +12,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   refresh_local_index:      "local",
   diff:                     "local",
   get_current_workspace_info: "local",
-  get_agent_workflow:       "local",
   web_search:               "local",
   web_fetch:                "local",
 
@@ -41,8 +40,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // ── Cloud project required ────────────────────────────────────────────────
   create_project:                "cloud",
-  create_project_from_github:    "cloud",
-  create_project_from_gitlab:    "cloud",
   reimport:                      "cloud",
   get_project_insights:          "cloud",
   get_project_map:               "cloud",

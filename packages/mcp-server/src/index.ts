@@ -20,8 +20,6 @@ import { registerManageGitConnectionTool } from "./tools/manage-git-connection.j
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
 import { registerListGithubRepositoriesTool } from "./tools/list-github-repositories.js";
 import { registerCreateProjectTool } from "./tools/create-project.js";
-import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
-import { registerCreateProjectFromGitlabTool } from "./tools/create-project-from-gitlab.js";
 import { registerLinkProjectTool } from "./tools/link-project.js";
 import { registerReimportTool } from "./tools/reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
@@ -107,8 +105,6 @@ async function runMcpServer() {
     registerFindRelatedFilesTool(server, config);
     registerSummarizeFeatureAreaTool(server, config);
     registerCreateProjectTool(server, config);
-    registerCreateProjectFromGithubTool(server, config);
-    registerCreateProjectFromGitlabTool(server, config);
     registerListProjectsTool(server, config);
   }
 
