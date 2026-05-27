@@ -330,34 +330,24 @@ function handleTaskWrite(
   }
 
   store.dispatch((prev) => {
-    const existing = new Map(prev.taskList.map((t) => [t.id, t]));
+    const prevById = new Map(prev.taskList.map((t) => [t.id, t]));
 
-    // Merge result tasks (preferred — has generated IDs)
-    if (resultTasks) {
-      for (const t of resultTasks) {
-        const prev = existing.get(t.id);
-        existing.set(t.id, {
-          id: t.id,
-          content: t.content ?? prev?.content ?? "",
-          status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
-          activeForm: t.activeForm ?? prev?.activeForm ?? "",
-        });
-      }
-    } else if (inputTasks) {
-      // Fallback: merge input tasks
-      for (const t of inputTasks) {
-        if (!t.id) continue;
-        const prev = existing.get(t.id);
-        existing.set(t.id, {
-          id: t.id,
-          content: t.content ?? prev?.content ?? "",
-          status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
-          activeForm: t.activeForm ?? prev?.activeForm ?? "",
-        });
-      }
+    // Build new list from incoming tasks only (replace, not merge).
+    // Preserve status/activeForm from existing tasks with same ID.
+    const source = resultTasks ?? inputTasks ?? [];
+    const next: TaskListItem[] = [];
+    for (const t of source) {
+      if (!t.id) continue;
+      const prev = prevById.get(t.id);
+      next.push({
+        id: t.id,
+        content: t.content ?? prev?.content ?? "",
+        status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
+        activeForm: t.activeForm ?? prev?.activeForm ?? "",
+      });
     }
 
-    return { taskList: [...existing.values()], taskListVisible: true };
+    return { taskList: next, taskListVisible: true };
   });
 }
 

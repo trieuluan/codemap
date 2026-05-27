@@ -413,8 +413,8 @@ args = ["-y", "@codemap/mcp-server@latest"]`;
 
           <p className="text-sm text-muted-foreground">
             The AI will call{" "}
-            <code className="rounded bg-muted px-1 font-mono text-xs">start_auth_flow</code>,
-            open a browser tab on this site, and you approve access with one
+            <code className="rounded bg-muted px-1 font-mono text-xs">login</code>,
+            a browser tab opens on this site, and you approve access with one
             click. After that, the API key is saved automatically — nothing to
             copy.
           </p>

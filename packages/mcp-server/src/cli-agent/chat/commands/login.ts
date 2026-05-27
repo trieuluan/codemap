@@ -11,13 +11,27 @@ export const loginCommand: Command = {
   name: "login",
   description: "Log in to CodeMap (opens browser for authorization)",
   execute: async (_args, ctx) => {
-    ctx.setMessages((prev) => [
-      ...prev,
-      { role: "system", content: "Starting CodeMap login..." },
-    ]);
     ctx.setBusy(true);
     try {
       const config = await loadConfig();
+
+      if (config.apiToken) {
+        const lines = ["Already logged in."];
+        if (config.user?.email) lines.push(`Account: ${config.user.email}`);
+        if (config.user?.name) lines.push(`Name:    ${config.user.name}`);
+        lines.push(`API:     ${config.apiUrl}`);
+        lines.push(`\nUse /logout first if you want to log in with a different account.`);
+        ctx.setMessages((prev) => [
+          ...prev,
+          { role: "system", content: lines.join("\n") },
+        ]);
+        return;
+      }
+
+      ctx.setMessages((prev) => [
+        ...prev,
+        { role: "system", content: "Starting CodeMap login..." },
+      ]);
       const client = createCodeMapClient(config);
       const startResponse = await startMcpLogin(client);
       const openedBrowser = await tryOpenLoginBrowser(startResponse.authorizeUrl);

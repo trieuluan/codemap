@@ -546,15 +546,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
   // ── store subscription ────────────────────────────────────────────────────
 
-  let _lastMessageCount = 0;
   unsubscribe = chatTerminal.bus.on("screen:refresh", () => {
-    const count = chatTerminal.store.getState().messages.length;
-    if (count !== _lastMessageCount) {
-      _lastMessageCount = count;
-      tui.requestRender(true);
-    } else {
-      tui.requestRender();
-    }
+    tui.requestRender();
   });
 
   // ── wait for stop ─────────────────────────────────────────────────────────

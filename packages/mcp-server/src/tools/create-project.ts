@@ -78,7 +78,7 @@ export function registerCreateProjectTool(
             "GitHub is not connected to this CodeMap account.",
             "",
             "For private repositories, please connect GitHub first:",
-            "  1. Call get_github_connect_url — it will open the browser automatically.",
+            "  1. Call manage_git_connection with provider='github' and action='connect' — it will open the browser automatically.",
             "  2. Complete the authorization flow.",
             "  3. Call create_project again.",
             "",
@@ -96,7 +96,7 @@ export function registerCreateProjectTool(
             },
             project: null,
             import: null,
-            nextAction: "get_github_connect_url",
+            nextAction: "manage_git_connection",
           });
         }
 

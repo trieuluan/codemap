@@ -31,20 +31,14 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // ── Auth required, no project needed ─────────────────────────────────────
   check_auth_status:        "auth",
-  start_auth_flow:          "auth",
-  wait_for_auth:            "auth",
+  login:                    "auth",
   logout:                   "auth",
   get_project:              "auth",
   list_projects:            "auth",
   link_project:             "auth",
-  check_github_connection:  "auth",
-  get_github_connect_url:   "auth",
-  disconnect_github:        "auth",
+  manage_git_connection:   "auth",
   list_github_repositories: "auth",
   search_github_repositories: "auth",
-  check_gitlab_connection:  "auth",
-  get_gitlab_connect_url:   "auth",
-  disconnect_gitlab:        "auth",
 
   // ── Cloud project required ────────────────────────────────────────────────
   create_project:                "cloud",

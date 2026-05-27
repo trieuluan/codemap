@@ -112,9 +112,8 @@ const MASTRA_DISABLED_TOOLS = [
   // Auth/setup flows are handled by built-in CLI /commands (/login, /logout,
   // /link, /create, /import, /projects). Hiding these keeps them off the
   // agent's tool list and prevents wasted turns on infrastructure concerns.
-  "codemap_start_auth_flow",
+  "codemap_login",
   "codemap_check_auth_status",
-  "codemap_wait_for_auth",
   "codemap_logout",
   "codemap_link_project",
   "codemap_reimport",

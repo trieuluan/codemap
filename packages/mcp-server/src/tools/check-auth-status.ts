@@ -32,7 +32,7 @@ export function registerCheckAuthStatusTool(
       if (!config.apiToken) {
         const summary =
           `Not authenticated.\nAPI URL: ${config.apiUrl}\n` +
-          "Next action: call `start_auth_flow` to begin browser login, then `wait_for_auth` after the user completes authorization. " +
+          "Next action: call `login` to begin browser login and wait for authorization. " +
           "For CLI usage, run `codemap-mcp login`.";
 
         return success(summary, {

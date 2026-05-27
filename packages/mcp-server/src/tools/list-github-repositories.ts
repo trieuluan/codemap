@@ -37,7 +37,7 @@ export function registerListGithubRepositoriesTool(
       title: "List GitHub Repositories",
       description:
         "Lists repositories accessible through the user's connected GitHub account. " +
-        "Use this after check_github_connection reports connected=true.",
+        "Use this after manage_git_connection(provider='github', action='check') reports connected=true.",
       inputSchema: {
         limit: z.number().int().min(1).max(100).optional(),
       },

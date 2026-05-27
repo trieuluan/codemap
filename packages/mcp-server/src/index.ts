@@ -16,10 +16,7 @@ import {
   tryOpenLoginBrowser,
   waitForLoginAuthorization,
 } from "./lib/mcp-auth.js";
-import { registerCheckGithubConnectionTool } from "./tools/check-github-connection.js";
-import { registerGetGithubConnectUrlTool } from "./tools/get-github-connect-url.js";
-import { registerCheckGitlabConnectionTool } from "./tools/check-gitlab-connection.js";
-import { registerGetGitlabConnectUrlTool } from "./tools/get-gitlab-connect-url.js";
+import { registerManageGitConnectionTool } from "./tools/manage-git-connection.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
 import {
   registerListGithubRepositoriesTool,
@@ -52,8 +49,7 @@ import { registerProjectContextResource } from "./resources/project-context.js";
 import { registerAgentRuleResources } from "./resources/agent-rules.js";
 import { registerAgentPackResources } from "./resources/agent-pack.js";
 import { registerCheckAuthStatusTool } from "./tools/check-auth-status.js";
-import { registerStartAuthFlowTool } from "./tools/start-auth-flow.js";
-import { registerWaitForAuthTool } from "./tools/wait-for-auth.js";
+import { registerLoginTool } from "./tools/login.js";
 import { registerLogoutTool } from "./tools/logout.js";
 import { registerWebSearchTool } from "./tools/web-search.js";
 import { registerExploreTaskTool } from "./tools/explore-task.js";
@@ -92,8 +88,7 @@ async function runMcpServer() {
 
   // ── Lite tier: core exploration + auth (always registered) ──────────────
   registerCheckAuthStatusTool(server, config);
-  registerStartAuthFlowTool(server, config);
-  registerWaitForAuthTool(server, config);
+  registerLoginTool(server, config);
   registerLogoutTool(server, config);
   registerGetProjectTool(server, config);
   registerLinkProjectTool(server, config);
@@ -126,10 +121,7 @@ async function runMcpServer() {
     registerRenameSymbolTool(server, config);
     registerFindCyclesTool(server, config);
     registerCodeReviewTool(server, config);
-    registerCheckGithubConnectionTool(server, config);
-    registerGetGithubConnectUrlTool(server, config);
-    registerCheckGitlabConnectionTool(server, config);
-    registerGetGitlabConnectUrlTool(server, config);
+    registerManageGitConnectionTool(server, config);
     registerGetCurrentWorkspaceInfoTool(server);
     registerListGithubRepositoriesTool(server, config);
     registerSearchGithubRepositoriesTool(server, config);
