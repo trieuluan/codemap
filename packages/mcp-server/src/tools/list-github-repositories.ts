@@ -37,70 +37,40 @@ export function registerListGithubRepositoriesTool(
       title: "List GitHub Repositories",
       description:
         "Lists repositories accessible through the user's connected GitHub account. " +
+        "Optionally pass a query to search by repo name, owner, or URL fragment. " +
         "Use this after manage_git_connection(provider='github', action='check') reports connected=true.",
       inputSchema: {
-        limit: z.number().int().min(1).max(100).optional(),
-      },
-    },
-    withToolError(async ({ limit }) => {
-      const repositories = await client.request<GithubRepository[]>(
-        "/github/repositories",
-        {
-          query: { limit: limit ? `${limit}` : undefined },
-          authRequired: true,
-        },
-      );
-
-      return success(
-        formatRepositoryList(repositories, "Accessible GitHub repositories:"),
-        {
-          items: repositories,
-          total: repositories.length,
-          limit: limit ?? null,
-          query: null,
-        },
-      );
-    }),
-  );
-}
-
-export function registerSearchGithubRepositoriesTool(
-  server: McpServer,
-  config: McpServerConfig,
-) {
-  const client = createCodeMapClient(config);
-
-  server.registerTool(
-    "search_github_repositories",
-    {
-      title: "Search GitHub Repositories",
-      description:
-        "Searches repositories accessible through the user's connected GitHub account. " +
-        "Use this when the user gives a repo name, owner, or URL fragment.",
-      inputSchema: {
-        query: z.string().trim().min(1).max(200),
+        query: z.string().trim().min(1).max(200).optional().describe(
+          "Optional search filter — repo name, owner, or URL fragment. Omit to list all repositories.",
+        ),
         limit: z.number().int().min(1).max(100).optional(),
       },
     },
     withToolError(async ({ query, limit }) => {
+      const queryParams: Record<string, string | undefined> = {
+        limit: limit ? `${limit}` : undefined,
+      };
+      if (query) queryParams.q = query;
+
       const repositories = await client.request<GithubRepository[]>(
         "/github/repositories",
         {
-          query: { q: query, limit: limit ? `${limit}` : undefined },
+          query: queryParams,
           authRequired: true,
         },
       );
 
+      const heading = query
+        ? `GitHub repositories matching "${query}":`
+        : "Accessible GitHub repositories:";
+
       return success(
-        formatRepositoryList(
-          repositories,
-          `GitHub repositories matching "${query}":`,
-        ),
+        formatRepositoryList(repositories, heading),
         {
           items: repositories,
           total: repositories.length,
           limit: limit ?? null,
-          query,
+          query: query ?? null,
         },
       );
     }),

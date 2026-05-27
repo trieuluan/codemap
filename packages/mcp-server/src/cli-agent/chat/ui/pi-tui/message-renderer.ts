@@ -127,20 +127,11 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number): st
   const previewIndentW = 3;
   const renderW = Math.max(20, bodyW - previewIndentW);
   const rendered = renderMarkdownish(normalized, renderW);
-  const limit = 60;
-  const shown = rendered.slice(0, limit);
   const indent = " ".repeat(prefixW);
   const fitPreviewLine = (line: string) =>
     truncateVisible(`${indent}${line}`, prefixW + bodyW);
   const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
-  out.push(...shown.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
-  if (rendered.length > limit) {
-    out.push(
-      fitPreviewLine(
-        `${" ".repeat(previewIndentW)}${C_MUTED}… ${rendered.length - limit} more lines${RESET}`,
-      ),
-    );
-  }
+  out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
   return out;
 }
 

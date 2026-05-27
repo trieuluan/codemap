@@ -81,6 +81,73 @@ test("emits passive tool preview on tool_start", () => {
   assert.match(preview ?? "", /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
 });
 
+test("emits tool_end error message from structured result", () => {
+  let result = "";
+  const cb = callbacks(() => {});
+  cb.onToolResult = (_name, content) => {
+    result = content;
+  };
+
+  bridgeCommonEvent(
+    {
+      type: "tool_end",
+      toolCallId: "call_1",
+      toolName: "execute_command",
+      isError: true,
+      result: {
+        error: true,
+        message: "Tool input validation failed for execute_command.",
+        validationErrors: { fields: { tail: { errors: ["Invalid input"] } } },
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.equal(result, "[ERROR] Tool input validation failed for execute_command.");
+});
+
+test("emits non-empty fallback for blank tool_end results", () => {
+  let result = "";
+  const cb = callbacks(() => {});
+  cb.onToolResult = (_name, content) => {
+    result = content;
+  };
+
+  bridgeCommonEvent(
+    {
+      type: "tool_end",
+      toolCallId: "call_1",
+      toolName: "execute_command",
+      isError: false,
+      result: undefined,
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.equal(result, "Tool completed without a result.");
+});
+
+test("emits text from MCP-style content arrays", () => {
+  let result = "";
+  const cb = callbacks(() => {});
+  cb.onToolResult = (_name, content) => {
+    result = content;
+  };
+
+  bridgeCommonEvent(
+    {
+      type: "tool_end",
+      toolCallId: "call_1",
+      toolName: "codemap_get_file",
+      isError: false,
+      result: { content: [{ type: "text", text: "file content" }] },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.equal(result, "file content");
+});
+
 test("auto-approves Mastra tool approval requests", async () => {
   let decision: unknown;
   const cb = callbacks(() => {});

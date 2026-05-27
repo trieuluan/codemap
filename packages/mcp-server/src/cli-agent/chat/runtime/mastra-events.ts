@@ -139,10 +139,12 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   if (event.type === "tool_end") {
     const ev = event as ToolEndEvent;
     const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
-    const r = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? "");
-    cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${r}` : r, ev.toolCallId);
+    const r = formatToolResult(ev.result);
+    const content = r.trim() || (ev.isError ? "Tool failed without a result." : "Tool completed without a result.");
+    cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${content}` : content, ev.toolCallId);
     return;
   }
+
 
   if (event.type === "tool_approval_required") {
     cb.harness.respondToToolApproval?.({ decision: "approve" });
@@ -232,6 +234,44 @@ function normalizeToolArgs(args: unknown): Record<string, unknown> {
     return args as Record<string, unknown>;
   }
   return {};
+}
+
+function formatToolResult(result: unknown): string {
+  const text = extractToolResultText(result);
+  if (text.trim()) return text;
+  return safeJsonStringify(result).trim();
+}
+
+function extractToolResultText(value: unknown, seen = new Set<unknown>()): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  if (typeof value !== "object") return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => extractToolResultText(item, seen)).filter(Boolean).join("\n");
+  }
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ["text", "content", "message", "error", "stdout", "stderr", "output"];
+  for (const key of preferredKeys) {
+    const text = extractToolResultText(record[key], seen);
+    if (text.trim()) return text;
+  }
+
+  return "";
+}
+
+function safeJsonStringify(value: unknown): string {
+  if (value == null) return "";
+  try {
+    const json = JSON.stringify(value, null, 2);
+    return typeof json === "string" ? json : "";
+  } catch {
+    return String(value);
+  }
 }
 
 export interface HarnessThread {

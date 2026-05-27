@@ -58,8 +58,6 @@ const TOOLS_STANDARD_EXTRA = [
   "- summarize_feature_area — summarize the purpose, key files, and entry points of a feature area or directory",
   "- explore_task — orient on broad tasks with unclear files; returns likely files, entry points, risks, and suggested next tools",
   "- create_project — create or reuse a CodeMap project from the current workspace",
-  "- create_project_from_github — create or reuse a CodeMap project from a GitHub repository",
-  "- create_project_from_gitlab — create or reuse a CodeMap project from a gitlab.com repository",
   "- list_projects — list all accessible projects",
 ];
 
@@ -69,7 +67,7 @@ const TOOLS_FULL_EXTRA = [
   "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
   "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
   "- manage_git_connection — check or initiate GitHub/GitLab OAuth for repository imports",
-  "- list_github_repositories / search_github_repositories — discover GitHub repositories",
+  "- list_github_repositories — discover GitHub repositories (pass optional query to search)",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
 ];
 

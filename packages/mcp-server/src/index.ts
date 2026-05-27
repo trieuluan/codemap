@@ -18,10 +18,7 @@ import {
 } from "./lib/mcp-auth.js";
 import { registerManageGitConnectionTool } from "./tools/manage-git-connection.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
-import {
-  registerListGithubRepositoriesTool,
-  registerSearchGithubRepositoriesTool,
-} from "./tools/list-github-repositories.js";
+import { registerListGithubRepositoriesTool } from "./tools/list-github-repositories.js";
 import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
 import { registerCreateProjectFromGitlabTool } from "./tools/create-project-from-gitlab.js";
@@ -124,7 +121,6 @@ async function runMcpServer() {
     registerManageGitConnectionTool(server, config);
     registerGetCurrentWorkspaceInfoTool(server);
     registerListGithubRepositoriesTool(server, config);
-    registerSearchGithubRepositoriesTool(server, config);
   }
 
   // Resources — automatically surfaced to Claude as session context

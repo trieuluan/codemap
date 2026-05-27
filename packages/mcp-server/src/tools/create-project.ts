@@ -9,6 +9,12 @@ import { zipWorkspaceFolder } from "../lib/workspace-zip.js";
 import { saveWorkspaceProjectId, readWorkspaceProjectId } from "../lib/workspace-project.js";
 import { resolveWorkspace } from "../lib/workspace-resolver.js";
 import type { GithubStatus, ProjectSourceImportResult } from "../lib/api-types.js";
+import { createGithubProject } from "./create-project-from-github.js";
+import { createGitlabProject } from "./create-project-from-gitlab.js";
+
+function detectGitProvider(remoteUrl: string): "github" | "gitlab" {
+  return remoteUrl.includes("gitlab") ? "gitlab" : "github";
+}
 
 export function registerCreateProjectTool(
   server: McpServer,
@@ -22,7 +28,7 @@ export function registerCreateProjectTool(
       title: "Create Project",
       description:
         "Smart entry point for creating a CodeMap project from the current workspace. " +
-        "If the workspace has a git remote URL, CodeMap will clone it directly from the remote (use create_project_from_github for more control). " +
+        "If the workspace has a git remote URL, CodeMap will delegate to the GitHub or GitLab source import flow automatically. " +
         "If there is no git remote — or no git at all — the workspace folder will be zipped and uploaded to CodeMap for analysis. " +
         "Sensitive files (.env*, *.pem, *.key, .aws/, .ssh/, secrets.*, etc.) and artifact directories (node_modules, dist, .next, etc.) " +
         "are automatically excluded before upload. " +
@@ -69,6 +75,58 @@ export function registerCreateProjectTool(
 
       // ── Path A: workspace has a git remote → clone flow ────────────────────
       if (workspace?.remoteUrl) {
+        const provider = detectGitProvider(workspace.remoteUrl);
+
+        // GitLab repos: delegate to the GitLab helper
+        // Public repos work without access_token; private repos will fail and
+        // the user should use create_project_from_gitlab with an explicit token.
+        if (provider === "gitlab") {
+          const gitlabResult = await createGitlabProject(client, {
+            repository_url: workspace.remoteUrl,
+            name,
+            description,
+            workspace_id,
+            default_branch: workspace.branch,
+            branch: branch ?? workspace.branch,
+          });
+
+          if (gitlabResult.alreadyLinked) {
+            return success(
+              `This workspace is already linked to CodeMap project \`${gitlabResult.projectId}\`.\n` +
+              `Use \`reimport\` to re-sync the existing project instead.`,
+              { projectId: gitlabResult.projectId },
+            );
+          }
+
+          const summary = [
+            "Project import started from GitLab repository.",
+            `Project: ${gitlabResult.project.name} (${gitlabResult.project.id})`,
+            `Repository: ${workspace.remoteUrl}`,
+            `Branch: ${gitlabResult.import.branch ?? workspace.branch}`,
+            `Import status: ${gitlabResult.import.status}`,
+            `Parse status: ${gitlabResult.import.parseStatus}`,
+            "",
+            `Project ID saved to workspace — future tools will use it automatically.`,
+            "Next action: call reimport until indexing is ready.",
+          ].join("\n");
+
+          return success(summary, {
+            created: true,
+            actionRequired: null,
+            source: {
+              provider: "gitlab",
+              repositoryUrl: workspace.remoteUrl,
+              branch: gitlabResult.import.branch ?? workspace.branch,
+              workspaceRootPath: workspace.repoRootPath ?? process.cwd(),
+            },
+            project: gitlabResult.project,
+            import: gitlabResult.import,
+            workspaceProjectIdSaved: true,
+            nextAction: "reimport",
+          });
+        }
+
+        // GitHub flow: check connection status first
         const githubStatus = await client.request<GithubStatus>("/github/status", {
           authRequired: true,
         });
@@ -100,34 +158,31 @@ export function registerCreateProjectTool(
           });
         }
 
-        const result = await client.request<ProjectSourceImportResult>(
-          "/projects/from-github",
-          {
-            method: "POST",
-            body: {
-              repositoryUrl: workspace.remoteUrl,
-              name,
-              description,
-              workspaceId: workspace_id,
-              defaultBranch: workspace.branch,
-              branch: branch ?? workspace.branch,
-            },
-            authRequired: true,
-          },
-        );
+        // Delegate to the extracted GitHub helper
+        const githubResult = await createGithubProject(client, {
+          repository_url: workspace.remoteUrl,
+          name,
+          description,
+          workspace_id,
+          default_branch: workspace.branch,
+          branch: branch ?? workspace.branch,
+        });
 
-        await saveWorkspaceProjectId(
-          workspace.repoRootPath ?? process.cwd(),
-          result.project.id,
-        ).catch(() => undefined); // non-fatal
+        if (githubResult.alreadyLinked) {
+          return success(
+            `This workspace is already linked to CodeMap project \`${githubResult.projectId}\`.\n` +
+            `Use \`reimport\` to re-sync the existing project instead.`,
+            { projectId: githubResult.projectId },
+          );
+        }
 
         const summary = [
           "Project import started from GitHub repository.",
-          `Project: ${result.project.name} (${result.project.id})`,
+          `Project: ${githubResult.project.name} (${githubResult.project.id})`,
           `Repository: ${workspace.remoteUrl}`,
-          `Branch: ${result.import.branch ?? workspace.branch}`,
-          `Import status: ${result.import.status}`,
-          `Parse status: ${result.import.parseStatus}`,
+          `Branch: ${githubResult.import.branch ?? workspace.branch}`,
+          `Import status: ${githubResult.import.status}`,
+          `Parse status: ${githubResult.import.parseStatus}`,
           "",
           `Project ID saved to workspace — future tools will use it automatically.`,
           "Next action: call reimport until indexing is ready.",
@@ -139,11 +194,11 @@ export function registerCreateProjectTool(
           source: {
             provider: "github",
             repositoryUrl: workspace.remoteUrl,
-            branch: result.import.branch ?? workspace.branch,
+            branch: githubResult.import.branch ?? workspace.branch,
             workspaceRootPath: workspace.repoRootPath ?? process.cwd(),
           },
-          project: result.project,
-          import: result.import,
+          project: githubResult.project,
+          import: githubResult.import,
           workspaceProjectIdSaved: true,
           nextAction: "reimport",
         });
