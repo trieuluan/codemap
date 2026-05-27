@@ -22,7 +22,7 @@ export function formatToolUiResult(name: string, result: string): string {
   }
 
   const followUps: string[] = [];
-  if (result.includes("After apply: get_working_diff")) followUps.push("- Working diff checked");
+  if (result.includes("After apply: diff")) followUps.push("- Working diff checked");
   if (result.includes("After apply: refresh_local_index")) followUps.push("- Index refreshed");
 
   return [...visibleAppliedLines, "", ...followUps].filter(Boolean).join("\n");

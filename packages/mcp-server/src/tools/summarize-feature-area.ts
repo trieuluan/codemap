@@ -456,7 +456,7 @@ function rankConfidence(files: FeatureFile[]): Confidence {
 
 function formatGetFilesCall(files: FeatureFile[]) {
   const paths = files.slice(0, 7).map((file) => file.path);
-  return `get_files(${JSON.stringify(paths)})`;
+  return `get_file(${JSON.stringify(paths)})`;
 }
 
 function buildOutput(query: string, files: FeatureFile[], confidence: Confidence) {
@@ -486,7 +486,7 @@ function buildOutput(query: string, files: FeatureFile[], confidence: Confidence
   const firstSymbolFile = topFiles.find((file) => file.symbols.length > 0);
   if (firstSymbolFile) {
     lines.push(
-      `- get_symbol_context(symbol_name="${firstSymbolFile.symbols[0]}", file_path="${firstSymbolFile.path}")`,
+      `- symbol(action="context", symbol_name="${firstSymbolFile.symbols[0]}", file_path="${firstSymbolFile.path}")`,
     );
   } else if (topFiles[0]) {
     lines.push(`- get_file("${topFiles[0].path}", include=["outline"])`);
@@ -562,7 +562,7 @@ export function registerSummarizeFeatureAreaTool(
             ? [
                 formatGetFilesCall(files),
                 files[0].symbols[0]
-                  ? `get_symbol_context(symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
+                  ? `symbol(action="context", symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
                   : `get_file("${files[0].path}", include=["outline"])`,
               ]
             : ["search_codebase(query)"];
@@ -600,7 +600,7 @@ export function registerSummarizeFeatureAreaTool(
             ? [
                 formatGetFilesCall(files),
                 files[0].symbols[0]
-                  ? `get_symbol_context(symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
+                  ? `symbol(action="context", symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
                   : `get_file("${files[0].path}", include=["outline"])`,
               ]
             : ["search_codebase(query)"];
@@ -684,7 +684,7 @@ export function registerSummarizeFeatureAreaTool(
           ? [
               formatGetFilesCall(files),
               files[0].symbols[0]
-                ? `get_symbol_context(symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
+                ? `symbol(action="context", symbol_name="${files[0].symbols[0]}", file_path="${files[0].path}")`
                 : `get_file("${files[0].path}", include=["outline"])`,
             ]
           : ["search_codebase(query)"];

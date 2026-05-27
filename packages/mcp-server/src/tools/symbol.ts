@@ -9,6 +9,7 @@ import type {
   CodebaseSearchResponse,
   FileContent,
   SearchSymbolResult,
+  SymbolUsagesResponse,
 } from "../lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
@@ -160,28 +161,195 @@ function buildOutput(input: {
   lines.push("");
   lines.push("## Next tool calls");
   lines.push(`- ${formatSymbolCall(symbol)}  // same symbol through get_file`);
-  lines.push(`- find_usages("${symbol.displayName}")  // callers and references`);
+  lines.push(`- symbol(action="usages", symbol_name="${symbol.displayName}")  // callers and references`);
   lines.push(`- get_file("${symbol.filePath}", include=["outline"])  // full file outline only`);
 
   return lines.join("\n");
 }
 
-export function registerGetSymbolContextTool(
+
+
+function formatUsageRange(range: { startLine: number; startCol: number } | null) {
+  return range ? `${range.startLine}:${range.startCol}` : "?:?";
+}
+
+function formatUsageLine(
+  usage: {
+    filePath: string;
+    range: { startLine: number; startCol: number } | null;
+    confidence: string;
+    role?: string;
+    evidence?: string;
+    snippetPreview?: string | null;
+  },
+) {
+  const label = usage.role ?? usage.evidence ?? "usage";
+  const snippet = usage.snippetPreview ? ` - ${usage.snippetPreview}` : "";
+  return `  ${usage.filePath}:${formatUsageRange(usage.range)} [${usage.confidence}/${label}]${snippet}`;
+}
+
+async function findSymbolUsages(
+  client: ReturnType<typeof createCodeMapClient>,
+  symbolName: string,
+  projectId?: string,
+) {
+  const resolvedProjectId = projectId ?? (await readWorkspaceProjectId());
+  if (!resolvedProjectId) {
+    return success("No project ID provided and no linked project found.", {
+      projectId: null,
+      symbolName,
+      found: false,
+      definitions: [],
+      usages: [],
+      callers: [],
+    });
+  }
+
+  const searchResult = await client.request<CodebaseSearchResponse>(
+    `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+    { authRequired: true, query: { q: symbolName } },
+  );
+  const exactSymbols = searchResult.symbols.filter(
+    (symbol): symbol is SearchSymbolResult =>
+      symbol.displayName === symbolName && Boolean(symbol.id),
+  );
+  if (exactSymbols.length === 0) {
+    return success(`Symbol '${symbolName}' not found in codebase.`, {
+      projectId: resolvedProjectId,
+      symbolName,
+      found: false,
+      definitions: [],
+      usages: [],
+      callers: [],
+    });
+  }
+
+  const usageResults = await Promise.all(
+    exactSymbols.map((symbol) =>
+      client.request<SymbolUsagesResponse>(
+        `/projects/${encodeURIComponent(resolvedProjectId)}/map/symbols/${encodeURIComponent(symbol.id)}/usages`,
+        { authRequired: true },
+      ),
+    ),
+  );
+
+  const lines: string[] = [`Usages of '${symbolName}'`, `Matched symbols: ${usageResults.length}`, ""];
+  for (const result of usageResults) {
+    const target = result.target;
+    lines.push(`## ${target.displayName} (${target.symbolKind}) in ${target.filePath ?? "(unknown file)"}:${formatUsageRange(target.range)}`);
+    if (target.signature) lines.push(`  ${target.signature}`);
+    lines.push(`  Confidence data: ${result.meta.source}, ${result.meta.staleness}, parse=${result.meta.parseStatus ?? "unknown"}`);
+    lines.push("", `  Definitions (${result.totals.definitions})`);
+    if (result.definitions.length === 0) lines.push("  (none)");
+    else for (const definition of result.definitions.slice(0, 10)) lines.push(formatUsageLine(definition));
+    lines.push("", `  Occurrence usages (${result.totals.usages})`);
+    if (result.usages.length === 0) lines.push("  (none)");
+    else for (const usage of result.usages.slice(0, 25)) lines.push(formatUsageLine(usage));
+    lines.push("", `  Callers (${result.totals.callers})`);
+    if (result.callers.length === 0) lines.push("  No callers found.");
+    else for (const caller of result.callers.slice(0, 25)) lines.push(formatUsageLine(caller));
+    lines.push("");
+  }
+  const totalUsages = usageResults.reduce((sum, item) => sum + item.totals.usages, 0);
+  const totalCallers = usageResults.reduce((sum, item) => sum + item.totals.callers, 0);
+  const defFile = usageResults[0]?.target.filePath;
+  const topCaller = usageResults[0]?.callers[0]?.filePath;
+  const suggestedNextTools: string[] = [];
+  if (defFile) suggestedNextTools.push(`get_file("${defFile}", include=["symbols"], symbol_names=["${symbolName}"])`);
+  if (topCaller && topCaller !== defFile) suggestedNextTools.push(`get_file("${topCaller}", include=["outline"])`);
+  suggestedNextTools.push("diff()  // after making changes");
+
+  return success(lines.join("\n").trim(), {
+    projectId: resolvedProjectId,
+    symbolName,
+    found: true,
+    results: usageResults,
+    totalDefinitions: usageResults.reduce((sum, item) => sum + item.totals.definitions, 0),
+    totalUsages,
+    totalCallers,
+    truncated: usageResults.some((r) => r.usages.length >= 25 || r.callers.length >= 25),
+    suggestedNextTools,
+  });
+}
+
+async function findSymbolCallers(
+  client: ReturnType<typeof createCodeMapClient>,
+  symbolName: string,
+  filePath: string | undefined,
+  projectId?: string,
+) {
+  const resolvedProjectId = projectId ?? (await readWorkspaceProjectId());
+  if (!filePath) {
+    return success("action=callers requires file_path.", {
+      projectId: resolvedProjectId ?? null,
+      symbolName,
+      found: false,
+      callers: [],
+    });
+  }
+  if (!resolvedProjectId) {
+    return success("No project ID provided and no linked project found.", {
+      projectId: null,
+      path: filePath,
+      symbolName,
+      found: false,
+      callers: [],
+    });
+  }
+  const result = await client.request<SymbolUsagesResponse>(
+    `/projects/${encodeURIComponent(resolvedProjectId)}/map/symbol-usages`,
+    { authRequired: true, query: { symbolName, path: filePath } },
+  );
+  const lines: string[] = [
+    `Callers of '${symbolName}' in ${filePath}`,
+    `Symbol exported: ${result.target.isExported ? "yes" : "no"}`,
+    `Confidence data: ${result.meta.source}, ${result.meta.staleness}, parse=${result.meta.parseStatus ?? "unknown"}`,
+    "",
+  ];
+  if (result.callers.length === 0) {
+    lines.push(result.target.isExported ? "No callers found. Symbol may be unused, entry-like, or used outside parsed code." : "No callers found. Symbol is not exported and has no parsed external usages.");
+  } else {
+    lines.push(`Found ${result.callers.length} caller(s):`);
+    for (const caller of result.callers.slice(0, 50)) {
+      const names = caller.importedNames?.length ? ` { ${caller.importedNames.join(", ")} }` : "";
+      const source = caller.moduleSpecifier !== undefined ? ` from '${caller.moduleSpecifier}'` : "";
+      const snippet = caller.snippetPreview ? ` - ${caller.snippetPreview}` : "";
+      lines.push(`  ${caller.filePath}:${formatUsageRange(caller.range)} [${caller.confidence}/${caller.evidence}${names}${source}]${snippet}`);
+    }
+  }
+  return success(lines.join("\n"), {
+    projectId: resolvedProjectId,
+    path: filePath,
+    symbolName,
+    found: true,
+    target: result.target,
+    callers: result.callers,
+    usages: result.usages,
+    definitions: result.definitions,
+    totalCallers: result.totals.callers,
+    totalUsages: result.totals.usages,
+    truncated: result.callers.length >= 50,
+    meta: result.meta,
+    suggestedNextTools: [`get_file("${filePath}", include=["symbols"], symbol_names=["${symbolName}"])`, "diff()  // after making changes"],
+  });
+}
+
+export function registerSymbolTool(
   server: McpServer,
   config: McpServerConfig,
 ) {
   const client = createCodeMapClient(config);
 
   server.registerTool(
-    "get_symbol_context",
+    "symbol",
     {
-      title: "Get Symbol Context",
+      title: "Symbol",
       description:
-        "Read one symbol body plus compact surrounding outline. " +
-        "Use this after search_codebase, summarize_feature_area, or find_related_files when a function/component/class is the real target. " +
-        "This avoids reading an entire file just to inspect one symbol. " +
+        "Inspect a symbol. Default action=context reads one symbol body plus compact surrounding outline. " +
+        "Use action=usages to find definitions/usages/callers by symbol name, or action=callers with file_path for faster cross-file callers. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
+        action: z.enum(["context", "usages", "callers"]).optional().default("context").describe("Symbol action to perform."),
         symbol_name: z
           .string()
           .min(1)
@@ -189,7 +357,7 @@ export function registerGetSymbolContextTool(
         file_path: z
           .string()
           .optional()
-          .describe("Optional file path to disambiguate the symbol."),
+          .describe("Optional file path to disambiguate the symbol. Required for action=callers."),
         project_id: uuidSchema
           .optional()
           .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
@@ -203,7 +371,9 @@ export function registerGetSymbolContextTool(
           .describe("Extra lines before and after the symbol body. Default: 4."),
       },
     },
-    withToolError(async ({ symbol_name, file_path, project_id, context_lines }) => {
+    withToolError(async ({ action, symbol_name, file_path, project_id, context_lines }) => {
+      if (action === "usages") return findSymbolUsages(client, symbol_name, project_id);
+      if (action === "callers") return findSymbolCallers(client, symbol_name, file_path, project_id);
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       async function localResponse(projectId: string | null, reason?: string) {
@@ -383,7 +553,7 @@ export function registerGetSymbolContextTool(
           outline: parse,
           suggestedNextTools: [
             formatSymbolCall(symbol),
-            `find_usages("${symbol.displayName}")`,
+            `symbol(action="usages", symbol_name="${symbol.displayName}")`,
             `get_file("${symbol.filePath}", include=["outline"])`,
           ],
         },

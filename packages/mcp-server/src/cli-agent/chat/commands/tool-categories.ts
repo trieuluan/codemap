@@ -10,7 +10,7 @@ export type ToolCategory = "local" | "auth" | "cloud";
 export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   // ── Local-only ───────────────────────────────────────────────────────────
   refresh_local_index:      "local",
-  get_working_diff:         "local",
+  diff:                     "local",
   get_current_workspace_info: "local",
   get_agent_workflow:       "local",
   web_search:               "local",
@@ -20,18 +20,14 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   explore_task:             "local",
   search_codebase:          "local",
   get_file:                 "local",
-  get_files:                "local",
-  find_usages:              "local",
-  find_callers:             "local",
   find_related_files:       "local",
-  get_symbol_context:       "local",
+  symbol:                   "local",
 
   summarize_feature_area:   "local",
   rename_symbol:            "local",
   move_symbols:             "local",
   code_review:              "local",
   find_cycles:              "local",
-  get_diff:                 "local",
 
   // ── Auth required, no project needed ─────────────────────────────────────
   check_auth_status:        "auth",
@@ -54,8 +50,7 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   create_project:                "cloud",
   create_project_from_github:    "cloud",
   create_project_from_gitlab:    "cloud",
-  trigger_reimport:              "cloud",
-  wait_for_import:               "cloud",
+  reimport:                      "cloud",
   get_project_insights:          "cloud",
   get_project_map:               "cloud",
 };

@@ -11,8 +11,8 @@ Use this skill after a CodeMap MCP tool returns ranked files, symbol context, re
 
 ## Token Discipline
 
-- Use `get_files` for several candidate files instead of opening each file.
-- Use `get_symbol_context` for a known function, component, class, or method body.
+- Use `get_file` for several candidate files instead of opening each file.
+- Use `symbol` for a known function, component, class, or method body.
 - Use `get_file` with line ranges when the tool output points to a precise span.
 - Stop expanding context once the edit or answer is grounded enough.
 

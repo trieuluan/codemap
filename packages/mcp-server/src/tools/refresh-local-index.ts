@@ -13,7 +13,7 @@ export function registerRefreshLocalIndexTool(server: McpServer) {
         "Refreshes the local SQLite CodeMap index for the current workspace. " +
         "This is local-only: it reads files from disk, does not require authentication, " +
         "does not call the CodeMap API, and does not update web graph/insights. " +
-        "Use trigger_reimport when a paid workspace needs cloud indexing for the web app.",
+        "Use reimport when a paid workspace needs cloud indexing for the web app.",
       inputSchema: {
         force: z
           .boolean()
@@ -41,7 +41,7 @@ export function registerRefreshLocalIndexTool(server: McpServer) {
         `Stale: ${summary.stale ? "yes" : "no"}`,
         `Elapsed: ${elapsedMs}ms`,
         "",
-        "This updated only the MCP local index. Use trigger_reimport to update cloud indexing, web graph, and insights.",
+        "This updated only the MCP local index. Use reimport to update cloud indexing, web graph, and insights.",
       ].join("\n");
 
       return success(output, {
@@ -53,7 +53,7 @@ export function registerRefreshLocalIndexTool(server: McpServer) {
         symbolCount: summary.symbolCount,
         stale: summary.stale,
         elapsedMs,
-        suggestedNextTools: ["get_working_diff()"],
+        suggestedNextTools: ["diff()"],
       });
     }),
   );

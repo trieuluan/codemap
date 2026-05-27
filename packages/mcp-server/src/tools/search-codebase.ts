@@ -241,11 +241,11 @@ function buildSearchEnvelope(
   ].slice(0, 7);
   const nextActions = symbols[0]
     ? [
-        `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+        `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
         `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
       ]
     : topPaths[0]
-      ? [`get_files(${JSON.stringify(topPaths)})`]
+      ? [`get_file(${JSON.stringify(topPaths)})`]
       : [];
   const summary =
     total === 0
@@ -279,9 +279,9 @@ function buildSearchEnvelope(
     },
     agentHints: {
       recommendedNextTool: symbols[0]
-        ? "get_symbol_context"
+        ? "symbol"
         : topPaths.length
-          ? "get_files"
+          ? "get_file"
           : undefined,
       recommendedPaths: topPaths,
       avoidReadingFullFiles: true,
@@ -341,11 +341,11 @@ function buildOutput(
     sections.push("\nBest next read:");
     if (visibleSymbols[0]) {
       sections.push(
-        `→ get_symbol_context(symbol_name="${visibleSymbols[0].displayName}", file_path="${visibleSymbols[0].filePath}")`,
+        `→ symbol(action="context", symbol_name="${visibleSymbols[0].displayName}", file_path="${visibleSymbols[0].filePath}")`,
       );
     }
     if (uniqueTopFiles.length > 0) {
-      sections.push(`→ get_files(${JSON.stringify(uniqueTopFiles)})`);
+      sections.push(`→ get_file(${JSON.stringify(uniqueTopFiles)})`);
     }
   }
 
@@ -467,7 +467,7 @@ export function registerSearchCodebaseTool(
             suggestedNextTools:
               symbols.length > 0
                 ? [
-                    `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+                    `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
                     `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
                   ]
                 : files.length > 0
@@ -514,7 +514,7 @@ export function registerSearchCodebaseTool(
             suggestedNextTools:
               symbols.length > 0
                 ? [
-                    `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+                    `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
                     `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
                   ]
                 : files.length > 0
@@ -591,7 +591,7 @@ export function registerSearchCodebaseTool(
         const suggestedNextTools: string[] = [];
         if (symbols.length > 0) {
           suggestedNextTools.push(
-            `get_symbol_context(symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+            `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
           );
           suggestedNextTools.push(
             `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,

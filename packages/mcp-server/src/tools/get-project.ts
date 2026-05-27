@@ -48,25 +48,18 @@ function formatProject(
 function buildRecommendedWorkflow(
   health: Awaited<ReturnType<typeof getProjectImportHealth>>,
 ) {
-  if (health.nextAction === "trigger_reimport") {
+  if (health.nextAction === "reimport") {
     return [
-      "Call trigger_reimport to refresh the CodeMap index.",
-      "Call wait_for_import until parseStatus is completed.",
-      "Use explore_task for broad tasks, find_related_files for reading lists, or search_codebase for narrow lookup before reading files.",
-    ];
-  }
-
-  if (health.nextAction === "wait_for_import") {
-    return [
-      "Call wait_for_import until import and parse complete.",
+      "Call reimport to refresh the CodeMap index.",
       "Use get_project again to confirm health is ready.",
+      "Use explore_task for broad tasks, find_related_files for reading lists, or search_codebase for narrow lookup before reading files.",
     ];
   }
 
   if (health.nextAction === "inspect_import_error") {
     return [
       "Inspect latestImport.errorMessage and latestImport.parseError.",
-      "Fix the import source or parser issue, then call trigger_reimport.",
+      "Fix the import source or parser issue, then call reimport.",
     ];
   }
 
@@ -75,7 +68,7 @@ function buildRecommendedWorkflow(
     "Use explore_task first for broad implementation or debugging tasks.",
     "Use find_related_files when the user asks which files are related or what to read.",
     "Use search_codebase for known files, symbols, or exports.",
-    "Use get_files to survey shortlisted files, then get_file with outline/symbols before reading large files.",
+    "Use get_file with an array of paths to survey shortlisted file outlines, then get_file with symbols before reading large files.",
   ];
 }
 
@@ -91,7 +84,7 @@ export function registerGetProjectTool(
       description:
         "Returns the current linked CodeMap cloud project for this workspace (read from .codemap/mcp.json). " +
         "Use only when the user asks about cloud project/import/index status, when a cloud tool reports a missing/stale project, " +
-        "or before cloud-only features such as graph, insights, dashboard, trigger_reimport, or wait_for_import. " +
+        "or before cloud-only features such as graph, insights, dashboard, reimport, or reimport. " +
         "Do not call as setup for normal local coding: local tools work without a cloud project — use refresh_local_index for the local index.",
       inputSchema: {
         verbose: z

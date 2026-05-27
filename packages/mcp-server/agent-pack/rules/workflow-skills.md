@@ -2,7 +2,7 @@
 
 ## Start Here: Context Routing
 
-For broad work, choose the narrowest CodeMap context tool before implementing. Use `explore_task` when files are unclear, `search_codebase` for known names, `find_related_files` for related-file questions, and `get_files`/`get_file` for known paths.
+For broad work, choose the narrowest CodeMap context tool before implementing. Use `explore_task` when files are unclear, `search_codebase` for known names, `find_related_files` for related-file questions, and `get_file` for known paths.
 
 ## Brainstorming (design before code)
 
@@ -19,8 +19,8 @@ For new features or vague requirements, design first — never write production 
 For new functionality or bug fixes, follow RED → GREEN → REFACTOR strictly.
 
 - **RED**: `search_codebase("test <feature>")` to find patterns, write a minimal failing test, run with the host agent test runner and confirm it **fails**.
-- **GREEN**: Use `get_symbol_context` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
-- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `get_working_diff` before declaring done.
+- **GREEN**: Use `symbol` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
+- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `diff(mode="working")` before declaring done.
 
 No production code before a failing test exists.
 
@@ -38,7 +38,7 @@ Use after a design is approved and before implementation begins.
 
 Use when implementing an approved plan.
 
-1. Call `get_working_diff` before edits and preserve unrelated user changes.
+1. Call `diff(mode="working")` before edits and preserve unrelated user changes.
 2. Execute one plan step at a time.
 3. If reality contradicts the plan, revise the plan instead of broad improvisation.
 4. Run planned verification, inspect diff, then refresh local index.
@@ -47,10 +47,10 @@ Use when implementing an approved plan.
 
 Use after every file-changing task.
 
-1. Call `get_working_diff`.
+1. Call `diff(mode="working")`.
 2. Run the smallest relevant build/test command.
 3. Call `refresh_local_index` after local edits.
-4. Decide whether `trigger_reimport` and `wait_for_import` are needed for cloud graph/insights.
+4. Decide whether `reimport` and `reimport(wait=true)` are needed for cloud graph/insights.
 5. Report changed behavior, verification results, skipped checks, and residual risk.
 
 ## Feature Area Investigation
@@ -58,8 +58,8 @@ Use after every file-changing task.
 Use when the task involves a named feature (billing, auth, admin, graph, etc.).
 
 1. Call `summarize_feature_area(query)` — read confidence level and recommended order.
-2. Call `get_files([...])` on the top results to survey outlines without loading full files.
-3. Use `get_symbol_context` for the most relevant component, service, or controller.
+2. Call `get_file(path=[...])` on the top results to survey outlines without loading full files.
+3. Use `symbol` for the most relevant component, service, or controller.
 4. If still unclear, call `find_related_files` anchored to the best file found.
 
 ## Symbol-Level Debugging
@@ -67,8 +67,8 @@ Use when the task involves a named feature (billing, auth, admin, graph, etc.).
 Use when a bug or behavior centers on a specific function, class, component, or method.
 
 1. `search_codebase(symbol_name)` if the file is unknown.
-2. `get_symbol_context(symbol_name, file_path)` for the exact body.
-3. `find_callers` or `find_usages` when call flow or impact matters.
+2. `symbol(action="context", symbol_name, file_path)` for the exact body.
+3. `symbol` when call flow or impact matters.
 4. Read only adjacent files needed to explain or change the behavior.
 
 Do not read an entire large file to inspect one symbol when CodeMap can return symbol context.
@@ -89,9 +89,9 @@ When results look weak or noisy, refine the query, anchor to a known file or sym
 
 Use when reviewing changes in a CodeMap-indexed repository.
 
-1. Start with `get_working_diff` or `get_diff`.
-2. For changed symbols, use `get_symbol_context` instead of full-file reads.
-3. Use `find_usages` or `find_callers` for risky public API or shared behavior changes.
+1. Start with `diff(mode="working")` or `diff(mode="refs")`.
+2. For changed symbols, use `symbol` instead of full-file reads.
+3. Use `symbol` for risky public API or shared behavior changes.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.

@@ -1,12 +1,26 @@
 # Verification Before Completion
 
-Use this skill after any task that changed files.
+Use this skill after any task that changed files. It is the final gate before telling the user the work is done.
 
 ## Checklist
 
-1. Call `get_working_diff` and confirm only intended files changed.
-2. Run the smallest relevant build or test command.
-3. Call `refresh_local_index` after local code edits.
-4. Decide whether cloud `trigger_reimport` and `wait_for_import` are needed.
-5. Final response must include changed behavior, verification results, skipped checks, and residual risk.
+1. **Inspect changes**
+   - Call `diff(mode="working")`.
+   - Confirm only intended files changed.
+   - Mention unrelated dirty files if present.
+
+2. **Run checks**
+   - Run the smallest sufficient build or test command.
+   - For shared package changes, build shared before dependents.
+   - If a check cannot run, explain why and what risk remains.
+
+3. **Refresh indexes**
+   - Call `refresh_local_index` after local code edits.
+   - Use `reimport` and `reimport(wait=true)` only when cloud graph, web insights, or paid workspace cloud indexing should update.
+
+4. **Final response**
+   - Summarize changed behavior.
+   - List verification results.
+   - Call out skipped checks, blockers, or residual risk.
+
 

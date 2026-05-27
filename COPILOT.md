@@ -1,18 +1,15 @@
-# GEMINI.md
+# COPILOT.md
 
-Use CodeMap MCP before raw file reads or grep.
+Use CodeMap MCP as the first context source for codebase work.
 
-Default workflow:
-
-1. Call `get_agent_workflow`, then `get_project`.
-2. For broad implementation/debug/review/refactor/test/research work with unclear files, call `explore_task`.
-3. Use `explore_task` for broad implementation/debugging.
-4. Use `summarize_feature_area` for feature keywords.
-5. Use `find_related_files` for anchor file/symbol questions.
-6. Use `search_codebase` for known symbols, exports, filenames, or keywords.
-7. Use `get_file` for outlines and `symbol` for exact bodies.
-8. Read MCP summaries, rankings, score reasons, next steps, and resource URIs before opening raw files.
-9. After edits, build/test, inspect diff, and reimport when needed.
+- Prefer CodeMap tools before raw file reads.
+- Start with `get_agent_workflow`, then `get_project`.
+- For broad implementation/debug/review/refactor/test/research work with unclear files, call `explore_task`.
+- Use `summarize_feature_area`, `find_related_files`, or `search_codebase` to locate files.
+- Use `get_file` and `symbol` to keep context small.
+- Use `symbol` for impact analysis.
+- Read MCP summaries, ranking reasons, next steps, and resource URIs before expanding context.
+- Verify with focused build/test commands and reimport after meaningful changes.
 
 ## Brainstorming (design before code)
 
@@ -76,3 +73,4 @@ Use when reviewing changes in a CodeMap-indexed repository.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.
+

@@ -177,7 +177,7 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Claude task lifecycle rule",
         relativePath: ".claude/rules/codemap-task-lifecycle.md",
         required: true,
-        phrases: ["refresh_local_index", "trigger_reimport"],
+        phrases: ["refresh_local_index", "reimport"],
       },
       {
         target,

@@ -22,8 +22,7 @@ export type ImportHealthState =
 
 export type ImportHealthNextAction =
   | "none"
-  | "wait_for_import"
-  | "trigger_reimport"
+  | "reimport"
   | "inspect_import_error";
 
 export interface ImportHealth {
@@ -139,7 +138,7 @@ export function buildImportHealth(input: {
       isReady: false,
       isStale: false,
       needsReimport: true,
-      nextAction: "trigger_reimport",
+      nextAction: "reimport",
       latestImport,
       workspace: comparableWorkspace,
       workspaceResolution,
@@ -167,7 +166,7 @@ export function buildImportHealth(input: {
       isReady: false,
       isStale: false,
       needsReimport: false,
-      nextAction: "wait_for_import",
+      nextAction: "reimport",
       latestImport,
       workspace: comparableWorkspace,
       workspaceResolution,
@@ -185,7 +184,7 @@ export function buildImportHealth(input: {
       isReady: false,
       isStale: false,
       needsReimport: false,
-      nextAction: "wait_for_import",
+      nextAction: "reimport",
       latestImport,
       workspace: comparableWorkspace,
       workspaceResolution,
@@ -203,7 +202,7 @@ export function buildImportHealth(input: {
       isReady: false,
       isStale: true,
       needsReimport: true,
-      nextAction: "trigger_reimport",
+      nextAction: "reimport",
       latestImport,
       workspace: comparableWorkspace,
       workspaceResolution,
@@ -230,7 +229,7 @@ export function buildImportHealth(input: {
     isReady: false,
     isStale: false,
     needsReimport: false,
-    nextAction: "wait_for_import",
+    nextAction: "reimport",
     latestImport,
     workspace: comparableWorkspace,
     workspaceResolution,

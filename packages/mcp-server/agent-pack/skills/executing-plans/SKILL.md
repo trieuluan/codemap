@@ -6,7 +6,7 @@ Use this skill when implementing an approved plan. Follow the plan in order and 
 
 1. **Before edits**
    - Read the approved plan.
-   - Call `get_working_diff` and note unrelated dirty files.
+   - Call `diff(mode="working")` and note unrelated dirty files.
    - Read only the CodeMap context needed for the next step.
 
 2. **During implementation**
@@ -16,9 +16,9 @@ Use this skill when implementing an approved plan. Follow the plan in order and 
 
 3. **After edits**
    - Run the planned checks.
-   - Call `get_working_diff` to inspect the actual changed files.
+   - Call `diff(mode="working")` to inspect the actual changed files.
    - Use `refresh_local_index` after local edits.
-   - Use `trigger_reimport` only when cloud graph, web insights, or paid cloud indexing should refresh.
+   - Use `reimport` only when cloud graph, web insights, or paid cloud indexing should refresh.
 
 ## Rule
 

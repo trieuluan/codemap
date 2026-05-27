@@ -49,10 +49,10 @@ export interface WorkflowRoute {
 }
 
 export const DEFAULT_VERIFICATION_CHECKLIST = [
-  "Inspect uncommitted changes with get_working_diff.",
+  "Inspect uncommitted changes with diff(mode=\"working\").",
   "Run the smallest relevant build or test command.",
   "Refresh the local MCP index with refresh_local_index after local edits.",
-  "Decide whether cloud graph/insights need trigger_reimport and wait_for_import.",
+  "Decide whether cloud graph/insights need reimport.",
   "Report verification results, skipped checks, and residual risk.",
 ];
 
@@ -85,7 +85,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "safe-edit-and-reimport",
       "verification-before-completion",
     ],
-    firstTools: ["explore_task", "search_codebase", "get_symbol_context"],
+    firstTools: ["explore_task", "search_codebase", "symbol"],
     hardGates: [
       "Reproduce or identify the failing path before changing code.",
       "Prefer a failing test before production changes when the repo has a matching test pattern.",
@@ -103,7 +103,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "feature-area-investigation",
       "interpreting-codemap-output",
     ],
-    firstTools: ["search_codebase", "get_symbol_context", "find_callers"],
+    firstTools: ["search_codebase", "symbol", "symbol"],
     hardGates: [
       "Do not patch before the likely root cause is grounded in CodeMap context.",
       "Use symbol context and callers/usages before raw broad reads.",
@@ -116,7 +116,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "review",
     description: "Code review, PR review, diff review, or risk assessment.",
     requiredSkills: ["token-efficient-code-review", "interpreting-codemap-output"],
-    firstTools: ["get_working_diff", "get_diff", "find_usages"],
+    firstTools: ["diff", "symbol"],
     hardGates: [
       "Lead with findings by severity.",
       "Use changed symbols and usages before summarizing broad context.",
@@ -133,7 +133,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "safe-edit-and-reimport",
       "verification-before-completion",
     ],
-    firstTools: ["find_related_files", "find_usages", "get_working_diff"],
+    firstTools: ["find_related_files", "symbol", "diff"],
     hardGates: [
       "Confirm behavior-preserving scope before edits.",
       "Use usages/callers before moving or renaming shared symbols.",
@@ -147,7 +147,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "test",
     description: "Add, repair, or improve tests.",
     requiredSkills: ["test-driven-development", "verification-before-completion"],
-    firstTools: ["search_codebase", "get_symbol_context"],
+    firstTools: ["search_codebase", "symbol"],
     hardGates: [
       "Find existing test patterns before adding tests.",
       "For bug coverage, confirm the test fails before the fix when feasible.",
@@ -160,7 +160,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
     taskType: "research",
     description: "Read-only exploration, codebase explanation, feasibility analysis, or planning.",
     requiredSkills: ["mcp-first-exploration", "interpreting-codemap-output"],
-    firstTools: ["explore_task", "find_related_files", "get_files"],
+    firstTools: ["explore_task", "find_related_files", "get_file"],
     hardGates: [
       "Prefer CodeMap summaries, rankings, and next steps before opening raw files.",
       "Do not edit files for read-only research tasks.",
@@ -184,20 +184,20 @@ export const AGENT_WORKFLOW_SUMMARY = [
   "For 'which files are related?' or 'what should I read?', call find_related_files — semantic similarity is a built-in signal.",
   "For known keywords, files, symbols, or exports, call search_codebase.",
   "For conceptual queries ('authentication flow', 'error handling') where exact names are unknown, call search_codebase(semantic=true).",
-  "After you have a shortlist, call get_files for outlines, then get_file for specific content or symbols.",
-  "Use find_usages/find_callers for symbol impact analysis.",
-  "Use get_working_diff after edits, then build/test as appropriate.",
-  "Call refresh_local_index after local edits; call trigger_reimport and wait_for_import only when cloud/web indexing should refresh.",
+  "After you have a shortlist, call get_file for outlines, then get_file for specific content or symbols.",
+  "Use symbol/symbol for symbol impact analysis.",
+  "Use diff after edits, then build/test as appropriate.",
+  "Call refresh_local_index after local edits; call reimport only when cloud/web indexing should refresh.",
   "Read required CodeMap Agent Pack skills before implementing gated work.",
 ];
 
 export const AGENT_WORKFLOW_SEQUENCE = [
   "New session: get_agent_workflow, then check project-context resource. If no local index exists yet, call refresh_local_index first (no auth required).",
-  "Broad task: explore_task -> follow suggestedNextTools -> get_file/get_files. Semantic search runs automatically.",
-  "Related-file question: find_related_files(query/file_path/symbol_name) -> get_files -> get_file. Semantic signal is built in.",
+  "Broad task: explore_task -> follow suggestedNextTools -> get_file. Semantic search runs automatically.",
+  "Related-file question: find_related_files(query/file_path/symbol_name) -> get_file -> get_file. Semantic signal is built in.",
   "Narrow lookup by name: search_codebase -> get_file(include=[outline] or [symbols]).",
   "Conceptual lookup (no exact name): search_codebase(semantic=true) -> get_file(include=[outline]).",
-  "Refactor/cleanup: find_usages or find_callers -> get_file(blast_radius if risky) -> get_working_diff.",
+  "Refactor/cleanup: symbol or symbol -> get_file(blast_radius if risky) -> diff.",
   "Broad work: choose CodeMap exploration tools -> required skills -> design/plan gates -> implementation.",
   "Verification: inspect diff, build/test, refresh_local_index, and decide whether cloud reimport is needed.",
 ];
@@ -232,7 +232,7 @@ CodeMap Agent Pack uses Superpowers-style gates to keep agents from jumping into
 
 ## Gates
 
-1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then choose the narrowest CodeMap context tool: \`explore_task\` for broad unclear work, \`search_codebase\` for known names, \`find_related_files\` for related-file questions, or \`get_files\`/\`get_file\` for known paths.
+1. **Orient** — call \`get_agent_workflow\` if workflow is unknown. The project-context resource is already loaded in your context — do NOT call \`get_project\` or \`list_projects\` unless the user explicitly asks for project or account info. If no local index exists yet, call \`refresh_local_index\` (no auth required). Then choose the narrowest CodeMap context tool: \`explore_task\` for broad unclear work, \`search_codebase\` for known names, \`find_related_files\` for related-file questions, or \`get_file\`/\`get_file\` for known paths.
 2. **Design** — for features or vague tasks, complete brainstorming and get design approval before editing production files.
 3. **Plan** — after design approval, write an implementation plan with exact files, steps, and verification commands.
 4. **Implement** — follow the plan or TDD loop; keep changes scoped.
@@ -267,11 +267,11 @@ Choose the tool based on the shape of the question:
 2. \`explore_task\` — use first for broad tasks such as "fix bug X", "implement Y", or "investigate Z". It returns likely files, entrypoints, symbols, risks, recommended reads, and suggested next tools.
 3. \`find_related_files\` — use when you already have an anchor file/symbol, or when the user asks "which files should I read?", "what is related to X?", or "what is the scope around X?".
 4. \`search_codebase\` — use for known keywords, filenames, exports, or symbols. Pass \`semantic=true\` for conceptual queries where you do not know the exact symbol name (e.g. "authentication flow", "error handling logic").
-5. \`get_files\` — fetch outlines for several candidate files in one call. Use after \`explore_task\`, \`find_related_files\`, or \`search_codebase\`.
+5. \`get_file\` — fetch outlines for several candidate files in one call. Use after \`explore_task\`, \`find_related_files\`, or \`search_codebase\`.
 6. \`get_file\` — read exact content only after you know what you need. Prefer \`include=["outline"]\` for map context and \`include=["symbols"]\` with \`symbol_names\` for function/class bodies.
-7. \`find_usages\` / \`find_callers\` — use for symbol impact analysis. Use \`find_callers\` when the symbol's file is known.
+7. \`symbol\` / \`symbol\` — use for symbol impact analysis. Use \`symbol\` when the symbol's file is known.
 8. \`get_project_map\` — inspect folder structure when module layout is unclear.
-9. \`get_working_diff\` / \`get_diff\` — inspect uncommitted changes or committed ref diffs.
+9. \`diff\` — inspect uncommitted local changes (mode=working) or committed ref diffs (mode=ref).
 10. Raw Read / grep — fallback only when MCP cannot answer, such as unindexed files, dynamic string access, or complex regex searches.
 
 ## Quick Decisions
@@ -280,10 +280,10 @@ Choose the tool based on the shape of the question:
 - "Which files are related?" -> \`find_related_files\` (semantic signal built in).
 - Known symbol or filename -> \`search_codebase\`.
 - Conceptual query, no exact name -> \`search_codebase(semantic=true)\`.
-- Several candidate files -> \`get_files\`.
+- Several candidate files -> \`get_file\`.
 - Specific symbol body -> \`get_file(include=["symbols"], symbol_names=[...])\`.
-- Who calls/imports this? -> \`find_callers\` or \`find_usages\`.
-- After edits -> \`get_working_diff\`, build/test, then \`refresh_local_index\` when the local MCP index should refresh.
+- Who calls/imports this? -> \`symbol\` or \`symbol\`.
+- After edits -> \`diff\`, build/test, then \`refresh_local_index\` when the local MCP index should refresh.
 `;
 
 export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
@@ -296,7 +296,7 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 ## 2. Read Deliberately
 
-- Use \`get_files\` to survey multiple outlines.
+- Use \`get_file\` to survey multiple outlines.
 - Use \`get_file(include=["outline"])\` before full content for large/unknown files.
 - Use \`get_file(include=["symbols"], symbol_names=[...])\` for exact function/class bodies.
 
@@ -311,12 +311,12 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 - Run the smallest sufficient build/test.
 - Build shared packages before dependents when applicable.
-- Use \`get_working_diff\` to confirm changed files.
+- Use \`diff\` to confirm changed files.
 
 ## 5. Refresh Index
 
 - Use \`refresh_local_index\` after local edits to refresh the MCP SQLite index without cloud access.
-- Use \`trigger_reimport\` then \`wait_for_import\` only when the cloud index, web graph, or insights should refresh.
+- Use \`reimport\` only when the cloud index, web graph, or insights should refresh.
 
 ## 6. Final Response
 

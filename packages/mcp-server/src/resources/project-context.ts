@@ -37,10 +37,9 @@ const TOOLS_LITE = [
   "- get_project_map — browse the full file tree",
   "- get_project — get the current linked project from .codemap/mcp.json; call with no arguments",
   "- link_project — link the workspace to an existing CodeMap project; auto-detects by git remote URL",
-  "- get_working_diff — show uncommitted changes (staged, unstaged, untracked); use after edits to verify what changed",
+  "- diff — show git diff. mode=\"working\" (default) for uncommitted local changes; mode=\"ref\" with from/to for committed ref diffs",
   "- refresh_local_index — refresh the local SQLite MCP index from disk; local-only, no auth or cloud API required",
-  "- trigger_reimport — run a full cloud import for web graph/insights when the workspace plan allows cloud indexing",
-  "- wait_for_import — wait until an import finishes",
+  "- reimport — run a full cloud import and/or wait for completion (actions: trigger, wait, trigger_and_wait)",
   "- check_auth_status — verify MCP authentication, current API URL, user, and next action",
   "- start_auth_flow / wait_for_auth / logout — browser login, API key claim, and local credential reset",
   "- web_search — search the web for documentation, library APIs, changelogs, or error solutions; returns ranked results with URLs",
@@ -49,13 +48,13 @@ const TOOLS_LITE = [
 ];
 
 const TOOLS_STANDARD_EXTRA = [
-  "- get_files — batch outline fetch for up to 7 files in one call; use after explore_task or find_related_files to survey candidates",
-  "- find_usages — find definitions, occurrence-level usages, and callers for a symbol across the codebase",
-  "- find_callers — find static callers of a symbol from a given file; faster than find_usages when file is known",
-  "- get_diff — show git diff between two refs (commits, branches, tags)",
+  "- get_file — batch outline fetch for up to 7 files in one call; use after explore_task or find_related_files to survey candidates",
+  "- symbol — find definitions, occurrence-level usages, and callers for a symbol across the codebase",
+  "- symbol — find static callers of a symbol from a given file; faster than symbol when file is known",
+
   "- get_project_insights — full codebase health report: cycles, entry points, orphans, top files",
   "- find_related_files — find files related to a query, file, or symbol using multi-signal ranking",
-  "- get_symbol_context — get full body and context for a specific symbol (function, class, method) by name and file",
+  "- symbol — get full body and context for a specific symbol (function, class, method) by name and file",
   "- summarize_feature_area — summarize the purpose, key files, and entry points of a feature area or directory",
   "- explore_task — orient on broad tasks with unclear files; returns likely files, entry points, risks, and suggested next tools",
   "- create_project — create or reuse a CodeMap project from the current workspace",
@@ -66,7 +65,7 @@ const TOOLS_STANDARD_EXTRA = [
 
 const TOOLS_FULL_EXTRA = [
   "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
-  "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call trigger_reimport after",
+  "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call reimport after",
   "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
   "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
   "- check_github_connection / get_github_connect_url / disconnect_github — manage GitHub OAuth for repository imports",
@@ -85,27 +84,27 @@ const WORKFLOW_LITE = [
   "- Follow suggestedNextTools returned by explore_task — it provides exact get_file calls to make next.",
   "- Use search_codebase when you know a specific keyword. Follow the read hint in each result.",
   "- Use get_file with include: [\"outline\"] to see a file's symbol list, then include: [\"symbols\"] + symbol_names for specific function bodies.",
-  "- Use get_working_diff after making edits to verify what changed before committing.",
+  "- Use diff after making edits to verify what changed before committing.",
   "- Use refresh_local_index after editing files to refresh local MCP search/read context without touching cloud indexing.",
-  "- Use trigger_reimport then wait_for_import when you need cloud indexing for web graph/insights.",
+  "- Use reimport when you need cloud indexing for web graph/insights.",
   "- Use web_search to find documentation, library APIs, or error solutions. Use web_fetch to read the full content of a result URL.",
 ];
 
 const WORKFLOW_STANDARD_EXTRA = [
   "- For broad tasks with unclear files, call explore_task before implementation; if exact files or symbols are already known, inspect them directly.",
-  "- After explore_task returns candidates, use get_files to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
-  "- Use get_symbol_context to read the full body of a specific function or class when you already know its name and file.",
+  "- After explore_task returns candidates, use get_file to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
+  "- Use symbol to read the full body of a specific function or class when you already know its name and file.",
   "- Use summarize_feature_area to get a high-level overview of a feature directory before diving into individual files.",
-  "- Use find_usages to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), find_usages works directly on method names.",
-  "- Use find_callers to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
+  "- Use symbol to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), symbol works directly on method names.",
+  "- Use symbol to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
   "- Use find_related_files with a natural-language query (e.g. 'login bug') to find related files across feature boundaries.",
   "- Use get_project_insights for global signals: orphans, cycles, top fan-out/fan-in files.",
-  "- Use get_diff to compare committed refs; use get_working_diff for uncommitted local changes.",
+  "- Use diff(mode=\"ref\", from, to) to compare committed refs; use diff (default mode=\"working\") for uncommitted local changes.",
 ];
 
 const WORKFLOW_FULL_EXTRA = [
   "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
-  "- Use rename_symbol to rename a symbol codebase-wide — call trigger_reimport after. For unexported/private symbols pass rename_in_file_only: true.",
+  "- Use rename_symbol to rename a symbol codebase-wide — call reimport after. For unexported/private symbols pass rename_in_file_only: true.",
   "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
   "- Use code_review for automated quality checks. Set focus_areas to target specific concerns (bugs, security, performance, etc.).",
 ];
@@ -115,9 +114,9 @@ const MAINTENANCE_SECTION = [
   "- For dead code, dead files, and large-file cleanup, combine CodeMap semantic tools with local static checks. MCP import graph is the first pass; TypeScript/compiler or ripgrep checks are the confirmation pass.",
   "- Use get_project_insights first for global signals: orphan files, cycles, top fan-out/fan-in files, parse quality, and entry-like files.",
   "- Dead files: check get_file outline importedBy. Empty importedBy is only a candidate. Do not delete route files, Fastify autoload plugins, CLI scripts, worker entrypoints, tests, or generated config files solely because the static graph has no importer.",
-  "- Dead functions: use find_usages or find_callers. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
-  "- find_usages occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
-  "- After cleanup edits, run package builds and get_working_diff. Call refresh_local_index to refresh MCP local data; call trigger_reimport and wait_for_import only when cloud/web data should refresh.",
+  "- Dead functions: use symbol or symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
+  "- symbol occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
+  "- After cleanup edits, run package builds and diff. Call refresh_local_index to refresh MCP local data; call reimport(wait=true) only when cloud/web data should refresh.",
   "- Before editing files, use find_cycles to ensure no new circular dependencies are introduced.",
 ];
 
@@ -191,7 +190,7 @@ function buildContextText(
     }
   } else {
     lines.push("## Import Status");
-    lines.push("No imports found. Run trigger_reimport to index the codebase.");
+    lines.push("No imports found. Run reimport to index the codebase.");
   }
 
   lines.push("");
@@ -201,7 +200,7 @@ function buildContextText(
   lines.push("");
   lines.push("## Supported Languages");
   lines.push("CodeMap parses and indexes symbols from the following languages:");
-  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports; methods inside factory return-objects (e.g. createXxxService, createXxxController patterns) are also indexed as kind=method with parentSymbolName pointing to the factory — find_usages works for these without needing grep");
+  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports; methods inside factory return-objects (e.g. createXxxService, createXxxController patterns) are also indexed as kind=method with parentSymbolName pointing to the factory — symbol works for these without needing grep");
   lines.push("- Dart (.dart) — classes, mixins, enums, imports");
   lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
   lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
@@ -209,12 +208,12 @@ function buildContextText(
   lines.push("All other file types are indexed by path only (no symbol extraction).");
   lines.push("");
   lines.push("## Symbol Occurrence Tracking (TypeScript/JS)");
-  lines.push("find_usages returns occurrences with occurrenceRole that indicates how a symbol appears:");
+  lines.push("symbol returns occurrences with occurrenceRole that indicates how a symbol appears:");
   lines.push("- definition — where the symbol is declared");
   lines.push("- call — direct function/method call: foo(), obj.method()");
   lines.push("- reference — property access (OBJ.prop) or bare identifier usage (CONST in array/arg)");
   lines.push("Cross-file calls are resolved via named imports ({ foo } from '...'). Wildcard imports (import * as ns) are also resolved: ns.foo() maps to foo in the target module.");
-  lines.push("Known false negatives — find_usages may show 0 callers for symbols used via:");
+  lines.push("Known false negatives — symbol may show 0 callers for symbols used via:");
   lines.push("- Dynamic import: import('../lib/foo.js') with no importedNames — workers often use this pattern");
   lines.push("- Framework registration: Fastify route handlers registered via object destructuring, not direct calls");
   lines.push("- Runtime/dynamic access: obj[methodName], eval, require with variable path");
@@ -270,20 +269,19 @@ function buildContextText(
     } else {
       lines.push(
         "The local workspace commit differs from the latest cloud indexed commit. " +
-          "Call refresh_local_index for local MCP work, or trigger_reimport then " +
-          "wait_for_import when web graph/insights should update.",
+          "Call refresh_local_index for local MCP work, or reimport when web graph/insights should update.",
       );
     }
   } else if (project.status === "importing") {
     if (latestImport?.parseStatus === "queued") {
       lines.push(
         "The import phase is complete and the parse job is queued. " +
-          "Call wait_for_import to wait for semantic analysis before relying " +
+          "Call reimport to wait for semantic analysis before relying " +
           "on symbol/export results.",
       );
     } else {
       lines.push(
-        "An import is currently in progress. Use wait_for_import to wait until " +
+        "An import is currently in progress. Use reimport to wait until " +
           "it completes before searching the codebase.",
       );
     }
@@ -294,7 +292,7 @@ function buildContextText(
     if (latestImport?.parseStatus === "queued") {
       lines.push(
         "The codebase snapshot is ready and the parse job is queued. " +
-          "Call wait_for_import to wait for semantic analysis before relying " +
+          "Call reimport to wait for semantic analysis before relying " +
           "on symbol/export results.",
       );
     } else {
@@ -307,7 +305,7 @@ function buildContextText(
   } else {
     lines.push(
       "The project has not been fully imported in the cloud yet. Use refresh_local_index " +
-        "for local MCP indexing, or trigger_reimport to create cloud graph/insights " +
+        "for local MCP indexing, or reimport to create cloud graph/insights " +
         "when the workspace plan allows it.",
     );
   }
@@ -366,9 +364,9 @@ export function registerProjectContextResource(
               "",
               "## What works locally (no cloud project needed)",
               "- refresh_local_index — build/refresh local SQLite index from disk; required before search/read tools work",
-              "- explore_task, search_codebase, get_file, get_files, find_usages, find_callers — full codebase navigation",
+              "- explore_task, search_codebase, get_file, get_file, symbol, symbol — full codebase navigation",
               "- web_search, web_fetch — search the web and fetch URLs; no auth required",
-              "- get_working_diff — see uncommitted changes",
+              "- diff — see uncommitted changes (working mode)",
               "",
               "## Recommended first step",
               "Call refresh_local_index now (no arguments) to build the local index. After that, you can search and navigate the codebase immediately.",
@@ -393,7 +391,7 @@ export function registerProjectContextResource(
               "",
               "## What works right now (no login needed)",
               "- refresh_local_index — build local index from disk; no auth required",
-              "- After indexing: explore_task, search_codebase, get_file, get_files, find_usages — full local navigation",
+              "- After indexing: explore_task, search_codebase, get_file, get_file, symbol — full local navigation",
               "- web_search, web_fetch — search the web and fetch URLs; no auth required",
               "",
               "## Recommended first step",

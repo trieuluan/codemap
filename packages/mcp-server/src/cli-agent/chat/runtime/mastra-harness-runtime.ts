@@ -117,7 +117,7 @@ const MASTRA_DISABLED_TOOLS = [
   "codemap_wait_for_auth",
   "codemap_logout",
   "codemap_link_project",
-  "codemap_wait_for_import",
+  "codemap_reimport",
   "codemap_create_project",
   "codemap_create_project_from_github",
   "codemap_create_project_from_gitlab",

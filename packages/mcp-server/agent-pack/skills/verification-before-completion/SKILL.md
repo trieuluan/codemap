@@ -5,7 +5,7 @@ Use this skill after any task that changed files. It is the final gate before te
 ## Checklist
 
 1. **Inspect changes**
-   - Call `get_working_diff`.
+   - Call `diff(mode="working")`.
    - Confirm only intended files changed.
    - Mention unrelated dirty files if present.
 
@@ -16,7 +16,7 @@ Use this skill after any task that changed files. It is the final gate before te
 
 3. **Refresh indexes**
    - Call `refresh_local_index` after local code edits.
-   - Use `trigger_reimport` and `wait_for_import` only when cloud graph, web insights, or paid workspace cloud indexing should update.
+   - Use `reimport` and `reimport(wait=true)` only when cloud graph, web insights, or paid workspace cloud indexing should update.
 
 4. **Final response**
    - Summarize changed behavior.

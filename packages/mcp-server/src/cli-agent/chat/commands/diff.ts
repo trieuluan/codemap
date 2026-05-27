@@ -6,7 +6,8 @@ export const diffCommand: Command = {
   execute: async (_args, ctx) => {
     ctx.setBusy(true);
     try {
-      const result = await ctx.toolClient.callTool("get_working_diff", {
+      const result = await ctx.toolClient.callTool("diff", {
+        mode: "working",
         include_patch: false,
         include_untracked: true,
       });

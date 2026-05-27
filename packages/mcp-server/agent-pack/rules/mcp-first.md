@@ -9,10 +9,10 @@ When CodeMap MCP is available, use CodeMap tools before raw file reads or grep.
 - Feature keyword: `summarize_feature_area`.
 - Related-file question: `find_related_files`.
 - Known symbol/file/export: `search_codebase`.
-- Several candidates: `get_files`.
-- Specific body: `get_symbol_context`.
-- Impact analysis: `find_usages` or `find_callers`.
-- After edits: `get_working_diff`, build/test, then reimport when needed.
+- Several candidates: `get_file`.
+- Specific body: `symbol`.
+- Impact analysis: `symbol`.
+- After edits: `diff(mode="working")`, build/test, then reimport when needed.
 
 Read MCP output in this order: summary, ranked files/symbols, score reasons, next steps, and resource URIs. Expand to raw files only when the ranked context is not enough to answer or edit safely.
 

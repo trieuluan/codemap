@@ -76,3 +76,4 @@ Use when reviewing changes in a CodeMap-indexed repository.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.
+

@@ -10,7 +10,7 @@ List build, test, lint, or manual smoke checks and their results.
 
 ## Indexing
 
-State whether `refresh_local_index` ran and whether cloud `trigger_reimport` was needed.
+State whether `refresh_local_index` ran and whether cloud `reimport` was needed.
 
 ## Skipped Checks
 

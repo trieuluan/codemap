@@ -4,7 +4,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const importCommand: Command = {
   name: "import",
-  description: "Trigger a CodeMap reimport and wait for it to finish. Usage: /import [<project-id>]",
+  description:
+    "Trigger a CodeMap reimport and wait for it to finish. Usage: /import [<project-id>]",
   execute: async (args, ctx) => {
     ctx.setBusy(true);
     try {
@@ -18,23 +19,27 @@ export const importCommand: Command = {
         { role: "system", content: "Triggering reimport..." },
       ]);
 
-      await ctx.toolClient.callTool("trigger_reimport", toolArgs);
-
-      ctx.setMessages((prev) => [
-        ...prev,
-        { role: "system", content: "Import started. Waiting for completion..." },
-      ]);
-
-      // Poll until both import and parse phases are done (max ~10 min).
-      // wait_for_import returns "Next action: wait_for_import" in its text
-      // output when the parse phase is still running after import completes.
+      // First call: trigger_and_wait — triggers a new import then polls.
+      // The reimport tool polls internally; if it returns timedOut=true
+      // the import is still running and we continue polling.
       const MAX_POLLS = 12;
-      let result = await ctx.toolClient.callTool("wait_for_import", toolArgs);
+      let result = await ctx.toolClient.callTool("reimport", {
+        ...toolArgs,
+        action: "trigger_and_wait",
+      });
+
       for (let i = 0; i < MAX_POLLS; i++) {
         if (result.isError) break;
-        if (!result.content.includes("Next action: wait_for_import")) break;
-        result = await ctx.toolClient.callTool("wait_for_import", toolArgs);
+        // Check if the import completed (not timed out)
+        const text: string = result.content ?? "";
+        if (!text.includes("still in progress") && !text.includes("timedOut")) break;
+        // Continue waiting
+        result = await ctx.toolClient.callTool("reimport", {
+          ...toolArgs,
+          action: "wait",
+        });
       }
+
       ctx.setMessages((prev) => [...prev, { role: "system", content: result.content }]);
     } catch (err) {
       ctx.setMessages((prev) => [

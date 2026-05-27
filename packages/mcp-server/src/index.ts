@@ -29,11 +29,10 @@ import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerCreateProjectFromGithubTool } from "./tools/create-project-from-github.js";
 import { registerCreateProjectFromGitlabTool } from "./tools/create-project-from-gitlab.js";
 import { registerLinkProjectTool } from "./tools/link-project.js";
-import { registerWaitForImportTool } from "./tools/wait-for-import.js";
-import { registerTriggerReimportTool } from "./tools/trigger-reimport.js";
+import { registerReimportTool } from "./tools/reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
-import { registerGetSymbolContextTool } from "./tools/get-symbol-context.js";
+import { registerSymbolTool } from "./tools/symbol.js";
 import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area.js";
 
 
@@ -43,13 +42,9 @@ import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerCodeReviewTool } from "./tools/code-review.js";
 import { registerGetFileTool } from "./tools/get-file.js";
-import { registerGetFilesTool } from "./tools/get-files.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
 import { registerRenameSymbolTool } from "./tools/rename-symbol.js";
-import { registerFindCallersTool } from "./tools/find-callers.js";
-import { registerFindUsagesTool } from "./tools/find-usages.js";
-import { registerGetDiffTool } from "./tools/get-diff.js";
-import { registerGetWorkingDiffTool } from "./tools/get-working-diff.js";
+import { registerDiffTool } from "./tools/diff.js";
 import { registerGetProjectMapTool } from "./tools/get-project-map.js";
 import { registerListProjectsTool } from "./tools/list-projects.js";
 import { registerGetProjectInsightsTool } from "./tools/get-project-insights.js";
@@ -104,22 +99,17 @@ async function runMcpServer() {
   registerLinkProjectTool(server, config);
   registerExploreTaskTool(server, config);
   registerSearchCodebaseTool(server, config);
-  registerGetSymbolContextTool(server, config);
+  registerSymbolTool(server, config);
   registerGetFileTool(server, config);
 
   registerGetProjectMapTool(server, config);
-  registerGetWorkingDiffTool(server);
+  registerDiffTool(server, config);
   registerRefreshLocalIndexTool(server);
   registerWebSearchTool(server);
-  registerTriggerReimportTool(server, config);
-  registerWaitForImportTool(server, config);
+  registerReimportTool(server, config);
 
   // ── Standard tier: deeper analysis + project management ─────────────────
   if (toolMode === "standard" || toolMode === "full") {
-    registerGetFilesTool(server, config);
-    registerFindUsagesTool(server, config);
-    registerFindCallersTool(server, config);
-    registerGetDiffTool(server, config);
     registerGetProjectInsightsTool(server, config);
     registerWebFetchTool(server, config);
     registerFindRelatedFilesTool(server, config);
@@ -597,7 +587,7 @@ async function runPreBashCommand() {
   if (codeSearchPattern.test(command)) {
     console.log("[CodeMap] Bash gate: grep/awk/sed detected on source files.");
     console.log("→ REQUIRED: Use search_codebase(query) for symbol/keyword lookup.");
-    console.log("  Use find_usages or find_callers for impact analysis.");
+    console.log("  Use symbol(action=usages) or symbol(action=callers) for impact analysis.");
     console.log("  Use Bash grep only for dynamic access patterns, string literals, or files not in the index.");
     return;
   }

@@ -4,7 +4,7 @@ CodeMap Agent Pack is a workflow layer for AI coding agents. It teaches agents t
 
 It includes skills, rules, agent roles, plugin metadata, and installer templates for Codex, Claude, Cursor, Gemini, OpenCode, and GitHub Copilot CLI style workflows.
 
-For broad tasks, agents should gather repository context first: use `explore_task` when files are unclear, `find_related_files` for scope questions, and `search_codebase` for known files, symbols, or keywords.
+For broad tasks, agents should choose the narrowest CodeMap context tool first: `explore_task` when files are unclear, `search_codebase` for known names, `find_related_files` for related-file questions, or `get_file` for known paths.
 
 Install locally with:
 
@@ -42,3 +42,4 @@ codemap-mcp init-agent-pack --target all --root /path/to/project --dry-run
 ```
 
 Official `/plugin install codemap-agent-pack` requires later marketplace publishing. This pack provides the local/plugin-compatible assets first.
+

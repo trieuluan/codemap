@@ -254,7 +254,7 @@ export function localIndexCachePath(workspaceRootPath: string) {
 /**
  * Normalize a file path to be repo-relative.
  * If an absolute path is given (e.g. from bash output or another tool),
- * strip the workspace root prefix so get_file / get_files can find it in the index.
+ * strip the workspace root prefix so get_file / get_file can find it in the index.
  * Returns the path unchanged if it is already relative or not under the workspace root.
  */
 export function toRepoRelativePath(filePath: string, workspaceRootPath: string): string {

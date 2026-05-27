@@ -325,7 +325,7 @@ export function registerGetFileTool(
     {
       title: "Get File",
       description:
-        "Read a specific file after explore_task, find_related_files, search_codebase, or get_files has identified it. " +
+        "Read one file, or pass up to 7 paths to batch-read outlines after explore_task, find_related_files, or search_codebase has identified candidates. " +
         "ALWAYS prefer include=['symbols'] with symbol_names over full file reads — reduces token usage by 80-90%. " +
         "Use include=['outline'] to survey imports/exports/symbols without reading code. " +
         "Use include=['content'] ONLY for non-indexed files (config, markdown, templates) or when symbol-level read is insufficient. " +
@@ -334,9 +334,13 @@ export function registerGetFileTool(
         "project_id is optional if this workspace was linked via create_project.",
       inputSchema: {
         path: z
-          .string()
-          .min(1)
-          .describe("Repository-relative file path, e.g. 'src/lib/utils.ts'."),
+          .union([
+            z.string().min(1),
+            z.array(z.string().min(1)).min(1).max(7),
+          ])
+          .describe(
+            "Repository-relative file path, or up to 7 paths for batch outline mode, e.g. 'src/lib/utils.ts'.",
+          ),
         project_id: uuidSchema
           .optional()
           .describe(
@@ -393,6 +397,113 @@ export function registerGetFileTool(
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
 
+        if (Array.isArray(filePath)) {
+          async function normalizePaths(rawPaths: string[]): Promise<string[]> {
+            if (!rawPaths.some((p) => p.startsWith("/"))) return rawPaths;
+            const { store } = await ensureLocalIndexWithSummary();
+            const meta = store.getMeta();
+            if (!meta?.workspaceRootPath) return rawPaths;
+            return rawPaths.map((p) => toRepoRelativePath(p, meta.workspaceRootPath));
+          }
+
+          const normalizedPaths = await normalizePaths(filePath);
+
+          async function buildBatchLocalResults(source: "local") {
+            const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+            const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
+            const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
+
+            for (const path of normalizedPaths) {
+              output.push(`## ${path}`);
+              output.push("");
+              const parsed = store.getFileParse(path);
+              if (parsed) {
+                output.push(buildOutlineSection(parsed as unknown as FileParseResponse));
+                structured.push({ path, status: "ok" });
+              } else {
+                output.push(`_File not found in local index: ${path}_`);
+                structured.push({ path, status: "error", error: "not found in local index" });
+              }
+              output.push("");
+            }
+
+            return success(output.join("\n").trimEnd(), {
+              projectId: resolvedProjectId ?? null,
+              source,
+              localIndex,
+              paths: normalizedPaths,
+              results: structured,
+              available: true,
+              sections: ["outline"],
+            });
+          }
+
+          if (!resolvedProjectId) {
+            return buildBatchLocalResults("local");
+          }
+
+          if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+            return buildBatchLocalResults("local");
+          }
+
+          const results = await Promise.allSettled(
+            normalizedPaths.map(async (path) => {
+              try {
+                return await client.request<FileParseResponse>(
+                  `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
+                  { authRequired: true, query: { path } },
+                );
+              } catch (error) {
+                if (shouldFallbackToLocal(error)) return { _localFallback: true, path, error };
+                throw error;
+              }
+            }),
+          );
+
+          const needsLocalFallback = results.some(
+            (r) => r.status === "fulfilled" && r.value && "_localFallback" in r.value,
+          );
+
+          if (needsLocalFallback) {
+            return buildBatchLocalResults("local");
+          }
+
+          const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
+          const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
+
+          for (let i = 0; i < normalizedPaths.length; i++) {
+            const path = normalizedPaths[i];
+            const result = results[i];
+            output.push(`## ${path}`);
+            output.push("");
+
+            if (result.status === "fulfilled" && result.value) {
+              output.push(buildOutlineSection(result.value as FileParseResponse));
+              structured.push({ path, status: "ok" });
+            } else {
+              const msg =
+                result.status === "rejected"
+                  ? result.reason instanceof Error
+                    ? result.reason.message
+                    : String(result.reason)
+                  : "No data returned";
+              output.push(`_Failed to load: ${msg}_`);
+              structured.push({ path, status: "error", error: msg });
+            }
+
+            output.push("");
+          }
+
+          return success(output.join("\n").trimEnd(), {
+            projectId: resolvedProjectId,
+            source: "remote",
+            paths: normalizedPaths,
+            results: structured,
+            available: true,
+            sections: ["outline"],
+          });
+        }
+
         // Normalize absolute paths (e.g. from bash/tool output) to repo-relative
         if (filePath.startsWith("/")) {
           const { store } = await ensureLocalIndexWithSummary();
@@ -421,9 +532,9 @@ export function registerGetFileTool(
         async function localResponse(projectId: string | null, reason?: string) {
           const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
           const content = wantContent
-            ? store.getFileContent(filePath, start_line, end_line)
+            ? store.getFileContent(filePath as string, start_line, end_line)
             : null;
-          const parse = wantParse ? store.getFileParse(filePath) : null;
+          const parse = wantParse ? store.getFileParse(filePath as string) : null;
           const errors: string[] = reason ? [`remote: ${reason}`] : [];
 
           if (!content && !parse) {

@@ -6,8 +6,8 @@ Use CodeMap MCP as the first context source for codebase work.
 - Start with `get_agent_workflow`, then `get_project`.
 - For broad implementation/debug/review/refactor/test/research work with unclear files, call `explore_task`.
 - Use `summarize_feature_area`, `find_related_files`, or `search_codebase` to locate files.
-- Use `get_files` and `get_symbol_context` to keep context small.
-- Use `find_usages` and `find_callers` for impact analysis.
+- Use `get_file` and `symbol` to keep context small.
+- Use `symbol` for impact analysis.
 - Read MCP summaries, ranking reasons, next steps, and resource URIs before expanding context.
 - Verify with focused build/test commands and reimport after meaningful changes.
 
@@ -26,8 +26,8 @@ For new features or vague requirements, design first — never write production 
 For new functionality or bug fixes, follow RED → GREEN → REFACTOR strictly.
 
 - **RED**: `search_codebase("test <feature>")` to find patterns, write a minimal failing test, run with the host agent test runner and confirm it **fails**.
-- **GREEN**: Use `get_symbol_context` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
-- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `get_working_diff` before declaring done.
+- **GREEN**: Use `symbol` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
+- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `diff(mode="working")` before declaring done.
 
 No production code before a failing test exists.
 
@@ -36,8 +36,8 @@ No production code before a failing test exists.
 Use when the task involves a named feature (billing, auth, admin, graph, etc.).
 
 1. Call `summarize_feature_area(query)` — read confidence level and recommended order.
-2. Call `get_files([...])` on the top results to survey outlines without loading full files.
-3. Use `get_symbol_context` for the most relevant component, service, or controller.
+2. Call `get_file(path=[...])` on the top results to survey outlines without loading full files.
+3. Use `symbol` for the most relevant component, service, or controller.
 4. If still unclear, call `find_related_files` anchored to the best file found.
 
 ## Symbol-Level Debugging
@@ -45,8 +45,8 @@ Use when the task involves a named feature (billing, auth, admin, graph, etc.).
 Use when a bug or behavior centers on a specific function, class, component, or method.
 
 1. `search_codebase(symbol_name)` if the file is unknown.
-2. `get_symbol_context(symbol_name, file_path)` for the exact body.
-3. `find_callers` or `find_usages` when call flow or impact matters.
+2. `symbol(action="context", symbol_name, file_path)` for the exact body.
+3. `symbol` when call flow or impact matters.
 4. Read only adjacent files needed to explain or change the behavior.
 
 Do not read an entire large file to inspect one symbol when CodeMap can return symbol context.
@@ -67,9 +67,9 @@ When results look weak or noisy, refine the query, anchor to a known file or sym
 
 Use when reviewing changes in a CodeMap-indexed repository.
 
-1. Start with `get_working_diff` or `get_diff`.
-2. For changed symbols, use `get_symbol_context` instead of full-file reads.
-3. Use `find_usages` or `find_callers` for risky public API or shared behavior changes.
+1. Start with `diff(mode="working")` or `diff(mode="refs")`.
+2. For changed symbols, use `symbol` instead of full-file reads.
+3. Use `symbol` for risky public API or shared behavior changes.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.

@@ -8,9 +8,9 @@ Use CodeMap MCP before raw file reads or grep.
 - Feature areas: `summarize_feature_area`.
 - Related files: `find_related_files`.
 - Known symbols/files: `search_codebase`.
-- Several candidates: `get_files`.
-- Exact body: `get_symbol_context`.
-- Impact analysis: `find_usages` or `find_callers`.
+- Several candidates: `get_file`.
+- Exact body: `symbol`.
+- Impact analysis: `symbol`.
 - Read MCP output by summary, ranking reasons, next steps, and resource URIs before expanding context.
 - After edits: build/test, inspect diff, then reimport when needed.
 

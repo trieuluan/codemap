@@ -196,7 +196,7 @@ function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools"
     .map((read) => read.path);
 
   if (readPaths.length > 1) {
-    tools.push(`get_files(${JSON.stringify(readPaths)})`);
+    tools.push(`get_file(${JSON.stringify(readPaths)})`);
   }
 
   if (pack.recommendedReads.length > 0) {
@@ -205,17 +205,17 @@ function buildNextTools(pack: Omit<ContextPack, "summary" | "suggestedNextTools"
   }
 
   if (pack.symbols.length > 0) {
-    tools.push(`find_usages("${pack.symbols[0].name}")`);
+    tools.push(`symbol(action="usages", symbol_name="${pack.symbols[0].name}")`);
   }
 
   const highRisk = pack.risks.find((r) => r.level === "high");
   if (highRisk) {
     const name = highRisk.file.split("/").pop()?.replace(/\.[jt]sx?$/, "") ?? "";
-    tools.push(`find_callers("${name}")  // check before editing high-risk file`);
+    tools.push(`symbol(action="callers", symbol_name="${name}", file_path="${highRisk.file}")  // check before editing high-risk file`);
   }
 
   tools.push(`find_related_files(query="${pack.task}")  // use if the task is mainly asking for scope/related files`);
-  tools.push("get_working_diff()  // verify changes after editing");
+  tools.push("diff()  // verify working-tree changes after editing");
   return tools;
 }
 
@@ -227,7 +227,7 @@ function buildTextOutput(pack: ContextPack): string {
   lines.push("### How to use this result");
   lines.push("- Start with the Recommended reads section; use the exact tool calls shown.");
   lines.push("- If this is only a scope/reading-list question, call find_related_files instead of editing.");
-  lines.push("- Use get_files for a quick outline survey, then get_file(include=[\"symbols\"]) for the exact body you need.");
+  lines.push("- Use get_file for a quick outline survey, then get_file(include=[\"symbols\"]) for the exact body you need.");
   lines.push("- Check Risks before editing high blast-radius files.");
   lines.push("");
 
@@ -269,7 +269,7 @@ function buildTextOutput(pack: ContextPack): string {
 
   lines.push("### Recommended reads (in order)");
   if (pack.recommendedReads.length > 1) {
-    lines.push(`Batch survey: get_files(${JSON.stringify(pack.recommendedReads.slice(0, 7).map((r) => r.path))})`);
+    lines.push(`Batch survey: get_file(${JSON.stringify(pack.recommendedReads.slice(0, 7).map((r) => r.path))})`);
   }
   pack.recommendedReads.slice(0, 6).forEach((r, i) => {
     lines.push(`${i + 1}. ${formatReadCall(r.path, r.readPlan)}`);

@@ -203,7 +203,7 @@ function groupResults(results: ScoredFile[]): ResultGroup[] {
 
 function formatGetFilesCall(results: ScoredFile[]) {
   const paths = results.slice(0, 7).map((result) => result.path);
-  return `get_files(${JSON.stringify(paths)})`;
+  return `get_file(${JSON.stringify(paths)})`;
 }
 
 // ── Output ────────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ function buildOutput(
   lines.push(`→ ${formatGetFilesCall(results)}  // survey outlines for the top candidates`);
   if (results[0]?.symbols?.[0]) {
     lines.push(
-      `→ get_symbol_context(symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")  // read only the top matched symbol`,
+      `→ symbol(action="context", symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")  // read only the top matched symbol`,
     );
   } else {
     lines.push(`→ get_file("${results[0]!.path}", include=["outline"])  // deep-dive the top candidate`);
@@ -279,7 +279,7 @@ export function registerFindRelatedFilesTool(
         "search relevance (0.35), semantic similarity (0.4), same folder (0.3). " +
         "When embeddings are available, semantic search runs automatically in parallel to surface conceptually related files beyond keyword matches. " +
         "Accepts natural-language queries (e.g. 'login bug', 'add pagination') or a file path as anchor. " +
-        "After results, use get_files to survey outlines before reading content. " +
+        "After results, use get_file to survey outlines before reading content. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
         query: z
@@ -529,7 +529,7 @@ export function registerFindRelatedFilesTool(
           symbols: result.symbols ?? [],
           readPlan: result.symbols?.[0]
             ? {
-                tool: "get_symbol_context",
+                tool: "symbol",
                 symbolName: result.symbols[0],
                 filePath: result.path,
               }
@@ -540,7 +540,7 @@ export function registerFindRelatedFilesTool(
           ? [
               formatGetFilesCall(results),
               results[0]?.symbols?.[0]
-                ? `get_symbol_context(symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")`
+                ? `symbol(action="context", symbol_name="${results[0].symbols[0]}", file_path="${results[0].path}")`
                 : `get_file("${results[0]!.path}", include=["outline"])`,
             ]
           : [];
@@ -570,7 +570,7 @@ export function registerFindRelatedFilesTool(
           })),
           recommendedReads,
           total: results.length,
-          nextAction: results.length > 0 ? "get_files" : "get_project_map",
+          nextAction: results.length > 0 ? "get_file" : "get_project_map",
           suggestedNextTools,
         });
       },

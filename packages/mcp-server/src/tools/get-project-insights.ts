@@ -77,7 +77,7 @@ export function registerGetProjectInsightsTool(
         if (message.includes("404")) {
           const summary =
             `Project not found or not yet imported: ${resolvedProjectId}\n` +
-            "Run trigger_reimport to index the project first.";
+            "Run reimport to index the project first.";
 
           return success(summary, {
             projectId: resolvedProjectId,

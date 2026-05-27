@@ -59,7 +59,7 @@ test("import health marks different workspace commit as stale", () => {
 
   assert.equal(health.state, "stale");
   assert.equal(health.needsReimport, true);
-  assert.equal(health.nextAction, "trigger_reimport");
+  assert.equal(health.nextAction, "reimport");
 });
 
 test("import health treats unrelated workspaces as unknown staleness", () => {

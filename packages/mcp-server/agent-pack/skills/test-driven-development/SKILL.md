@@ -18,8 +18,8 @@ Use this skill when implementing new functionality or fixing a bug where tests a
 
 ### GREEN — Implement the minimum to pass
 
-1. `get_symbol_context(symbol, file_path)` — read the exact function/class to modify
-2. `find_callers(path, symbol)` — understand call context before changing signatures
+1. `symbol(action="context", symbol, file_path)` — read the exact function/class to modify
+2. `symbol(action="callers", path, symbol)` — understand call context before changing signatures
 3. Write only the code needed to make the failing test pass — no extra logic
 4. Run tests using the host agent test runner (e.g. `npm test`, `vitest`, `pytest`, etc.) — confirm the test now **passes**
 
@@ -28,7 +28,7 @@ Use this skill when implementing new functionality or fixing a bug where tests a
 1. Improve naming, extract helpers, remove duplication
 2. Run tests using the host agent test runner (e.g. `npm test`, `vitest`, `pytest`, etc.) — confirm all tests still pass after cleanup
 3. `code_review` — catch issues before declaring done
-4. `get_working_diff` — review final scope of changes
+4. `diff(mode="working")` — review final scope of changes
 
 ## Rules
 

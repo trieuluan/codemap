@@ -55,7 +55,7 @@ export function registerCreateProjectFromGithubTool(
       if (existingProjectId) {
         return success(
           `This workspace is already linked to CodeMap project \`${existingProjectId}\`.\n` +
-          `Use \`trigger_reimport\` to re-sync the existing project instead.\n` +
+          `Use \`reimport\` to re-sync the existing project instead.\n` +
           `Do NOT call create_project_from_github again — it would overwrite the existing project link.`,
           { projectId: existingProjectId },
         );
@@ -96,7 +96,7 @@ export function registerCreateProjectFromGithubTool(
         `Branch: ${result.import.branch ?? default_branch ?? "default"}`,
         `Import status: ${result.import.status}`,
         `Parse status: ${result.import.parseStatus}`,
-        "Next action: call wait_for_import until indexing is ready.",
+        "Next action: call reimport until indexing is ready.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -113,7 +113,7 @@ export function registerCreateProjectFromGithubTool(
           workspaceId: workspace_id ?? null,
         },
         workspaceProjectIdSaved: true,
-        nextAction: "wait_for_import",
+        nextAction: "reimport",
       });
     }),
   );

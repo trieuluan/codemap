@@ -58,7 +58,7 @@ export function registerCreateProjectTool(
       if (existingProjectId) {
         return success(
           `This workspace is already linked to CodeMap project \`${existingProjectId}\`.\n` +
-          `Use \`trigger_reimport\` to re-sync, or \`link_project\` to switch to a different project.\n` +
+          `Use \`reimport\` to re-sync, or \`link_project\` to switch to a different project.\n` +
           `Do NOT call create_project again — it would overwrite the existing project link.`,
           { projectId: existingProjectId },
         );
@@ -130,7 +130,7 @@ export function registerCreateProjectTool(
           `Parse status: ${result.import.parseStatus}`,
           "",
           `Project ID saved to workspace — future tools will use it automatically.`,
-          "Next action: call wait_for_import until indexing is ready.",
+          "Next action: call reimport until indexing is ready.",
         ].join("\n");
 
         return success(summary, {
@@ -145,7 +145,7 @@ export function registerCreateProjectTool(
           project: result.project,
           import: result.import,
           workspaceProjectIdSaved: true,
-          nextAction: "wait_for_import",
+          nextAction: "reimport",
         });
       }
 
@@ -232,7 +232,7 @@ export function registerCreateProjectTool(
         `Parse status: ${result.import.parseStatus}`,
         "",
         `Project ID saved to workspace — future tools will use it automatically.`,
-        "Next action: call wait_for_import until indexing is ready.",
+        "Next action: call reimport until indexing is ready.",
       ]
         .filter(Boolean)
         .join("\n");
@@ -251,7 +251,7 @@ export function registerCreateProjectTool(
         filesIncluded: addedCount,
         excludedSensitive: skippedSensitive,
         workspaceProjectIdSaved: true,
-        nextAction: "wait_for_import",
+        nextAction: "reimport",
       });
     }),
   );
