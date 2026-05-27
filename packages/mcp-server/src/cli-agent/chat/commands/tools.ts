@@ -16,7 +16,7 @@ const SECTION: Record<ToolCategory, { label: string; color: string; note: string
   cloud: { label: "CLOUD", color: C_CYAN,   note: "login + linked project" },
 };
 
-const EXTERNAL_SECTION = { label: "EXTERNAL", color: C_MAGENTA, note: "from Mastra MCP servers" };
+const EXTERNAL_SECTION = { label: "EXTERNAL", color: C_MAGENTA, note: "from user MCP servers" };
 
 export const toolsCommand: Command = {
   name: "tools",
@@ -43,15 +43,15 @@ export const toolsCommand: Command = {
       const externalTools: { server: string; tools: { name: string; description?: string }[] }[] = [];
       if (mastraStatus?.statuses) {
         for (const server of mastraStatus.statuses) {
-          if (server.toolNames.length > 0 && server.name !== "codemap") {
-            const serverTools = server.toolNames.map((name) => ({ name }));
-            externalTools.push({ server: server.name, tools: serverTools });
-          }
+          if (server.toolNames.length === 0) continue;
+          if (server.name === "codemap") continue; // CodeMap tools already shown in LOCAL/AUTH/CLOUD
+          const serverTools = server.toolNames.map((name) => ({ name }));
+          externalTools.push({ server: server.name, tools: serverTools });
         }
       }
 
       const lines: string[] = [
-        `${BOLD}Available MCP tools${RESET}  ${C_GRAY}${tools.length} active, ${disabledTools.length} disabled${RESET}`,
+        `${BOLD}Available tools${RESET}  ${C_GRAY}${tools.length} MCP active, ${disabledTools.length} disabled${RESET}`,
         "",
       ];
 
