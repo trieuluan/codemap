@@ -1,6 +1,6 @@
 import type { Command } from "./types.js";
 import { TOOL_CATEGORIES, type ToolCategory } from "./tool-categories.js";
-import { getMastraMcpStatusSummary } from "../runtime/mastra-harness-runtime.js";
+import { getMastraMcpStatusSummary, MASTRA_DISABLED_TOOLS } from "../runtime/mastra-harness-runtime.js";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
@@ -24,8 +24,12 @@ export const toolsCommand: Command = {
   execute: async (_args, ctx) => {
     ctx.setBusy(true);
     try {
-      const tools = await ctx.toolClient.listAllowedTools();
-      const nameW = Math.min(32, Math.max(6, ...tools.map((t) => t.name.length)));
+      const allTools = await ctx.toolClient.listAllowedTools();
+      const disabledSet = new Set(MASTRA_DISABLED_TOOLS.map((n) => n.replace(/^codemap_/, "")));
+      const tools = allTools.filter((t) => !disabledSet.has(t.name));
+      const disabledTools = allTools.filter((t) => disabledSet.has(t.name));
+
+      const nameW = Math.min(32, Math.max(6, ...allTools.map((t) => t.name.length)));
       const descW = 58;
 
       const grouped: Record<ToolCategory, typeof tools> = { local: [], auth: [], cloud: [] };
@@ -47,7 +51,7 @@ export const toolsCommand: Command = {
       }
 
       const lines: string[] = [
-        `${BOLD}Available MCP tools${RESET}  ${C_GRAY}${tools.length} total${RESET}`,
+        `${BOLD}Available MCP tools${RESET}  ${C_GRAY}${tools.length} active, ${disabledTools.length} disabled${RESET}`,
         "",
       ];
 
@@ -55,6 +59,7 @@ export const toolsCommand: Command = {
         const group = grouped[cat];
         if (group.length === 0) continue;
         const { label, color, note } = SECTION[cat];
+        lines.push("");
         lines.push(
           `${color}${BOLD}${label}${RESET}  ${C_GRAY}${note}  ·  ${group.length} tools${RESET}`,
         );
@@ -72,6 +77,7 @@ export const toolsCommand: Command = {
       if (externalTools.length > 0) {
         const { label, color, note } = EXTERNAL_SECTION;
         const totalExternal = externalTools.reduce((sum, e) => sum + e.tools.length, 0);
+        lines.push("");
         lines.push(
           `${color}${BOLD}${label}${RESET}  ${C_GRAY}${note}  ·  ${totalExternal} tools from ${externalTools.length} server(s)${RESET}`,
         );
@@ -82,6 +88,22 @@ export const toolsCommand: Command = {
             const name = t.name.padEnd(nameW).slice(0, nameW);
             lines.push(`${color}${name}${RESET}`);
           }
+        }
+        lines.push("");
+      }
+
+      // Show disabled tools (handled by CLI /commands or internal)
+      if (disabledTools.length > 0) {
+        lines.push("");
+        lines.push(
+          `${C_GRAY}${BOLD}DISABLED${RESET}  ${C_GRAY}handled by CLI /commands or internal  ·  ${disabledTools.length} tools${RESET}`,
+        );
+        lines.push(`${C_GRAY}${"─".repeat(nameW + descW + 4)}${RESET}`);
+        for (const t of disabledTools) {
+          const name = t.name.padEnd(nameW).slice(0, nameW);
+          const raw = (t.description ?? "").replace(/\n.*/s, "").trim();
+          const desc = raw.length > descW ? raw.slice(0, descW - 1) + "…" : raw;
+          lines.push(`${C_GRAY}${name}  ${desc}${RESET}`);
         }
         lines.push("");
       }

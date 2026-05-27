@@ -106,7 +106,7 @@ const CANCEL_SYNONYMS = new Set([
   "hủy",
 ]);
 
-const MASTRA_DISABLED_TOOLS = [
+export const MASTRA_DISABLED_TOOLS = [
   // Mastra-internal approval tool — tool approval is handled in the UI layer.
   "request_access",
   // Auth/setup flows are handled by built-in CLI /commands (/login, /logout,

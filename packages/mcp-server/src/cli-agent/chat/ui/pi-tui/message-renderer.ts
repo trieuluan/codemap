@@ -299,7 +299,12 @@ function renderMessageLines(
     } else if (msg.role === "system") {
       const prefixW = 17;
       const bodyW = Math.max(20, width - prefixW);
-      const lines = safeRender(msg.content, bodyW);
+      // If content contains ANSI escape codes, split directly to preserve blank lines.
+      // Markdown rendering collapses consecutive blank lines and may mangle ANSI sequences.
+      const hasAnsi = /\x1b\[/.test(msg.content);
+      const lines = hasAnsi
+        ? msg.content.split("\n").flatMap((l) => wrapPlain(l, bodyW))
+        : safeRender(msg.content, bodyW);
       out.push(`${time} ${C_MUTED}system:${RESET} ${lines[0] ?? ""}`);
       for (const line of lines.slice(1))
         out.push(`${" ".repeat(prefixW)}${line}`);
