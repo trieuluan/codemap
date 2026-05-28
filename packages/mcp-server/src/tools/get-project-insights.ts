@@ -5,7 +5,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
-import type { ProjectInsightsSummary } from "../lib/api-types.js";
+import type { ProjectInsightsSummary, SemanticSearchResult } from "../lib/api-types.js";
 
 export function registerGetProjectInsightsTool(
   server: McpServer,
@@ -40,12 +40,13 @@ export function registerGetProjectInsightsTool(
               "orphans",
               "entry_points",
               "folders",
+              "semantic_clusters",
             ]),
           )
           .optional()
           .describe(
             "Sections to include. Omit to return all sections. " +
-              "Options: totals, top_by_imports, top_by_inbound, cycles, orphans, entry_points, folders.",
+              "Options: totals, top_by_imports, top_by_inbound, cycles, orphans, entry_points, folders, semantic_clusters.",
           ),
       },
     },
@@ -93,6 +94,28 @@ export function registerGetProjectInsightsTool(
         !sections || sections.includes(section as never);
 
       const lines: string[] = ["# Project Insights", ""];
+      let semanticClusters: Array<{ label: string; results: SemanticSearchResult[] }> = [];
+
+      if (include("semantic_clusters")) {
+        const labels = [
+          ...insights.topFoldersBySourceFileCount.slice(0, 4).map((folder) => folder.folder),
+          ...insights.entryLikeFiles.slice(0, 3).map((file) => file.path),
+        ];
+        const uniqueLabels = [...new Set(labels)].slice(0, 6);
+        const clusterResults = await Promise.allSettled(
+          uniqueLabels.map(async (label) => {
+            const response = await client.request<{ results: SemanticSearchResult[] }>(
+              `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+              { authRequired: true, query: { q: label, limit: "4" } },
+            );
+            return { label, results: response.results ?? [] };
+          }),
+        );
+        semanticClusters = clusterResults
+          .filter((result): result is PromiseFulfilledResult<{ label: string; results: SemanticSearchResult[] }> => result.status === "fulfilled")
+          .map((result) => result.value)
+          .filter((cluster) => cluster.results.length > 0);
+      }
 
       // --- Totals ---
       if (include("totals")) {
@@ -206,6 +229,23 @@ export function registerGetProjectInsightsTool(
         lines.push("");
       }
 
+      if (include("semantic_clusters")) {
+        lines.push(`## Semantic Clusters (${semanticClusters.length})`);
+        if (semanticClusters.length === 0) {
+          lines.push("No semantic cluster data available.");
+        } else {
+          for (const cluster of semanticClusters) {
+            lines.push(`- ${cluster.label}`);
+            for (const result of cluster.results.slice(0, 4)) {
+              const loc = result.startLine ? `${result.path}:${result.startLine}` : result.path;
+              const name = result.symbolName ? `${result.symbolName} ` : "";
+              lines.push(`  - ${name}${loc} (${result.chunkType}, score=${result.score.toFixed(3)})`);
+            }
+          }
+        }
+        lines.push("");
+      }
+
       const insightsTrimmed = {
         ...(include("totals") && { totals: insights.totals }),
         ...(include("cycles") && { circularDependencyCandidates: insights.circularDependencyCandidates }),
@@ -214,6 +254,7 @@ export function registerGetProjectInsightsTool(
         ...(include("top_by_inbound") && { topFilesByInboundDependencyCount: insights.topFilesByInboundDependencyCount }),
         ...(include("orphans") && { orphanFiles: insights.orphanFiles }),
         ...(include("folders") && { topFoldersBySourceFileCount: insights.topFoldersBySourceFileCount }),
+        ...(include("semantic_clusters") && { semanticClusters }),
       };
 
       return success(lines.join("\n"), {

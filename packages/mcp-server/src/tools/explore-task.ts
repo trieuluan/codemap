@@ -354,10 +354,10 @@ export function registerExploreTaskTool(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/edit-locations`,
           { authRequired: true, query: { q: task, limit: "10" } },
         ),
-        client.request<SemanticSearchResult[]>(
+        client.request<{ results: SemanticSearchResult[] }>(
           `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
           { authRequired: true, query: { q: task, limit: "5" } },
-        ),
+        ).then(r => r.results ?? []),
       ]);
 
       const search: CodebaseSearchResponse =

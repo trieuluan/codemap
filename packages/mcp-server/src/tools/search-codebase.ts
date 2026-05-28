@@ -542,10 +542,10 @@ export function registerSearchCodebaseTool(
               { authRequired: true, query: searchQuery },
             ),
             semantic
-              ? client.request<SemanticSearchResult[]>(
+              ? client.request<{ results: SemanticSearchResult[] }>(
                   `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
                   { authRequired: true, query: { q: query, limit: "10" } },
-                )
+                ).then(r => r.results ?? [])
               : Promise.resolve([] as SemanticSearchResult[]),
           ]);
 

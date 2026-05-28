@@ -422,12 +422,12 @@ export function registerFindRelatedFilesTool(
 
           query
             ? client
-                .request<SemanticSearchResult[]>(
+                .request<{ results: SemanticSearchResult[] }>(
                   `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
                   { authRequired: true, query: { q: query, limit: "10" } },
                 )
-                .then((results) => {
-                  results.forEach((r) => {
+                .then((response) => {
+                  (response.results ?? []).forEach((r) => {
                     addSignal(r.path, { semanticRelevance: r.score });
                   });
                 })

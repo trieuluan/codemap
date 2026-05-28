@@ -636,10 +636,10 @@ export function registerSummarizeFeatureAreaTool(
             `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
             { authRequired: true, query: { q: query } },
           ),
-          client.request<SemanticSearchResult[]>(
+          client.request<{ results: SemanticSearchResult[] }>(
             `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
             { authRequired: true, query: { q: query, limit: "8" } },
-          ),
+          ).then(r => r.results ?? []),
         ]);
         if (keywordResult.status === "rejected") throw keywordResult.reason;
         results = keywordResult.value;

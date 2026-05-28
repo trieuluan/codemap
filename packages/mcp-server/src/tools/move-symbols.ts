@@ -8,6 +8,7 @@ import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId, readWorkspacePath } from "../lib/workspace-project.js";
 import { escapeRegex } from "../lib/regex-utils.js";
+import type { SemanticSearchResult } from "../lib/api-types.js";
 
 // ─── types (subset of get-file parse response) ───────────────────────────────
 
@@ -234,10 +235,15 @@ export function registerMoveSymbolsTool(
           .describe(
             "Whether to update import statements in all caller files. Default true.",
           ),
+        dry_run: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Preview the move without writing files. Default false."),
       },
     },
     withToolError(
-      async ({ from, to, symbols, project_id, update_imports }) => {
+      async ({ from, to, symbols, project_id, update_imports, dry_run }) => {
         const resolvedProjectId =
           project_id ?? (await readWorkspaceProjectId());
         const workspacePath = await readWorkspacePath();
@@ -269,6 +275,13 @@ export function registerMoveSymbolsTool(
         }
 
         const warnings: string[] = [];
+        const semanticConflicts: Array<{
+          symbol: string;
+          existingSymbol: string | null;
+          path: string;
+          score: number;
+          snippet?: string;
+        }> = [];
         const symbolsMoved: string[] = [];
         const symbolsSkipped: string[] = [];
         const filesUpdated: string[] = [];
@@ -346,6 +359,45 @@ export function registerMoveSymbolsTool(
           });
         }
 
+        if (resolvedProjectId) {
+          const semanticChecks = await Promise.allSettled(
+            ranges.map((range) =>
+              client.request<{ results: SemanticSearchResult[] }>(
+                `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+                {
+                  authRequired: true,
+                  query: {
+                    q: `${range.name}\n${range.body.slice(0, 1200)}`,
+                    limit: "5",
+                  },
+                },
+              ),
+            ),
+          );
+
+          for (const [index, result] of semanticChecks.entries()) {
+            if (result.status === "rejected") continue;
+            const range = ranges[index];
+            const conflict = (result.value.results ?? []).find(
+              (candidate) =>
+                candidate.path === to &&
+                candidate.score >= 0.78 &&
+                candidate.symbolName?.toLowerCase() !== range.name.toLowerCase(),
+            );
+            if (!conflict) continue;
+            semanticConflicts.push({
+              symbol: range.name,
+              existingSymbol: conflict.symbolName ?? null,
+              path: conflict.path,
+              score: conflict.score,
+              snippet: conflict.snippet,
+            });
+            warnings.push(
+              `Potential semantic overlap moving '${range.name}' into ${to}: similar to '${conflict.symbolName ?? "unnamed chunk"}' (score ${conflict.score.toFixed(3)})`,
+            );
+          }
+        }
+
         // Check if symbol body references other symbols in source that aren't being moved
         if (parse) {
           const movedNameSet = new Set(ranges.map((r) => r.name.toLowerCase()));
@@ -370,13 +422,17 @@ export function registerMoveSymbolsTool(
         const destContent = await readFile(toAbsPath, "utf8");
         const appendParts = ranges.map((r) => r.body).join("\n\n");
         const separator = destContent.trimEnd().length > 0 ? "\n\n" : "";
-        await writeFile(toAbsPath, destContent.trimEnd() + separator + appendParts + "\n", "utf8");
+        if (!dry_run) {
+          await writeFile(toAbsPath, destContent.trimEnd() + separator + appendParts + "\n", "utf8");
+        }
 
         for (const range of ranges) symbolsMoved.push(range.name);
 
         // Remove symbols from source file
         const newSrcContent = removeSymbolsFromSource(srcContent, ranges);
-        await writeFile(fromAbsPath, newSrcContent, "utf8");
+        if (!dry_run) {
+          await writeFile(fromAbsPath, newSrcContent, "utf8");
+        }
 
         // Update imports in callers
         if (update_imports && resolvedProjectId) {
@@ -419,7 +475,9 @@ export function registerMoveSymbolsTool(
             }
 
             if (modified) {
-              await writeFile(callerAbsPath, newLines.join("\n"), "utf8");
+              if (!dry_run) {
+                await writeFile(callerAbsPath, newLines.join("\n"), "utf8");
+              }
               filesUpdated.push(caller.sourceFilePath);
             } else {
               // Couldn't match import line — possibly alias or barrel export
@@ -433,7 +491,7 @@ export function registerMoveSymbolsTool(
 
         // Build summary
         const lines: string[] = [
-          `Moved ${symbolsMoved.length} symbol(s) from ${from} → ${to}`,
+          `${dry_run ? "Would move" : "Moved"} ${symbolsMoved.length} symbol(s) from ${from} → ${to}`,
           ...symbolsMoved.map((s) => `  - ${s}`),
         ];
 
@@ -448,8 +506,15 @@ export function registerMoveSymbolsTool(
         }
 
         if (filesUpdated.length > 0) {
-          lines.push(`\nUpdated imports in ${filesUpdated.length} file(s):`);
+          lines.push(`\n${dry_run ? "Would update" : "Updated"} imports in ${filesUpdated.length} file(s):`);
           lines.push(...filesUpdated.map((f) => `  - ${f}`));
+        }
+
+        if (semanticConflicts.length > 0) {
+          lines.push(`\nPotential semantic conflicts (${semanticConflicts.length}):`);
+          lines.push(...semanticConflicts.map((conflict) =>
+            `  - ${conflict.symbol} vs ${conflict.existingSymbol ?? "unnamed chunk"} in ${conflict.path} (score ${conflict.score.toFixed(3)})`,
+          ));
         }
 
         if (filesSkipped.length > 0) {
@@ -472,6 +537,8 @@ export function registerMoveSymbolsTool(
           filesSkipped,
           warnings,
           updateImports: update_imports,
+          dryRun: dry_run,
+          semanticConflicts,
         });
       },
     ),

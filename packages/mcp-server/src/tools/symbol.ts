@@ -9,6 +9,7 @@ import type {
   CodebaseSearchResponse,
   FileContent,
   SearchSymbolResult,
+  SemanticSearchResult,
   SymbolUsagesResponse,
 } from "../lib/api-types.js";
 import {
@@ -334,6 +335,129 @@ async function findSymbolCallers(
   });
 }
 
+async function findSimilarSymbols(
+  client: ReturnType<typeof createCodeMapClient>,
+  symbolName: string,
+  filePath?: string,
+  projectId?: string,
+  limit = 5,
+) {
+  const resolvedProjectId = projectId ?? (await readWorkspaceProjectId());
+  const cappedLimit = Math.max(1, Math.min(20, limit));
+
+  async function localResponse(reason?: string) {
+    const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+    const search = store.search(symbolName, null);
+    const selectedSymbol = chooseSymbol(search.symbols, symbolName, filePath);
+    const candidates = search.symbols
+      .filter(
+        (symbol) =>
+          symbol.id !== selectedSymbol?.id &&
+          symbol.displayName.toLowerCase() !== symbolName.toLowerCase(),
+      )
+      .slice(0, cappedLimit);
+
+    const lines = [`# Similar symbols: ${symbolName}`, ""];
+    if (candidates.length === 0) {
+      lines.push("No similar symbols found in the local keyword index.");
+    } else {
+      lines.push("Local keyword matches:");
+      for (const [index, symbol] of candidates.entries()) {
+        const loc = symbol.startLine ? `${symbol.filePath}:${symbol.startLine}` : symbol.filePath;
+        lines.push(`${index + 1}. ${symbol.displayName} [${symbol.symbolKind}] — ${loc}`);
+        if (symbol.signature) lines.push(`   ${symbol.signature}`);
+      }
+    }
+
+    return success(lines.join("\n"), {
+      projectId: resolvedProjectId,
+      source: "local",
+      localIndex,
+      symbolName,
+      filePath: filePath ?? null,
+      found: candidates.length > 0,
+      selectedSymbol,
+      similar: candidates,
+      semanticUnavailable: true,
+      ...(reason ? { errors: [`remote: ${reason}`] } : {}),
+    });
+  }
+
+  if (!resolvedProjectId) return localResponse("missing_project_id");
+
+  if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
+    return localResponse("remote_index_not_ready_or_stale");
+  }
+
+  try {
+    const search = await client.request<CodebaseSearchResponse>(
+      `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
+      { authRequired: true, query: { q: symbolName } },
+    );
+    const selectedSymbol = chooseSymbol(search.symbols, symbolName, filePath);
+    const query = selectedSymbol?.signature
+      ? `${selectedSymbol.displayName} ${selectedSymbol.symbolKind} ${selectedSymbol.signature}`
+      : selectedSymbol
+        ? `${selectedSymbol.displayName} ${selectedSymbol.symbolKind}`
+        : symbolName;
+
+    const semanticResponse = await client.request<{ results: SemanticSearchResult[] }>(
+      `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
+      { authRequired: true, query: { q: query, limit: String(cappedLimit + 3) } },
+    );
+
+    const similar = (semanticResponse.results ?? [])
+      .filter(
+        (result) =>
+          result.path !== selectedSymbol?.filePath ||
+          (result.symbolName && result.symbolName !== selectedSymbol?.displayName),
+      )
+      .slice(0, cappedLimit);
+
+    const lines = [`# Similar symbols: ${symbolName}`, ""];
+    if (selectedSymbol) {
+      const loc = selectedSymbol.startLine
+        ? `${selectedSymbol.filePath}:${selectedSymbol.startLine}`
+        : selectedSymbol.filePath;
+      lines.push(`Anchor: ${selectedSymbol.displayName} [${selectedSymbol.symbolKind}] — ${loc}`);
+      lines.push("");
+    }
+
+    if (similar.length === 0) {
+      lines.push("No semantic matches found.");
+    } else {
+      lines.push("Semantic matches:");
+      for (const [index, result] of similar.entries()) {
+        const name = result.symbolName ? `${result.symbolName} ` : "";
+        const loc = result.startLine ? `${result.path}:${result.startLine}` : result.path;
+        lines.push(`${index + 1}. ${name}[${result.chunkType}] — ${loc} (score ${result.score.toFixed(3)})`);
+        if (result.snippet) lines.push(`   ${result.snippet.replace(/\s+/g, " ").slice(0, 180)}`);
+      }
+    }
+
+    return success(lines.join("\n"), {
+      projectId: resolvedProjectId,
+      source: "remote",
+      symbolName,
+      filePath: filePath ?? null,
+      found: similar.length > 0,
+      selectedSymbol,
+      query,
+      similar,
+      suggestedNextTools: similar.slice(0, 3).map((result) =>
+        result.symbolName
+          ? `get_file("${result.path}", include=["symbols"], symbol_names=["${result.symbolName}"])`
+          : `get_file("${result.path}", include=["outline"])`,
+      ),
+    });
+  } catch (error) {
+    if (shouldFallbackToLocal(error)) {
+      return localResponse(error instanceof Error ? error.message : String(error));
+    }
+    throw error;
+  }
+}
+
 export function registerSymbolTool(
   server: McpServer,
   config: McpServerConfig,
@@ -346,10 +470,10 @@ export function registerSymbolTool(
       title: "Symbol",
       description:
         "Inspect a symbol. Default action=context reads one symbol body plus compact surrounding outline. " +
-        "Use action=usages to find definitions/usages/callers by symbol name, or action=callers with file_path for faster cross-file callers. " +
+        "Use action=usages to find definitions/usages/callers by symbol name, action=callers with file_path for faster cross-file callers, or action=similar for semantic matches. " +
         "project_id is optional if workspace is linked.",
       inputSchema: {
-        action: z.enum(["context", "usages", "callers"]).optional().default("context").describe("Symbol action to perform."),
+        action: z.enum(["context", "usages", "callers", "similar"]).optional().default("context").describe("Symbol action to perform."),
         symbol_name: z
           .string()
           .min(1)
@@ -369,11 +493,20 @@ export function registerSymbolTool(
           .optional()
           .default(4)
           .describe("Extra lines before and after the symbol body. Default: 4."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .default(5)
+          .describe("Max results for action=similar. Default: 5."),
       },
     },
-    withToolError(async ({ action, symbol_name, file_path, project_id, context_lines }) => {
+    withToolError(async ({ action, symbol_name, file_path, project_id, context_lines, limit }) => {
       if (action === "usages") return findSymbolUsages(client, symbol_name, project_id);
       if (action === "callers") return findSymbolCallers(client, symbol_name, file_path, project_id);
+      if (action === "similar") return findSimilarSymbols(client, symbol_name, file_path, project_id, limit);
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       async function localResponse(projectId: string | null, reason?: string) {

@@ -5,6 +5,7 @@ import type { McpServerConfig } from "../config.js";
 import { createCodeMapClient } from "../lib/codemap-api.js";
 import { success, withToolError } from "../lib/tool-response.js";
 import { readWorkspaceProjectId } from "../lib/workspace-project.js";
+import type { FileContent, SemanticSearchResult } from "../lib/api-types.js";
 
 
 export function registerCodeReviewTool(
@@ -84,13 +85,13 @@ export function registerCodeReviewTool(
           );
         }
 
+        const client = createCodeMapClient(config);
         let filesToReview: string[] = [];
 
         if (file_path) {
           filesToReview = [file_path];
         } else if (file_pattern) {
           // Search for files matching the pattern
-          const client = createCodeMapClient(config);
           const searchResult = await client.request<{ files: Array<{ path: string }> }>(
             `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
             {
@@ -121,6 +122,7 @@ export function registerCodeReviewTool(
         const reviews = await Promise.all(
           filesToReview.slice(0, max_files).map(async (path) => {
             const review = await reviewFile(
+              client,
               resolvedProjectId,
               path,
               focus_areas,
@@ -144,6 +146,7 @@ export function registerCodeReviewTool(
 }
 
 async function reviewFile(
+  client: ReturnType<typeof createCodeMapClient>,
   projectId: string,
   filePath: string,
   focusAreas: string[] | undefined,
@@ -157,17 +160,60 @@ async function reviewFile(
   }>;
   complexityScore: number;
   reviewTimeMs: number;
+  semantic_context: SemanticSearchResult[];
 }> {
-  // In a real implementation, this would:
-  // 1. Fetch the file content
-  // 2. Run static analysis (ESLint, SonarQube, etc. via API or local tools)
-  // 3. Return structured results
+  const started = Date.now();
+  const [contentResult, semanticResult] = await Promise.allSettled([
+    client.request<FileContent>(
+      `/projects/${encodeURIComponent(projectId)}/map/files/content`,
+      { authRequired: true, query: { path: filePath } },
+    ),
+    client.request<{ results: SemanticSearchResult[] }>(
+      `/projects/${encodeURIComponent(projectId)}/map/search/semantic`,
+      { authRequired: true, query: { q: filePath, limit: "5" } },
+    ),
+  ]);
 
-  // For now, return a placeholder structure
+  const content = contentResult.status === "fulfilled" ? contentResult.value.content ?? "" : "";
+  const semanticContext = semanticResult.status === "fulfilled" ? semanticResult.value.results ?? [] : [];
+  const focus = new Set(focusAreas ?? ["bugs", "security", "performance", "style", "complexity", "best_practices"]);
+  const issues: Array<{
+    severity: "critical" | "high" | "medium" | "low";
+    category: string;
+    message: string;
+    line?: number;
+    suggestion?: string;
+  }> = [];
+
+  const lines = content.split("\n");
+  let complexityScore = 0;
+  for (const [index, line] of lines.entries()) {
+    const lineNumber = index + 1;
+    if (/\b(if|for|while|case|catch|switch)\b|&&|\|\|/.test(line)) complexityScore += 1;
+
+    if (focus.has("security") && /eval\s*\(|new Function\s*\(/.test(line)) {
+      issues.push({ severity: "high", category: "security", message: "Dynamic code execution can introduce injection risk.", line: lineNumber });
+    }
+    if (focus.has("security") && /innerHTML\s*=/.test(line)) {
+      issues.push({ severity: "medium", category: "security", message: "Direct innerHTML assignment can introduce XSS risk.", line: lineNumber });
+    }
+    if (focus.has("style") && /console\.(log|debug)\s*\(/.test(line)) {
+      issues.push({ severity: "low", category: "style", message: "Debug logging appears in source.", line: lineNumber });
+    }
+    if (focus.has("bugs") && /TODO|FIXME/.test(line)) {
+      issues.push({ severity: "low", category: "bugs", message: "TODO/FIXME marker should be resolved or tracked.", line: lineNumber });
+    }
+  }
+
+  if (focus.has("complexity") && complexityScore > 30) {
+    issues.push({ severity: "medium", category: "complexity", message: `High branch complexity score (${complexityScore}). Consider splitting the file or functions.` });
+  }
+
   return {
-    issues: [],
-    complexityScore: 0,
-    reviewTimeMs: 0,
+    issues,
+    complexityScore,
+    reviewTimeMs: Date.now() - started,
+    semantic_context: semanticContext,
   };
 }
 
@@ -181,6 +227,7 @@ function buildSummary(
       line?: number;
     }>;
     complexityScore: number;
+    semantic_context?: SemanticSearchResult[];
   }>,
   query: string | undefined,
 ): string {
@@ -237,6 +284,9 @@ function buildSummary(
       if (review.issues.length > 0) {
         lines.push(`#### \`${review.path}\``);
         lines.push(`**Complexity Score:** ${review.complexityScore}`);
+        if (review.semantic_context?.length) {
+          lines.push(`**Semantic Context:** ${review.semantic_context.length} related chunk(s)`);
+        }
         lines.push("");
 
         for (const issue of review.issues) {
