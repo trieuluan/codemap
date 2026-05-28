@@ -25,12 +25,17 @@ export interface MaterializedLocalWorkspaceSource {
 const IGNORED_NAMES = new Set([
   ".git",
   "node_modules",
+  ".pnpm-store",
+  ".yarn",
   "dist",
   "build",
   ".next",
   "coverage",
   ".turbo",
   ".cache",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
 ]);
 
 function parseAllowedWorkspaceRoots() {

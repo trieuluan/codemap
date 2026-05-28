@@ -18,6 +18,10 @@ export function createProjectMapPersistence(
           importId: input.importId,
           treeJson: input.tree,
         })
+        .onConflictDoUpdate({
+          target: projectMapSnapshot.importId,
+          set: { treeJson: input.tree },
+        })
         .returning();
 
       return snapshot;

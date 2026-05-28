@@ -25,11 +25,11 @@ const projectMapPersistence = createProjectMapPersistence(db);
 const repositoryWorkspaceService = createRepositoryWorkspaceService();
 
 function toImportFailureMessage(error: unknown) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.slice(0, 500);
-  }
-
-  return "Project import failed";
+  if (!(error instanceof Error)) return "Project import failed";
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const causeMsg = cause instanceof Error ? cause.message : undefined;
+  const base = error.message.slice(0, 300);
+  return causeMsg ? `${base}\ncause: ${causeMsg}` : base;
 }
 
 async function reportProjectImportProgress(
