@@ -4,7 +4,7 @@ include:
 x-codemap-volumes: &codemap-volumes
   - .:/workspace:cached
   - codemap_node_modules:/workspace/node_modules
-  - ./.codemap-storage:/codemap_storage
+  - ./.codemap/storage:/codemap_storage
 
 services:
   postgres:

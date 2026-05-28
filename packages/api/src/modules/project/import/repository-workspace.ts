@@ -1,4 +1,4 @@
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rename, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -25,7 +25,6 @@ export function buildRepositoryWorkspaceLocation(input: {
 }): RepositoryWorkspaceLocation {
   const storageRoot = resolveRepositoryWorkspaceStorageRoot();
   const storageKey = path.posix.join(
-    "repos",
     sanitizePathSegment(input.projectId),
     sanitizePathSegment(input.importId),
   );
@@ -84,6 +83,17 @@ export function createRepositoryWorkspaceService() {
       }
 
       await rm(workspacePath, { recursive: true, force: true });
+
+      // Also remove the parent {projectId} folder if it's now empty
+      const parentDir = path.dirname(workspacePath);
+      try {
+        const entries = await readdir(parentDir);
+        if (entries.length === 0) {
+          await rm(parentDir, { recursive: true, force: true });
+        }
+      } catch {
+        // Parent doesn't exist or can't be read — ignore
+      }
     },
   };
 }

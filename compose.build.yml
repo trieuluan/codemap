@@ -24,7 +24,7 @@ services:
     ports:
       - "${API_PORT:-3001}:3001"
     volumes:
-      - codemap_storage:/codemap_storage
+      - ./.codemap/storage:/codemap_storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +42,7 @@ services:
       REDIS_URL: redis://redis:6379
     command: ["node", "packages/api/dist/workers/index.js"]
     volumes:
-      - codemap_storage:/codemap_storage
+      - ./.codemap/storage:/codemap_storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,5 +67,3 @@ services:
     depends_on:
       - api
 
-volumes:
-  codemap_storage:

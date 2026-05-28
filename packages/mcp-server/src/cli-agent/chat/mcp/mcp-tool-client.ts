@@ -198,7 +198,15 @@ function formatToolResult(raw: unknown): AgentToolCallResult {
     }
   }
 
-  // execute() returned structuredContent directly
+  // execute() returned structuredContent directly (Mastra SDK strips the MCP
+  // content array when structuredContent is present). Prefer the human-readable
+  // summary field; fall back to JSON only for the data portion.
+  if (typeof raw === "object" && raw !== null && "summary" in raw) {
+    const structured = raw as Record<string, unknown>;
+    const summary = String(structured.summary ?? "");
+    return { content: summary, structuredContent: structured };
+  }
+
   return {
     content: typeof raw === "string" ? raw : JSON.stringify(raw, null, 2),
     structuredContent: raw as Record<string, unknown>,

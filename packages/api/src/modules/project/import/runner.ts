@@ -282,12 +282,7 @@ export async function runProjectImport(
     importPhaseCompleted = true;
     await reportProjectImportProgress(context, 100, "completed");
   } catch (error) {
-    if (
-      !importPhaseCompleted &&
-      !parseJobQueued &&
-      retainedWorkspacePath &&
-      !isPreMaterialized
-    ) {
+    if (retainedWorkspacePath) {
       await repositoryWorkspaceService.removeWorkspaceByPath(
         retainedWorkspacePath,
       );
