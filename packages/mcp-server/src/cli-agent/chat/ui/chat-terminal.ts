@@ -44,7 +44,7 @@ import {
   withToolCallSummary,
 } from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../slash-commands/sessions.js";
-import { buildLocalIndex, refreshLocalFile } from "../../../lib/local-index.js";
+import { buildLocalIndex, refreshLocalFile, removeLocalFile } from "../../../lib/local-index.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -527,7 +527,7 @@ export class ChatTerminal {
     let fullIndexRefreshTimer: NodeJS.Timeout | null = null;
 
     const extractEditedPath = (toolName: string, argsText: string): string | null => {
-      if (!["write_file", "string_replace_lsp", "ast_smart_edit"].includes(toolName)) return null;
+      if (!["write_file", "string_replace_lsp", "ast_smart_edit", "delete_file"].includes(toolName)) return null;
       try {
         const args = JSON.parse(argsText) as { path?: unknown };
         return typeof args.path === "string" && args.path.trim() ? args.path.trim() : null;
@@ -667,11 +667,15 @@ export class ChatTerminal {
             : editedPath;
           if (!relativePath.startsWith("..")) {
             dirtyLocalIndexPaths.add(relativePath);
-            void refreshLocalFile(relativePath).then((updated) => {
-              if (updated) scheduleFullLocalIndexRefresh();
+            const isDelete = rawName === "delete_file";
+            const refresh = isDelete
+              ? removeLocalFile(relativePath).then((removed) => removed)
+              : refreshLocalFile(relativePath).then((updated) => updated);
+            void refresh.then((changed) => {
+              if (changed) scheduleFullLocalIndexRefresh();
             }).catch((error: unknown) => {
               this.logger?.logDebugInfo({
-                event: "local_file_refresh_failed",
+                event: isDelete ? "local_file_remove_failed" : "local_file_refresh_failed",
                 filePath: relativePath,
                 error: String(error),
               });

@@ -306,6 +306,34 @@ export class SQLiteIndexStore {
     return rows.map((r) => r.path);
   }
 
+  /**
+   * Remove a single file and all its associated data from the index.
+   * Returns true if rows were deleted, false if the file wasn't in the index.
+   */
+  removeFileFromIndex(filePath: string): boolean {
+    const delManifest = this.db.prepare("DELETE FROM manifest WHERE path = ?");
+    const delFiles = this.db.prepare("DELETE FROM files WHERE path = ?");
+    const delSymbols = this.db.prepare("DELETE FROM symbols WHERE filePath = ?");
+    const delImports = this.db.prepare("DELETE FROM imports WHERE filePath = ?");
+    const delImportedBy = this.db.prepare("DELETE FROM imported_by WHERE targetFilePath = ?");
+    const delExports = this.db.prepare("DELETE FROM exports WHERE filePath = ?");
+
+    try {
+      this.db.exec("BEGIN");
+      const r = delManifest.run(filePath);
+      delFiles.run(filePath);
+      delSymbols.run(filePath);
+      delImports.run(filePath);
+      delImportedBy.run(filePath);
+      delExports.run(filePath);
+      this.db.exec("COMMIT");
+      return r.changes > 0;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   isStale(currentFiles: WorkspaceFileCandidate[]): boolean {
     const manifestRows = this.db
       .prepare("SELECT path, sizeBytes, contentSha256, parseStatus FROM manifest ORDER BY path")

@@ -226,6 +226,23 @@ export async function refreshLocalFile(
   return true;
 }
 
+/**
+ * Remove a single file from the local SQLite index.
+ * Use after delete_file tool to immediately purge stale entries.
+ * Returns true if the file was found and removed, false otherwise.
+ */
+export async function removeLocalFile(
+  relativePath: string,
+  workspaceRootPath?: string,
+): Promise<boolean> {
+  const store = _cachedStore ?? await readLocalIndex(workspaceRootPath);
+  if (!store) return false;
+
+  const removed = store.removeFileFromIndex(relativePath);
+  _cachedStore = null;
+  return removed;
+}
+
 export async function getLocalIndexSummary(store: SQLiteIndexStore): Promise<LocalIndexSummary> {
   const files = await collectFilesForStore(store);
   return store.getSummary(files.length > 0 ? store.isStale(files) : false);
