@@ -1,7 +1,7 @@
 import type { Editor } from "@earendil-works/pi-tui";
 import type { UIState, TaskListItem } from "../store.js";
 import { formatElapsed, formatTokenCount, truncate } from "../ink-utils.js";
-import { getCommandList } from "../../commands/index.js";
+import { getCommandList } from "../../slash-commands/index.js";
 import { renderEditor } from "./editor-renderer.js";
 import {
   BOLD,

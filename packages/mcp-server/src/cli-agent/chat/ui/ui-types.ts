@@ -1,7 +1,7 @@
 // Minimal interface for ChatTerminal consumed by pi-tui-app.
 // Extracted here to break the circular dependency between chat-terminal.ts and pi-tui-app.ts.
 
-import type { HarnessQuestionAnswer } from "../runtime/mastra-events.js";
+import type { HarnessQuestionAnswer } from "../harness/events.js";
 import type { Store } from "./store.js";
 import type { EventBus } from "./event-bus.js";
 

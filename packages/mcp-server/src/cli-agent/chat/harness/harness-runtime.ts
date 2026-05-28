@@ -1,27 +1,27 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import type { RequestContext } from "@mastra/core/request-context";
-import type { AgentLoopResult } from "../agent/agent-loop.js";
+import type { AgentLoopResult } from "../../core/agent-loop.js";
 import type {
   SingleAgentRuntimeInput,
   MultiPhaseLoopInput,
   PlanReviewAction,
-} from "./runtime-types.js";
+} from "./types.js";
 import {
   bridgeCommonEvent,
   type BridgeCallbacks,
   type HarnessEvent,
   type HarnessLike,
   summarizeHarnessEvent,
-} from "./mastra-events.js";
+} from "./events.js";
 import {
   resolveHarnessModelId,
   stripNineRouterPrefix,
-} from "./mastra-models.js";
+} from "./models.js";
 import {
   createManagedMastraSettings,
   upsertGlobalMastraProvider,
-} from "./mastra-settings.js";
+} from "./settings.js";
 import { buildMastraPermissionRules } from "./tool-approval-policy.js";
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
@@ -1167,7 +1167,7 @@ export async function getMastraThreadTokenUsage(): Promise<{
 
 export async function getMastraMessages(
   limit?: number,
-): Promise<import("./mastra-events.js").HarnessMessage[]> {
+): Promise<import("./events.js").HarnessMessage[]> {
   if (!_singleton) return [];
   try {
     return await _singleton.harness.listMessages({ limit });
@@ -1177,7 +1177,7 @@ export async function getMastraMessages(
 }
 
 export async function listMastraThreads(): Promise<
-  import("./mastra-events.js").HarnessThread[]
+  import("./events.js").HarnessThread[]
 > {
   if (!_singleton) return [];
   try {
@@ -1190,7 +1190,7 @@ export async function listMastraThreads(): Promise<
 export async function listMastraThreadMessages(
   threadId: string,
   limit?: number,
-): Promise<import("./mastra-events.js").HarnessMessage[]> {
+): Promise<import("./events.js").HarnessMessage[]> {
   if (!_singleton) return [];
   try {
     return await _singleton.harness.listMessagesForThread({ threadId, limit });

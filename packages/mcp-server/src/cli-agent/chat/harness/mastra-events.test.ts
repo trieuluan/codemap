@@ -4,7 +4,7 @@ import {
   bridgeCommonEvent,
   type BridgeCallbacks,
   type HarnessLike,
-} from "./mastra-events.js";
+} from "./events.js";
 
 function ref<T>(initial: T) {
   let value = initial;

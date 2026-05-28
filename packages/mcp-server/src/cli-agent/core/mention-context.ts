@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
-import { readWorkspacePath } from "../../../lib/workspace-project.js";
+import { readWorkspacePath } from "../../lib/workspace-project.js";
 
 const MAX_FILE_CHARS = 24_000;
 const MAX_TOTAL_CHARS = 60_000;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyTask } from "./task-classifier.js";
-import type { NineRouterProvider } from "../../provider.js";
+import type { NineRouterProvider } from "./provider.js";
 
 function providerReturning(json: object): NineRouterProvider {
   return {

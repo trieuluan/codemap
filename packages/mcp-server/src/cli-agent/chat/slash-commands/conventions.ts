@@ -1,5 +1,5 @@
 import type { Command } from "./types.js";
-import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../convention-synthesizer.js";
+import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../core/convention-synthesizer.js";
 
 function getPlannerModel(ctx: Parameters<typeof conventionsCommand.execute>[1]): string {
   const profiles = (ctx as unknown as { profiles?: Array<{ id: string; model: string }> }).profiles;

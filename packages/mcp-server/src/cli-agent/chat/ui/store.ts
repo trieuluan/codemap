@@ -1,4 +1,8 @@
 import type { EventBus, TaskPhase, UsageStats } from "./event-bus.js";
+import type { TaskItemSnapshot } from "@mastra/core/harness";
+
+/** @deprecated Use TaskItemSnapshot from @mastra/core/harness directly */
+export type TaskListItem = TaskItemSnapshot;
 
 // ─── Message Types ───────────────────────────────────────
 
@@ -70,12 +74,7 @@ export interface ChatContextState {
   assumptions: ChatContextItem[];
 }
 
-export interface TaskListItem {
-  id: string;
-  content: string;
-  status: "pending" | "in_progress" | "completed";
-  activeForm: string;
-}
+
 
 export interface UIState {
   // Current screen

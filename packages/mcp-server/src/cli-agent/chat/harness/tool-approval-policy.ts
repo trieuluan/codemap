@@ -1,10 +1,6 @@
-type PermissionPolicy = "allow" | "ask" | "deny";
-type ToolCategory = "read" | "edit" | "execute" | "mcp";
+import type { PermissionPolicy, PermissionRules, ToolCategory } from "@mastra/core/harness";
 
-export interface PermissionRules {
-  categories: Partial<Record<ToolCategory, PermissionPolicy>>;
-  tools: Record<string, PermissionPolicy>;
-}
+export type { PermissionPolicy, PermissionRules, ToolCategory };
 
 const MUTATING_TOOL_NAMES = [
   "apply_patch",
@@ -48,6 +44,7 @@ export function buildMastraPermissionRules(
       edit: "ask",
       execute: "ask",
       mcp: "allow",
+      other: "allow",
     },
     tools,
   };

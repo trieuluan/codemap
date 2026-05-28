@@ -1,6 +1,6 @@
-import type { AgentLoopResult } from "../agent/agent-loop.js";
-import { runWithMastraHarness, runMultiPhaseWithMastra } from "./mastra-harness-runtime.js";
-import type { SingleAgentRuntimeInput, MultiPhaseLoopInput } from "./runtime-types.js";
+import type { AgentLoopResult } from "../../core/agent-loop.js";
+import { runWithMastraHarness, runMultiPhaseWithMastra } from "./harness-runtime.js";
+import type { SingleAgentRuntimeInput, MultiPhaseLoopInput } from "./types.js";
 
 // Re-export types so existing consumers don't need to change imports
 export type {
@@ -9,7 +9,7 @@ export type {
   PlanReviewAction,
   SingleAgentRuntimeInput,
   MultiPhaseLoopInput,
-} from "./runtime-types.js";
+} from "./types.js";
 
 export async function runSingleAgentRuntime(
   input: SingleAgentRuntimeInput,

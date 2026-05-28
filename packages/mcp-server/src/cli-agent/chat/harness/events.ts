@@ -6,10 +6,16 @@ import type {
   HarnessQuestionOption,
   HarnessRequestContext,
   HarnessQuestionAnswer,
+  HarnessQuestionSelectionMode,
+  HarnessEvent,
+  HarnessDisplayState,
 } from "@mastra/core/harness";
 export type { HarnessThread, HarnessMessage, HarnessMessageContent };
 export type { HarnessQuestionOption as AskQuestionOption };
 export type { HarnessRequestContext, HarnessQuestionAnswer };
+export type { HarnessQuestionSelectionMode };
+export type { HarnessEvent };
+export type { HarnessDisplayState };
 
 interface Ref<T> {
   get(): T;
@@ -68,7 +74,7 @@ export function summarizeHarnessEvent(
   };
 
   if (event.type === "message_update" || event.type === "message_end") {
-    const message = (event as MessageEvent).message;
+    const message = event.message;
     const content = message?.role === "assistant" ? message.content : undefined;
     const lastText = extractLastText(content);
     return {
@@ -81,27 +87,24 @@ export function summarizeHarnessEvent(
   }
 
   if (event.type === "tool_start") {
-    const ev = event as ToolStartEvent;
-    return { ...base, toolName: ev.toolName, toolCallId: ev.toolCallId };
+    return { ...base, toolName: event.toolName, toolCallId: event.toolCallId };
   }
 
   if (event.type === "tool_end") {
-    const ev = event as ToolEndEvent;
     return {
       ...base,
-      toolName: ev.toolName,
-      toolCallId: ev.toolCallId,
-      isError: ev.isError,
-      resultType: typeof ev.result,
+      toolCallId: event.toolCallId,
+      isError: event.isError,
+      resultType: typeof event.result,
     };
   }
 
   if (event.type === "agent_end") {
-    return { ...base, reason: (event as AgentEndEvent).reason };
+    return { ...base, reason: event.reason };
   }
 
   if (event.type === "error") {
-    const err = (event as HarnessErrorEvent).error;
+    const err = event.error;
     return {
       ...base,
       errorName: err?.name,
@@ -110,8 +113,7 @@ export function summarizeHarnessEvent(
   }
 
   if (event.type === "mode_changed") {
-    const ev = event as ModeChangedEvent;
-    return { ...base, modeId: ev.modeId, previousModeId: ev.previousModeId };
+    return { ...base, modeId: event.modeId, previousModeId: event.previousModeId };
   }
 
   return base;
@@ -122,7 +124,7 @@ export function bridgeCommonEvent(
   cb: BridgeCallbacks,
 ): void {
   if (event.type === "message_update") {
-    const message = (event as MessageEvent).message;
+    const message = event.message;
     if (message?.role !== "assistant") return;
     const lastText = extractLastText(message.content);
     const prev = cb.currentStreamTextRef.get();
@@ -144,7 +146,7 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "message_end") {
-    const message = (event as MessageEvent).message;
+    const message = event.message;
     if (message?.role !== "assistant") return;
     const lastText = extractLastText(message.content);
     cb.finalTextRef.set(lastText);
@@ -154,32 +156,29 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "tool_start") {
-    const ev = event as ToolStartEvent;
     cb.usedToolsRef.set(true);
-    const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
-    const args = normalizeToolArgs(ev.args);
+    const displayName = formatToolDisplayName(event.toolName, cb.mcpServerIds);
+    const args = normalizeToolArgs(event.args);
     cb.onToolStart?.(
       displayName,
-      ev.args != null ? JSON.stringify(ev.args) : "{}",
-      ev.toolCallId ?? "",
-      buildToolPreview(ev.toolName, args),
+      event.args != null ? JSON.stringify(event.args) : "{}",
+      event.toolCallId ?? "",
+      buildToolPreview(event.toolName, args),
     );
     return;
   }
 
   if (event.type === "tool_end") {
-    const ev = event as ToolEndEvent;
-    const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
-    const r = formatToolResult(ev.result);
+    const r = formatToolResult(event.result);
     const content =
       r.trim() ||
-      (ev.isError
+      (event.isError
         ? "Tool failed without a result."
         : "Tool completed without a result.");
     cb.onToolResult?.(
-      displayName,
-      ev.isError ? `[ERROR] ${content}` : content,
-      ev.toolCallId,
+      event.toolCallId,
+      event.isError ? `[ERROR] ${content}` : content,
+      event.toolCallId,
     );
     return;
   }
@@ -190,40 +189,35 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "plan_approval_required") {
-    const ev = event as PlanApprovalEvent;
-    cb.onPlanApproval?.(ev.planId, ev.plan);
+    cb.onPlanApproval?.(event.planId, event.plan);
     return;
   }
 
   if (event.type === "ask_question") {
-    const ev = event as AskQuestionEvent;
     const respond = (answer: HarnessQuestionAnswer) =>
-      cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
+      cb.harness.respondToQuestion?.({ questionId: event.questionId, answer });
     cb.onAskQuestion?.(
-      ev.questionId,
-      ev.question,
-      ev.options,
+      event.questionId,
+      event.question,
+      event.options,
       respond,
-      ev.selectionMode,
+      event.selectionMode,
     );
     return;
   }
 
   if (event.type === "om_observation_end") {
-    const ev = event as OMObservationEndEvent;
-    cb.onOMObservation?.(ev.tokensObserved ?? 0, ev.observationTokens ?? 0);
+    cb.onOMObservation?.(event.tokensObserved ?? 0, event.observationTokens ?? 0);
     return;
   }
 
   if (event.type === "om_reflection_end") {
-    const ev = event as OMReflectionEndEvent;
-    cb.onOMReflection?.(ev.compressedTokens ?? 0);
+    cb.onOMReflection?.(event.compressedTokens ?? 0);
     return;
   }
 
   if (event.type === "error") {
-    const ev = event as HarnessErrorEvent;
-    cb.onError(ev.error);
+    cb.onError(event.error);
     return;
   }
 
@@ -239,7 +233,7 @@ export function bridgeCommonEvent(
     if (usage) cb.onUsage?.(usage);
     cb.onDebug?.({
       event: "mastra_harness_end",
-      reason: (event as AgentEndEvent).reason,
+      reason: event.type === "agent_end" ? event.reason : undefined,
       usedTools: cb.usedToolsRef.get(),
     });
     cb.onEnd(usage);
@@ -363,13 +357,7 @@ export interface HarnessLike {
   selectOrCreateThread(): Promise<unknown>;
   createThread(opts?: { title?: string }): Promise<unknown>;
   getCurrentThreadId?(): string | null;
-  getDisplayState?(): {
-    omProgress?: {
-      observationTokens?: number;
-      status?: string;
-      preReflectionTokens?: number;
-    };
-  };
+  getDisplayState?(): Readonly<HarnessDisplayState>;
   listMessages(options?: { limit?: number }): Promise<HarnessMessage[]>;
   listMessagesForThread(options: {
     threadId: string;
@@ -424,61 +412,4 @@ export interface HarnessLike {
   destroy?(): Promise<void>;
 }
 
-export interface HarnessEvent {
-  type: string;
-}
 
-interface MessageEvent extends HarnessEvent {
-  type: "message_update" | "message_end";
-  message: { role?: string; content?: HarnessMessageContent[] | string };
-}
-interface ToolStartEvent extends HarnessEvent {
-  type: "tool_start";
-  toolCallId?: string;
-  toolName: string;
-  args: unknown;
-}
-interface ToolEndEvent extends HarnessEvent {
-  type: "tool_end";
-  toolCallId?: string;
-  toolName: string;
-  result: unknown;
-  isError: boolean;
-}
-interface AgentEndEvent extends HarnessEvent {
-  type: "agent_end";
-  reason?: string;
-}
-interface HarnessErrorEvent extends HarnessEvent {
-  type: "error";
-  error: Error;
-}
-interface ModeChangedEvent extends HarnessEvent {
-  type: "mode_changed";
-  modeId: string;
-  previousModeId: string;
-}
-interface PlanApprovalEvent extends HarnessEvent {
-  type: "plan_approval_required";
-  planId: string;
-  title: string;
-  plan: string;
-}
-interface AskQuestionEvent extends HarnessEvent {
-  type: "ask_question";
-  questionId: string;
-  question: string;
-  options?: HarnessQuestionOption[];
-  selectionMode?: "single_select" | "multi_select";
-}
-interface OMObservationEndEvent extends HarnessEvent {
-  type: "om_observation_end";
-  tokensObserved?: number;
-  observationTokens?: number;
-  observations?: string;
-}
-interface OMReflectionEndEvent extends HarnessEvent {
-  type: "om_reflection_end";
-  compressedTokens?: number;
-  observations?: string;
-}

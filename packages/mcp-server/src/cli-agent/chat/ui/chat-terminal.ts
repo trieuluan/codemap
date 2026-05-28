@@ -1,14 +1,17 @@
-import type { NineRouterProvider } from "../../provider.js";
+import type { NineRouterProvider } from "../../core/provider.js";
 import type { ModelProfile, TokenUsage } from "../../types.js";
-import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
-import { fetchResourceContext } from "../mcp/mcp-tool-client.js";
-import { getCachedContext } from "../../convention-synthesizer.js";
+import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
+import { fetchResourceContext } from "../mcp-tools/mcp-tool-client.js";
+import { getCachedContext } from "../../core/convention-synthesizer.js";
 import {
   runMultiPhaseAgentRuntime,
   runSingleAgentRuntime,
   type ChatUiMode,
-} from "../runtime/cli-runtime.js";
-import type { AskQuestionOption, HarnessQuestionAnswer } from "../runtime/mastra-events.js";
+} from "../harness/cli-runtime.js";
+import type {
+  AskQuestionOption,
+  HarnessQuestionAnswer,
+} from "../harness/events.js";
 import {
   resetHarnessSingleton,
   getMastraThreadId,
@@ -16,20 +19,20 @@ import {
   getMastraThreadTokenUsage,
   switchMastraThread,
   warmupHarness,
-} from "../runtime/mastra-harness-runtime.js";
-import { resolveGatewayModel } from "../runtime/mastra-models.js";
-import { hydrateMentionContext } from "../agent/mention-context.js";
+} from "../harness/harness-runtime.js";
+import { resolveGatewayModel } from "../harness/models.js";
+import { hydrateMentionContext } from "../../core/mention-context.js";
 import {
   classifyTask,
   type TaskClassification,
-} from "../agent/task-classifier.js";
-import { executeCommand, getCommandList } from "../commands/index.js";
-import { runShell } from "../commands/shell.js";
-import { isStrongModel } from "../commands/profiles.js";
+} from "../../core/task-classifier.js";
+import { executeCommand, getCommandList } from "../slash-commands/index.js";
+import { runShell } from "../slash-commands/shell.js";
+import { isStrongModel } from "../slash-commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
-import { warmupFileSearch } from "../file-search.js";
-import { loadOrSynthesizeAll } from "../../convention-synthesizer.js";
-import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
+import { warmupFileSearch } from "../../core/file-search.js";
+import { loadOrSynthesizeAll } from "../../core/convention-synthesizer.js";
+import { createDebugLogger, type DebugLogger } from "../../core/debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
 import {
@@ -39,7 +42,7 @@ import {
   syncTaskListFromTool,
   withToolCallSummary,
 } from "./tool-call-messages.js";
-import { loadThreadIntoUI } from "../commands/sessions.js";
+import { loadThreadIntoUI } from "../slash-commands/sessions.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -170,7 +173,9 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _planReviewResolve: ((action: string) => void) | null = null;
-  private _askQuestionResolve: ((answer: HarnessQuestionAnswer) => void) | null = null;
+  private _askQuestionResolve:
+    | ((answer: HarnessQuestionAnswer) => void)
+    | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
   private _activeTaskId = 0;
@@ -291,7 +296,9 @@ export class ChatTerminal {
   waitForPlanReview(): Promise<string> {
     return new Promise((resolve) => {
       this._planReviewResolve = resolve;
-      this.store.dispatch({ planReview: { active: true, selection: 0, reviseMode: false } });
+      this.store.dispatch({
+        planReview: { active: true, selection: 0, reviseMode: false },
+      });
       this.bus.scheduleRefresh();
     });
   }
@@ -300,7 +307,9 @@ export class ChatTerminal {
   resolvePlanReview(action: string): void {
     this._planReviewResolve?.(action);
     this._planReviewResolve = null;
-    this.store.dispatch({ planReview: { active: false, selection: 0, reviseMode: false } });
+    this.store.dispatch({
+      planReview: { active: false, selection: 0, reviseMode: false },
+    });
     this.bus.scheduleRefresh();
   }
 
@@ -308,7 +317,7 @@ export class ChatTerminal {
   waitForAskQuestion(
     questionId: string,
     question: string,
-    options?: { label: string; description?: string }[],
+    options?: AskQuestionOption[],
     selectionMode?: "single_select" | "multi_select",
   ): Promise<HarnessQuestionAnswer> {
     return new Promise((resolve) => {
@@ -320,7 +329,8 @@ export class ChatTerminal {
           question,
           options,
           selection: 0,
-          selectionMode: selectionMode ?? (options?.length ? "single_select" : undefined),
+          selectionMode:
+            selectionMode ?? (options?.length ? "single_select" : undefined),
           selected: [],
         },
       });
@@ -363,7 +373,9 @@ export class ChatTerminal {
 
     // Fetch Mastra tool definitions from the already-connected MCPClient so the harness
     // can reuse the same connection instead of spawning a second codemap child process.
-    const mastraTools = await this.options.toolClient.getMastraTools().catch(() => undefined);
+    const mastraTools = await this.options.toolClient
+      .getMastraTools()
+      .catch(() => undefined);
 
     warmupHarness({
       toolClient: this.options.toolClient,
@@ -422,9 +434,7 @@ export class ChatTerminal {
         (msgs) => this.store.dispatch({ messages: msgs }),
         (msg) => this.appendMessage(msg as Message),
       );
-      const threadUsage = await getMastraThreadTokenUsage().catch(
-        () => null,
-      );
+      const threadUsage = await getMastraThreadTokenUsage().catch(() => null);
       this.store.dispatch({
         sessionTokens: threadUsage?.totalTokens ?? 0,
       });

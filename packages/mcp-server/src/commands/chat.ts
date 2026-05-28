@@ -1,13 +1,13 @@
 import type { GatewayCommandContext } from "../cli-agent/command-context.js";
-import { CodeMapMcpToolClient } from "../cli-agent/chat/mcp/mcp-tool-client.js";
-import { selectChatProfile } from "../cli-agent/chat/commands/profiles.js";
-import type { ChatUiMode } from "../cli-agent/chat/runtime/cli-runtime.js";
-import { NineRouterProvider } from "../cli-agent/provider.js";
+import { CodeMapMcpToolClient } from "../cli-agent/chat/mcp-tools/mcp-tool-client.js";
+import { selectChatProfile } from "../cli-agent/chat/slash-commands/profiles.js";
+import type { ChatUiMode } from "../cli-agent/chat/harness/cli-runtime.js";
+import { NineRouterProvider } from "../cli-agent/core/provider.js";
 import type { GatewayConfig } from "../cli-agent/types.js";
 import { printGatewayHint } from "./gateway-hint.js";
 import { loadConfig } from "../config.js";
 import { installStderrInterceptor } from "../cli-agent/chat/ui/stderr-interceptor.js";
-import { resetHarnessSingleton } from "../cli-agent/chat/runtime/mastra-harness-runtime.js";
+import { resetHarnessSingleton } from "../cli-agent/chat/harness/harness-runtime.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const provider = new NineRouterProvider(

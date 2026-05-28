@@ -22,7 +22,7 @@ import type {
   GatewayProvider,
   ProviderHealth,
   TokenUsage,
-} from "./types.js";
+} from "../types.js";
 
 export class NineRouterProvider implements GatewayProvider {
   readonly name = "9router";

@@ -10,7 +10,7 @@ import {
 import type { ChatTerminalLike } from "./ui-types.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import { MentionAutocompleteProvider } from "./pi-tui/input.js";
-import { getCommandList } from "../commands/index.js";
+import { getCommandList } from "../slash-commands/index.js";
 import { initShiki } from "./pi-tui/shiki-highlight.js";
 import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
 import {
@@ -27,7 +27,7 @@ import {
   buildPanel,
   isActiveTaskPhase,
 } from "./pi-tui/panel-builder.js";
-import { getMastraMessages } from "../runtime/mastra-harness-runtime.js";
+import { getMastraMessages } from "../harness/harness-runtime.js";
 
 export { isActiveTaskPhase };
 

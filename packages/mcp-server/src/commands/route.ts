@@ -1,5 +1,5 @@
 import type { GatewayCommandContext } from "../cli-agent/command-context.js";
-import { recommendRoute } from "../cli-agent/policy.js";
+import { recommendRoute } from "../cli-agent/core/policy.js";
 import type { GatewayConfig, ModelProfile } from "../cli-agent/types.js";
 
 export function runRouteCommand(ctx: GatewayCommandContext): void {

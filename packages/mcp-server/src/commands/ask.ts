@@ -1,6 +1,6 @@
 import type { GatewayCommandContext } from "../cli-agent/command-context.js";
-import { findProfile } from "../cli-agent/policy.js";
-import { NineRouterProvider } from "../cli-agent/provider.js";
+import { findProfile } from "../cli-agent/core/policy.js";
+import { NineRouterProvider } from "../cli-agent/core/provider.js";
 import { printGatewayHint } from "./gateway-hint.js";
 
 export async function runAsk(ctx: GatewayCommandContext): Promise<void> {

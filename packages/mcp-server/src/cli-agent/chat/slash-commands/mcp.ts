@@ -4,7 +4,7 @@ import {
   saveMcpServerEntry,
   removeMcpServerEntry,
 } from "../../../lib/workspace-project.js";
-import { getMastraMcpStatusSummary } from "../runtime/mastra-harness-runtime.js";
+import { getMastraMcpStatusSummary } from "../harness/harness-runtime.js";
 
 export const mcpCommand: Command = {
   name: "mcp",

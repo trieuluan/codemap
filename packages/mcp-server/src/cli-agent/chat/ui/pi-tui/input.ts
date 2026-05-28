@@ -1,5 +1,5 @@
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
-import { searchIndexedFiles } from "../../file-search.js";
+import { searchIndexedFiles } from "../../../core/file-search.js";
 
 const AT_DELIMITERS = new Set([" ", "\t", '"', "'", "="]);
 

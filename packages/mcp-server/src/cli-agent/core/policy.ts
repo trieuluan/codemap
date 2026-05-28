@@ -5,7 +5,7 @@ import type {
   RouteRecommendation,
   RouteRequest,
   TaskType,
-} from "./types.js";
+} from "../types.js";
 
 const TASK_PATTERNS: Array<[TaskType, RegExp]> = [
   ["review", /\b(review|pr|diff|audit|security)\b/i],

@@ -1,10 +1,10 @@
 // Shared types for cli-runtime and mastra-harness-runtime.
 // Extracted here to break the circular dependency between the two files.
 
-import type { NineRouterProvider } from "../../provider.js";
+import type { NineRouterProvider } from "../../core/provider.js";
 import type { ChatMessage, TokenUsage } from "../../types.js";
-import type { CodeMapMcpToolClient } from "../mcp/mcp-tool-client.js";
-import type { AskQuestionOption, HarnessQuestionAnswer } from "./mastra-events.js";
+import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
+import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode } from "./events.js";
 
 export type ChatUiMode = "tui";
 
@@ -31,7 +31,7 @@ export interface SingleAgentRuntimeInput {
   onPlanWait?: () => Promise<PlanReviewAction>;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
-  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: "single_select" | "multi_select") => void;
+  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
 }
@@ -56,7 +56,7 @@ export interface MultiPhaseLoopInput {
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
-  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: "single_select" | "multi_select") => void;
+  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
 }

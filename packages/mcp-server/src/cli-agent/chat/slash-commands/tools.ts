@@ -1,6 +1,6 @@
 import type { Command } from "./types.js";
 import { TOOL_CATEGORIES, type ToolCategory } from "./tool-categories.js";
-import { getMastraMcpStatusSummary, MASTRA_DISABLED_TOOLS } from "../runtime/mastra-harness-runtime.js";
+import { getMastraMcpStatusSummary, MASTRA_DISABLED_TOOLS } from "../harness/harness-runtime.js";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";

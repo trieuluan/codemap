@@ -1,9 +1,9 @@
 import type { Command } from "./types.js";
-import type { HarnessMessage, HarnessThread } from "../runtime/mastra-events.js";
+import type { HarnessMessage, HarnessThread } from "../harness/events.js";
 import {
   listMastraThreads,
   listMastraThreadMessages,
-} from "../runtime/mastra-harness-runtime.js";
+} from "../harness/harness-runtime.js";
 import type { Message } from "../ui/store.js";
 
 function stringifyToolResult(result: unknown): string {
