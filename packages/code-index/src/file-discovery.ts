@@ -71,6 +71,94 @@ export function normalizeRepositoryFilePath(input: string) {
   return resolvedPath;
 }
 
+/**
+ * Collect a single file as a WorkspaceFileCandidate.
+ * Returns null if the file doesn't exist, is a symlink, or is in an ignored directory.
+ */
+export async function collectSingleFile(
+  relativePath: string,
+  workspacePath: string,
+): Promise<WorkspaceFileCandidate | null> {
+  const absolutePath = path.join(workspacePath, relativePath);
+
+  try {
+    const entryStats = await lstat(absolutePath);
+    if (entryStats.isSymbolicLink() || !entryStats.isFile()) return null;
+
+    // Check if any parent directory is in IGNORED_NAMES
+    const parts = relativePath.split("/");
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (IGNORED_NAMES.has(parts[i])) return null;
+    }
+
+    const name = path.basename(absolutePath);
+    const extension = normalizeExtension(name);
+    const language = inferLanguage(extension);
+    const mimeType = inferMimeType(extension);
+    const sample = await readSampleBuffer(absolutePath, entryStats.size);
+    const isBinary = isBinaryBuffer(sample);
+    const isText = !isBinary;
+    const maxParseBytes = (language ? MAX_PARSE_BYTES_BY_LANGUAGE[language] : undefined) ?? MAX_PARSE_BYTES;
+    const isParseable = Boolean(language) && isText && entryStats.size <= maxParseBytes;
+    const normalizedPath = normalizeRepositoryFilePath(relativePath);
+    const dirPath = path.posix.dirname(normalizedPath) === "."
+      ? ""
+      : path.posix.dirname(normalizedPath);
+
+    if (!isParseable) {
+      return {
+        path: normalizedPath,
+        absolutePath,
+        dirPath,
+        baseName: name,
+        extension,
+        language,
+        mimeType,
+        sizeBytes: entryStats.size,
+        contentSha256: null,
+        isText,
+        isBinary,
+        isGenerated: false,
+        isIgnored: false,
+        ignoreReason: null,
+        isParseable: false,
+        parseStatus: isBinary ? "binary" : entryStats.size > MAX_PARSE_BYTES ? "too_large" : "unsupported",
+        parserName: null,
+        parserVersion: null,
+        lineCount: null,
+        content: null,
+      };
+    }
+
+    const content = await readFile(absolutePath, "utf8");
+
+    return {
+      path: normalizedPath,
+      absolutePath,
+      dirPath,
+      baseName: name,
+      extension,
+      language,
+      mimeType,
+      sizeBytes: entryStats.size,
+      contentSha256: buildFileSha256(content),
+      isText: true,
+      isBinary: false,
+      isGenerated: false,
+      isIgnored: false,
+      ignoreReason: null,
+      isParseable: true,
+      parseStatus: "parsed",
+      parserName: PARSE_TOOL_NAME,
+      parserVersion: PARSE_TOOL_VERSION,
+      lineCount: content.split(/\r?\n/).length,
+      content,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function collectWorkspaceFiles(
   workspacePath: string,
 ): Promise<WorkspaceFileCandidate[]> {

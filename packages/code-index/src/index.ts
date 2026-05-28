@@ -1,4 +1,5 @@
 export {
+  collectSingleFile,
   collectWorkspaceFiles,
   IGNORED_NAMES,
   MAX_PARSE_BYTES,

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NineRouterProvider } from "../../core/provider.js";
 import type { ModelProfile, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
@@ -43,6 +44,7 @@ import {
   withToolCallSummary,
 } from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../slash-commands/sessions.js";
+import { buildLocalIndex, refreshLocalFile } from "../../../lib/local-index.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -521,6 +523,28 @@ export class ChatTerminal {
     let streamingContent = "";
     let hasStreamingEntry = false;
     const toolArgsById = new Map<string, { name: string; args: string }>();
+    const dirtyLocalIndexPaths = new Set<string>();
+    let fullIndexRefreshTimer: NodeJS.Timeout | null = null;
+
+    const extractEditedPath = (toolName: string, argsText: string): string | null => {
+      if (!["write_file", "string_replace_lsp", "ast_smart_edit"].includes(toolName)) return null;
+      try {
+        const args = JSON.parse(argsText) as { path?: unknown };
+        return typeof args.path === "string" && args.path.trim() ? args.path.trim() : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const scheduleFullLocalIndexRefresh = () => {
+      if (fullIndexRefreshTimer) clearTimeout(fullIndexRefreshTimer);
+      fullIndexRefreshTimer = setTimeout(() => {
+        fullIndexRefreshTimer = null;
+        void buildLocalIndex().catch((error: unknown) => {
+          this.logger?.logDebugInfo({ event: "local_index_refresh_failed", error: String(error) });
+        });
+      }, 3_000);
+    };
 
     const resetStreaming = () => {
       streamingContent = "";
@@ -635,6 +659,26 @@ export class ChatTerminal {
         const rawArgs = toolMeta?.args ?? "{}";
         if (id) toolArgsById.delete(id);
         syncTaskListFromTool(this.store, rawName, rawArgs, resultText);
+
+        const editedPath = extractEditedPath(rawName, rawArgs);
+        if (editedPath) {
+          const relativePath = path.isAbsolute(editedPath)
+            ? path.relative(process.cwd(), editedPath)
+            : editedPath;
+          if (!relativePath.startsWith("..")) {
+            dirtyLocalIndexPaths.add(relativePath);
+            void refreshLocalFile(relativePath).then((updated) => {
+              if (updated) scheduleFullLocalIndexRefresh();
+            }).catch((error: unknown) => {
+              this.logger?.logDebugInfo({
+                event: "local_file_refresh_failed",
+                filePath: relativePath,
+                error: String(error),
+              });
+            });
+          }
+        }
+
         this.bus.scheduleRefresh();
       },
       onOMObservation: (tokensObserved: number, observationTokens: number) => {

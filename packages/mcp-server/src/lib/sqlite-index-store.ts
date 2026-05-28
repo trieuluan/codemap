@@ -301,6 +301,11 @@ export class SQLiteIndexStore {
     };
   }
 
+  getAllFilePaths(): string[] {
+    const rows = this.db.prepare("SELECT path FROM manifest ORDER BY path").all() as Array<{ path: string }>;
+    return rows.map((r) => r.path);
+  }
+
   isStale(currentFiles: WorkspaceFileCandidate[]): boolean {
     const manifestRows = this.db
       .prepare("SELECT path, sizeBytes, contentSha256, parseStatus FROM manifest ORDER BY path")
@@ -440,6 +445,117 @@ export class SQLiteIndexStore {
             exp.line, exp.col, exp.endLine, exp.endCol,
           );
         }
+      }
+
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /**
+   * Upsert a single file's data. Replaces manifest/files/symbols/imports/exports rows
+   * for the file and rebuilds imported_by entries where this file is the target.
+   * Does NOT update imported_by entries in OTHER files that import this file
+   * (those are managed by the importer's own upsert).
+   */
+  upsertFile(
+    file: LocalIndexedFile,
+    opts: { keepImportedByForFile?: boolean } = {},
+  ): void {
+    this.db.exec("BEGIN");
+    try {
+      // Delete all data for this file from file-owned tables
+      this.db.prepare("DELETE FROM manifest WHERE path = ?").run(file.path);
+      this.db.prepare("DELETE FROM files WHERE path = ?").run(file.path);
+      this.db.prepare("DELETE FROM symbols WHERE filePath = ?").run(file.path);
+      this.db.prepare("DELETE FROM imports WHERE filePath = ?").run(file.path);
+      this.db.prepare("DELETE FROM exports WHERE filePath = ?").run(file.path);
+
+      // Delete imported_by entries where this file is the TARGET (other files import this file)
+      // and where this file is the SOURCE (this file imports other files).
+      if (!opts.keepImportedByForFile) {
+        this.db.prepare("DELETE FROM imported_by WHERE targetFilePath = ? OR sourceFilePath = ?").run(file.path, file.path);
+      }
+
+      // Re-insert manifest + files
+      this.db.prepare(
+        "INSERT INTO manifest(path, sizeBytes, contentSha256, parseStatus) VALUES(?, ?, ?, ?)",
+      ).run(file.path, file.sizeBytes, file.contentSha256 ?? null, file.parseStatus);
+
+      this.db.prepare(
+        "INSERT INTO files(path, dirPath, baseName, extension, language, mimeType, sizeBytes, lineCount, parseStatus, isBinary, isText, contentSha256, content) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(
+        file.path, file.dirPath, file.baseName,
+        file.extension ?? null, file.language ?? null, file.mimeType ?? null,
+        file.sizeBytes, file.lineCount ?? null, file.parseStatus,
+        file.isBinary ? 1 : 0, file.isText ? 1 : 0,
+        file.contentSha256 ?? null, file.content ?? null,
+      );
+
+      // Re-insert symbols
+      const insertSymbol = this.db.prepare(
+        "INSERT INTO symbols(filePath, localKey, stableKey, displayName, kind, signature, returnType, doc, isExported, parentSymbolLocalKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      for (const sym of file.symbols) {
+        insertSymbol.run(
+          file.path, sym.localKey, sym.stableKey, sym.displayName, sym.kind,
+          sym.signature ?? null, sym.returnType ?? null, sym.doc ?? null,
+          sym.isExported ? 1 : 0, sym.parentSymbolLocalKey ?? null,
+          sym.line, sym.col, sym.endLine, sym.endCol,
+        );
+      }
+
+      // Re-insert imports
+      const insertImport = this.db.prepare(
+        "INSERT INTO imports(filePath, localKey, moduleSpecifier, importKind, resolutionKind, targetPathText, targetExternalSymbolKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      for (const imp of file.imports) {
+        insertImport.run(
+          file.path, imp.localKey, imp.moduleSpecifier, imp.importKind, imp.resolutionKind,
+          imp.targetPathText ?? null, imp.targetExternalSymbolKey ?? null,
+          imp.line, imp.col, imp.endLine, imp.endCol,
+        );
+      }
+
+      // Re-insert imported_by entries for imports owned by this file
+      const insertIB = this.db.prepare(
+        "INSERT INTO imported_by(targetFilePath, sourceFilePath, moduleSpecifier, importKind, resolutionKind, startLine, startCol, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      for (const imp of file.imports) {
+        if (!imp.targetPathText) continue;
+        insertIB.run(
+          imp.targetPathText, file.path, imp.moduleSpecifier, imp.importKind, imp.resolutionKind,
+          imp.line, imp.col, imp.endLine, imp.endCol,
+        );
+      }
+
+      // Re-insert exports
+      const insertExport = this.db.prepare(
+        "INSERT INTO exports(filePath, exportName, exportKind, symbolLocalKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      for (const exp of file.exports) {
+        insertExport.run(
+          file.path, exp.exportName, exp.exportKind, exp.symbolLocalKey ?? null,
+          exp.line, exp.col, exp.endLine, exp.endCol,
+        );
+      }
+
+      // Re-insert imported_by entries for this file (where other files import from this file)
+      // These are derived from the imports table: for each import with targetPathText = file.path,
+      // the importing file has an imported_by entry pointing to this file
+      const importers = this.db.prepare(
+        "SELECT filePath, moduleSpecifier, importKind, resolutionKind, line, col, endLine, endCol FROM imports WHERE targetPathText = ?",
+      ).all(file.path) as Array<{
+        filePath: string; moduleSpecifier: string; importKind: string;
+        resolutionKind: string; line: number; col: number; endLine: number; endCol: number;
+      }>;
+      for (const imp of importers) {
+        insertIB.run(
+          file.path, imp.filePath, imp.moduleSpecifier, imp.importKind, imp.resolutionKind,
+          imp.line, imp.col, imp.endLine, imp.endCol,
+        );
       }
 
       this.db.exec("COMMIT");

@@ -1,5 +1,6 @@
 import path from "node:path";
 import {
+  collectSingleFile,
   collectWorkspaceFiles,
   loadTypeScriptResolverConfigs,
   parseWorkspaceFileSemantics,
@@ -182,6 +183,47 @@ export async function ensureLocalIndex(input?: {
   }
 
   return buildLocalIndex(input);
+}
+
+/**
+ * Incrementally re-index a single file. Updates only the given file's data
+ * in the SQLite index without a full workspace scan.
+ * Returns true if the file was updated, false if it couldn't be found/read.
+ */
+export async function refreshLocalFile(
+  relativePath: string,
+  workspaceRootPath?: string,
+): Promise<boolean> {
+  // Get or build the store
+  const store = _cachedStore ?? await readLocalIndex(workspaceRootPath) ?? await buildLocalIndex({ workspaceRootPath });
+  const meta = store.getMeta();
+  if (!meta) return false;
+
+  const candidate = await collectSingleFile(relativePath, meta.workspaceRootPath);
+  if (!candidate || !candidate.isParseable) return false;
+
+  // Get current file set for import resolution context
+  const existingFiles = store.getAllFilePaths();
+  const filePathSet = new Set(existingFiles);
+  // Ensure the current file is in the set (it may be a new file)
+  filePathSet.add(candidate.path);
+
+  const resolverConfigs = await loadTypeScriptResolverConfigs(meta.workspaceRootPath);
+  const semantics = await parseWorkspaceFileSemantics({
+    file: candidate,
+    filePathSet,
+    projectImportId: "local",
+    workspacePath: meta.workspaceRootPath,
+    resolverConfigs,
+  });
+
+  const localFile = toLocalFile(candidate, semantics);
+  store.upsertFile(localFile);
+
+  // Invalidate cached store so next ensureLocalIndex re-checks freshness
+  _cachedStore = null;
+
+  return true;
 }
 
 export async function getLocalIndexSummary(store: SQLiteIndexStore): Promise<LocalIndexSummary> {
