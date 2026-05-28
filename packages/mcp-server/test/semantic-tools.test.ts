@@ -160,37 +160,6 @@ test("move-symbols tool handles empty semantic results", async () => {
   assert.equal(conflict, undefined);
 });
 
-test("code-review tool semantic context extraction", async () => {
-  const mockSemanticResponse = {
-    results: [
-      {
-        path: "src/utils/helper.ts",
-        symbolName: "helperFunction",
-        chunkType: "symbol",
-        startLine: 10,
-        endLine: 20,
-        score: 0.85,
-        snippet: "function helperFunction() { ... }",
-      },
-    ],
-    query: "test query",
-  };
-
-  // Simulate the code-review extraction logic
-  const semanticResult = { status: "fulfilled" as const, value: mockSemanticResponse };
-  const semanticContext = semanticResult.status === "fulfilled" ? semanticResult.value.results ?? [] : [];
-
-  assert.equal(semanticContext.length, 1);
-  assert.equal(semanticContext[0].symbolName, "helperFunction");
-});
-
-test("code-review tool handles failed semantic request", async () => {
-  const semanticResult = { status: "rejected" as const, reason: new Error("API error") };
-  const semanticContext = semanticResult.status === "fulfilled" ? (semanticResult.value as { results: Array<{ score: number }> }).results ?? [] : [];
-
-  assert.equal(semanticContext.length, 0);
-});
-
 test("get-project-insights tool cluster extraction", async () => {
   const mockSemanticResponse = {
     results: [

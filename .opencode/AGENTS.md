@@ -29,7 +29,7 @@ For new functionality or bug fixes, follow RED → GREEN → REFACTOR strictly.
 
 - **RED**: `search_codebase("test <feature>")` to find patterns, write a minimal failing test, run with the host agent test runner and confirm it **fails**.
 - **GREEN**: Use `symbol` to read the target, implement only the minimum to pass, run the host agent test runner and confirm it **passes**.
-- **REFACTOR**: Clean up, run the host agent test runner again, then call `code_review` and `diff(mode="working")` before declaring done.
+- **REFACTOR**: Clean up, run the host agent test runner again, then call `diff(mode="working")` before declaring done.
 
 No production code before a failing test exists.
 
@@ -75,4 +75,3 @@ Use when reviewing changes in a CodeMap-indexed repository.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.
-

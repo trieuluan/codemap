@@ -27,8 +27,7 @@ Use this skill when implementing new functionality or fixing a bug where tests a
 
 1. Improve naming, extract helpers, remove duplication
 2. Run tests using the host agent test runner (e.g. `npm test`, `vitest`, `pytest`, etc.) — confirm all tests still pass after cleanup
-3. `code_review` — catch issues before declaring done
-4. `diff(mode="working")` — review final scope of changes
+3. `diff(mode="working")` — review final scope of changes
 
 ## Rules
 

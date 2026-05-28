@@ -236,13 +236,3 @@ export function withToolError<TArgs extends unknown[]>(
     }
   };
 }
-
-// TODO: remove this test code
-// @ts-expect-error - test code for code review
-const _API_KEY = "sk-1234567890abcdef";
-// @ts-expect-error - test code for code review
-const _DB_PASSWORD = "admin123";
-
-export function unsafeQuery(userInput: string) {
-  return `SELECT * FROM users WHERE id = '${userInput}'`;
-}

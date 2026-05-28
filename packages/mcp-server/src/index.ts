@@ -40,7 +40,6 @@ import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
-import { registerCodeReviewTool } from "./tools/code-review.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
 import { registerRenameSymbolTool } from "./tools/rename-symbol.js";
@@ -112,7 +111,6 @@ async function runMcpServer() {
     registerMoveSymbolsTool(server, config);
     registerRenameSymbolTool(server, config);
     registerFindCyclesTool(server, config);
-    registerCodeReviewTool(server, config);
     registerManageGitConnectionTool(server, config);
     registerGetCurrentWorkspaceInfoTool(server);
     registerListGithubRepositoriesTool(server, config);

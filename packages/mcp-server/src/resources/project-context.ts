@@ -64,7 +64,6 @@ const TOOLS_FULL_EXTRA = [
   "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call reimport after",
   "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
-  "- code_review — automated code review analyzing bugs, security, performance, style, and complexity",
   "- manage_git_connection — check or initiate GitHub/GitLab OAuth for repository imports",
   "- list_github_repositories — discover GitHub repositories (pass optional query to search)",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
@@ -101,7 +100,6 @@ const WORKFLOW_FULL_EXTRA = [
   "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
   "- Use rename_symbol to rename a symbol codebase-wide — call reimport after. For unexported/private symbols pass rename_in_file_only: true.",
   "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
-  "- Use code_review for automated quality checks. Set focus_areas to target specific concerns (bugs, security, performance, etc.).",
 ];
 
 const MAINTENANCE_SECTION = [

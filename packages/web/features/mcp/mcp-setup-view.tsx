@@ -599,8 +599,8 @@ args = ["-y", "@codemap/mcp-server@latest"]`;
             },
             {
               label: "Act",
-              tools: "rename_symbol · move_symbols · code_review · trigger_reimport",
-              detail: "Refactor, review, and refresh cloud indexes",
+              tools: "rename_symbol · move_symbols · trigger_reimport",
+              detail: "Refactor and refresh cloud indexes",
             },
           ].map(({ label, tools, detail }) => (
             <div
