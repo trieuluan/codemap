@@ -122,9 +122,11 @@ export const gitCommitCommand: Command = {
       const diff = diffOutput.slice(0, 6000);
 
       // Run code review if --review flag
+      let reviewIssueCount = 0;
       if (shouldReview && changedFiles.length > 0) {
         ctx.logSubprocess("Running code review…");
         const { issues, filesReviewed } = await runCodeReview(ctx, changedFiles);
+        reviewIssueCount = issues.length;
 
         if (filesReviewed > 0) {
           ctx.logSubprocess(`Reviewed ${filesReviewed} files, found ${issues.length} issues`);
@@ -135,11 +137,8 @@ export const gitCommitCommand: Command = {
         );
 
         if (blockingIssues.length > 0) {
-          // Ask for confirmation via UI
           append(formatReviewWarning(blockingIssues));
-          // Note: In a real TUI, we'd wait for user input here
-          // For now, we'll log a warning and continue
-          ctx.logSubprocess("⚠️ Issues found — committing anyway");
+          ctx.logSubprocess(`⚠️ ${blockingIssues.length} blocking issues — committing anyway`);
         }
       }
 
@@ -168,7 +167,11 @@ export const gitCommitCommand: Command = {
       let resultMsg = `\`\`\`\n${commitMsg}\n\`\`\`\n${commitOutput}\n\n_Undo: \`git reset --soft HEAD~1\`_`;
 
       if (shouldReview) {
-        resultMsg += "\n\n✅ Code review completed before commit";
+        if (reviewIssueCount > 0) {
+          resultMsg += `\n\n⚠️ Committed with ${reviewIssueCount} review issue(s)`;
+        } else {
+          resultMsg += "\n\n✅ Code review passed — no issues found";
+        }
       }
 
       append(resultMsg);
