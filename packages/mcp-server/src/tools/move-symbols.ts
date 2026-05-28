@@ -203,7 +203,9 @@ export function registerMoveSymbolsTool(
         "and optionally update all import statements across the codebase. " +
         "The destination file must already exist. " +
         "After moving, the CodeMap index will be updated automatically on the next get_file call. " +
-        "project_id is optional if this workspace was linked via create_project.",
+        "project_id is optional if this workspace was linked via create_project. " +
+        "USE WHEN: refactoring symbols to a different module, splitting large files, " +
+        "reorganizing feature structure, or extracting reusable utilities to shared modules.",
       inputSchema: {
         from: z
           .string()

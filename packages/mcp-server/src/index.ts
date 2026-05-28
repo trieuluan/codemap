@@ -132,6 +132,14 @@ async function runMcpServer() {
   // Push session context to stderr — Claude Code hooks and other agents read this
   const sessionCtx = await buildSessionContext(process.cwd()).catch(() => null);
   if (sessionCtx) process.stderr.write(sessionCtx + "\n");
+
+  // Graceful shutdown handlers to avoid native mutex lock errors
+  const shutdown = () => {
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("SIGHUP", shutdown);
 }
 
 

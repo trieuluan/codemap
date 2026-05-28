@@ -258,6 +258,7 @@ async function findSymbolUsages(
   const suggestedNextTools: string[] = [];
   if (defFile) suggestedNextTools.push(`get_file("${defFile}", include=["symbols"], symbol_names=["${symbolName}"])`);
   if (topCaller && topCaller !== defFile) suggestedNextTools.push(`get_file("${topCaller}", include=["outline"])`);
+  if (totalCallers > 5 && defFile) suggestedNextTools.push(`move_symbols(from="${defFile}", to="<destination>", symbols=["${symbolName}"])  // refactor to different module`);
   suggestedNextTools.push("diff()  // after making changes");
 
   return success(lines.join("\n").trim(), {
@@ -331,7 +332,11 @@ async function findSymbolCallers(
     totalUsages: result.totals.usages,
     truncated: result.callers.length >= 50,
     meta: result.meta,
-    suggestedNextTools: [`get_file("${filePath}", include=["symbols"], symbol_names=["${symbolName}"])`, "diff()  // after making changes"],
+    suggestedNextTools: [
+      `get_file("${filePath}", include=["symbols"], symbol_names=["${symbolName}"])`,
+      result.callers.length > 5 ? `move_symbols(from="${filePath}", to="<destination>", symbols=["${symbolName}"])  // refactor to different module` : undefined,
+      "diff()  // after making changes",
+    ].filter(Boolean) as string[],
   });
 }
 
@@ -471,7 +476,9 @@ export function registerSymbolTool(
       description:
         "Inspect a symbol. Default action=context reads one symbol body plus compact surrounding outline. " +
         "Use action=usages to find definitions/usages/callers by symbol name, action=callers with file_path for faster cross-file callers, or action=similar for semantic matches. " +
-        "project_id is optional if workspace is linked.",
+        "project_id is optional if workspace is linked.\n\n" +
+        "USE WHEN: debugging a specific function/class, checking who calls a symbol before refactoring, " +
+        "finding the definition of an unknown symbol, or understanding the impact of changing a symbol.",
       inputSchema: {
         action: z.enum(["context", "usages", "callers", "similar"]).optional().default("context").describe("Symbol action to perform."),
         symbol_name: z

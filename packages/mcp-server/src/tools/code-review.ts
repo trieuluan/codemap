@@ -20,7 +20,10 @@ export function registerCodeReviewTool(
         "Perform an automated code review on a file or set of files. " +
         "Analyzes code for common issues like bugs, security vulnerabilities, " +
         "performance problems, and style violations. " +
-        "project_id is optional if workspace is linked.",
+        "project_id is optional if workspace is linked.\n\n" +
+        "USE WHEN: pre-commit quality check, audit after refactor, " +
+        "security scan before deployment, or when the user asks to 'review', " +
+        "'check quality', 'find issues', or 'audit' a file or module.",
       inputSchema: {
         file_path: z
           .string()
