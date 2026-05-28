@@ -1,6 +1,5 @@
 type TextContent = { type: "text"; text: string };
 
-// TODO: test /commit --review flow
 export type ToolData = Record<string, unknown> | unknown[];
 
 export type Verbosity = "compact" | "normal" | "verbose" | "debug";
