@@ -49,7 +49,7 @@ export function createCodeMapClient(config: McpServerConfig) {
 
   function checkAuth(required?: boolean) {
     if (required && !config.apiToken) {
-      throw new Error("Not authenticated. Run `codemap-mcp login`.");
+      throw new Error("Not authenticated. Run `codemap login`.");
     }
   }
 

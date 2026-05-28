@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, copyFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   AGENT_PACK_SKILLS,
@@ -151,9 +151,9 @@ type SettingsShape = {
 };
 
 const CODEMAP_HOOKS = {
-  sessionHint: { command: "codemap-mcp session-hint 2>/dev/null || true", marker: "codemap-mcp session-hint" },
-  preEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap-mcp pre-edit 2>/dev/null || true", marker: "codemap-mcp pre-edit" },
-  postEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap-mcp local-index 2>/dev/null || true", marker: "codemap-mcp local-index" },
+  sessionHint: { command: "codemap session-hint 2>/dev/null || true", marker: "codemap session-hint" },
+  preEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap pre-edit 2>/dev/null || true", marker: "codemap pre-edit" },
+  postEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap local-index 2>/dev/null || true", marker: "codemap local-index" },
 } as const;
 
 function hasCodemapMarker(entry: HookEntry, marker: string): boolean {
@@ -421,4 +421,53 @@ export async function listAgentPackFiles() {
   const root = getAgentPackRoot();
   const entries = await readdir(root, { recursive: true });
   return entries.map((entry) => path.join(root, entry.toString()));
+}
+
+const BACKUP_SUFFIX = ".codemap-backup-";
+
+async function findBackupFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      results.push(...(await findBackupFiles(full)));
+    } else if (entry.name.includes(BACKUP_SUFFIX)) {
+      results.push(full);
+    }
+  }
+  return results;
+}
+
+export async function cleanAgentPackBackups(root: string, dryRun: boolean) {
+  const files = await findBackupFiles(root);
+  if (files.length === 0) {
+    console.log(`No .codemap-backup-* files found in ${root}`);
+    return { deleted: 0, files: [] };
+  }
+
+  if (dryRun) {
+    console.log(`Found ${files.length} backup file(s):`);
+    for (const f of files) console.log(`  ${f}`);
+    console.log("\nRun without --dry-run to delete.");
+    return { deleted: 0, files };
+  }
+
+  let deleted = 0;
+  for (const f of files) {
+    try {
+      await unlink(f);
+      deleted++;
+    } catch {
+      // skip files that can't be deleted
+    }
+  }
+  console.log(`Deleted ${deleted} backup file(s).`);
+  return { deleted, files };
 }

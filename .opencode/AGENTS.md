@@ -2,7 +2,7 @@
 
 Use CodeMap MCP-first workflow in this repository.
 
-- New session: `get_agent_workflow`, then `get_project`.
+- New session: `get_project`.
 - Broad implementation/debug/review/refactor/test/research task with unclear files: `explore_task`.
 - Broad codebase exploration: `explore_task`.
 - Feature area: `summarize_feature_area`.

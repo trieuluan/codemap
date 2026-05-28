@@ -183,7 +183,7 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Claude hooks",
         relativePath: ".claude/settings.json",
         required: false,
-        phrases: ["codemap-mcp session-hint", "codemap-mcp pre-edit", "codemap-mcp local-index"],
+        phrases: ["codemap session-hint", "codemap pre-edit", "codemap local-index"],
       },
       ...skillExpectations(target),
     ];
@@ -332,8 +332,8 @@ function buildSuggestions(result: AgentPackDoctorSuggestionContext): string[] {
   }
 
   const targets = result.targets.length === CONCRETE_TARGETS.length ? "all" : result.targets.join(",");
-  suggestions.push(`Run codemap-mcp init-agent-pack --target ${targets} --root ${result.root}`);
-  suggestions.push(`Run codemap-mcp doctor-agent-pack --target ${targets} --root ${result.root} after install.`);
+  suggestions.push(`Run codemap init-agent-pack --target ${targets} --root ${result.root}`);
+  suggestions.push(`Run codemap doctor-agent-pack --target ${targets} --root ${result.root} after install.`);
   if (result.missingPhrases.length > 0) {
     suggestions.push("Use --force when you want CodeMap to overwrite stale Agent Pack instructions.");
   }

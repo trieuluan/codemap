@@ -4,7 +4,7 @@ When CodeMap MCP is available, use CodeMap tools before raw file reads or grep.
 
 ## Default Tool Routing
 
-- New CodeMap session: `get_agent_workflow`, then `get_project`.
+- New CodeMap session: `get_project`.
 - Broad task: `explore_task`.
 - Feature keyword: `summarize_feature_area`.
 - Related-file question: `find_related_files`.

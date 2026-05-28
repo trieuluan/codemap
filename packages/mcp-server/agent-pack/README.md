@@ -9,36 +9,36 @@ For broad tasks, agents should choose the narrowest CodeMap context tool first: 
 Install locally with:
 
 ```bash
-codemap-mcp init-agent-pack --target all
+codemap init-agent-pack --target all
 ```
 
 Install one target:
 
 ```bash
-codemap-mcp init-agent-pack --target codex
-codemap-mcp init-agent-pack --target claude
-codemap-mcp init-agent-pack --target cursor
-codemap-mcp init-agent-pack --target gemini
-codemap-mcp init-agent-pack --target opencode
-codemap-mcp init-agent-pack --target copilot
+codemap init-agent-pack --target codex
+codemap init-agent-pack --target claude
+codemap init-agent-pack --target cursor
+codemap init-agent-pack --target gemini
+codemap init-agent-pack --target opencode
+codemap init-agent-pack --target copilot
 ```
 
 Print the local plugin root path:
 
 ```bash
-codemap-mcp agent-pack-path
+codemap agent-pack-path
 ```
 
 Register a local Codex-style marketplace entry:
 
 ```bash
-codemap-mcp init-agent-pack --target marketplace --plugin-path ./packages/mcp-server
+codemap init-agent-pack --target marketplace --plugin-path ./packages/mcp-server
 ```
 
 Preview or test in another directory:
 
 ```bash
-codemap-mcp init-agent-pack --target all --root /path/to/project --dry-run
+codemap init-agent-pack --target all --root /path/to/project --dry-run
 ```
 
 Official `/plugin install codemap-agent-pack` requires later marketplace publishing. This pack provides the local/plugin-compatible assets first.

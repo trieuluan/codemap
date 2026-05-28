@@ -17,7 +17,7 @@ const MCP_JSON_SNIPPET = (key: string) =>
 const COMMON_STEPS_AFTER_SERVER = [
   "",
   "2. Authenticate",
-  "   $ codemap-mcp login",
+  "   $ codemap login",
   "",
   "3. Verify (inside the editor / agent)",
   "   Call: ping  →  expect reply \"pong\"",
@@ -27,7 +27,7 @@ const COMMON_STEPS_AFTER_SERVER = [
   "         (or create_project if no CodeMap project exists yet)",
   "",
   "5. Build local index",
-  "   $ codemap-mcp local-index",
+  "   $ codemap local-index",
 ].join("\n");
 
 const FOOTER = [

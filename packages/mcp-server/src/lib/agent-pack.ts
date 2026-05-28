@@ -97,12 +97,12 @@ export function buildAgentPackIndexMarkdown() {
     "## Local Install",
     "",
     "```bash",
-    "codemap-mcp init-agent-pack --target all",
-    "codemap-mcp doctor-agent-pack --target auto",
+    "codemap init-agent-pack --target all",
+    "codemap doctor-agent-pack --target auto",
     "```",
     "",
-    "Use `codemap-mcp doctor-agent-pack` to verify local rules and skills after install.",
-    "Use `codemap-mcp agent-pack-path` to print the local plugin root path.",
+    "Use `codemap doctor-agent-pack` to verify local rules and skills after install.",
+    "Use `codemap agent-pack-path` to print the local plugin root path.",
   ].join("\n");
 }
 
@@ -128,8 +128,8 @@ export function buildHarnessMarkdown(
     "Install local rules and skills with:",
     "",
     "```bash",
-    `codemap-mcp init-agent-pack --target ${harness}`,
-    `codemap-mcp doctor-agent-pack --target ${harness}`,
+    `codemap init-agent-pack --target ${harness}`,
+    `codemap doctor-agent-pack --target ${harness}`,
     "```",
     "",
     "The doctor command verifies the installed rules and skills contain the required workflow gates.",

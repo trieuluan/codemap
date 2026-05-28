@@ -4,7 +4,6 @@
       "command": "npx",
       "args": [
         "tsx",
-        "--watch",
         "/Users/louis/Development/codemap/packages/mcp-server/src/index.ts"
       ]
     }

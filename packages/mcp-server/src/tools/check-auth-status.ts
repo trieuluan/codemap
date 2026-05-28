@@ -33,7 +33,7 @@ export function registerCheckAuthStatusTool(
         const summary =
           `Not authenticated.\nAPI URL: ${config.apiUrl}\n` +
           "Next action: call `login` to begin browser login and wait for authorization. " +
-          "For CLI usage, run `codemap-mcp login`.";
+          "For CLI usage, run `codemap login`.";
 
         return success(summary, {
           authenticated: false,

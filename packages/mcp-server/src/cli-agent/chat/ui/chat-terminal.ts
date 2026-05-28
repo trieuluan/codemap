@@ -31,11 +31,7 @@ import { warmupFileSearch } from "../file-search.js";
 import { loadOrSynthesizeAll } from "../../convention-synthesizer.js";
 import { createDebugLogger, type DebugLogger } from "../debug-logger.js";
 import { EventBus } from "./event-bus.js";
-import {
-  Store,
-  createInitialState,
-  type Message,
-} from "./store.js";
+import { Store, createInitialState, type Message } from "./store.js";
 import {
   markLastPendingToolCallCanceled,
   markToolDone,
@@ -309,10 +305,22 @@ export class ChatTerminal {
   }
 
   /** Called by the multi-phase/single loop: pause and wait for user to answer ask_user question. */
-  waitForAskQuestion(questionId: string, question: string, options?: { label: string; description?: string }[]): Promise<string> {
+  waitForAskQuestion(
+    questionId: string,
+    question: string,
+    options?: { label: string; description?: string }[],
+  ): Promise<string> {
     return new Promise((resolve) => {
       this._askQuestionResolve = resolve;
-      this.store.dispatch({ askQuestion: { active: true, questionId, question, options, selection: 0 } });
+      this.store.dispatch({
+        askQuestion: {
+          active: true,
+          questionId,
+          question,
+          options,
+          selection: 0,
+        },
+      });
       this.bus.scheduleRefresh();
     });
   }
@@ -324,7 +332,6 @@ export class ChatTerminal {
     this.store.dispatch({ askQuestion: null });
     this.bus.scheduleRefresh();
   }
-
 
   // ─── Start ───────────────────────────────────────────────
 
@@ -350,6 +357,11 @@ export class ChatTerminal {
     const startupModel =
       startupProfiles.find((p) => p.id === "coder")?.model ??
       this.store.getState().config.model;
+
+    // Fetch Mastra tool definitions from the already-connected MCPClient so the harness
+    // can reuse the same connection instead of spawning a second codemap child process.
+    const mastraTools = await this.options.toolClient.getMastraTools().catch(() => undefined);
+
     warmupHarness({
       toolClient: this.options.toolClient,
       baseUrl: this.options.provider.baseUrl,
@@ -358,7 +370,10 @@ export class ChatTerminal {
       availableModels: this.store.getState().config.availableModels,
       onDebug: undefined,
       extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
-    }).catch(() => { /* best-effort startup warmup */ });
+      mastraTools,
+    }).catch(() => {
+      /* best-effort startup warmup */
+    });
 
     // Synthesize project conventions in background (non-blocking)
     const profiles = this.options.profiles ?? [];
@@ -550,7 +565,12 @@ export class ChatTerminal {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.store.dispatch((prev) => ({ task: { ...prev.task, usage } }));
       },
-      onToolStart: (name: string, args: string, id: string, preview?: string) => {
+      onToolStart: (
+        name: string,
+        args: string,
+        id: string,
+        preview?: string,
+      ) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.logger?.logToolStart(name, args, id);
         if (id) toolArgsById.set(id, { name, args });
@@ -573,9 +593,7 @@ export class ChatTerminal {
         this.store.dispatch((prev) => {
           const newMsgs = withToolCallSummary(prev.messages, name, args, id);
           return {
-            messages: preview
-              ? setToolCallPreview(newMsgs, preview)
-              : newMsgs,
+            messages: preview ? setToolCallPreview(newMsgs, preview) : newMsgs,
           };
         });
         this.bus.scheduleRefresh();
@@ -636,13 +654,20 @@ export class ChatTerminal {
           this.logger?.logDebugInfo(info);
         }
       },
-      onAskQuestion: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string) => void) => {
+      onAskQuestion: (
+        questionId: string,
+        question: string,
+        options: AskQuestionOption[] | undefined,
+        respond: (answer: string) => void,
+      ) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
-        this.waitForAskQuestion(questionId, question, options).then((answer) => {
-          respond(answer);
-        }).catch(() => {
-          respond("(skipped)");
-        });
+        this.waitForAskQuestion(questionId, question, options)
+          .then((answer) => {
+            respond(answer);
+          })
+          .catch(() => {
+            respond("(skipped)");
+          });
       },
     };
 
@@ -842,12 +867,14 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
       } else {
         // Fallback: try to sync from Mastra thread storage.
-        getMastraThreadTokenUsage().then((usage) => {
-          if (usage?.totalTokens) {
-            this.store.dispatch({ sessionTokens: usage.totalTokens });
-            this.bus.scheduleRefresh();
-          }
-        }).catch(() => {});
+        getMastraThreadTokenUsage()
+          .then((usage) => {
+            if (usage?.totalTokens) {
+              this.store.dispatch({ sessionTokens: usage.totalTokens });
+              this.bus.scheduleRefresh();
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
@@ -868,8 +895,7 @@ export class ChatTerminal {
         errMsg.includes("empty document") ||
         errMsg.includes("429");
       const isImageUnsupported =
-        errMsg.includes("image input") ||
-        errMsg.includes("support image");
+        errMsg.includes("image input") || errMsg.includes("support image");
       const cs = this.store.getState().config;
 
       if (isContextFull) {
@@ -1147,7 +1173,10 @@ export class ChatTerminal {
           apiKey: this.options.provider.apiKey,
           modelId: (() => {
             const p = this.options.profiles ?? [];
-            return p.find((pr) => pr.id === "coder")?.model ?? this.store.getState().config.model;
+            return (
+              p.find((pr) => pr.id === "coder")?.model ??
+              this.store.getState().config.model
+            );
           })(),
           availableModels: this.store.getState().config.availableModels,
           onDebug: undefined,

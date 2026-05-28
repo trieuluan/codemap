@@ -3,13 +3,14 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { MCPClient } from "@mastra/mcp";
+
 import {
   readMcpServerConfigs,
   readPriorityResources,
 } from "../../../lib/workspace-project.js";
 import type { ChatToolDefinition } from "../../types.js";
 import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
-import { McpServerConnection } from "./mcp-server-connection.js";
 
 // Re-export types so existing consumers don't need to change imports
 export type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
@@ -24,9 +25,10 @@ const DEFAULT_PRIORITY_RESOURCES = [
 ];
 
 export class CodeMapMcpToolClient {
-  private defaultConn: McpServerConnection;
+  private _mcpClient: MCPClient;
   private _extraConfigs: Map<string, ExtraServerConfig> = new Map();
   private _serverConfig: { command: string; args: string[]; env: Record<string, string> };
+  private _cachedToolCount = 0;
 
   constructor() {
     const runtime = resolvePackageRuntime();
@@ -36,7 +38,17 @@ export class CodeMapMcpToolClient {
       args: codemapServer.args,
       env: { CODEMAP_TOOL_MODE: "full" },
     };
-    this.defaultConn = new McpServerConnection("codemap", this._serverConfig);
+    this._mcpClient = new MCPClient({
+      id: "codemap-chat-client",
+      servers: {
+        codemap: {
+          command: codemapServer.command,
+          args: codemapServer.args,
+          env: { ...process.env as Record<string, string>, CODEMAP_TOOL_MODE: "full" },
+          stderr: "pipe",
+        },
+      },
+    });
   }
 
   getServerConfig(): { command: string; args: string[]; env: Record<string, string> } {
@@ -64,7 +76,7 @@ export class CodeMapMcpToolClient {
 
   getServerStatuses(): McpServerStatus[] {
     const statuses: McpServerStatus[] = [
-      { name: "codemap", connected: true, tools: this.defaultConn.tools?.length ?? 0 },
+      { name: "codemap", connected: this._cachedToolCount > 0, tools: this._cachedToolCount },
     ];
     for (const [name] of this._extraConfigs) {
       statuses.push({ name, connected: true, tools: 0 });
@@ -73,38 +85,69 @@ export class CodeMapMcpToolClient {
   }
 
   async listAllowedTools(): Promise<AgentTool[]> {
-    return this.defaultConn.listTools();
+    const toolsets = await this._mcpClient.listToolsets();
+    const tools = toolsets["codemap"] ?? {};
+    return Object.entries(tools).map(([name, tool]) => ({
+      name,
+      description: (tool as { description?: string }).description ?? "",
+      inputSchema: ((tool as { inputSchema?: unknown }).inputSchema ?? {}) as Record<string, unknown>,
+    })) as AgentTool[];
   }
 
   async listChatTools(): Promise<ChatToolDefinition[]> {
-    const tools = await this.defaultConn.listTools();
-    return tools.map((tool) => ({
+    const toolsets = await this._mcpClient.listToolsets();
+    const tools = toolsets["codemap"] ?? {};
+    return Object.entries(tools).map(([name, tool]) => ({
       type: "function" as const,
       function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema,
+        name,
+        description: (tool as { description?: string }).description ?? "",
+        parameters: ((tool as { inputSchema?: unknown }).inputSchema ?? {}) as Record<string, unknown>,
       },
     }));
+  }
+
+  /** Returns Mastra tool definitions for sharing with the harness (avoids a second child process). */
+  async getMastraTools(): Promise<Record<string, unknown>> {
+    const toolsets = await this._mcpClient.listToolsets();
+    const tools = toolsets["codemap"] ?? {};
+    this._cachedToolCount = Object.keys(tools).length;
+    return tools as Record<string, unknown>;
   }
 
   async callTool(
     name: string,
     args: Record<string, unknown>,
   ): Promise<AgentToolCallResult> {
-    return this.defaultConn.callTool(name, args);
+    const toolsets = await this._mcpClient.listToolsets();
+    const tool = (toolsets["codemap"] ?? {})[name] as
+      | { execute?: (args: Record<string, unknown>, ctx?: unknown) => Promise<unknown> }
+      | undefined;
+    if (!tool?.execute) {
+      throw new Error(`MCP tool not found: ${name}`);
+    }
+    const raw = await tool.execute(args, undefined);
+    return formatToolResult(raw);
   }
 
   async listResources(): Promise<{ uri: string; name: string }[]> {
-    return this.defaultConn.listResources();
+    const allResources = await this._mcpClient.resources.list();
+    return (allResources["codemap"] ?? []).map((r) => ({
+      uri: r.uri,
+      name: r.name ?? r.uri,
+    }));
   }
 
   async readResource(uri: string): Promise<string> {
-    return this.defaultConn.readResource(uri);
+    const result = await this._mcpClient.resources.read("codemap", uri);
+    return result.contents
+      .filter((c): c is { uri: string; text: string } => "text" in c)
+      .map((c) => c.text)
+      .join("\n");
   }
 
   async close(): Promise<void> {
-    await this.defaultConn.close();
+    await this._mcpClient.disconnect();
   }
 }
 
@@ -131,6 +174,35 @@ export async function fetchResourceContext(
     }
   }
   return parts.length > 0 ? parts.join("\n\n---\n\n") : null;
+}
+
+function formatToolResult(raw: unknown): AgentToolCallResult {
+  if (raw === null || raw === undefined) return { content: "" };
+
+  if (typeof raw === "object" && raw !== null && "content" in raw) {
+    const result = raw as {
+      content: Array<{ type: string; text?: string }>;
+      structuredContent?: unknown;
+      isError?: boolean;
+    };
+    if (Array.isArray(result.content)) {
+      const text = result.content
+        .filter((c) => c.type === "text")
+        .map((c) => c.text ?? "")
+        .join("\n");
+      return {
+        content: text,
+        structuredContent: result.structuredContent as Record<string, unknown> | undefined,
+        isError: result.isError,
+      };
+    }
+  }
+
+  // execute() returned structuredContent directly
+  return {
+    content: typeof raw === "string" ? raw : JSON.stringify(raw, null, 2),
+    structuredContent: raw as Record<string, unknown>,
+  };
 }
 
 function findPackageRoot(startDir: string): string {

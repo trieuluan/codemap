@@ -4,7 +4,7 @@ Use CodeMap MCP before raw file reads or grep.
 
 Default workflow:
 
-1. Call `get_agent_workflow`, then `get_project`.
+1. Call `get_project`.
 2. For broad implementation/debug/review/refactor/test/research work with unclear files, call `explore_task`.
 3. Use `explore_task` for broad implementation/debugging.
 4. Use `summarize_feature_area` for feature keywords.

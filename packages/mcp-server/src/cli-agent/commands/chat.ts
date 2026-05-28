@@ -7,9 +7,13 @@ import type { GatewayConfig } from "../types.js";
 import { printGatewayHint } from "./gateway-hint.js";
 import { loadConfig } from "../../config.js";
 import { installStderrInterceptor } from "../chat/ui/stderr-interceptor.js";
+import { resetHarnessSingleton } from "../chat/runtime/mastra-harness-runtime.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
-  const provider = new NineRouterProvider(ctx.config.baseUrl, ctx.config.apiKey);
+  const provider = new NineRouterProvider(
+    ctx.config.baseUrl,
+    ctx.config.apiKey,
+  );
   const availableModels = await loadGatewayModels(ctx.config, provider);
   const profile = selectChatProfile(ctx.config, ctx.flags.model);
   const uiMode = parseUiMode(ctx.flags.ui);
@@ -18,6 +22,22 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   await toolClient.connectExtras();
 
   const cleanupInterceptor = installStderrInterceptor();
+
+  // Intercept process.exit so MCP child processes are always cleaned up before
+  // the process terminates — covers Ctrl+C (pre-TUI), /exit command, and SIGTERM.
+  // Without this, stdio MCP server children spawned by McpServerConnection and
+  // mastracode's MCPClient become orphans and accumulate across sessions.
+  const originalProcessExit = process.exit.bind(process) as typeof process.exit;
+  let childCleanupDone = false;
+  const cleanupChildren = async () => {
+    if (childCleanupDone) return;
+    childCleanupDone = true;
+    await toolClient.close().catch(() => {});
+    await resetHarnessSingleton().catch(() => {});
+  };
+  (process as NodeJS.Process).exit = ((code?: number | string) => {
+    cleanupChildren().finally(() => originalProcessExit(code as number));
+  }) as typeof process.exit;
 
   try {
     const mcpConfig = await loadConfig();
@@ -39,8 +59,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       throw err;
     }
   } finally {
+    process.exit = originalProcessExit;
     cleanupInterceptor();
-    await toolClient.close();
+    await cleanupChildren();
   }
 }
 
@@ -51,7 +72,10 @@ function parseUiMode(value: string | undefined): ChatUiMode | undefined {
   return undefined;
 }
 
-async function loadGatewayModels(config: GatewayConfig, provider: NineRouterProvider): Promise<string[]> {
+async function loadGatewayModels(
+  config: GatewayConfig,
+  provider: NineRouterProvider,
+): Promise<string[]> {
   try {
     return await provider.listModels();
   } catch (error) {

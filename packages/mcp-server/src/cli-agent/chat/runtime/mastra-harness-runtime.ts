@@ -66,6 +66,7 @@ interface MastraMcpManagerLike {
   getServerStatuses(): MastraMcpServerStatus[];
   getSkippedServers(): MastraMcpSkippedServer[];
   getConfigPaths?(): MastraMcpConfigPaths;
+  disconnect?(): Promise<void>;
 }
 
 const dynamicImport = new Function(
@@ -139,6 +140,8 @@ interface CreateHarnessOptions {
     string,
     { command: string; args?: string[]; env?: Record<string, string> }
   >;
+  /** Mastra tool definitions from CodeMapMcpToolClient — when provided, skips spawning a separate codemap MCP child process. */
+  mastraTools?: Record<string, unknown>;
 }
 
 // ─── Session-level harness singleton ─────────────────────────────────────────
@@ -291,6 +294,11 @@ export async function resetHarnessSingleton(): Promise<void> {
   const old = _singleton;
   _singleton = null;
   try {
+    await old.mcpManager?.disconnect?.();
+  } catch {
+    /* best-effort */
+  }
+  try {
     await old.harness.destroy?.();
   } catch {
     /* best-effort */
@@ -331,13 +339,33 @@ async function createFreshHarness(
     settingsPath,
     globalSettingsPath,
   });
+  // When the caller supplies Mastra tool definitions (from its own MCPClient), we skip
+  // spawning a second codemap child process inside the harness. Extra user-defined
+  // servers from .codemap/mcp.json still spawn their own children as before.
+  const extraServerKeys = Object.keys(opts.extraServerConfigs ?? {});
+  const baseMcpServers = opts.mastraTools
+    ? (extraServerKeys.length > 0 ? opts.extraServerConfigs : undefined)
+    : { codemap: serverConfig, ...opts.extraServerConfigs };
+
+  // extraTools keys have no "codemap_" prefix, so MASTRA_DISABLED_TOOLS (which use the
+  // prefix) won't match them via mastracode's exact-name delete loop. Pre-filter here.
+  const disabledBaseNames = new Set(MASTRA_DISABLED_TOOLS.map((n) => n.replace(/^codemap_/, "")));
+  const filteredMastraTools = opts.mastraTools
+    ? Object.fromEntries(
+        Object.entries(opts.mastraTools).filter(([name]) => !disabledBaseNames.has(name)),
+      )
+    : undefined;
+
   const mcpServerIds = new Set([
     "codemap",
-    ...Object.keys(opts.extraServerConfigs ?? {}),
+    ...extraServerKeys,
   ]);
   const { harness, mcpManager } = await createMastraCode({
     settingsPath,
-    mcpServers: { codemap: serverConfig, ...opts.extraServerConfigs },
+    ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
+      ? { mcpServers: baseMcpServers }
+      : {}),
+    ...(filteredMastraTools ? { extraTools: filteredMastraTools } : {}),
     // Disable project/auth setup tools — these are handled by built-in CLI /commands.
     // Hiding them prevents the agent from wasting turns on infrastructure concerns.
     disabledTools: MASTRA_DISABLED_TOOLS,

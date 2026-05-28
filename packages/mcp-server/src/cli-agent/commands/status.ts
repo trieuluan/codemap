@@ -48,7 +48,7 @@ export async function getWorkspaceStatusLines(): Promise<string[]> {
     lines.push(`  Files:      ${summary.fileCount}`);
     lines.push(`  Symbols:    ${summary.symbolCount}`);
   } else {
-    lines.push("  Run `codemap-mcp local-index` to build the local index.");
+    lines.push("  Run `codemap local-index` to build the local index.");
   }
 
   lines.push("");

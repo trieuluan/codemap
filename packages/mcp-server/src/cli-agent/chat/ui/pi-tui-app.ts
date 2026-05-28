@@ -187,7 +187,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
   function renderMessageLines(state: ReturnType<typeof chatTerminal.store.getState>, w: number): string[] {
     const contentWidth = w - 2;
-    const spinning = isActiveTaskPhase(state.task.phase) || state.synthRunning;
+    const spinning = !state.planReview?.active && (isActiveTaskPhase(state.task.phase) || state.synthRunning);
     const widthChanged = w !== _cachedWidth;
     const chromeSignature = chromeRenderSignature(state);
 
@@ -538,6 +538,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
   tick = setInterval(() => {
     const state = chatTerminal.store.getState();
+    // Skip spinner tick when plan review is active — user may be scrolling to
+    // read the plan and a re-render would reset the TUI viewport to the bottom.
+    if (state.planReview?.active) return;
     if (isActiveTaskPhase(state.task.phase) || state.synthRunning) {
       frame = (frame + 1) % SPINNER.length;
       tui.requestRender();

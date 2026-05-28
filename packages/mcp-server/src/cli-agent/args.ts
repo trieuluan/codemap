@@ -33,7 +33,8 @@ export function hasFlag(flags: Flags, key: string): boolean {
 function parseCommand(argv: string[]): Command {
   if (argv.includes("--help") || argv.includes("-h")) return "help";
   const first = argv.find((arg) => !arg.startsWith("-"));
-  if (!first || first === "help") return "help";
+  if (!first) return "chat";
+  if (first === "help") return "help";
   if (isCommand(first)) return first;
   throw new Error(`Unknown command "${first}". Run "codemap --help".`);
 }

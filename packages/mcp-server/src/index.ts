@@ -51,6 +51,7 @@ import { registerExploreTaskTool } from "./tools/explore-task.js";
 import {
   installAgentPack,
   parseAgentPackInstallArgs,
+  cleanAgentPackBackups,
 } from "./lib/agent-pack-installer.js";
 import { getPluginRoot } from "./lib/agent-pack.js";
 import {
@@ -71,6 +72,7 @@ import { buildOnboardingGuide, isOnboardingTarget } from "./lib/onboarding.js";
 import { buildServerInstructions } from "./lib/server-instructions.js";
 import { buildSessionContext } from "./lib/session-context.js";
 import { autoInjectRules } from "./lib/auto-inject.js";
+import { runCliAgent } from "./cli-agent/index.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -150,7 +152,7 @@ async function runInitAgentPackCommand(args: string[]) {
   }
   console.log("");
   const doctorTarget = result.target === "marketplace" ? "auto" : result.target;
-  console.log(`Verify with: codemap-mcp doctor-agent-pack --target ${doctorTarget} --root ${result.root}`);
+  console.log(`Verify with: codemap doctor-agent-pack --target ${doctorTarget} --root ${result.root}`);
 
   if (!result.dryRun) {
     const target = result.target;
@@ -159,6 +161,16 @@ async function runInitAgentPackCommand(args: string[]) {
       console.log(buildOnboardingGuide(target));
     }
   }
+}
+
+function runCleanAgentPackBackupsCommand(args: string[]) {
+  const rootIdx = args.indexOf("--root");
+  const root = rootIdx >= 0 && args[rootIdx + 1] ? args[rootIdx + 1]! : process.cwd();
+  const dryRun = args.includes("--dry-run");
+  cleanAgentPackBackups(root, dryRun).catch((err: unknown) => {
+    console.error("Failed:", err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  });
 }
 
 async function runDoctorAgentPackCommand(args: string[]) {
@@ -265,7 +277,7 @@ async function runWhoAmICommand() {
   if (!config.apiToken) {
     console.log("Not authenticated.");
     console.log(`API URL: ${config.apiUrl}`);
-    console.log("Run `codemap-mcp login` to authenticate.");
+    console.log("Run `codemap login` to authenticate.");
     return;
   }
 
@@ -315,7 +327,7 @@ async function runStatusCommand() {
     lines.push(`  Files:      ${summary.fileCount}`);
     lines.push(`  Symbols:    ${summary.symbolCount}`);
   } else {
-    lines.push("  Run `codemap-mcp local-index` to build the local index.");
+    lines.push("  Run `codemap local-index` to build the local index.");
   }
   lines.push("");
   lines.push(`Auth:      ${config.apiToken ? "authenticated" : "not authenticated"}`);
@@ -583,9 +595,30 @@ async function runPreBashCommand() {
   }
 }
 
+// Agent-specific commands routed to cli-agent (interactive chat, LLM gateway)
+const AGENT_COMMANDS = new Set(["help", "route", "ask", "chat", "models", "init-gateway"]);
+
 async function main() {
   const command = process.argv[2];
 
+  // No args → interactive chat when running in a terminal (like `claude`),
+  // or MCP server when stdin is piped (spawned as a child by McpServerConnection / MCPClient).
+  if (!command) {
+    if (!process.stdin.isTTY) {
+      await runMcpServer();
+      return;
+    }
+    await runCliAgent([]);
+    return;
+  }
+
+  // Agent commands → delegate to cli-agent
+  if (AGENT_COMMANDS.has(command)) {
+    await runCliAgent(process.argv.slice(2));
+    return;
+  }
+
+  // MCP utility commands
   switch (command) {
     case "login":
       await runLoginCommand();
@@ -608,6 +641,9 @@ async function main() {
     case "agent-pack-path":
       runAgentPackPathCommand();
       return;
+    case "clean-agent-pack-backups":
+      runCleanAgentPackBackupsCommand(process.argv.slice(3));
+      return;
     case "local-index":
       await runLocalIndexCommand(process.argv.slice(3));
       return;
@@ -627,6 +663,7 @@ async function main() {
       runOnboardingCommand(process.argv.slice(3));
       return;
     default:
+      // Unknown command → start MCP server (backward compat with codemap-mcp)
       await runMcpServer();
   }
 }
