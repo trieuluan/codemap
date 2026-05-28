@@ -1,5 +1,5 @@
-import { getGatewayConfigPath } from "../config.js";
-import type { GatewayConfig } from "../types.js";
+import { getGatewayConfigPath } from "../cli-agent/config.js";
+import type { GatewayConfig } from "../cli-agent/types.js";
 
 export function printGatewayHint(config: GatewayConfig): void {
   if (config.configSource !== "built-in defaults") return;

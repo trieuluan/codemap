@@ -1,6 +1,6 @@
-import type { GatewayCommandContext } from "../command-context.js";
-import { NineRouterProvider } from "../provider.js";
-import type { GatewayConfig } from "../types.js";
+import type { GatewayCommandContext } from "../cli-agent/command-context.js";
+import { NineRouterProvider } from "../cli-agent/provider.js";
+import type { GatewayConfig } from "../cli-agent/types.js";
 
 export async function runModels(ctx: GatewayCommandContext): Promise<void> {
   printModels(ctx.config);
@@ -21,9 +21,7 @@ async function printGatewayModels(ctx: GatewayCommandContext): Promise<void> {
   console.log("");
   console.log("Available gateway models:");
   try {
-    const models = (await provider.listModelDetails()).filter(
-      (model) => model.ownedBy !== "combo",
-    );
+    const models = (await provider.listModelDetails()).filter((model) => model.ownedBy !== "combo");
     if (models.length === 0) {
       console.log("- none returned by gateway");
       return;

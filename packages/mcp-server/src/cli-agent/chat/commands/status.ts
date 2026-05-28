@@ -1,4 +1,4 @@
-import { getWorkspaceStatusLines } from "../../commands/status.js";
+import { getWorkspaceStatusLines } from "../../../commands/status.js";
 import type { Command } from "./types.js";
 
 export const statusCommand: Command = {

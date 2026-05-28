@@ -1,6 +1,6 @@
-import { hasFlag } from "../args.js";
-import type { BaseCommandContext } from "../command-context.js";
-import { DEFAULT_BASE_URL, writeGatewayConfig } from "../config.js";
+import { hasFlag } from "../cli-agent/args.js";
+import type { BaseCommandContext } from "../cli-agent/command-context.js";
+import { DEFAULT_BASE_URL, writeGatewayConfig } from "../cli-agent/config.js";
 
 export async function runInitGateway(ctx: BaseCommandContext): Promise<void> {
   const scope = hasFlag(ctx.flags, "project") ? "project" : "global";

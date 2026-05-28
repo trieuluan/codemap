@@ -1,6 +1,6 @@
-import type { GatewayCommandContext } from "../command-context.js";
-import { findProfile } from "../policy.js";
-import { NineRouterProvider } from "../provider.js";
+import type { GatewayCommandContext } from "../cli-agent/command-context.js";
+import { findProfile } from "../cli-agent/policy.js";
+import { NineRouterProvider } from "../cli-agent/provider.js";
 import { printGatewayHint } from "./gateway-hint.js";
 
 export async function runAsk(ctx: GatewayCommandContext): Promise<void> {
@@ -16,11 +16,7 @@ export async function runAsk(ctx: GatewayCommandContext): Promise<void> {
     response = await provider.complete({
       model: profile.model,
       messages: [
-        {
-          role: "system",
-          content:
-            "You are CodeMap LLM Gateway. Answer concisely and focus on coding work.",
-        },
+        { role: "system", content: "You are CodeMap LLM Gateway. Answer concisely and focus on coding work." },
         { role: "user", content: ctx.positional },
       ],
     });

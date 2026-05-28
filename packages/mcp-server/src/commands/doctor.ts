@@ -1,5 +1,5 @@
-import type { GatewayCommandContext } from "../command-context.js";
-import { NineRouterProvider } from "../provider.js";
+import type { GatewayCommandContext } from "../cli-agent/command-context.js";
+import { NineRouterProvider } from "../cli-agent/provider.js";
 
 export async function runDoctor(ctx: GatewayCommandContext): Promise<void> {
   const config = ctx.config;
