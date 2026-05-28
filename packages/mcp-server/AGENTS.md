@@ -6,7 +6,6 @@ Use CodeMap MCP before raw file reads or grep.
 - Broad implementation/debug/review/refactor/test/research tasks with unclear files: `explore_task`.
 - Follow relevant skills, hard gates, artifact templates, and verification checklist.
 - Related files: `find_related_files`.
-- Related files: `find_related_files`.
 - Known symbols/files: `search_codebase`.
 - Several candidates: `get_file`.
 - Exact body: `symbol`.
