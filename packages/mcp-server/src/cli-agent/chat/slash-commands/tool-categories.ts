@@ -22,7 +22,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   find_related_files:       "local",
   symbol:                   "local",
 
-  summarize_feature_area:   "local",
   rename_symbol:            "local",
   move_symbols:             "local",
   find_cycles:              "local",

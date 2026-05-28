@@ -33,9 +33,6 @@ import { registerReimportTool } from "./tools/reimport.js";
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerSymbolTool } from "./tools/symbol.js";
-import { registerSummarizeFeatureAreaTool } from "./tools/summarize-feature-area.js";
-
-
 import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerFindCyclesTool } from "./tools/find-cycles.js";
@@ -101,7 +98,6 @@ async function runMcpServer() {
     registerGetProjectInsightsTool(server, config);
     registerWebFetchTool(server, config);
     registerFindRelatedFilesTool(server, config);
-    registerSummarizeFeatureAreaTool(server, config);
     registerCreateProjectTool(server, config);
     registerListProjectsTool(server, config);
   }

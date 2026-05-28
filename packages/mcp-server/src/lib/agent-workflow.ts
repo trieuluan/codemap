@@ -66,7 +66,7 @@ export const WORKFLOW_ROUTES: Record<AgentTaskType, WorkflowRoute> = {
       "executing-plans",
       "verification-before-completion",
     ],
-    firstTools: ["explore_task", "summarize_feature_area"],
+    firstTools: ["explore_task"],
     hardGates: [
       "Do not edit production files before the design is approved.",
       "After design approval, write an implementation plan before code changes.",

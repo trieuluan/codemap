@@ -11,7 +11,6 @@ Use this skill when the user describes a new feature, a vague requirement, or sa
 1. **Gather real context with CodeMap**
    - `explore_task("feature or problem description")` — get likely files, entrypoints, risks
    - `get_project_insights()` — understand codebase size, language breakdown, patterns
-   - `summarize_feature_area(query)` — map the affected domain
 
 2. **Ask clarifying questions** — one at a time, stop when the scope is unambiguous:
    - What is the expected input and output?

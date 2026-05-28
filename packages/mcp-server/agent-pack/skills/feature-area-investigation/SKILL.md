@@ -4,8 +4,8 @@ Use this skill for feature questions like billing, auth redirect, admin project 
 
 ## Process
 
-1. Call `summarize_feature_area(query)`.
-2. Read the recommended order and confidence.
+1. Call `explore_task(query)`.
+2. Review likely files, entrypoints, and recommended reads.
 3. Call the suggested `get_file(path=[...])` to inspect outlines without loading full files.
 4. Use `symbol` for the most relevant component/service/controller.
 5. If the area is still unclear, call `find_related_files` with the best anchor file.

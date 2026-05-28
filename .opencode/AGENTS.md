@@ -5,7 +5,6 @@ Use CodeMap MCP-first workflow in this repository.
 - New session: `get_project`.
 - Broad implementation/debug/review/refactor/test/research task with unclear files: `explore_task`.
 - Broad codebase exploration: `explore_task`.
-- Feature area: `summarize_feature_area`.
 - Related files: `find_related_files`.
 - Known lookup: `search_codebase`.
 - Read many outlines: `get_file`.
@@ -17,7 +16,7 @@ Use CodeMap MCP-first workflow in this repository.
 
 For new features or vague requirements, design first — never write production code before the design is approved.
 
-1. Call `explore_task` and `summarize_feature_area` to gather real codebase context.
+1. Call `explore_task` to gather real codebase context.
 2. Ask clarifying questions one at a time until scope is clear.
 3. Propose 2–3 approaches with trade-offs, referencing real files from CodeMap.
 4. Write a design doc (`docs/specs/YYYY-MM-DD-<topic>.md`) covering goal, approach, affected files, and open questions.
@@ -37,7 +36,7 @@ No production code before a failing test exists.
 
 Use when the task involves a named feature (billing, auth, admin, graph, etc.).
 
-1. Call `summarize_feature_area(query)` — read confidence level and recommended order.
+1. Call `explore_task(query)` — review likely files, entrypoints, and recommended reads.
 2. Call `get_file(path=[...])` on the top results to survey outlines without loading full files.
 3. Use `symbol` for the most relevant component, service, or controller.
 4. If still unclear, call `find_related_files` anchored to the best file found.
@@ -75,3 +74,4 @@ Use when reviewing changes in a CodeMap-indexed repository.
 4. Lead findings by severity. Mention test gaps and residual risk.
 
 Review behavior and integration risks — avoid summarizing broad context unless it supports a finding.
+

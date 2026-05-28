@@ -6,7 +6,6 @@ When CodeMap MCP is available, use CodeMap tools before raw file reads or grep.
 
 - New CodeMap session: `get_project`.
 - Broad task: `explore_task`.
-- Feature keyword: `summarize_feature_area`.
 - Related-file question: `find_related_files`.
 - Known symbol/file/export: `search_codebase`.
 - Several candidates: `get_file`.
