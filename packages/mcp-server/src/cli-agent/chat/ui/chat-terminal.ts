@@ -170,7 +170,7 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _planReviewResolve: ((action: string) => void) | null = null;
-  private _askQuestionResolve: ((answer: string) => void) | null = null;
+  private _askQuestionResolve: ((answer: string | string[]) => void) | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
   private _activeTaskId = 0;
@@ -291,7 +291,7 @@ export class ChatTerminal {
   waitForPlanReview(): Promise<string> {
     return new Promise((resolve) => {
       this._planReviewResolve = resolve;
-      this.store.dispatch({ planReview: { active: true, selection: 0 } });
+      this.store.dispatch({ planReview: { active: true, selection: 0, reviseMode: false } });
       this.bus.scheduleRefresh();
     });
   }
@@ -300,7 +300,7 @@ export class ChatTerminal {
   resolvePlanReview(action: string): void {
     this._planReviewResolve?.(action);
     this._planReviewResolve = null;
-    this.store.dispatch({ planReview: { active: false, selection: 0 } });
+    this.store.dispatch({ planReview: { active: false, selection: 0, reviseMode: false } });
     this.bus.scheduleRefresh();
   }
 
@@ -309,7 +309,8 @@ export class ChatTerminal {
     questionId: string,
     question: string,
     options?: { label: string; description?: string }[],
-  ): Promise<string> {
+    selectionMode?: "single_select" | "multi_select",
+  ): Promise<string | string[]> {
     return new Promise((resolve) => {
       this._askQuestionResolve = resolve;
       this.store.dispatch({
@@ -319,6 +320,8 @@ export class ChatTerminal {
           question,
           options,
           selection: 0,
+          selectionMode: selectionMode ?? (options?.length ? "single_select" : undefined),
+          selected: [],
         },
       });
       this.bus.scheduleRefresh();
@@ -326,7 +329,7 @@ export class ChatTerminal {
   }
 
   /** Called by the UI when user answers the ask_user question. */
-  resolveAskQuestion(answer: string): void {
+  resolveAskQuestion(answer: string | string[]): void {
     this._askQuestionResolve?.(answer);
     this._askQuestionResolve = null;
     this.store.dispatch({ askQuestion: null });
@@ -658,10 +661,11 @@ export class ChatTerminal {
         questionId: string,
         question: string,
         options: AskQuestionOption[] | undefined,
-        respond: (answer: string) => void,
+        respond: (answer: string | string[]) => void,
+        selectionMode?: "single_select" | "multi_select",
       ) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
-        this.waitForAskQuestion(questionId, question, options)
+        this.waitForAskQuestion(questionId, question, options, selectionMode)
           .then((answer) => {
             respond(answer);
           })

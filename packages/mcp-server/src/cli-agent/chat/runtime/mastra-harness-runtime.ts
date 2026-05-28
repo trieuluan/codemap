@@ -347,14 +347,9 @@ async function createFreshHarness(
     ? (extraServerKeys.length > 0 ? opts.extraServerConfigs : undefined)
     : { codemap: serverConfig, ...opts.extraServerConfigs };
 
-  // extraTools keys have no "codemap_" prefix, so MASTRA_DISABLED_TOOLS (which use the
-  // prefix) won't match them via mastracode's exact-name delete loop. Pre-filter here.
-  const disabledBaseNames = new Set(MASTRA_DISABLED_TOOLS.map((n) => n.replace(/^codemap_/, "")));
-  const filteredMastraTools = opts.mastraTools
-    ? Object.fromEntries(
-        Object.entries(opts.mastraTools).filter(([name]) => !disabledBaseNames.has(name)),
-      )
-    : undefined;
+  // getMastraTools() now returns keys with server prefix (e.g. "codemap_explore_task"),
+  // so MASTRA_DISABLED_TOOLS exact-name matching works without pre-filtering here.
+  const filteredMastraTools = opts.mastraTools ?? undefined;
 
   const mcpServerIds = new Set([
     "codemap",

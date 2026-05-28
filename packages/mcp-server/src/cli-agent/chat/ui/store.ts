@@ -151,7 +151,7 @@ export interface UIState {
   planMode: boolean;
 
   // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
-  planReview: { active: boolean; selection: number };
+  planReview: { active: boolean; selection: number; reviseMode?: boolean };
 
   // ask_user: AI is waiting for user to answer an inline question
   askQuestion: {
@@ -160,6 +160,8 @@ export interface UIState {
     question: string;
     options?: { label: string; description?: string }[];
     selection: number;
+    selectionMode?: "single_select" | "multi_select";
+    selected: number[]; // indices of toggled options in multi-select
   } | null;
 
   // Debug
@@ -225,7 +227,7 @@ export function createInitialState(opts: {
     },
     synthRunning: false,
     planMode: false,
-    planReview: { active: false, selection: 0 },
+    planReview: { active: false, selection: 0, reviseMode: false },
     askQuestion: null,
     debug: opts.debug ?? false,
     debugLogFile: null,

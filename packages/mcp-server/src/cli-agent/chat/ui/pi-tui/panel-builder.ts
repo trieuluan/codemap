@@ -271,7 +271,8 @@ export function buildPanel(
 
   // ask_user prompt — AI is waiting for an inline answer.
   if (state.askQuestion?.active) {
-    const { question, options, selection } = state.askQuestion;
+    const { question, options, selection, selectionMode, selected = [] } = state.askQuestion;
+    const isMultiSelect = selectionMode === "multi_select";
     const questionLines = question.split("\n");
 
     // Top separator
@@ -292,27 +293,38 @@ export function buildPanel(
 
     if (options && options.length > 0) {
       for (const [idx, opt] of options.entries()) {
-        const selected = idx === (selection ?? 0);
+        const focused = idx === (selection ?? 0);
+        const checked = selected.includes(idx);
         const num = `${C_MUTED}${idx + 1}.${RESET}`;
-        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
-        const label = selected
+        const checkbox = isMultiSelect ? `${C_MUTED}[${checked ? "x" : " "}]${RESET}` : "";
+        const prefix = focused ? `${C_ACTION}>${RESET}` : " ";
+        const label = focused
           ? `${C_WHITE}${BOLD}${opt.label}${RESET}`
           : `${C_WHITE}${opt.label}${RESET}`;
         const desc = opt.description
           ? `  ${C_GRAY}${opt.description}${RESET}`
           : "";
-        out.push(fitLine(`    ${prefix} ${num} ${label}${desc}`, w));
+        out.push(fitLine(`    ${prefix} ${num} ${checkbox}${checkbox ? " " : ""}${label}${desc}`, w));
       }
+      // Spacer between options and hint text
+      out.push(fitLine(``, w));
+
+      // Help text
       out.push(
         fitLine(
-          `    ${C_ACTION}↑↓${RESET}${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}skip${RESET}`,
+          isMultiSelect
+            ? `    ${C_ACTION}↑↓${RESET} ${C_GRAY}move · ${RESET}${C_ACTION}Space${RESET} ${C_GRAY}toggle · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}skip${RESET}`
+            : `    ${C_ACTION}↑↓${RESET} ${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}skip${RESET}`,
           w,
         ),
       );
     } else {
+      // Spacer before hint text
+      out.push(fitLine(``, w));
+
       out.push(
         fitLine(
-          `    ${C_GRAY}Type answer + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to reply · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY}/skip${RESET}`,
+          `    ${C_GRAY}Type answer + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to reply · ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}skip${RESET}`,
           w,
         ),
       );
@@ -322,47 +334,71 @@ export function buildPanel(
     out.push(fitLine(`  ${sep}`, w));
   } else if (state.planReview?.active) {
     const sel = state.planReview.selection ?? 0;
+    const reviseMode = state.planReview.reviseMode ?? false;
     const PLAN_OPTIONS = [
       {
         label: "apply",
         desc: "Proceed with implementation (planner → coder → reviewer)",
       },
       { label: "no", desc: "Cancel — don't implement this plan" },
+      { label: "revise", desc: "Request changes to the plan" },
     ];
 
     // Top separator
     out.push(fitLine(`  ${sep}`, w));
 
-    // Header
-    out.push(
-      fitLine(`    ${C_AI}◈${RESET} ${C_WHITE}${BOLD}Plan ready${RESET}`, w),
-    );
-
-    // Sub-separator
-    out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
-
-    // Options
-    for (const [idx, opt] of PLAN_OPTIONS.entries()) {
-      const selected = idx === sel;
-      const num = `${C_MUTED}${idx + 1}.${RESET}`;
-      const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
-      const isNo = opt.label === "no";
-      const labelColor = isNo ? C_ERROR : C_WHITE;
-      const label = selected
-        ? `${labelColor}${BOLD}${opt.label}${RESET}`
-        : `${labelColor}${opt.label}${RESET}`;
+    if (reviseMode) {
+      // Revise input mode: prompt user to type feedback.
       out.push(
-        fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
+        fitLine(`    ${C_WARNING}◈${RESET} ${C_WHITE}${BOLD}Revise plan${RESET}`, w),
+      );
+      out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+      out.push(
+        fitLine(`    ${C_GRAY}Describe what to change, then press ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to submit${RESET}`, w),
+      );
+      out.push(fitLine(``, w));
+      out.push(
+        fitLine(
+          `    ${C_ACTION}Esc${RESET} ${C_GRAY}back to options${RESET}`,
+          w,
+        ),
+      );
+    } else {
+      // Option selection mode.
+      out.push(
+        fitLine(`    ${C_AI}◈${RESET} ${C_WHITE}${BOLD}Plan ready${RESET}`, w),
+      );
+
+      // Sub-separator
+      out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+
+      // Options
+      for (const [idx, opt] of PLAN_OPTIONS.entries()) {
+        const selected = idx === sel;
+        const num = `${C_MUTED}${idx + 1}.${RESET}`;
+        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
+        const isNo = opt.label === "no";
+        const isRevise = opt.label === "revise";
+        const labelColor = isNo ? C_ERROR : isRevise ? C_WARNING : C_WHITE;
+        const label = selected
+          ? `${labelColor}${BOLD}${opt.label}${RESET}`
+          : `${labelColor}${opt.label}${RESET}`;
+        out.push(
+          fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
+        );
+      }
+
+      // Spacer between options and hint text
+      out.push(fitLine(``, w));
+
+      // Help text
+      out.push(
+        fitLine(
+          `    ${C_ACTION}↑↓${RESET} ${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm${RESET}`,
+          w,
+        ),
       );
     }
-
-    // Help text
-    out.push(
-      fitLine(
-        `    ${C_ACTION}↑↓${RESET}${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}confirm · ${RESET}${C_GRAY}or type feedback + ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}revise${RESET}`,
-        w,
-      ),
-    );
 
     // Bottom separator
     out.push(fitLine(`  ${sep}`, w));

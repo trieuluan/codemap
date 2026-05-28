@@ -92,6 +92,7 @@ export class MentionAutocompleteProvider implements AutocompleteProvider {
 const PLAN_REVIEW_ITEMS = [
   { value: "implement", label: "implement", description: "Proceed with implementation (planner → coder → reviewer)" },
   { value: "no",        label: "no",        description: "Cancel — don't implement this plan" },
+  { value: "revise",    label: "revise",    description: "Type your changes + Enter to update the plan" },
 ];
 
 /** Shown while the multi-phase loop is waiting for plan review. */

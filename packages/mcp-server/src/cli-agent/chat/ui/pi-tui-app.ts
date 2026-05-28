@@ -270,10 +270,14 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     const trimmed = value.trim();
     const state = chatTerminal.store.getState();
 
-    // Plan review: non-empty text is feedback to revise the plan.
+    // Plan review: only allow text submission when in revise mode.
     if (state.planReview?.active && trimmed) {
-      editor.setText("");
-      chatTerminal.resolvePlanReview(trimmed);
+      if (state.planReview.reviseMode) {
+        editor.setText("");
+        chatTerminal.resolvePlanReview(`revise: ${trimmed}`);
+        return;
+      }
+      // Not in revise mode — block text input.
       return;
     }
 
@@ -457,28 +461,53 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       return { consume: true };
     }
 
-    // ask_user inline select (only when editor is empty and options are provided).
-    if (state.askQuestion?.active && editor.getText().trim() === "") {
+    // ask_user inline select (when options are provided, block typing like planReview).
+    if (state.askQuestion?.active) {
       const aq = state.askQuestion;
       const options = aq.options ?? [];
-      const sel = aq.selection ?? 0;
+
       if (options.length > 0) {
-        if (matchesKey(data, Key.up)) {
-          chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + options.length - 1) % options.length } });
-          tui.requestRender();
+        // Options mode: only allow navigation keys, block all typing.
+        const sel = aq.selection ?? 0;
+        const isMultiSelect = aq.selectionMode === "multi_select";
+        if (editor.getText().trim() === "") {
+          if (matchesKey(data, Key.up)) {
+            chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + options.length - 1) % options.length } });
+            tui.requestRender();
+            return { consume: true };
+          }
+          if (matchesKey(data, Key.down)) {
+            chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + 1) % options.length } });
+            tui.requestRender();
+            return { consume: true };
+          }
+          if (isMultiSelect && data === " ") {
+            const selected = aq.selected.includes(sel)
+              ? aq.selected.filter((idx) => idx !== sel)
+              : [...aq.selected, sel];
+            chatTerminal.store.dispatch({ askQuestion: { ...aq, selected } });
+            tui.requestRender();
+            return { consume: true };
+          }
+          if (matchesKey(data, Key.enter)) {
+            if (isMultiSelect) {
+              chatTerminal.resolveAskQuestion(aq.selected.map((idx) => options[idx]?.label).filter((label): label is string => Boolean(label)));
+            } else {
+              const selected = options[sel];
+              if (selected) chatTerminal.resolveAskQuestion(selected.label);
+            }
+            return { consume: true };
+          }
+        }
+        // Block all other input when options are shown.
+        if (matchesKey(data, Key.escape)) {
+          chatTerminal.resolveAskQuestion(isMultiSelect ? [] : "(skipped)");
           return { consume: true };
         }
-        if (matchesKey(data, Key.down)) {
-          chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + 1) % options.length } });
-          tui.requestRender();
-          return { consume: true };
-        }
-        if (matchesKey(data, Key.enter)) {
-          const selected = options[sel];
-          if (selected) chatTerminal.resolveAskQuestion(selected.label);
-          return { consume: true };
-        }
+        return { consume: true };
       }
+
+      // No options — free text mode, only intercept Escape.
       if (matchesKey(data, Key.escape)) {
         chatTerminal.resolveAskQuestion("(skipped)");
         return { consume: true };
@@ -487,8 +516,33 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
     // Plan review inline select (only when editor is empty).
     if (state.planReview?.active && editor.getText().trim() === "") {
-      const PLAN_OPTIONS = ["apply", "no"] as const;
-      const sel = state.planReview.selection ?? 0;
+      const pr = state.planReview;
+
+      // Revise mode: user is typing feedback — let editor handle input, only intercept Escape.
+      if (pr.reviseMode) {
+        if (matchesKey(data, Key.escape)) {
+          // Cancel revise mode, go back to option selection.
+          chatTerminal.store.dispatch({ planReview: { active: true, selection: 2, reviseMode: false } });
+          tui.requestRender();
+          return { consume: true };
+        }
+        // Let all other keys fall through to the editor.
+        void handleEditorInput(data);
+        return { consume: true };
+      }
+      
+      // Not in revise mode — block all input except navigation keys.
+      // This prevents typing when plan review is active but revise mode is not selected.
+      if (!pr.reviseMode) {
+        // Only allow navigation keys (up, down, enter, escape)
+        if (!matchesKey(data, Key.up) && !matchesKey(data, Key.down) && 
+            !matchesKey(data, Key.enter) && !matchesKey(data, Key.escape)) {
+          return { consume: true };
+        }
+      }
+
+      const PLAN_OPTIONS = ["apply", "no", "revise"] as const;
+      const sel = pr.selection ?? 0;
       if (matchesKey(data, Key.up)) {
         chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + PLAN_OPTIONS.length - 1) % PLAN_OPTIONS.length } });
         tui.requestRender();
@@ -500,13 +554,33 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
         return { consume: true };
       }
       if (matchesKey(data, Key.enter)) {
-        chatTerminal.resolvePlanReview(PLAN_OPTIONS[sel] ?? "apply");
+        const chosen = PLAN_OPTIONS[sel] ?? "apply";
+        if (chosen === "revise") {
+          // Enter revise mode: show input prompt instead of resolving immediately.
+          chatTerminal.store.dispatch({ planReview: { active: true, selection: sel, reviseMode: true } });
+          tui.requestRender();
+          return { consume: true };
+        }
+        chatTerminal.resolvePlanReview(chosen);
         return { consume: true };
       }
       if (matchesKey(data, Key.escape)) {
         chatTerminal.resolvePlanReview("cancel");
         return { consume: true };
       }
+    }
+
+    // Block input when plan review is active but not in revise mode.
+    // This prevents typing when the user hasn't selected "revise" yet.
+    if (state.planReview?.active && !state.planReview.reviseMode) {
+      // Only allow navigation keys (up, down, enter, escape)
+      if (matchesKey(data, Key.up) || matchesKey(data, Key.down) || 
+          matchesKey(data, Key.enter) || matchesKey(data, Key.escape)) {
+        // These are handled above in the plan review section
+        return { consume: true };
+      }
+      // Block all other input
+      return { consume: true };
     }
 
     // All other input → async editor handler (image paste detection + editor routing).

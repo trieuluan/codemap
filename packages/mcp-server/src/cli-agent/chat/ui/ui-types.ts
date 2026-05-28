@@ -8,7 +8,7 @@ export interface ChatTerminalLike {
   readonly store: Store;
   readonly bus: EventBus;
   resolvePlanReview(action: string): void;
-  resolveAskQuestion(answer: string): void;
+  resolveAskQuestion(answer: string | string[]): void;
   handleSubmitWithContent(content: string, skipConfirmation?: boolean, images?: Array<{ data: string; mimeType: string }>): void;
   cancelTask(): string | null;
 }

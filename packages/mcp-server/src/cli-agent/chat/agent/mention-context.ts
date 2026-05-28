@@ -80,12 +80,19 @@ export function extractFileMentions(message: string): string[] {
 
   for (const match of matches) {
     const mention = stripTrailingPunctuation(match[1] ?? "");
-    if (!mention || seen.has(mention)) continue;
+    if (!mention || seen.has(mention) || !looksLikeFilePath(mention)) continue;
     seen.add(mention);
     mentions.push(mention);
   }
 
   return mentions;
+}
+
+function looksLikeFilePath(input: string): boolean {
+  if (input.includes("/")) return true;
+  if (input.startsWith(".")) return true;
+  if (/\.[a-zA-Z0-9]{1,10}$/.test(input)) return true;
+  return false;
 }
 
 function normalizeMentionPath(input: string): string | null {

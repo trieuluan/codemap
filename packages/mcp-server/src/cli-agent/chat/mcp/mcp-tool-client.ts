@@ -107,12 +107,20 @@ export class CodeMapMcpToolClient {
     }));
   }
 
-  /** Returns Mastra tool definitions for sharing with the harness (avoids a second child process). */
+  /** Returns Mastra tool definitions for sharing with the harness (avoids a second child process).
+   * Keys are prefixed with the server name (e.g. "codemap_explore_task") so that
+   * formatToolDisplayName can strip the prefix and show "codemap · explore_task" in the UI.
+   */
   async getMastraTools(): Promise<Record<string, unknown>> {
     const toolsets = await this._mcpClient.listToolsets();
-    const tools = toolsets["codemap"] ?? {};
-    this._cachedToolCount = Object.keys(tools).length;
-    return tools as Record<string, unknown>;
+    const prefixed: Record<string, unknown> = {};
+    for (const [serverName, serverTools] of Object.entries(toolsets)) {
+      for (const [toolName, tool] of Object.entries(serverTools as Record<string, unknown>)) {
+        prefixed[`${serverName}_${toolName}`] = tool;
+      }
+    }
+    this._cachedToolCount = Object.keys(toolsets["codemap"] ?? {}).length;
+    return prefixed;
   }
 
   async callTool(

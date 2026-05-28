@@ -16,7 +16,7 @@ export interface BridgeCallbacks {
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
-  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string) => void) => void;
+  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string | string[]) => void, selectionMode?: "single_select" | "multi_select") => void;
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
   finalTextRef: Ref<string>;
@@ -159,8 +159,8 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
 
   if (event.type === "ask_question") {
     const ev = event as AskQuestionEvent;
-    const respond = (answer: string) => cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
-    cb.onAskQuestion?.(ev.questionId, ev.question, ev.options, respond);
+    const respond = (answer: string | string[]) => cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
+    cb.onAskQuestion?.(ev.questionId, ev.question, ev.options, respond, ev.selectionMode);
     return;
   }
 
@@ -325,7 +325,7 @@ export interface HarnessLike {
     planId: string;
     response: { action: "approved" | "rejected"; feedback?: string };
   }): Promise<void>;
-  respondToQuestion?(input: { questionId: string; answer: string }): void;
+  respondToQuestion?(input: { questionId: string; answer: string | string[] }): void;
   respondToToolApproval?(input: { decision: "approve" | "decline" | "always_allow_category" }): void;
   destroy?(): Promise<void>;
 }
@@ -373,6 +373,7 @@ interface AskQuestionEvent extends HarnessEvent {
   questionId: string;
   question: string;
   options?: AskQuestionOption[];
+  selectionMode?: "single_select" | "multi_select";
 }
 interface OMObservationEndEvent extends HarnessEvent {
   type: "om_observation_end";
