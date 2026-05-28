@@ -57,6 +57,14 @@ export async function hydrateMentionContext(
       files.push(safePath);
       blocks.push(formatFileBlock(safePath, content, raw.length > limit));
     } catch (error) {
+      // Silently skip mentions that don't exist on disk (not actual files).
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      ) {
+        continue;
+      }
       const message = error instanceof Error ? error.message : String(error);
       warnings.push(`Could not read ${safePath}: ${message}`);
     }

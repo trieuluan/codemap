@@ -43,6 +43,7 @@
   "devDependencies": {
     "@types/node": "^24.12.2",
     "tsx": "^4.21.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@mastra/core": "^1.35.0"
   }
 }

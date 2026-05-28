@@ -8,7 +8,7 @@ import {
   runSingleAgentRuntime,
   type ChatUiMode,
 } from "../runtime/cli-runtime.js";
-import type { AskQuestionOption } from "../runtime/mastra-events.js";
+import type { AskQuestionOption, HarnessQuestionAnswer } from "../runtime/mastra-events.js";
 import {
   resetHarnessSingleton,
   getMastraThreadId,
@@ -170,7 +170,7 @@ export class ChatTerminal {
   readonly store: Store;
 
   private _planReviewResolve: ((action: string) => void) | null = null;
-  private _askQuestionResolve: ((answer: string | string[]) => void) | null = null;
+  private _askQuestionResolve: ((answer: HarnessQuestionAnswer) => void) | null = null;
   private _taskAbort: AbortController | null = null;
   private _taskSeq = 0;
   private _activeTaskId = 0;
@@ -310,7 +310,7 @@ export class ChatTerminal {
     question: string,
     options?: { label: string; description?: string }[],
     selectionMode?: "single_select" | "multi_select",
-  ): Promise<string | string[]> {
+  ): Promise<HarnessQuestionAnswer> {
     return new Promise((resolve) => {
       this._askQuestionResolve = resolve;
       this.store.dispatch({
@@ -329,7 +329,7 @@ export class ChatTerminal {
   }
 
   /** Called by the UI when user answers the ask_user question. */
-  resolveAskQuestion(answer: string | string[]): void {
+  resolveAskQuestion(answer: HarnessQuestionAnswer): void {
     this._askQuestionResolve?.(answer);
     this._askQuestionResolve = null;
     this.store.dispatch({ askQuestion: null });
@@ -422,8 +422,11 @@ export class ChatTerminal {
         (msgs) => this.store.dispatch({ messages: msgs }),
         (msg) => this.appendMessage(msg as Message),
       );
+      const threadUsage = await getMastraThreadTokenUsage().catch(
+        () => null,
+      );
       this.store.dispatch({
-        sessionTokens: 0,
+        sessionTokens: threadUsage?.totalTokens ?? 0,
       });
     } catch (err) {
       this.appendMessage({
@@ -661,7 +664,7 @@ export class ChatTerminal {
         questionId: string,
         question: string,
         options: AskQuestionOption[] | undefined,
-        respond: (answer: string | string[]) => void,
+        respond: (answer: HarnessQuestionAnswer) => void,
         selectionMode?: "single_select" | "multi_select",
       ) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -863,23 +866,12 @@ export class ChatTerminal {
 
       this.bus.scheduleRefresh();
 
-      // Accumulate session-level token usage from this turn's result.
-      if (result.usage?.totalTokens) {
-        this.store.dispatch((prev) => ({
-          sessionTokens: prev.sessionTokens + result.usage!.totalTokens,
-        }));
-        this.bus.scheduleRefresh();
-      } else {
-        // Fallback: try to sync from Mastra thread storage.
-        getMastraThreadTokenUsage()
-          .then((usage) => {
-            if (usage?.totalTokens) {
-              this.store.dispatch({ sessionTokens: usage.totalTokens });
-              this.bus.scheduleRefresh();
-            }
-          })
-          .catch(() => {});
-      }
+      // Sync session token usage from Mastra thread storage.
+      const mastraUsage = await getMastraThreadTokenUsage().catch(() => null);
+      this.store.dispatch({
+        sessionTokens: mastraUsage?.totalTokens ?? 0,
+      });
+      this.bus.scheduleRefresh();
     } catch (err) {
       if (isAbortError(err) || taskAbort.signal.aborted) return;
       this.store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });

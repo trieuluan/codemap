@@ -1,3 +1,6 @@
+import type { TokenUsage } from "@mastra/core/harness";
+export type { TokenUsage };
+
 export type ModelTier = "planner" | "coder" | "reviewer" | "local";
 
 export type TaskType =
@@ -82,12 +85,6 @@ export interface CompletionResponse {
   model?: string;
   provider: string;
   toolCalls?: ChatToolCall[];
-}
-
-export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
 }
 
 export interface CompletionStreamChunk {

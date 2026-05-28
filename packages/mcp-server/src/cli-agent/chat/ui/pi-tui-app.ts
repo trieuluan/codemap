@@ -166,8 +166,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
   function messageRenderSignature(
     msg: ReturnType<typeof chatTerminal.store.getState>["messages"][number],
     idx: number,
-    spinning: boolean,
   ): string {
+    // NOTE: frame is intentionally excluded from the signature.
+    // Including it would invalidate the cache every 120ms (spinner tick),
+    // causing full message re-renders that may change line count and
+    // trigger pi-tui's fullRender() → scroll jump.  Instead, we patch
+    // only the spinner character on cached lines (see patchSpinnerLines).
     return [
       idx,
       msg.role,
@@ -177,7 +181,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       chatTerminal.store.getState().config.debug ? "debug" : "",
       msg.toolCalls?.length ?? 0,
       msg.toolResults?.length ?? 0,
-      spinning && msg.role === "tool_call" && !msg.toolResults?.length ? frame : "",
     ].join(":");
   }
 
@@ -187,7 +190,6 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
   function renderMessageLines(state: ReturnType<typeof chatTerminal.store.getState>, w: number): string[] {
     const contentWidth = w - 2;
-    const spinning = !state.planReview?.active && (isActiveTaskPhase(state.task.phase) || state.synthRunning);
     const widthChanged = w !== _cachedWidth;
     const chromeSignature = chromeRenderSignature(state);
 
@@ -207,7 +209,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
         const msg = state.messages[idx];
         const prev = _cachedBlocks[idx];
         if (!msg || !prev) { firstDirty = idx; break; }
-        const signature = messageRenderSignature(msg, idx, spinning);
+        const signature = messageRenderSignature(msg, idx);
         if (prev.signature !== signature || prev.contentRef !== msg.content) {
           firstDirty = idx;
           break;
@@ -220,7 +222,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     for (let idx = firstDirty; idx < state.messages.length; idx += 1) {
       const msg = state.messages[idx];
       if (!msg) continue;
-      const signature = messageRenderSignature(msg, idx, spinning);
+      const signature = messageRenderSignature(msg, idx);
       const prev = !widthChanged ? _cachedBlocks[idx] : undefined;
       const lines = (prev?.signature === signature && prev.contentRef === msg.content)
         ? prev.lines
@@ -234,9 +236,20 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     _cachedWidth = w;
     _cachedMessageCount = state.messages.length;
 
-    const out: string[] = [..._cachedChromeLines];
+    // Return cached lines directly without patching spinner characters.
+    // Patching caused character-level diffs above the viewport, which pi-tui
+    // detects as `firstChanged < prevViewportTop` and triggers fullRender(true)
+    // → clear screen + clear scrollback → scroll jump.
+    // The PanelComponent renders its own spinner at the bottom (within viewport),
+    // so the spinner still animates there via differential rendering.
+    const out: string[] = [];
+    for (const line of _cachedChromeLines) {
+      out.push(line);
+    }
     for (const block of _cachedBlocks) {
-      if (block) out.push(...block.lines);
+      if (block) {
+        out.push(...block.lines);
+      }
     }
     return out;
   }

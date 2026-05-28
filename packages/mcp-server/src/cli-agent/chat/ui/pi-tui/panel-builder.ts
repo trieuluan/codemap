@@ -203,13 +203,11 @@ export function buildPanel(
       : "0s";
     const promptTok = state.task.usage?.promptTokens ?? 0;
     const completionTok = state.task.usage?.completionTokens ?? 0;
-    const sessTok = state.sessionTokens;
     const usage =
-      promptTok > 0 || sessTok > 0
+      promptTok > 0 || completionTok > 0
         ? ` · ${[
             promptTok > 0 ? `↑${formatTokenCount(promptTok)}` : "",
             completionTok > 0 ? `↓${formatTokenCount(completionTok)}` : "",
-            sessTok > 0 ? `∑${formatTokenCount(sessTok)}` : "",
           ]
             .filter(Boolean)
             .join(" ")} tok`

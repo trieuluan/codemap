@@ -1,28 +1,56 @@
 import { buildToolPreview } from "./tool-approval-policy.js";
+import type {
+  HarnessThread,
+  HarnessMessage,
+  HarnessMessageContent,
+  HarnessQuestionOption,
+  HarnessRequestContext,
+  HarnessQuestionAnswer,
+} from "@mastra/core/harness";
+export type { HarnessThread, HarnessMessage, HarnessMessageContent };
+export type { HarnessQuestionOption as AskQuestionOption };
+export type { HarnessRequestContext, HarnessQuestionAnswer };
 
-interface Ref<T> { get(): T; set(v: T): void }
-
-export interface AskQuestionOption {
-  label: string;
-  description?: string;
+interface Ref<T> {
+  get(): T;
+  set(v: T): void;
 }
 
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
   onStreamReset?: () => void;
-  onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
+  onToolStart?: (
+    name: string,
+    args: string,
+    id: string,
+    preview?: string,
+  ) => void;
   onToolResult?: (name: string, result: string, id?: string) => void;
-  onUsage?: (u: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
+  onUsage?: (u: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  }) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
-  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: string | string[]) => void, selectionMode?: "single_select" | "multi_select") => void;
+  onAskQuestion?: (
+    questionId: string,
+    question: string,
+    options: HarnessQuestionOption[] | undefined,
+    respond: (answer: HarnessQuestionAnswer) => void,
+    selectionMode?: "single_select" | "multi_select",
+  ) => void;
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
   finalTextRef: Ref<string>;
   usedToolsRef: Ref<boolean>;
   onPlanApproval?: (planId: string, plan: string) => void;
-  onEnd: (usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined) => void;
+  onEnd: (
+    usage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined,
+  ) => void;
   onError: (err: unknown) => void;
   mcpServerIds?: Set<string>;
 }
@@ -89,7 +117,10 @@ export function summarizeHarnessEvent(
   return base;
 }
 
-export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): void {
+export function bridgeCommonEvent(
+  event: HarnessEvent,
+  cb: BridgeCallbacks,
+): void {
   if (event.type === "message_update") {
     const message = (event as MessageEvent).message;
     if (message?.role !== "assistant") return;
@@ -140,11 +171,18 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
     const ev = event as ToolEndEvent;
     const displayName = formatToolDisplayName(ev.toolName, cb.mcpServerIds);
     const r = formatToolResult(ev.result);
-    const content = r.trim() || (ev.isError ? "Tool failed without a result." : "Tool completed without a result.");
-    cb.onToolResult?.(displayName, ev.isError ? `[ERROR] ${content}` : content, ev.toolCallId);
+    const content =
+      r.trim() ||
+      (ev.isError
+        ? "Tool failed without a result."
+        : "Tool completed without a result.");
+    cb.onToolResult?.(
+      displayName,
+      ev.isError ? `[ERROR] ${content}` : content,
+      ev.toolCallId,
+    );
     return;
   }
-
 
   if (event.type === "tool_approval_required") {
     cb.harness.respondToToolApproval?.({ decision: "approve" });
@@ -159,8 +197,15 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
 
   if (event.type === "ask_question") {
     const ev = event as AskQuestionEvent;
-    const respond = (answer: string | string[]) => cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
-    cb.onAskQuestion?.(ev.questionId, ev.question, ev.options, respond, ev.selectionMode);
+    const respond = (answer: HarnessQuestionAnswer) =>
+      cb.harness.respondToQuestion?.({ questionId: ev.questionId, answer });
+    cb.onAskQuestion?.(
+      ev.questionId,
+      ev.question,
+      ev.options,
+      respond,
+      ev.selectionMode,
+    );
     return;
   }
 
@@ -185,31 +230,49 @@ export function bridgeCommonEvent(event: HarnessEvent, cb: BridgeCallbacks): voi
   if (event.type === "agent_end") {
     const raw = cb.harness.getTokenUsage?.();
     const usage = raw
-      ? { promptTokens: raw.promptTokens ?? 0, completionTokens: raw.completionTokens ?? 0, totalTokens: raw.totalTokens ?? 0 }
+      ? {
+          promptTokens: raw.promptTokens ?? 0,
+          completionTokens: raw.completionTokens ?? 0,
+          totalTokens: raw.totalTokens ?? 0,
+        }
       : undefined;
     if (usage) cb.onUsage?.(usage);
-    cb.onDebug?.({ event: "mastra_harness_end", reason: (event as AgentEndEvent).reason, usedTools: cb.usedToolsRef.get() });
+    cb.onDebug?.({
+      event: "mastra_harness_end",
+      reason: (event as AgentEndEvent).reason,
+      usedTools: cb.usedToolsRef.get(),
+    });
     cb.onEnd(usage);
   }
 }
 
-function formatToolDisplayName(name: string, mcpServerIds?: Set<string>): string {
+function formatToolDisplayName(
+  name: string,
+  mcpServerIds?: Set<string>,
+): string {
   if (!name) return name ?? "";
   if (!mcpServerIds) return name;
   const underscoreIdx = name.indexOf("_");
   if (underscoreIdx > 0) {
     const server = name.slice(0, underscoreIdx);
-    if (mcpServerIds.has(server)) return `${server} · ${name.slice(underscoreIdx + 1)}`;
+    if (mcpServerIds.has(server))
+      return `${server} · ${name.slice(underscoreIdx + 1)}`;
   }
   return name;
 }
 
-function describeMessageContent(content: HarnessMessageContent[] | string | undefined): unknown {
+function describeMessageContent(
+  content: HarnessMessageContent[] | string | undefined,
+): unknown {
   if (!content) return "empty";
-  if (typeof content === "string") return { kind: "string", length: content.length };
+  if (typeof content === "string")
+    return { kind: "string", length: content.length };
   return content.map((part) => ({
     type: part.type,
-    textLength: part.type === "text" ? (part as { type: "text"; text: string }).text.length : undefined,
+    textLength:
+      part.type === "text"
+        ? (part as { type: "text"; text: string }).text.length
+        : undefined,
   }));
 }
 
@@ -218,7 +281,9 @@ function previewText(text: string): string {
   return compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
 }
 
-function extractLastText(content: HarnessMessageContent[] | string | undefined): string {
+function extractLastText(
+  content: HarnessMessageContent[] | string | undefined,
+): string {
   if (!content) return "";
   if (typeof content === "string") return content;
   for (let i = content.length - 1; i >= 0; i--) {
@@ -242,20 +307,39 @@ function formatToolResult(result: unknown): string {
   return safeJsonStringify(result).trim();
 }
 
-function extractToolResultText(value: unknown, seen = new Set<unknown>()): string {
+function extractToolResultText(
+  value: unknown,
+  seen = new Set<unknown>(),
+): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  )
+    return String(value);
   if (typeof value !== "object") return "";
   if (seen.has(value)) return "";
   seen.add(value);
 
   if (Array.isArray(value)) {
-    return value.map((item) => extractToolResultText(item, seen)).filter(Boolean).join("\n");
+    return value
+      .map((item) => extractToolResultText(item, seen))
+      .filter(Boolean)
+      .join("\n");
   }
 
   const record = value as Record<string, unknown>;
-  const preferredKeys = ["text", "content", "message", "error", "stdout", "stderr", "output"];
+  const preferredKeys = [
+    "text",
+    "content",
+    "message",
+    "error",
+    "stdout",
+    "stderr",
+    "output",
+  ];
   for (const key of preferredKeys) {
     const text = extractToolResultText(record[key], seen);
     if (text.trim()) return text;
@@ -274,63 +358,75 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
-export interface HarnessThread {
-  id: string;
-  title?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  tokenUsage?: { totalTokens?: number };
-}
-
-export type HarnessMessageContent =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string }
-  | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
-  | { type: 'system_reminder'; message: string }
-  | { type: string; [key: string]: unknown };
-
-export interface HarnessMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: HarnessMessageContent[];
-  createdAt: Date;
-  stopReason?: string;
-}
-
 export interface HarnessLike {
   init(): Promise<void>;
   selectOrCreateThread(): Promise<unknown>;
   createThread(opts?: { title?: string }): Promise<unknown>;
   getCurrentThreadId?(): string | null;
-  getDisplayState?(): { omProgress?: { observationTokens?: number; status?: string; preReflectionTokens?: number } };
+  getDisplayState?(): {
+    omProgress?: {
+      observationTokens?: number;
+      status?: string;
+      preReflectionTokens?: number;
+    };
+  };
   listMessages(options?: { limit?: number }): Promise<HarnessMessage[]>;
-  listMessagesForThread(options: { threadId: string; limit?: number }): Promise<HarnessMessage[]>;
-  listThreads(options?: { includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  listMessagesForThread(options: {
+    threadId: string;
+    limit?: number;
+  }): Promise<HarnessMessage[]>;
+  listThreads(options?: {
+    includeForkedSubagents?: boolean;
+  }): Promise<HarnessThread[]>;
   switchThread(options: { threadId: string }): Promise<void>;
   getCurrentModelId?(): string;
-  getTokenUsage?(): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
+  getTokenUsage?():
+    | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+    | undefined;
   setState?(updates: Record<string, unknown>): Promise<void>;
   subscribe(listener: (event: HarnessEvent) => void): () => void;
-  sendSignal?(input: { content?: string | { role: string; content: Array<{ type: string; [key: string]: unknown }> }; type?: string; contents?: string; [key: string]: unknown }): {
+  sendSignal?(input: {
+    content?:
+      | string
+      | {
+          role: string;
+          content: Array<{ type: string; [key: string]: unknown }>;
+        };
+    type?: string;
+    contents?: string;
+    [key: string]: unknown;
+  }): {
     id: string;
     type: string;
     accepted: Promise<{ accepted?: boolean; runId?: string | null }>;
   };
-  sendMessage(input: { content: string; files?: Array<{ data: string; mediaType: string }> }): Promise<void>;
+  sendMessage(input: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string }>;
+  }): Promise<void>;
   abort?(): void;
   switchMode?(input: { modeId: string }): Promise<void>;
-  switchModel?(input: { modelId: string; scope?: "global" | "thread" }): Promise<void>;
+  switchModel?(input: {
+    modelId: string;
+    scope?: "global" | "thread";
+  }): Promise<void>;
   respondToPlanApproval?(input: {
     planId: string;
     response: { action: "approved" | "rejected"; feedback?: string };
   }): Promise<void>;
-  respondToQuestion?(input: { questionId: string; answer: string | string[] }): void;
-  respondToToolApproval?(input: { decision: "approve" | "decline" | "always_allow_category" }): void;
+  respondToQuestion?(input: {
+    questionId: string;
+    answer: HarnessQuestionAnswer;
+  }): void;
+  respondToToolApproval?(input: {
+    decision: "approve" | "decline" | "always_allow_category";
+  }): void;
   destroy?(): Promise<void>;
 }
 
-export interface HarnessEvent { type: string }
+export interface HarnessEvent {
+  type: string;
+}
 
 interface MessageEvent extends HarnessEvent {
   type: "message_update" | "message_end";
@@ -372,7 +468,7 @@ interface AskQuestionEvent extends HarnessEvent {
   type: "ask_question";
   questionId: string;
   question: string;
-  options?: AskQuestionOption[];
+  options?: HarnessQuestionOption[];
   selectionMode?: "single_select" | "multi_select";
 }
 interface OMObservationEndEvent extends HarnessEvent {

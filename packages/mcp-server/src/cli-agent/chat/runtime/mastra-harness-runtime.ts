@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import type { RequestContext } from "@mastra/core/request-context";
 import type { AgentLoopResult } from "../agent/agent-loop.js";
 import type {
   SingleAgentRuntimeInput,
@@ -223,7 +224,7 @@ function installTemperatureInterceptor(baseUrl: string): void {
 }
 const ORIGINAL_AGENT_INSTRUCTIONS = new WeakMap<
   object,
-  (options?: { requestContext?: unknown }) => unknown
+  (options?: { requestContext?: RequestContext }) => unknown
 >();
 const APPLIED_AGENT_INSTRUCTIONS = new WeakMap<object, string>();
 
@@ -465,11 +466,11 @@ function stringifyInstructions(value: unknown): string {
 
 async function resolveAgentInstructions(
   instructions: unknown,
-  options?: { requestContext?: unknown },
+  options?: { requestContext?: RequestContext },
 ): Promise<unknown> {
   if (typeof instructions === "function") {
     return (
-      instructions as (options?: { requestContext?: unknown }) => unknown
+      instructions as (options?: { requestContext?: RequestContext }) => unknown
     )(options);
   }
   return instructions;
@@ -510,14 +511,14 @@ function applyAgentInstructions(
       writableAgent.__getOverridableFields?.().instructions;
     const original =
       ORIGINAL_AGENT_INSTRUCTIONS.get(agent) ??
-      ((options?: { requestContext?: unknown }) =>
+      ((options?: { requestContext?: RequestContext }) =>
         resolveAgentInstructions(originalInstructions, options));
     if (!original) continue;
     ORIGINAL_AGENT_INSTRUCTIONS.set(agent, original);
     APPLIED_AGENT_INSTRUCTIONS.set(agent, instructions);
 
     writableAgent.__updateInstructions(
-      async (options?: { requestContext?: unknown }) => {
+      async (options?: { requestContext?: RequestContext }) => {
         const base = stringifyInstructions(await original(options));
         return [
           instructions,
@@ -1132,15 +1133,31 @@ export async function getMastraThreadTokenUsage(): Promise<{
   try {
     const threadId = _singleton.harness.getCurrentThreadId?.();
     if (!threadId) return null;
+
+    // Prefer harness.getTokenUsage() which has prompt/completion breakdown
+    // and is kept in sync during active conversation turns.
+    const harnessUsage = _singleton.harness.getTokenUsage?.();
+    if (
+      harnessUsage &&
+      ((harnessUsage.promptTokens ?? 0) > 0 ||
+        (harnessUsage.completionTokens ?? 0) > 0 ||
+        (harnessUsage.totalTokens ?? 0) > 0)
+    ) {
+      return {
+        promptTokens: harnessUsage.promptTokens ?? 0,
+        completionTokens: harnessUsage.completionTokens ?? 0,
+        totalTokens: harnessUsage.totalTokens ?? 0,
+      };
+    }
+
+    // Fallback: read totalTokens from thread metadata.
     const threads = await _singleton.harness.listThreads();
     const thread = threads.find((t) => t.id === threadId);
     const u = thread?.tokenUsage;
-    if (!u) return null;
+    if (!u || (u.totalTokens ?? 0) <= 0) return null;
     return {
-      promptTokens:
-        (u as unknown as { promptTokens?: number }).promptTokens ?? 0,
-      completionTokens:
-        (u as unknown as { completionTokens?: number }).completionTokens ?? 0,
+      promptTokens: 0,
+      completionTokens: 0,
       totalTokens: u.totalTokens ?? 0,
     };
   } catch {

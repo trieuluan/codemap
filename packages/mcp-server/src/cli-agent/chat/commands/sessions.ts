@@ -66,13 +66,24 @@ function formatAge(date: Date): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function formatThread(i: number, t: HarnessThread, current: boolean): string {
-  const tok = t.tokenUsage?.totalTokens
-    ? ` · ${Math.round(t.tokenUsage.totalTokens / 1000)}k tok`
+function getThreadTokenUsage(t: HarnessThread): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined {
+  // Token usage is stored in metadata.tokenUsage (persisted by harness after each generate call)
+  const metaUsage = (t.metadata as Record<string, unknown> | undefined)?.tokenUsage as
+    | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+    | undefined;
+  if (metaUsage?.totalTokens) return metaUsage;
+  // Fallback to top-level tokenUsage (legacy)
+  return t.tokenUsage;
+}
+
+function formatThread(t: HarnessThread, current: boolean): string {
+  const usage = getThreadTokenUsage(t);
+  const tok = usage?.totalTokens
+    ? ` · ${Math.round(usage.totalTokens / 1000)}k tok`
     : "";
   const title = t.title ?? t.id.slice(0, 8);
   const bullet = current ? " ●" : "";
-  return `${i + 1}.${bullet} ${title}${tok}  ${formatAge(t.updatedAt)}`;
+  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt)}`;
 }
 
 function extractText(content: HarnessMessage["content"]): string {
@@ -123,7 +134,7 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
 
 export const sessionsCommand: Command = {
   name: "sessions",
-  description: "List or load Mastra chat threads. Usage: /sessions [new|load <n>]",
+  description: "List or load Mastra chat threads. Usage: /sessions [new|load <thread-id>]",
   execute: async (args, ctx) => {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content, timestamp: Date.now() }]);
@@ -137,11 +148,11 @@ export const sessionsCommand: Command = {
     }
 
     if (sub === "load" && rest[0]) {
-      const idx = parseInt(rest[0], 10) - 1;
+      const prefix = rest[0];
       const threads = await listMastraThreads();
-      const target = threads[idx];
+      const target = threads.find((t) => t.id.startsWith(prefix));
       if (!target) {
-        append(`No thread #${idx + 1}. Run /sessions to list.`);
+        append(`No thread matching \`${prefix}\`. Run /sessions to list.`);
         return;
       }
       await ctx.loadThreadById?.(target.id);
@@ -159,8 +170,8 @@ export const sessionsCommand: Command = {
     [...threads]
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, 10)
-      .forEach((t, i) => lines.push(formatThread(i, t, t.id === currentId)));
-    lines.push("", "_/sessions new · /sessions load <n>_");
+      .forEach((t) => lines.push(formatThread(t, t.id === currentId)));
+    lines.push("", "_/sessions new · /sessions load <thread-id>_");
     append(lines.join("\n"));
   },
 };
