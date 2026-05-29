@@ -9,7 +9,10 @@ import {
 } from "@earendil-works/pi-tui";
 import type { ChatTerminalLike } from "./ui-types.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
-import { MentionAutocompleteProvider, ModelPickerProvider } from "./pi-tui/input.js";
+import {
+  MentionAutocompleteProvider,
+  ModelPickerProvider,
+} from "./pi-tui/input.js";
 import { getCommandList } from "../slash-commands/index.js";
 import { initShiki } from "./pi-tui/shiki-highlight.js";
 import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
@@ -23,10 +26,7 @@ import {
   SPINNER,
 } from "./pi-tui/theme.js";
 import { workspaceStateCardLines } from "./pi-tui/text.js";
-import {
-  buildPanel,
-  isActiveTaskPhase,
-} from "./pi-tui/panel-builder.js";
+import { buildPanel, isActiveTaskPhase } from "./pi-tui/panel-builder.js";
 import { getMastraMessages } from "../harness/harness-runtime.js";
 
 export { isActiveTaskPhase };
@@ -50,7 +50,9 @@ function extractToolResultText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
-async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminalLike): Promise<void> {
+async function toggleAllToolCallsExpanded(
+  chatTerminal: ChatTerminalLike,
+): Promise<void> {
   const state = chatTerminal.store.getState();
   const messages = state.messages;
 
@@ -62,7 +64,14 @@ async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminalLike): Promi
 
   if (toolCallIdxs.length === 0) {
     chatTerminal.store.dispatch((prev) => ({
-      messages: [...prev.messages, { role: "system" as const, content: "No tool call to expand yet.", timestamp: Date.now() }],
+      messages: [
+        ...prev.messages,
+        {
+          role: "system" as const,
+          content: "No tool call to expand yet.",
+          timestamp: Date.now(),
+        },
+      ],
     }));
     return;
   }
@@ -94,7 +103,9 @@ async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminalLike): Promi
         if (!m) continue;
         for (const block of m.content) {
           if (block.type === "tool_result") {
-            allResults.push(extractToolResultText((block as Record<string, unknown>).result));
+            allResults.push(
+              extractToolResultText((block as Record<string, unknown>).result),
+            );
           }
         }
       }
@@ -133,7 +144,9 @@ async function toggleAllToolCallsExpanded(chatTerminal: ChatTerminalLike): Promi
   });
 }
 
-export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<void> {
+export async function startPiTuiApp(
+  chatTerminal: ChatTerminalLike,
+): Promise<void> {
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal, true);
 
@@ -184,11 +197,16 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     ].join(":");
   }
 
-  function chromeRenderSignature(state: ReturnType<typeof chatTerminal.store.getState>): string {
+  function chromeRenderSignature(
+    state: ReturnType<typeof chatTerminal.store.getState>,
+  ): string {
     return JSON.stringify([state.chatMode, state.workspaceState]);
   }
 
-  function renderMessageLines(state: ReturnType<typeof chatTerminal.store.getState>, w: number): string[] {
+  function renderMessageLines(
+    state: ReturnType<typeof chatTerminal.store.getState>,
+    w: number,
+  ): string[] {
     const contentWidth = w - 2;
     const widthChanged = w !== _cachedWidth;
     const chromeSignature = chromeRenderSignature(state);
@@ -197,18 +215,29 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     if (widthChanged || chromeChanged) {
       _cachedChromeLines = [
         ...headerLines(state),
-        ...workspaceStateCardLines(state.workspaceState, state.chatMode, contentWidth),
+        ...workspaceStateCardLines(
+          state.workspaceState,
+          state.chatMode,
+          contentWidth,
+        ),
       ];
       _cachedChromeSignature = chromeSignature;
     }
 
     let firstDirty = 0;
-    if (!widthChanged && !chromeChanged && _cachedMessageCount === state.messages.length) {
+    if (
+      !widthChanged &&
+      !chromeChanged &&
+      _cachedMessageCount === state.messages.length
+    ) {
       firstDirty = state.messages.length;
       for (let idx = 0; idx < state.messages.length; idx += 1) {
         const msg = state.messages[idx];
         const prev = _cachedBlocks[idx];
-        if (!msg || !prev) { firstDirty = idx; break; }
+        if (!msg || !prev) {
+          firstDirty = idx;
+          break;
+        }
         const signature = messageRenderSignature(msg, idx);
         if (prev.signature !== signature || prev.contentRef !== msg.content) {
           firstDirty = idx;
@@ -224,11 +253,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       if (!msg) continue;
       const signature = messageRenderSignature(msg, idx);
       const prev = !widthChanged ? _cachedBlocks[idx] : undefined;
-      const lines = (prev?.signature === signature && prev.contentRef === msg.content)
-        ? prev.lines
-        : messageLines([msg], contentWidth, frame, {
-          showRawToolData: state.config.debug,
-        });
+      const lines =
+        prev?.signature === signature && prev.contentRef === msg.content
+          ? prev.lines
+          : messageLines([msg], contentWidth, frame, {
+              showRawToolData: state.config.debug,
+            });
       nextBlocks[idx] = { signature, contentRef: msg.content, lines };
     }
 
@@ -274,10 +304,18 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
   const editor = new Editor(tui, editorTheme);
   editor.focused = true;
   const slashCommands: { value: string; description: string }[] = [
-    { value: "/plan", description: "Plan then implement: planner → coder → reviewer" },
-    ...getCommandList().map((c) => ({ value: `/${c.name}`, description: c.description })),
+    {
+      value: "/plan",
+      description: "Plan then implement: planner → coder → reviewer",
+    },
+    ...getCommandList().map((c) => ({
+      value: `/${c.name}`,
+      description: c.description,
+    })),
   ].sort((a, b) => a.value.localeCompare(b.value));
-  const defaultAutocompleteProvider = new MentionAutocompleteProvider({ commands: slashCommands });
+  const defaultAutocompleteProvider = new MentionAutocompleteProvider({
+    commands: slashCommands,
+  });
   let modelPickerActive = false;
 
   const switchModel = (model: string) => {
@@ -286,7 +324,10 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     chatTerminal.store.dispatch((s) => ({
       messages: [
         ...s.messages,
-        { role: "system" as const, content: `Switched model: ${prev.config.model} → ${model}` },
+        {
+          role: "system" as const,
+          content: `Switched model: ${prev.config.model} → ${model}`,
+        },
       ],
     }));
   };
@@ -303,12 +344,14 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     if (state.config.availableModels.length === 0) return;
     modelPickerActive = true;
     editor.setText("");
-    editor.setAutocompleteProvider(new ModelPickerProvider(
-      () => chatTerminal.store.getState().config.availableModels,
-      () => chatTerminal.store.getState().config.model,
-      switchModel,
-      closeModelPicker,
-    ));
+    editor.setAutocompleteProvider(
+      new ModelPickerProvider(
+        () => chatTerminal.store.getState().config.availableModels,
+        () => chatTerminal.store.getState().config.model,
+        switchModel,
+        closeModelPicker,
+      ),
+    );
     editor.handleInput("\t");
   };
 
@@ -337,7 +380,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     }
 
     // ask_user free-text answer (only when there are no selection options).
-    if (state.askQuestion?.active && trimmed && !(state.askQuestion.options?.length)) {
+    if (
+      state.askQuestion?.active &&
+      trimmed &&
+      !state.askQuestion.options?.length
+    ) {
       editor.setText("");
       chatTerminal.resolveAskQuestion(trimmed);
       return;
@@ -351,7 +398,10 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       return;
     }
 
-    const imageFiles = pendingImages.map((img) => ({ data: img.data, mimeType: img.mimeType }));
+    const imageFiles = pendingImages.map((img) => ({
+      data: img.data,
+      mimeType: img.mimeType,
+    }));
     pendingImages.length = 0;
     chatTerminal.store.dispatch((prev) => ({
       input: { ...prev.input, history: [...prev.input.history, trimmed] },
@@ -359,13 +409,19 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     editor.addToHistory(trimmed);
     editor.setText("");
     shellMode = false;
-    void chatTerminal.handleSubmitWithContent(trimmed, false, imageFiles.length > 0 ? imageFiles : undefined);
+    void chatTerminal.handleSubmitWithContent(
+      trimmed,
+      false,
+      imageFiles.length > 0 ? imageFiles : undefined,
+    );
   };
 
   // ── TUI components ────────────────────────────────────────────────────────
 
   class MessagesComponent implements Component {
-    invalidate(): void { _cachedWidth = -1; }
+    invalidate(): void {
+      _cachedWidth = -1;
+    }
     render(width: number): string[] {
       return renderMessageLines(chatTerminal.store.getState(), width);
     }
@@ -378,7 +434,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       debugMode = state.debug;
       planMode = state.planMode;
       const result = buildPanel(state, width, {
-        editor, frame, shellMode, debugMode, statusMessage, modelPickerActive,
+        editor,
+        frame,
+        shellMode,
+        debugMode,
+        statusMessage,
+        modelPickerActive,
       });
       return result.lines;
     }
@@ -459,7 +520,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       chatTerminal.store.dispatch((prev) => ({
         messages: [
           ...prev.messages,
-          { role: "system", content: `Image paste skipped: ${message}`, timestamp: Date.now() },
+          {
+            role: "system",
+            content: `Image paste skipped: ${message}`,
+            timestamp: Date.now(),
+          },
         ],
       }));
       tui.requestRender();
@@ -474,9 +539,15 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       if (markerMatch) {
         const marker = markerMatch[0]!;
         const fullText = lines.join("\n");
-        editor.setText(fullText.slice(0, fullText.lastIndexOf(marker)) + fullText.slice(fullText.lastIndexOf(marker) + marker.length));
+        editor.setText(
+          fullText.slice(0, fullText.lastIndexOf(marker)) +
+            fullText.slice(fullText.lastIndexOf(marker) + marker.length),
+        );
         for (let i = pendingImages.length - 1; i >= 0; i--) {
-          if (pendingImages[i]!.marker === marker) { pendingImages.splice(i, 1); break; }
+          if (pendingImages[i]!.marker === marker) {
+            pendingImages.splice(i, 1);
+            break;
+          }
         }
         tui.requestRender();
         return;
@@ -489,7 +560,8 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     }
     const currentText = editor.getText();
     for (let i = pendingImages.length - 1; i >= 0; i--) {
-      if (!currentText.includes(pendingImages[i]!.marker)) pendingImages.splice(i, 1);
+      if (!currentText.includes(pendingImages[i]!.marker))
+        pendingImages.splice(i, 1);
     }
     shellMode = currentText.startsWith("!");
     tui.requestRender();
@@ -537,12 +609,19 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
         const isMultiSelect = aq.selectionMode === "multi_select";
         if (editor.getText().trim() === "") {
           if (matchesKey(data, Key.up)) {
-            chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + options.length - 1) % options.length } });
+            chatTerminal.store.dispatch({
+              askQuestion: {
+                ...aq,
+                selection: (sel + options.length - 1) % options.length,
+              },
+            });
             tui.requestRender();
             return { consume: true };
           }
           if (matchesKey(data, Key.down)) {
-            chatTerminal.store.dispatch({ askQuestion: { ...aq, selection: (sel + 1) % options.length } });
+            chatTerminal.store.dispatch({
+              askQuestion: { ...aq, selection: (sel + 1) % options.length },
+            });
             tui.requestRender();
             return { consume: true };
           }
@@ -556,7 +635,11 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
           }
           if (matchesKey(data, Key.enter)) {
             if (isMultiSelect) {
-              chatTerminal.resolveAskQuestion(aq.selected.map((idx) => options[idx]?.label).filter((label): label is string => Boolean(label)));
+              chatTerminal.resolveAskQuestion(
+                aq.selected
+                  .map((idx) => options[idx]?.label)
+                  .filter((label): label is string => Boolean(label)),
+              );
             } else {
               const selected = options[sel];
               if (selected) chatTerminal.resolveAskQuestion(selected.label);
@@ -587,7 +670,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       if (pr.reviseMode) {
         if (matchesKey(data, Key.escape)) {
           // Cancel revise mode, go back to option selection.
-          chatTerminal.store.dispatch({ planReview: { active: true, selection: 2, reviseMode: false } });
+          chatTerminal.store.dispatch({
+            planReview: { active: true, selection: 2, reviseMode: false },
+          });
           tui.requestRender();
           return { consume: true };
         }
@@ -595,13 +680,17 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
         void handleEditorInput(data);
         return { consume: true };
       }
-      
+
       // Not in revise mode — block all input except navigation keys.
       // This prevents typing when plan review is active but revise mode is not selected.
       if (!pr.reviseMode) {
         // Only allow navigation keys (up, down, enter, escape)
-        if (!matchesKey(data, Key.up) && !matchesKey(data, Key.down) && 
-            !matchesKey(data, Key.enter) && !matchesKey(data, Key.escape)) {
+        if (
+          !matchesKey(data, Key.up) &&
+          !matchesKey(data, Key.down) &&
+          !matchesKey(data, Key.enter) &&
+          !matchesKey(data, Key.escape)
+        ) {
           return { consume: true };
         }
       }
@@ -609,12 +698,22 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       const PLAN_OPTIONS = ["apply", "no", "revise"] as const;
       const sel = pr.selection ?? 0;
       if (matchesKey(data, Key.up)) {
-        chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + PLAN_OPTIONS.length - 1) % PLAN_OPTIONS.length } });
+        chatTerminal.store.dispatch({
+          planReview: {
+            active: true,
+            selection: (sel + PLAN_OPTIONS.length - 1) % PLAN_OPTIONS.length,
+          },
+        });
         tui.requestRender();
         return { consume: true };
       }
       if (matchesKey(data, Key.down)) {
-        chatTerminal.store.dispatch({ planReview: { active: true, selection: (sel + 1) % PLAN_OPTIONS.length } });
+        chatTerminal.store.dispatch({
+          planReview: {
+            active: true,
+            selection: (sel + 1) % PLAN_OPTIONS.length,
+          },
+        });
         tui.requestRender();
         return { consume: true };
       }
@@ -622,7 +721,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
         const chosen = PLAN_OPTIONS[sel] ?? "apply";
         if (chosen === "revise") {
           // Enter revise mode: show input prompt instead of resolving immediately.
-          chatTerminal.store.dispatch({ planReview: { active: true, selection: sel, reviseMode: true } });
+          chatTerminal.store.dispatch({
+            planReview: { active: true, selection: sel, reviseMode: true },
+          });
           tui.requestRender();
           return { consume: true };
         }
@@ -639,8 +740,12 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     // This prevents typing when the user hasn't selected "revise" yet.
     if (state.planReview?.active && !state.planReview.reviseMode) {
       // Only allow navigation keys (up, down, enter, escape)
-      if (matchesKey(data, Key.up) || matchesKey(data, Key.down) || 
-          matchesKey(data, Key.enter) || matchesKey(data, Key.escape)) {
+      if (
+        matchesKey(data, Key.up) ||
+        matchesKey(data, Key.down) ||
+        matchesKey(data, Key.enter) ||
+        matchesKey(data, Key.escape)
+      ) {
         // These are handled above in the plan review section
         return { consume: true };
       }
@@ -658,15 +763,24 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
   function cleanup(): void {
     if (stopped) return;
     stopped = true;
-    if (exitConfirmTimer) { clearTimeout(exitConfirmTimer); exitConfirmTimer = undefined; }
-    if (tick) { clearInterval(tick); tick = undefined; }
+    if (exitConfirmTimer) {
+      clearTimeout(exitConfirmTimer);
+      exitConfirmTimer = undefined;
+    }
+    if (tick) {
+      clearInterval(tick);
+      tick = undefined;
+    }
     unsubscribe?.();
     process.off("SIGINT", handleInterrupt);
     tui.stop();
   }
 
   process.once("exit", cleanup);
-  process.once("SIGTERM", () => { cleanup(); process.exit(0); });
+  process.once("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
   process.on("SIGINT", handleInterrupt);
 
   await initShiki().catch(() => {});
@@ -696,7 +810,10 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
 
   await new Promise<void>((resolve) => {
     const interval = setInterval(() => {
-      if (stopped) { clearInterval(interval); resolve(); }
+      if (stopped) {
+        clearInterval(interval);
+        resolve();
+      }
     }, 50);
   });
 }

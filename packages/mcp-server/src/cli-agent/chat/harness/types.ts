@@ -8,7 +8,7 @@ import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelection
 
 export type ChatUiMode = "tui";
 
-export type AgentPhase = "planning" | "executing" | "reviewing";
+export type AgentPhase = "planning" | "executing";
 export type PlanReviewAction = "apply" | "cancel" | string;
 
 export interface SingleAgentRuntimeInput {
@@ -16,6 +16,8 @@ export interface SingleAgentRuntimeInput {
   model: string;
   /** Real model IDs from the gateway — used to resolve profile aliases like "coder". */
   availableModels?: string[];
+  /** Combo IDs from the gateway — passed through without model resolution. */
+  availableCombos?: string[];
   agentInstructions?: string;
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
@@ -39,9 +41,9 @@ export interface SingleAgentRuntimeInput {
 
 export interface MultiPhaseLoopInput {
   provider: NineRouterProvider;
-  coderModel: string;
-  reviewerModel: string;
+  model: string;
   availableModels?: string[];
+  availableCombos?: string[];
   agentInstructions?: string;
   onStreamReset?: () => void;
   userMessage: ChatMessage;

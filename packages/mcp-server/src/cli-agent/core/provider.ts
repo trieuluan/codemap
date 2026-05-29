@@ -76,7 +76,8 @@ export class NineRouterProvider implements GatewayProvider {
     return (
       body.data?.flatMap((model) => {
         if (!isString(model.id)) return [];
-        return [{ id: model.id, ownedBy: model.owned_by ?? model.ownedBy }];
+        const ownedBy = model.owned_by ?? model.ownedBy;
+        return [{ id: model.id, ownedBy }];
       }) ?? []
     );
   }

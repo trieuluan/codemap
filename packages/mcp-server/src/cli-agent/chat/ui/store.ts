@@ -1,5 +1,6 @@
 import type { EventBus, TaskPhase, UsageStats } from "./event-bus.js";
 import type { TaskItemSnapshot } from "@mastra/core/harness";
+import type { GatewayModel } from "../../types.js";
 
 /** @deprecated Use TaskItemSnapshot from @mastra/core/harness directly */
 export type TaskListItem = TaskItemSnapshot;
@@ -91,6 +92,7 @@ export interface UIState {
   task: {
     phase: TaskPhase;
     model?: string;
+    effort?: "low" | "medium" | "high";
     toolName?: string;
     toolArgs?: string;
     startTime?: number;
@@ -127,7 +129,7 @@ export interface UIState {
   config: {
     model: string;
     debug: boolean;
-    availableModels: string[];
+    availableModels: GatewayModel[];
   };
 
   // Git workspace info — populated async after start
@@ -171,7 +173,7 @@ export interface UIState {
 
 export function createInitialState(opts: {
   model: string;
-  availableModels?: string[];
+  availableModels?: GatewayModel[];
   debug?: boolean;
 }): UIState {
   return {

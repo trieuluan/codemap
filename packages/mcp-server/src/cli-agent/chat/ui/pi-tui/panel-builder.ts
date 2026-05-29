@@ -222,6 +222,9 @@ export function buildPanel(
     const model = displayModel
       ? ` ${C_GRAY}${truncate(displayModel, 28)}${RESET}`
       : "";
+    const effort = state.task.effort
+      ? ` ${C_MUTED}· ${state.task.effort}${RESET}`
+      : "";
     const phaseLabel: Record<string, string> = {
       classifying: "classifying...",
       planning: "planning...",
@@ -248,7 +251,7 @@ export function buildPanel(
         : `${phaseColor}${SPINNER[frame]}${RESET}`;
     out.push(
       fitLine(
-        ` ${marker} ${phaseColor}${label}${RESET}${model}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`,
+        ` ${marker} ${phaseColor}${label}${RESET}${model}${effort}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`,
         w,
       ),
     );
@@ -418,7 +421,7 @@ export function buildPanel(
   }
 
   // Editor + autocomplete.
-  // When the model picker is active, hide the editor and show a navigation hint instead.
+  // When the model picker is active, show a navigation hint above the editor.
   if (modelPickerActive) {
     out.push(
       fitLine(
@@ -426,10 +429,9 @@ export function buildPanel(
         w,
       ),
     );
-  } else {
-    const editorLines = renderEditor(editor, w, shellMode, debugMode);
-    out.push(...editorLines);
   }
+  const editorLines = renderEditor(editor, w, shellMode, debugMode);
+  out.push(...editorLines);
 
   // Status bar.
   out.push(buildStatusBar(state, w, debugMode, statusMessage));

@@ -57,7 +57,7 @@ export const gitPrCommand: Command = {
       let raw = "";
       const vanillaModel =
         ctx.availableModels?.find((m) => m.startsWith("cc/") || m.startsWith("kr/")) ??
-        ctx.reviewerModel;
+        ctx.currentModel;
       for await (const chunk of ctx.provider.stream({
         model: vanillaModel,
         messages: [{

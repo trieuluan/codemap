@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { NineRouterProvider } from "../../core/provider.js";
-import type { TokenUsage } from "../../types.js";
+import type { GatewayModel, TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp-tools/mcp-tool-client.js";
 import { getCachedContext } from "../../core/convention-synthesizer.js";
@@ -172,7 +172,7 @@ interface ChatTerminalOptions {
   provider: NineRouterProvider;
   model: string;
   toolClient: CodeMapMcpToolClient;
-  availableModels?: string[];
+  availableModels?: GatewayModel[];
   apiToken?: string;
   mcpConfig?: import("../../../config.js").McpServerConfig;
   uiMode?: ChatUiMode;
@@ -389,7 +389,7 @@ export class ChatTerminal {
       baseUrl: this.options.provider.baseUrl,
       apiKey: this.options.provider.apiKey,
       modelId: startupModel,
-      availableModels: this.store.getState().config.availableModels,
+      availableModels: this.store.getState().config.availableModels.map(m => m.id),
       onDebug: undefined,
       extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
       mastraTools,
@@ -398,10 +398,9 @@ export class ChatTerminal {
     });
 
     // Synthesize project conventions in background (non-blocking)
-    const plannerModel = this.store.getState().config.model;
     this.store.dispatch({ synthRunning: true });
     this.bus.scheduleRefresh();
-    loadOrSynthesizeAll(this.options.provider, plannerModel)
+    loadOrSynthesizeAll(this.options.provider, this.store.getState().config.model)
       .catch(() => {})
       .finally(() => {
         this.store.dispatch({ synthRunning: false });
@@ -792,12 +791,23 @@ export class ChatTerminal {
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.store.dispatch({
-          task: { ...this.store.getState().task, phase: "thinking" },
+          task: { ...this.store.getState().task, phase: "thinking", effort: classification.effort },
         });
         this.bus.scheduleRefresh();
       }
 
       const useMultiPhase = forceMultiPhase || planMode || classification.phase === "multi";
+
+      // Set effort into task state so the UI can display it.
+      if (useMultiPhase) {
+        this.store.dispatch({
+          task: { ...this.store.getState().task, effort: "high" },
+        });
+      } else {
+        this.store.dispatch({
+          task: { ...this.store.getState().task, effort: classification.effort },
+        });
+      }
 
       // Fetch session-level caches once — reused across all agent calls this turn.
       const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
@@ -808,7 +818,7 @@ export class ChatTerminal {
         getMastraCurrentModelId() ??
         resolveGatewayModel(
           this.store.getState().config.model,
-          this.store.getState().config.availableModels,
+          this.store.getState().config.availableModels.map(m => m.id),
         );
       const agentInstructions = buildCodeMapAgentInstructions(
         sessionResourceCtx,
@@ -825,9 +835,8 @@ export class ChatTerminal {
       const result = useMultiPhase
         ? await runMultiPhaseAgentRuntime({
             provider: this.options.provider,
-            availableModels: this.store.getState().config.availableModels,
-            coderModel: this.store.getState().config.model,
-            reviewerModel: this.store.getState().config.model,
+            availableModels: this.store.getState().config.availableModels.map(m => m.id),
+            model: this.store.getState().config.model,
             agentInstructions,
             userMessage: {
               role: "user",
@@ -840,7 +849,7 @@ export class ChatTerminal {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
               this.store.dispatch({
-                task: { ...this.store.getState().task, phase, model },
+                task: { ...this.store.getState().task, phase, model, effort: "high" },
               });
               this.bus.scheduleRefresh();
             },
@@ -852,7 +861,7 @@ export class ChatTerminal {
         : await runSingleAgentRuntime({
             provider: this.options.provider,
             model: this.store.getState().config.model,
-            availableModels: this.store.getState().config.availableModels,
+            availableModels: this.store.getState().config.availableModels.map(m => m.id),
             agentInstructions,
             userMessage: {
               role: "user",
@@ -966,12 +975,12 @@ export class ChatTerminal {
         });
       } else if (isModelBroken && cs.availableModels.length > 1) {
         const strong = cs.availableModels.filter(
-          (m) => m !== cs.model && isStrongModel(m),
+          (m) => m.id !== cs.model && isStrongModel(m.id),
         );
         const newModel =
-          strong[0] ?? cs.availableModels.find((m) => m !== cs.model) ?? null;
+          strong[0] ?? cs.availableModels.find((m) => m.id !== cs.model) ?? null;
         if (newModel) {
-          this.store.dispatch({ config: { ...cs, model: newModel } });
+          this.store.dispatch({ config: { ...cs, model: newModel.id } });
           this.appendMessage({
             role: "system",
             content: `Model "${cs.model}" failed. Auto-switched to "${newModel}". Resend your message to retry.`,
@@ -1148,10 +1157,7 @@ export class ChatTerminal {
     return {
       currentModel: s.config.model,
       provider: this.options.provider,
-      reviewerModel: s.config.model,
-      coderModel: s.config.model,
-      plannerModel: s.config.model,
-      availableModels: s.config.availableModels,
+      availableModels: s.config.availableModels.map(m => m.id),
       toolClient: this.options.toolClient,
       getMessages: () => this.store.getState().messages as Message[],
       appendMessage: (
@@ -1223,7 +1229,7 @@ export class ChatTerminal {
           baseUrl: this.options.provider.baseUrl,
           apiKey: this.options.provider.apiKey,
           modelId: this.store.getState().config.model,
-          availableModels: this.store.getState().config.availableModels,
+          availableModels: this.store.getState().config.availableModels.map(m => m.id),
           onDebug: undefined,
           extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
         });

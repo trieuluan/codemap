@@ -5,9 +5,6 @@ import type { NineRouterProvider } from "../../core/provider.js";
 export interface CommandContext {
   currentModel: string;
   provider: NineRouterProvider;
-  reviewerModel: string;
-  coderModel: string;
-  plannerModel: string;
   availableModels?: string[];
   toolClient: CodeMapMcpToolClient;
   getMessages: () => ChatEntry[];

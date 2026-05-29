@@ -136,6 +136,7 @@ interface CreateHarnessOptions {
   apiKey: string | undefined;
   modelId: string;
   availableModels?: string[];
+  availableCombos?: string[];
   onDebug?: (info: Record<string, unknown>) => void;
   extraServerConfigs?: Record<
     string,
@@ -334,6 +335,7 @@ async function createFreshHarness(
   const harnessModelId = resolveHarnessModelId(
     opts.modelId,
     opts.availableModels,
+    opts.availableCombos,
   );
   const settingsPath = await createManagedMastraSettings(opts, harnessModelId);
   const globalSettingsPath = await upsertGlobalMastraProvider(
@@ -543,7 +545,7 @@ function applyAgentInstructions(
 async function getOrCreateHarness(
   opts: CreateHarnessOptions,
 ): Promise<HarnessLike> {
-  const wanted = resolveHarnessModelId(opts.modelId, opts.availableModels);
+  const wanted = resolveHarnessModelId(opts.modelId, opts.availableModels, opts.availableCombos);
   if (
     _singleton &&
     _singleton.baseUrl === opts.baseUrl &&
@@ -583,6 +585,7 @@ export async function runWithMastraHarness(
   const resolvedModel = resolveHarnessModelId(
     input.model,
     input.availableModels,
+    input.availableCombos,
   );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
@@ -590,6 +593,7 @@ export async function runWithMastraHarness(
     apiKey: input.provider.apiKey,
     modelId: input.model,
     availableModels: input.availableModels,
+    availableCombos: input.availableCombos,
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
@@ -657,28 +661,24 @@ export async function runMultiPhaseWithMastra(
 ): Promise<AgentLoopResult> {
   _currentEffort = input.effort ?? "high";
   await drainHarness();
-  const resolvedCoderModel = resolveHarnessModelId(
-    input.coderModel,
-    input.availableModels,
-  );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
     baseUrl: input.provider.baseUrl,
     apiKey: input.provider.apiKey,
-    modelId: input.coderModel,
+    modelId: input.model,
     availableModels: input.availableModels,
+    availableCombos: input.availableCombos,
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
   startDrainTracking(harness);
 
   await harness.switchMode?.({ modeId: "plan" });
-  await forceHarnessModel(harness, resolvedCoderModel);
   applyAgentInstructions(harness, input.agentInstructions);
   input.onDebug?.({
     event: "mastra_model_resolved",
-    requested: input.coderModel,
-    resolved: resolvedCoderModel,
+    requested: input.model,
+    resolved: harness.getCurrentModelId?.() ?? input.model,
     availableCount: input.availableModels?.length ?? 0,
   });
 

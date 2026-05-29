@@ -131,7 +131,7 @@ export const gitCommitCommand: Command = {
         ctx.logSubprocess("AI reviewing diff…");
         let reviewResponse = "";
         for await (const chunk of ctx.provider.stream({
-          model: ctx.reviewerModel,
+          model: ctx.currentModel,
           messages: [{ role: "user", content: `${REVIEW_PROMPT}\n\n${diff}` }],
         })) {
           if (chunk.text) reviewResponse += chunk.text;
@@ -162,7 +162,7 @@ export const gitCommitCommand: Command = {
       ctx.logSubprocess("Generating commit message…");
       let commitMsg = "";
       for await (const chunk of ctx.provider.stream({
-        model: ctx.plannerModel,
+        model: ctx.currentModel,
         messages: [{
           role: "user",
           content: `${COMMIT_MSG_PROMPT}\n\nDiff:\n${diff}`,

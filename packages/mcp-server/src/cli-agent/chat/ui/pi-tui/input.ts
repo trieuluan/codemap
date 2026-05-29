@@ -1,36 +1,51 @@
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { searchIndexedFiles } from "../../../core/file-search.js";
+import type { GatewayModel } from "../../../types.js";
 
 /**
  * Dedicated provider for the model picker overlay.
- * Always returns the full model list with prefix "" so the picker shows immediately.
+ * Shows a flat list of all available models.
  * applyCompletion calls onSelect then onClose (scheduled after current tick).
  */
 export class ModelPickerProvider implements AutocompleteProvider {
   constructor(
-    private getModels: () => string[],
+    private getModels: () => GatewayModel[],
     private getCurrentModel: () => string,
     private onSelect: (model: string) => void,
     private onClose: () => void,
   ) {}
 
   async getSuggestions(
-    _lines: string[],
-    _cursorLine: number,
-    _cursorCol: number,
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
     _options: { signal: AbortSignal; force?: boolean },
   ): Promise<AutocompleteSuggestions | null> {
     const current = this.getCurrentModel();
-    const models = this.getModels();
-    if (models.length === 0) return null;
-    return {
-      prefix: "",
-      items: models.map((m) => ({
-        value: m,
-        label: m,
-        description: m === current ? "✓ active" : "",
-      })),
-    };
+    const available = this.getModels();
+
+    if (available.length === 0) return null;
+
+    const query = (lines[cursorLine] ?? "").slice(0, cursorCol).toLowerCase();
+    const filtered = query
+      ? available.filter((m) => m.id.toLowerCase().includes(query))
+      : available;
+
+    // Don't return null for empty filtered results — returning an empty items array
+    // keeps the autocomplete UI alive so it can update when the user edits the query.
+    // Returning null would call cancelAutocomplete(), and the editor only re-triggers
+    // for slash-command or symbol contexts, not for generic providers like the model picker.
+    if (filtered.length === 0) {
+      return { prefix: query, items: [{ value: "", label: "No matches", description: "" }] };
+    }
+
+    const items: AutocompleteItem[] = filtered.map((m) => ({
+      value: m.id,
+      label: m.id,
+      description: m.id === current ? "✓ active" : (m.ownedBy ?? ""),
+    }));
+
+    return { prefix: query, items };
   }
 
   applyCompletion(
@@ -40,6 +55,10 @@ export class ModelPickerProvider implements AutocompleteProvider {
     item: AutocompleteItem,
     _prefix: string,
   ): { lines: string[]; cursorLine: number; cursorCol: number } {
+    // Skip "No matches" placeholder
+    if (!item.value) {
+      return { lines: [...lines], cursorLine, cursorCol: 0 };
+    }
     this.onSelect(item.value);
     // Schedule close after this tick so editor finishes apply before provider swaps back
     setTimeout(() => this.onClose(), 0);

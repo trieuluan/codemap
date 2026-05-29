@@ -1,6 +1,5 @@
 import type { Command } from "./types.js";
 import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../core/convention-synthesizer.js";
-import { resolveGatewayModel } from "../harness/models.js";
 
 export const conventionsCommand: Command = {
   name: "conventions",
@@ -10,15 +9,13 @@ export const conventionsCommand: Command = {
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
     const sub = args.trim().toLowerCase();
-    // Resolve current model against the available list so profile labels or stale IDs
-    // don't silently produce the wrong model for convention synthesis.
-    const plannerModel = resolveGatewayModel(ctx.currentModel, ctx.availableModels);
+    const model = ctx.currentModel;
 
     if (sub === "refresh") {
       ctx.setBusy(true);
       append("Re-synthesizing conventions, rules and skills in parallel…");
       try {
-        const result = await refreshAll(ctx.provider, plannerModel);
+        const result = await refreshAll(ctx.provider, model);
         if (!result) {
           append("No convention/rule/skill files found in workspace.");
         } else {
@@ -43,7 +40,7 @@ export const conventionsCommand: Command = {
 
       if (!hasCache) {
         append("No cache found. Synthesizing now (running 3 streams in parallel)…");
-        const result = await loadOrSynthesizeAll(ctx.provider, plannerModel);
+        const result = await loadOrSynthesizeAll(ctx.provider, model);
         if (!result) {
           append("No convention/rule/skill files found in workspace.");
           ctx.setBusy(false);

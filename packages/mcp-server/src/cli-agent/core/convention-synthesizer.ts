@@ -255,7 +255,7 @@ export interface SynthesisResult {
 
 export async function loadOrSynthesizeAll(
   provider: NineRouterProvider,
-  plannerModel: string,
+  model: string,
   forceRefresh = false,
 ): Promise<SynthesisResult | null> {
   const root = getWorkspaceRoot();
@@ -272,9 +272,9 @@ export async function loadOrSynthesizeAll(
   if (conventionFiles.length === 0 && ruleFiles.length === 0 && skillFiles.length === 0) return null;
 
   const [conventions, rules, skills] = await Promise.all([
-    runPipeline(root, conventionFiles, cp.conventions, CONVENTIONS_PROMPT, provider, plannerModel, maxTokens, forceRefresh),
-    runPipeline(root, ruleFiles, cp.rules, RULES_PROMPT, provider, plannerModel, null, forceRefresh),
-    runPipeline(root, skillFiles, cp.skills, SKILLS_PROMPT, provider, plannerModel, null, forceRefresh),
+    runPipeline(root, conventionFiles, cp.conventions, CONVENTIONS_PROMPT, provider, model, maxTokens, forceRefresh),
+    runPipeline(root, ruleFiles, cp.rules, RULES_PROMPT, provider, model, null, forceRefresh),
+    runPipeline(root, skillFiles, cp.skills, SKILLS_PROMPT, provider, model, null, forceRefresh),
   ]);
 
   const fromCache = !forceRefresh;
@@ -283,9 +283,9 @@ export async function loadOrSynthesizeAll(
 
 export async function refreshAll(
   provider: NineRouterProvider,
-  plannerModel: string,
+  model: string,
 ): Promise<SynthesisResult | null> {
-  return loadOrSynthesizeAll(provider, plannerModel, true);
+  return loadOrSynthesizeAll(provider, model, true);
 }
 
 export async function getCachedContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {

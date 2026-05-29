@@ -2,7 +2,7 @@ import type { GatewayCommandContext } from "../cli-agent/command-context.js";
 import { CodeMapMcpToolClient } from "../cli-agent/chat/mcp-tools/mcp-tool-client.js";
 import type { ChatUiMode } from "../cli-agent/chat/harness/cli-runtime.js";
 import { NineRouterProvider } from "../cli-agent/core/provider.js";
-import type { GatewayConfig } from "../cli-agent/types.js";
+import type { GatewayConfig, GatewayModel } from "../cli-agent/types.js";
 import { printGatewayHint } from "./gateway-hint.js";
 import { loadConfig } from "../config.js";
 import { installStderrInterceptor } from "../cli-agent/chat/ui/stderr-interceptor.js";
@@ -14,7 +14,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
     ctx.config.apiKey,
   );
   const availableModels = await loadGatewayModels(ctx.config, provider);
-  const model = ctx.flags.model ?? ctx.config.defaultModel;
+  const requestedModel = ctx.flags.model ?? ctx.config.defaultModel;
+  const model = requestedModel;
   const uiMode = parseUiMode(ctx.flags.ui);
   const toolClient = new CodeMapMcpToolClient();
 
@@ -38,7 +39,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
 
   try {
     const mcpConfig = await loadConfig();
-    const { ChatTerminal } = await import("../cli-agent/chat/ui/chat-terminal.js");
+    const { ChatTerminal } =
+      await import("../cli-agent/chat/ui/chat-terminal.js");
     const terminal = new ChatTerminal({
       provider,
       model,
@@ -70,9 +72,9 @@ function parseUiMode(value: string | undefined): ChatUiMode | undefined {
 async function loadGatewayModels(
   config: GatewayConfig,
   provider: NineRouterProvider,
-): Promise<string[]> {
+): Promise<GatewayModel[]> {
   try {
-    return await provider.listModels();
+    return await provider.listModelDetails();
   } catch (error) {
     printGatewayHint(config);
     const message = error instanceof Error ? error.message : String(error);
