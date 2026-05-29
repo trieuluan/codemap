@@ -20,7 +20,8 @@ export function registerGetProjectInsightsTool(
       description:
         "Returns a comprehensive analysis of a CodeMap project: top files by " +
         "dependency count, orphan files (no dependents/imports), entry-like files " +
-        "(likely app entry points), circular dependency candidates (cycles), folder " +
+        "(likely app entry points), circular dependency candidates (cycles) with " +
+        "detailed impact analysis and refactoring recommendations, folder " +
         "breakdown, and overall totals. Use this for architecture review, refactoring " +
         "planning, or understanding codebase health. " +
         "project_id is optional if this workspace was linked via create_project.",
@@ -48,9 +49,19 @@ export function registerGetProjectInsightsTool(
             "Sections to include. Omit to return all sections. " +
               "Options: totals, top_by_imports, top_by_inbound, cycles, orphans, entry_points, folders, semantic_clusters.",
           ),
+        max_cycles: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .default(10)
+          .describe(
+            "Maximum number of cycles to display when cycles section is included. Default: 10.",
+          ),
       },
     },
-    withToolError(async ({ project_id, sections }) => {
+    withToolError(async ({ project_id, sections, max_cycles }) => {
       const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
 
       if (!resolvedProjectId) {
@@ -132,15 +143,61 @@ export function registerGetProjectInsightsTool(
       // --- Cycles ---
       if (include("cycles")) {
         const cycles = insights.circularDependencyCandidates;
-        lines.push(`## Circular Dependencies (${cycles.length})`);
-        if (cycles.length === 0) {
+        const totalCycles = cycles.length;
+        const displayCycles = cycles.slice(0, max_cycles);
+
+        lines.push(`## Circular Dependencies (${totalCycles})`);
+        lines.push("");
+
+        if (totalCycles === 0) {
           lines.push("No circular dependencies detected. ✅");
         } else {
-          for (const cycle of cycles) {
-            lines.push(`- [${cycle.kind}] ${cycle.summary}`);
-            lines.push(`  Edges: ${cycle.edgeCount}`);
-            lines.push(`  Files: ${cycle.paths.join(" → ")}`);
+          lines.push(`### Cycles Detected (showing ${displayCycles.length} of ${totalCycles})`);
+          lines.push("");
+
+          for (let i = 0; i < displayCycles.length; i++) {
+            const cycle = displayCycles[i];
+            const cycleFiles = cycle.paths || [];
+
+            lines.push(`#### Cycle ${i + 1}`);
+            lines.push("");
+
+            if (cycleFiles.length > 0) {
+              lines.push("Files in cycle:");
+              lines.push("");
+              for (let j = 0; j < cycleFiles.length; j++) {
+                lines.push(`${j + 1}. \`${cycleFiles[j]}\``);
+              }
+              lines.push("");
+            }
+
+            if (cycle.summary) {
+              lines.push(`Summary: ${cycle.summary}`);
+              lines.push(`Kind: ${cycle.kind} | Edges: ${cycle.edgeCount}`);
+              lines.push("");
+            }
           }
+
+          if (totalCycles > max_cycles) {
+            lines.push(`... and ${totalCycles - max_cycles} more cycles (use max_cycles to see more)`);
+            lines.push("");
+          }
+
+          lines.push("### Impact");
+          lines.push("");
+          lines.push("Circular dependencies can cause:");
+          lines.push("- Build failures or inconsistencies");
+          lines.push("- Infinite loops during module initialization");
+          lines.push("- Increased coupling between modules");
+          lines.push("- Difficulty in testing isolated components");
+          lines.push("");
+          lines.push("### Recommendation");
+          lines.push("");
+          lines.push("To break cycles:");
+          lines.push("1. Extract shared code into a separate module");
+          lines.push("2. Use dependency injection");
+          lines.push("3. Apply interface segregation");
+          lines.push("4. Consider inverting dependencies");
         }
         lines.push("");
       }

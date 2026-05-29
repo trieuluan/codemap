@@ -24,7 +24,6 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   rename_symbol:            "local",
   move_symbols:             "local",
-  find_cycles:              "local",
 
   // ── Auth required, no project needed ─────────────────────────────────────
   check_auth_status:        "auth",

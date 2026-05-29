@@ -139,7 +139,7 @@ export async function runPreEditCommand(args: string[]): Promise<void> {
   }
 
   if (store.hasCycle(filePath)) {
-    lines.push("⚠ CYCLE DETECTED — this file is in an import cycle. Verify with find_cycles after editing.");
+    lines.push("⚠ CYCLE DETECTED — this file is in an import cycle. Verify with get_project_insights (sections=['cycles']) after editing.");
   } else {
     lines.push("Cycle risk: none detected");
   }

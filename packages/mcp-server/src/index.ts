@@ -35,7 +35,6 @@ import { registerSearchCodebaseTool } from "./tools/search-codebase.js";
 import { registerSymbolTool } from "./tools/symbol.js";
 import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
-import { registerFindCyclesTool } from "./tools/find-cycles.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
@@ -106,7 +105,6 @@ async function runMcpServer() {
   if (toolMode === "full") {
     registerMoveSymbolsTool(server, config);
     registerRenameSymbolTool(server, config);
-    registerFindCyclesTool(server, config);
     registerManageGitConnectionTool(server, config);
     registerGetCurrentWorkspaceInfoTool(server);
     registerListGithubRepositoriesTool(server, config);

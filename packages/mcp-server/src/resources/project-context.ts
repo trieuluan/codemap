@@ -62,7 +62,6 @@ const TOOLS_STANDARD_EXTRA = [
 const TOOLS_FULL_EXTRA = [
   "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call reimport after",
-  "- find_cycles — detect circular dependencies with impact analysis and refactoring recommendations",
   "- manage_git_connection — check or initiate GitHub/GitLab OAuth for repository imports",
   "- list_github_repositories — discover GitHub repositories (pass optional query to search)",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
@@ -97,7 +96,7 @@ const WORKFLOW_STANDARD_EXTRA = [
 const WORKFLOW_FULL_EXTRA = [
   "- Use move_symbols to relocate code between files — handles removing from source, appending to dest, and rewriting imports in all callers.",
   "- Use rename_symbol to rename a symbol codebase-wide — call reimport after. For unexported/private symbols pass rename_in_file_only: true.",
-  "- Use find_cycles during architecture review or refactoring planning to identify circular dependency risks.",
+  "- Use get_project_insights with sections=['cycles'] during architecture review or refactoring planning to identify circular dependency risks.",
 ];
 
 const MAINTENANCE_SECTION = [
@@ -108,7 +107,7 @@ const MAINTENANCE_SECTION = [
   "- Dead functions: use symbol or symbol. Empty usage is only a signal; confirm with ripgrep for dynamic string usage before deleting.",
   "- symbol occurrenceRole: 'definition' = declaration; 'call' = direct call; 'reference' = property access or bare identifier. A symbol with only 'reference' occurrences and no 'call' is likely a config/constant, not dead code.",
   "- After cleanup edits, run package builds and diff. Call refresh_local_index to refresh MCP local data; call reimport(wait=true) only when cloud/web data should refresh.",
-  "- Before editing files, use find_cycles to ensure no new circular dependencies are introduced.",
+  "- Before editing files, use get_project_insights with sections=['cycles'] to ensure no new circular dependencies are introduced.",
 ];
 
 // ── Main builder ──────────────────────────────────────────────────────────────
