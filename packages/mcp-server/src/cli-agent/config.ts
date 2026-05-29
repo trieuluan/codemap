@@ -2,13 +2,12 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 
-import type { GatewayConfig, ModelProfile } from "./types.js";
+import type { GatewayConfig } from "./types.js";
 
 export interface FileGatewayConfig {
   baseUrl?: string;
   apiKey?: string;
-  defaultProfile?: string;
-  profiles?: ModelProfile[];
+  defaultModel?: string;
 }
 
 export type GatewayConfigScope = "project" | "global";
@@ -18,6 +17,7 @@ export interface WriteGatewayConfigOptions {
   cwd?: string;
   force?: boolean;
   baseUrl?: string;
+  apiKey?: string;
 }
 
 export const DEFAULT_BASE_URL = "http://localhost:4000/v1";
@@ -35,19 +35,16 @@ export async function loadGatewayConfig(
     DEFAULT_BASE_URL;
   const apiKey =
     process.env.CODEMAP_LLM_GATEWAY_API_KEY ?? fileConfig.value?.apiKey;
-  const profiles = fileConfig.value?.profiles?.length
-    ? fileConfig.value.profiles
-    : buildDefaultProfiles();
-  const defaultProfile =
-    fileConfig.value?.defaultProfile ??
-    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_PROFILE ??
+  const defaultModel =
+    fileConfig.value?.defaultModel ??
+    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
     "coder";
 
   return {
     baseUrl: trimTrailingSlash(baseUrl),
     apiKey,
-    defaultProfile,
-    profiles,
+    defaultModel,
+    models: [],
     configSource:
       fileConfig.source ??
       (hasEnvironmentConfig() ? "environment" : "built-in defaults"),
@@ -62,6 +59,9 @@ export async function writeGatewayConfig(
     options.cwd ?? process.cwd(),
   );
   const config = buildDefaultGatewayFile({ baseUrl: options.baseUrl });
+  if (options.apiKey) {
+    config.apiKey = options.apiKey;
+  }
 
   try {
     await mkdir(path.dirname(configPath), { recursive: true });
@@ -91,64 +91,37 @@ export function getGatewayConfigPath(
   return path.join(homedir(), ".codemap", "llm-gateway.json");
 }
 
+export async function hasConfigOrEnvSetup(): Promise<boolean> {
+  const projectPath = getGatewayConfigPath("project");
+  const globalPath = getGatewayConfigPath("global");
+  
+  try {
+    await access(projectPath);
+    return true;
+  } catch {
+    // Check global config
+  }
+  
+  try {
+    await access(globalPath);
+    return true;
+  } catch {
+    // Check environment
+  }
+  
+  return hasEnvironmentConfig();
+}
+
 export function buildDefaultGatewayFile(
   overrides: Pick<FileGatewayConfig, "baseUrl"> = {},
 ): FileGatewayConfig {
   return {
     baseUrl: trimTrailingSlash(overrides.baseUrl ?? DEFAULT_BASE_URL),
-    defaultProfile: "coder",
-    profiles: buildDefaultProfiles(),
+    defaultModel: "coder",
   };
 }
 
-export function buildDefaultProfiles(): ModelProfile[] {
-  return [
-    {
-      id: "planner",
-      label: "Planner model (task breakdown)",
-      provider: "9router",
-      model:
-        process.env.CODEMAP_LLM_GATEWAY_PLANNER_MODEL ??
-        process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "planner",
-      tier: "planner",
-      local: false,
-    },
-    {
-      id: "coder",
-      label: "Coder model (implementation)",
-      provider: "9router",
-      model:
-        process.env.CODEMAP_LLM_GATEWAY_CODER_MODEL ??
-        process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "coder",
-      tier: "coder",
-      local: false,
-    },
-    {
-      id: "reviewer",
-      label: "Reviewer model (code review & test)",
-      provider: "9router",
-      model:
-        process.env.CODEMAP_LLM_GATEWAY_REVIEWER_MODEL ??
-        process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "reviewer",
-      tier: "reviewer",
-      local: false,
-    },
-    {
-      id: "local",
-      label: "Local private model",
-      provider: "9router",
-      model:
-        process.env.CODEMAP_LLM_GATEWAY_LOCAL_MODEL ??
-        process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-        "local:auto",
-      tier: "local",
-      local: true,
-    },
-  ];
-}
+
 
 async function readFirstJsonConfig(paths: string[]): Promise<{
   source?: string;

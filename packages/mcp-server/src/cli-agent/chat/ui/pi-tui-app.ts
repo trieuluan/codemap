@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { ChatTerminalLike } from "./ui-types.js";
 import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
-import { MentionAutocompleteProvider } from "./pi-tui/input.js";
+import { MentionAutocompleteProvider, ModelPickerProvider } from "./pi-tui/input.js";
 import { getCommandList } from "../slash-commands/index.js";
 import { initShiki } from "./pi-tui/shiki-highlight.js";
 import { imageFromPaste, type PastedImage } from "./pi-tui/image-paste.js";
@@ -277,7 +277,49 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     { value: "/plan", description: "Plan then implement: planner → coder → reviewer" },
     ...getCommandList().map((c) => ({ value: `/${c.name}`, description: c.description })),
   ].sort((a, b) => a.value.localeCompare(b.value));
-  editor.setAutocompleteProvider(new MentionAutocompleteProvider(slashCommands));
+  const defaultAutocompleteProvider = new MentionAutocompleteProvider({ commands: slashCommands });
+  let modelPickerActive = false;
+
+  const switchModel = (model: string) => {
+    const prev = chatTerminal.store.getState();
+    chatTerminal.store.dispatch((s) => ({ config: { ...s.config, model } }));
+    chatTerminal.store.dispatch((s) => ({
+      messages: [
+        ...s.messages,
+        { role: "system" as const, content: `Switched model: ${prev.config.model} → ${model}` },
+      ],
+    }));
+  };
+
+  const closeModelPicker = () => {
+    if (!modelPickerActive) return;
+    modelPickerActive = false;
+    editor.setAutocompleteProvider(defaultAutocompleteProvider);
+    editor.setText("");
+  };
+
+  const openModelPicker = () => {
+    const state = chatTerminal.store.getState();
+    if (state.config.availableModels.length === 0) return;
+    modelPickerActive = true;
+    editor.setText("");
+    editor.setAutocompleteProvider(new ModelPickerProvider(
+      () => chatTerminal.store.getState().config.availableModels,
+      () => chatTerminal.store.getState().config.model,
+      switchModel,
+      closeModelPicker,
+    ));
+    editor.handleInput("\t");
+  };
+
+  editor.setAutocompleteProvider(defaultAutocompleteProvider);
+  editor.onChange = (text) => {
+    // Selecting /models from slash autocomplete via Tab leaves "/models " in input;
+    // immediately replace it with the inline model picker and hide the input text.
+    if (!modelPickerActive && /^\/models?\s$/i.test(text)) {
+      openModelPicker();
+    }
+  };
 
   editor.onSubmit = (value) => {
     const trimmed = value.trim();
@@ -302,6 +344,13 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     }
 
     if (!trimmed || state.input.busy) return;
+
+    // "/models" Enter → open inline model picker and clear/hide the input text.
+    if (/^\/models?$/i.test(trimmed)) {
+      openModelPicker();
+      return;
+    }
+
     const imageFiles = pendingImages.map((img) => ({ data: img.data, mimeType: img.mimeType }));
     pendingImages.length = 0;
     chatTerminal.store.dispatch((prev) => ({
@@ -329,7 +378,7 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
       debugMode = state.debug;
       planMode = state.planMode;
       const result = buildPanel(state, width, {
-        editor, frame, shellMode, debugMode, statusMessage,
+        editor, frame, shellMode, debugMode, statusMessage, modelPickerActive,
       });
       return result.lines;
     }
@@ -435,6 +484,9 @@ export async function startPiTuiApp(chatTerminal: ChatTerminalLike): Promise<voi
     }
 
     editor.handleInput(data);
+    if (modelPickerActive && matchesKey(data, Key.escape)) {
+      closeModelPicker();
+    }
     const currentText = editor.getText();
     for (let i = pendingImages.length - 1; i >= 0; i--) {
       if (!currentText.includes(pendingImages[i]!.marker)) pendingImages.splice(i, 1);

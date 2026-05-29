@@ -1,6 +1,55 @@
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { searchIndexedFiles } from "../../../core/file-search.js";
 
+/**
+ * Dedicated provider for the model picker overlay.
+ * Always returns the full model list with prefix "" so the picker shows immediately.
+ * applyCompletion calls onSelect then onClose (scheduled after current tick).
+ */
+export class ModelPickerProvider implements AutocompleteProvider {
+  constructor(
+    private getModels: () => string[],
+    private getCurrentModel: () => string,
+    private onSelect: (model: string) => void,
+    private onClose: () => void,
+  ) {}
+
+  async getSuggestions(
+    _lines: string[],
+    _cursorLine: number,
+    _cursorCol: number,
+    _options: { signal: AbortSignal; force?: boolean },
+  ): Promise<AutocompleteSuggestions | null> {
+    const current = this.getCurrentModel();
+    const models = this.getModels();
+    if (models.length === 0) return null;
+    return {
+      prefix: "",
+      items: models.map((m) => ({
+        value: m,
+        label: m,
+        description: m === current ? "✓ active" : "",
+      })),
+    };
+  }
+
+  applyCompletion(
+    lines: string[],
+    cursorLine: number,
+    _cursorCol: number,
+    item: AutocompleteItem,
+    _prefix: string,
+  ): { lines: string[]; cursorLine: number; cursorCol: number } {
+    this.onSelect(item.value);
+    // Schedule close after this tick so editor finishes apply before provider swaps back
+    setTimeout(() => this.onClose(), 0);
+    // Clear the input line
+    const newLines = [...lines];
+    newLines[cursorLine] = "";
+    return { lines: newLines, cursorLine, cursorCol: 0 };
+  }
+}
+
 const AT_DELIMITERS = new Set([" ", "\t", '"', "'", "="]);
 
 function extractAtPrefix(textBeforeCursor: string): string | null {
@@ -20,11 +69,19 @@ function extractAtPrefix(textBeforeCursor: string): string | null {
 
 interface SlashEntry { value: string; description: string }
 
+export interface MentionAutocompleteOptions {
+  commands?: SlashEntry[];
+}
+
 export class MentionAutocompleteProvider implements AutocompleteProvider {
   private commands: SlashEntry[];
 
-  constructor(commands: SlashEntry[] = []) {
-    this.commands = commands;
+  constructor(commandsOrOptions: SlashEntry[] | MentionAutocompleteOptions = []) {
+    if (Array.isArray(commandsOrOptions)) {
+      this.commands = commandsOrOptions;
+    } else {
+      this.commands = commandsOrOptions.commands ?? [];
+    }
   }
 
   async getSuggestions(

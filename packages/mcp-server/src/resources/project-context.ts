@@ -63,6 +63,7 @@ const TOOLS_FULL_EXTRA = [
   "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call reimport after",
   "- manage_git_connection — check or initiate GitHub/GitLab OAuth for repository imports",
+  "- list_repositories — list repositories accessible through connected GitHub and/or GitLab accounts; pass optional query to search by name, owner, or URL fragment",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
 ];
 

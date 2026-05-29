@@ -11,12 +11,11 @@ function providerReturning(json: object): NineRouterProvider {
   } as unknown as NineRouterProvider;
 }
 
-test("classifies lookup tasks as single reviewer", async () => {
+test("classifies lookup tasks as single research", async () => {
   const result = await classifyTask(
     "tìm đoạn code render ask_user multi select ở đâu",
     providerReturning({
       phase: "single",
-      tier: "reviewer",
       taskType: "research",
       reason: "lookup task",
     }),
@@ -24,7 +23,6 @@ test("classifies lookup tasks as single reviewer", async () => {
   );
 
   assert.equal(result.phase, "single");
-  assert.equal(result.tier, "reviewer");
   assert.equal(result.taskType, "research");
 });
 
@@ -33,7 +31,6 @@ test("downgrades read-only multi classifications to single", async () => {
     "find where imports are parsed",
     providerReturning({
       phase: "multi",
-      tier: "reviewer",
       taskType: "research",
       reason: "incorrect model output",
     }),
@@ -41,7 +38,6 @@ test("downgrades read-only multi classifications to single", async () => {
   );
 
   assert.equal(result.phase, "single");
-  assert.equal(result.tier, "reviewer");
   assert.equal(result.taskType, "research");
 });
 
@@ -50,7 +46,6 @@ test("keeps large coding tasks as multi", async () => {
     "implement full OAuth2 system across auth/web/api modules",
     providerReturning({
       phase: "multi",
-      tier: "coder",
       taskType: "feature",
       reason: "large feature",
     }),
@@ -58,11 +53,10 @@ test("keeps large coding tasks as multi", async () => {
   );
 
   assert.equal(result.phase, "multi");
-  assert.equal(result.tier, "coder");
   assert.equal(result.taskType, "feature");
 });
 
-test("treats short confirmation replies as coder continuation without model call", async () => {
+test("treats short confirmation replies as continuation without model call", async () => {
   let called = false;
   const provider = {
     async *stream() {
@@ -76,8 +70,8 @@ test("treats short confirmation replies as coder continuation without model call
   assert.equal(called, false);
   assert.deepEqual(result, {
     phase: "single",
-    tier: "coder",
     taskType: "general",
+    effort: "medium",
     reason: "confirmation — continuing coding task",
   });
 });

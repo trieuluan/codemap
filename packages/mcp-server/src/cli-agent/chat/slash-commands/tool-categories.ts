@@ -33,6 +33,7 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   list_projects: "auth",
   link_project: "auth",
   manage_git_connection: "auth",
+  list_repositories: "auth",
 
   // ── Cloud project required ────────────────────────────────────────────────
   create_project: "cloud",

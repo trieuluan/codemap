@@ -136,7 +136,7 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number): st
 }
 
 export function headerLines(state: UIState): string[] {
-  const workspace = state.workspace?.repoName ?? state.config.profile;
+  const workspace = state.workspace?.repoName ?? state.config.model;
   if (state.messages.length > 0) {
     return [
       `${C_ACTION}${BOLD}codemap${RESET} ${C_GRAY}${workspace}${RESET} ${C_MUTED}|${RESET} ${C_WHITE}${truncate(state.config.model, 28)}${RESET} ${C_MUTED}|${RESET} ${C_ACTION}MCP connected${RESET}`,

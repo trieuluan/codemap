@@ -3,7 +3,6 @@ import { clearCommand } from "./clear.js";
 import { exitCommand } from "./exit.js";
 import { statusCommand } from "./status.js";
 import { modelsCommand } from "./models.js";
-import { modelCommand } from "./model.js";
 import { toolsCommand } from "./tools.js";
 import { diffCommand } from "./diff.js";
 import { historyCommand } from "./history.js";
@@ -34,7 +33,6 @@ const commands: Command[] = [
   createCommand,
   importCommand,
   modelsCommand,
-  modelCommand,
   toolsCommand,
   diffCommand,
   gitCommitCommand,

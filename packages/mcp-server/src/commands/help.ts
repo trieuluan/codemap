@@ -11,7 +11,7 @@ Chat:
   codemap chat                Enter interactive chat (explicit)
   codemap ask "<prompt>"      Run a single prompt and exit
   codemap route "<task>"      Show which model profile would handle a task
-  codemap models              List configured profiles and available gateway models
+  codemap models              List default model and available gateway models
   codemap doctor              Diagnose gateway connection and model configuration
   codemap init-gateway        Create gateway config file (--project | --global)
                               --base-url <url>   Override gateway base URL

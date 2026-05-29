@@ -1,14 +1,6 @@
 import type { Command } from "./types.js";
 import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../core/convention-synthesizer.js";
-
-function getPlannerModel(ctx: Parameters<typeof conventionsCommand.execute>[1]): string {
-  const profiles = (ctx as unknown as { profiles?: Array<{ id: string; model: string }> }).profiles;
-  return (
-    profiles?.find((p) => p.id === "planner")?.model ??
-    profiles?.find((p) => p.id === "coder")?.model ??
-    ctx.currentModel
-  );
-}
+import { resolveGatewayModel } from "../harness/models.js";
 
 export const conventionsCommand: Command = {
   name: "conventions",
@@ -18,7 +10,9 @@ export const conventionsCommand: Command = {
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content }]);
 
     const sub = args.trim().toLowerCase();
-    const plannerModel = getPlannerModel(ctx);
+    // Resolve current model against the available list so profile labels or stale IDs
+    // don't silently produce the wrong model for convention synthesis.
+    const plannerModel = resolveGatewayModel(ctx.currentModel, ctx.availableModels);
 
     if (sub === "refresh") {
       ctx.setBusy(true);

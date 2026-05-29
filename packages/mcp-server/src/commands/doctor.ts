@@ -12,7 +12,7 @@ export async function runDoctor(ctx: GatewayCommandContext): Promise<void> {
   console.log(`Base URL: ${config.baseUrl}`);
   console.log(`API key: ${config.apiKey ? "configured" : "not configured"}`);
   console.log(`Provider: ${status} - ${health.message}`);
-  console.log(`Profiles: ${config.profiles.length}`);
+  console.log(`Default model: ${config.defaultModel}`);
   if (config.configSource === "built-in defaults") {
     console.log(`No llm-gateway.json found.`);
     console.log(`Run: codemap init-gateway`);

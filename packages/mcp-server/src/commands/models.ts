@@ -8,11 +8,7 @@ export async function runModels(ctx: GatewayCommandContext): Promise<void> {
 }
 
 export function printModels(config: GatewayConfig): void {
-  console.log("Configured routing profiles:");
-  for (const profile of config.profiles) {
-    const local = profile.local ? "local" : "remote";
-    console.log(`- ${profile.id}: ${profile.model} (${profile.tier}, ${local})`);
-  }
+  console.log(`Default model: ${config.defaultModel}`);
 }
 
 async function printGatewayModels(ctx: GatewayCommandContext): Promise<void> {
@@ -21,7 +17,7 @@ async function printGatewayModels(ctx: GatewayCommandContext): Promise<void> {
   console.log("");
   console.log("Available gateway models:");
   try {
-    const models = (await provider.listModelDetails()).filter((model) => model.ownedBy !== "combo");
+    const models = await provider.listModelDetails();
     if (models.length === 0) {
       console.log("- none returned by gateway");
       return;

@@ -1,41 +1,29 @@
-const FALLBACK_GATEWAY_MODELS: Record<string, string> = {
-  planner: process.env.CODEMAP_LLM_GATEWAY_PLANNER_MODEL ??
-    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-    "cx/gpt-5.3-codex",
-  coder: process.env.CODEMAP_LLM_GATEWAY_CODER_MODEL ??
-    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-    "cx/gpt-5.3-codex",
-  reviewer: process.env.CODEMAP_LLM_GATEWAY_REVIEWER_MODEL ??
-    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-    "cx/gpt-5.3-codex-review",
-};
+const FALLBACK_GATEWAY_MODEL =
+  process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
 
 /**
- * Resolve the model ID to pass to Mastra's switchModel.
- * "coder", "planner", etc. are profile labels; if not in the gateway model list,
- * fall back to the first available real model. If no available models, use as-is.
+ * Resolve the model ID to pass to the gateway.
+ *
+ * Resolution order:
+ * 1. If `modelId` is in the available list → use it as-is.
+ * 2. If `available` is non-empty but `modelId` is not in it → use the first
+ *    available model (covers unknown/stale IDs).
+ * 3. If `available` is empty or undefined AND `modelId` is a non-empty concrete
+ *    ID → honour the caller's intent and return `modelId` directly.
+ * 4. Last resort → return the configured FALLBACK_GATEWAY_MODEL.
+ *
+ * Note: profile labels ('planner', 'coder', 'reviewer') are no longer valid
+ * inputs; callers are responsible for resolving profiles to concrete model IDs
+ * before calling this function.
  */
 export function resolveGatewayModel(modelId: string, available: string[] | undefined): string {
-  const fallback = FALLBACK_GATEWAY_MODELS[modelId];
-  if (!available || available.length === 0) return fallback ?? modelId;
-  if (available.includes(modelId)) return modelId;
-
-  const byPrefix = (...prefixes: string[]) =>
-    available.find((model) => prefixes.some((prefix) => model.startsWith(prefix)));
-  const byIncludes = (...needles: string[]) =>
-    available.find((model) => needles.every((needle) => model.includes(needle)));
-
-  if (modelId === "planner") {
-    return byIncludes("-codex") ?? byPrefix("kr/auto", "cx/", "cc/", "mimo/") ?? available[0]!;
+  if (available && available.length > 0) {
+    if (available.includes(modelId)) return modelId;
+    return available[0]!;
   }
-  if (modelId === "coder") {
-    return byIncludes("-codex") ?? byIncludes("agentic") ?? byPrefix("kr/auto", "cx/", "cc/", "mimo/") ?? available[0]!;
-  }
-  if (modelId === "reviewer") {
-    return byIncludes("review") ?? byIncludes("-codex") ?? byPrefix("cx/", "cc/", "kr/auto", "mimo/") ?? available[0]!;
-  }
-
-  return available[0]!;
+  // No available list — trust the caller's concrete modelId if provided.
+  if (modelId && modelId.trim().length > 0) return modelId;
+  return FALLBACK_GATEWAY_MODEL;
 }
 
 export function resolveHarnessModelId(modelId: string, available: string[] | undefined): string {

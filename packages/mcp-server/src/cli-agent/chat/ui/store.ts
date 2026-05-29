@@ -126,7 +126,6 @@ export interface UIState {
   // Session config
   config: {
     model: string;
-    profile: string;
     debug: boolean;
     availableModels: string[];
   };
@@ -172,7 +171,6 @@ export interface UIState {
 
 export function createInitialState(opts: {
   model: string;
-  profile: string;
   availableModels?: string[];
   debug?: boolean;
 }): UIState {
@@ -203,7 +201,6 @@ export function createInitialState(opts: {
     },
     config: {
       model: opts.model,
-      profile: opts.profile,
       debug: opts.debug ?? false,
       availableModels: opts.availableModels ?? [],
     },

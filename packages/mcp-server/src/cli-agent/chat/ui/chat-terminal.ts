@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { NineRouterProvider } from "../../core/provider.js";
-import type { ModelProfile, TokenUsage } from "../../types.js";
+import type { TokenUsage } from "../../types.js";
 import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp-tools/mcp-tool-client.js";
 import { getCachedContext } from "../../core/convention-synthesizer.js";
@@ -29,7 +29,11 @@ import {
 } from "../../core/task-classifier.js";
 import { executeCommand, getCommandList } from "../slash-commands/index.js";
 import { runShell } from "../slash-commands/shell.js";
-import { isStrongModel } from "../slash-commands/profiles.js";
+function isStrongModel(model: string): boolean {
+  return /\b(strong|opus|sonnet|gpt-5|gpt-4|o3|o4|deepseek-r1|qwen3-coder)\b/i.test(
+    model,
+  );
+}
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../../core/file-search.js";
 import { loadOrSynthesizeAll } from "../../core/convention-synthesizer.js";
@@ -168,10 +172,8 @@ interface ChatTerminalOptions {
   provider: NineRouterProvider;
   model: string;
   toolClient: CodeMapMcpToolClient;
-  profileId: string;
-  profiles?: ModelProfile[];
   availableModels?: string[];
-  apiToken?: string; // from McpServerConfig — used to detect unauthenticated state
+  apiToken?: string;
   mcpConfig?: import("../../../config.js").McpServerConfig;
   uiMode?: ChatUiMode;
 }
@@ -208,7 +210,6 @@ export class ChatTerminal {
     this.store = new Store(
       createInitialState({
         model: options.model,
-        profile: options.profileId,
         availableModels: options.availableModels,
         debug,
       }),
@@ -375,10 +376,7 @@ export class ChatTerminal {
     await this.refreshWorkspaceCommits();
 
     // Pre-initialize Mastra harness in background so the first chat turn has no cold-start delay.
-    const startupProfiles = this.options.profiles ?? [];
-    const startupModel =
-      startupProfiles.find((p) => p.id === "coder")?.model ??
-      this.store.getState().config.model;
+    const startupModel = this.store.getState().config.model;
 
     // Fetch Mastra tool definitions from the already-connected MCPClient so the harness
     // can reuse the same connection instead of spawning a second codemap child process.
@@ -400,11 +398,7 @@ export class ChatTerminal {
     });
 
     // Synthesize project conventions in background (non-blocking)
-    const profiles = this.options.profiles ?? [];
-    const plannerModel =
-      profiles.find((p) => p.id === "planner")?.model ??
-      profiles.find((p) => p.id === "coder")?.model ??
-      this.store.getState().config.model;
+    const plannerModel = this.store.getState().config.model;
     this.store.dispatch({ synthRunning: true });
     this.bus.scheduleRefresh();
     loadOrSynthesizeAll(this.options.provider, plannerModel)
@@ -770,18 +764,9 @@ export class ChatTerminal {
         this.appendMessage({ role: "system", content: `⚠ ${warning}` });
       }
 
-      const profiles = this.options.profiles ?? [];
-      const plannerProfile = profiles.find((p) => p.id === "planner");
-      const coderProfile = profiles.find((p) => p.id === "coder");
-      const reviewerProfile = profiles.find((p) => p.id === "reviewer");
-      const hasAllProfiles = !!(
-        plannerProfile &&
-        coderProfile &&
-        reviewerProfile
-      );
+      const currentModel = this.store.getState().config.model;
       let classification: TaskClassification = {
         phase: "single",
-        tier: "coder",
         taskType: "general",
         reason: "",
         effort: "medium",
@@ -789,12 +774,12 @@ export class ChatTerminal {
 
       const planMode = this.store.getState().planMode;
 
-      if (!forceMultiPhase && !planMode && hasAllProfiles) {
+      if (!forceMultiPhase && !planMode) {
         this.store.dispatch({
           task: {
             ...this.store.getState().task,
             phase: "classifying",
-            model: plannerProfile.model,
+            model: currentModel,
           },
         });
         this.bus.scheduleRefresh();
@@ -802,7 +787,7 @@ export class ChatTerminal {
         classification = await classifyTask(
           text,
           this.options.provider,
-          coderProfile.model, // coder has better instruction following for JSON classification
+          currentModel,
           taskAbort.signal,
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -812,16 +797,7 @@ export class ChatTerminal {
         this.bus.scheduleRefresh();
       }
 
-      const useMultiPhase =
-        forceMultiPhase ||
-        planMode ||
-        (hasAllProfiles && classification.phase === "multi");
-      const singlePhaseModel =
-        (() => {
-          if (classification.tier === "planner") return plannerProfile?.model;
-          if (classification.tier === "reviewer") return reviewerProfile?.model;
-          return coderProfile?.model;
-        })() ?? this.store.getState().config.model;
+      const useMultiPhase = forceMultiPhase || planMode || classification.phase === "multi";
 
       // Fetch session-level caches once — reused across all agent calls this turn.
       const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
@@ -831,7 +807,7 @@ export class ChatTerminal {
       const resolvedAgentModel =
         getMastraCurrentModelId() ??
         resolveGatewayModel(
-          useMultiPhase ? coderProfile!.model : singlePhaseModel,
+          this.store.getState().config.model,
           this.store.getState().config.availableModels,
         );
       const agentInstructions = buildCodeMapAgentInstructions(
@@ -850,8 +826,8 @@ export class ChatTerminal {
         ? await runMultiPhaseAgentRuntime({
             provider: this.options.provider,
             availableModels: this.store.getState().config.availableModels,
-            coderModel: coderProfile!.model,
-            reviewerModel: reviewerProfile!.model,
+            coderModel: this.store.getState().config.model,
+            reviewerModel: this.store.getState().config.model,
             agentInstructions,
             userMessage: {
               role: "user",
@@ -875,7 +851,7 @@ export class ChatTerminal {
           })
         : await runSingleAgentRuntime({
             provider: this.options.provider,
-            model: singlePhaseModel,
+            model: this.store.getState().config.model,
             availableModels: this.store.getState().config.availableModels,
             agentInstructions,
             userMessage: {
@@ -1169,21 +1145,12 @@ export class ChatTerminal {
 
   private buildCommandContext() {
     const s = this.store.getState();
-    const profiles = this.options.profiles ?? [];
-    const reviewerModel =
-      profiles.find((p) => p.id === "reviewer")?.model ??
-      profiles.find((p) => p.id === "coder")?.model ??
-      s.config.model;
-    const coderModel =
-      profiles.find((p) => p.id === "coder")?.model ?? s.config.model;
-    const plannerModel =
-      profiles.find((p) => p.id === "planner")?.model ?? s.config.model;
     return {
       currentModel: s.config.model,
       provider: this.options.provider,
-      reviewerModel,
-      coderModel,
-      plannerModel,
+      reviewerModel: s.config.model,
+      coderModel: s.config.model,
+      plannerModel: s.config.model,
       availableModels: s.config.availableModels,
       toolClient: this.options.toolClient,
       getMessages: () => this.store.getState().messages as Message[],
@@ -1255,13 +1222,7 @@ export class ChatTerminal {
           toolClient: this.options.toolClient,
           baseUrl: this.options.provider.baseUrl,
           apiKey: this.options.provider.apiKey,
-          modelId: (() => {
-            const p = this.options.profiles ?? [];
-            return (
-              p.find((pr) => pr.id === "coder")?.model ??
-              this.store.getState().config.model
-            );
-          })(),
+          modelId: this.store.getState().config.model,
           availableModels: this.store.getState().config.availableModels,
           onDebug: undefined,
           extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),

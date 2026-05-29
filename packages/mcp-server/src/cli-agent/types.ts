@@ -1,8 +1,6 @@
 import type { TokenUsage } from "@mastra/core/harness";
 export type { TokenUsage };
 
-export type ModelTier = "planner" | "coder" | "reviewer" | "local";
-
 export type TaskType =
   | "feature"
   | "bugfix"
@@ -15,20 +13,11 @@ export type TaskType =
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export interface ModelProfile {
-  id: string;
-  label: string;
-  provider: "9router";
-  model: string;
-  tier: ModelTier;
-  local: boolean;
-}
-
 export interface GatewayConfig {
   baseUrl: string;
   apiKey?: string;
-  defaultProfile: string;
-  profiles: ModelProfile[];
+  defaultModel: string;
+  models: string[];
   configSource: string;
 }
 
@@ -124,7 +113,6 @@ export interface RouteRequest {
 export interface RouteRecommendation {
   taskType: TaskType;
   risk: RiskLevel;
-  profile: ModelProfile;
-  fallbackProfile?: ModelProfile;
+  model: string;
   reasons: string[];
 }

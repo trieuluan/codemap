@@ -49,6 +49,8 @@ export interface PanelContext {
   shellMode: boolean;
   debugMode: boolean;
   statusMessage?: string;
+  /** When true, the model picker autocomplete is open — hide the editor, show a hint instead. */
+  modelPickerActive?: boolean;
 }
 
 export interface PanelResult {
@@ -61,7 +63,7 @@ export function buildStatusBar(
   debugMode: boolean,
   statusMessage = "",
 ): string {
-  const workspace = state.workspace?.repoName ?? state.config.profile;
+  const workspace = state.workspace?.repoName ?? state.config.model;
   const branch = state.workspace?.branch ? `/${state.workspace.branch}` : "";
 
   const gatewayTag = isGatewayOffline()
@@ -141,7 +143,7 @@ export function buildPanel(
   w: number,
   ctx: PanelContext,
 ): PanelResult {
-  const { editor, frame, shellMode, debugMode, statusMessage } = ctx;
+  const { editor, frame, shellMode, debugMode, statusMessage, modelPickerActive } = ctx;
 
   const out: string[] = [];
   const sep = `${DIM}${C_MUTED}${"─".repeat(Math.min(w - 4, 40))}${RESET}`;
@@ -416,8 +418,18 @@ export function buildPanel(
   }
 
   // Editor + autocomplete.
-  const editorLines = renderEditor(editor, w, shellMode, debugMode);
-  out.push(...editorLines);
+  // When the model picker is active, hide the editor and show a navigation hint instead.
+  if (modelPickerActive) {
+    out.push(
+      fitLine(
+        `  ${C_ACTION}↑↓${RESET} ${C_GRAY}navigate  ${RESET}${C_ACTION}Enter${RESET}${C_GRAY}/${RESET}${C_ACTION}Tab${RESET} ${C_GRAY}select model  ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}cancel${RESET}`,
+        w,
+      ),
+    );
+  } else {
+    const editorLines = renderEditor(editor, w, shellMode, debugMode);
+    out.push(...editorLines);
+  }
 
   // Status bar.
   out.push(buildStatusBar(state, w, debugMode, statusMessage));

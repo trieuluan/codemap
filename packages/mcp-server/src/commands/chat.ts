@@ -1,6 +1,5 @@
 import type { GatewayCommandContext } from "../cli-agent/command-context.js";
 import { CodeMapMcpToolClient } from "../cli-agent/chat/mcp-tools/mcp-tool-client.js";
-import { selectChatProfile } from "../cli-agent/chat/slash-commands/profiles.js";
 import type { ChatUiMode } from "../cli-agent/chat/harness/cli-runtime.js";
 import { NineRouterProvider } from "../cli-agent/core/provider.js";
 import type { GatewayConfig } from "../cli-agent/types.js";
@@ -15,7 +14,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
     ctx.config.apiKey,
   );
   const availableModels = await loadGatewayModels(ctx.config, provider);
-  const profile = selectChatProfile(ctx.config, ctx.flags.model);
+  const model = ctx.flags.model ?? ctx.config.defaultModel;
   const uiMode = parseUiMode(ctx.flags.ui);
   const toolClient = new CodeMapMcpToolClient();
 
@@ -25,8 +24,6 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
 
   // Intercept process.exit so MCP child processes are always cleaned up before
   // the process terminates — covers Ctrl+C (pre-TUI), /exit command, and SIGTERM.
-  // Without this, stdio MCP server children spawned by McpServerConnection and
-  // mastracode's MCPClient become orphans and accumulate across sessions.
   const originalProcessExit = process.exit.bind(process) as typeof process.exit;
   let childCleanupDone = false;
   const cleanupChildren = async () => {
@@ -44,10 +41,8 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
     const { ChatTerminal } = await import("../cli-agent/chat/ui/chat-terminal.js");
     const terminal = new ChatTerminal({
       provider,
-      model: profile.model,
+      model,
       toolClient,
-      profileId: profile.id,
-      profiles: ctx.config.profiles,
       availableModels,
       apiToken: mcpConfig.apiToken ?? undefined,
       mcpConfig,
@@ -82,7 +77,7 @@ async function loadGatewayModels(
     printGatewayHint(config);
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Gateway model list unavailable: ${message}`);
-    console.error("Using configured model profiles instead.");
+    console.error("Using configured default model instead.");
     return [];
   }
 }

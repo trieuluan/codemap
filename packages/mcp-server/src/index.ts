@@ -56,7 +56,7 @@ import { buildSessionContext } from "./lib/session-context.js";
 import { autoInjectRules } from "./lib/auto-inject.js";
 import { parseArgs } from "./cli-agent/args.js";
 import { createBaseContext } from "./cli-agent/command-context.js";
-import { loadGatewayConfig } from "./cli-agent/config.js";
+import { loadGatewayConfig, hasConfigOrEnvSetup } from "./cli-agent/config.js";
 import { loadDotEnv } from "./cli-agent/env.js";
 import { runAsk } from "./commands/ask.js";
 import { runChat } from "./commands/chat.js";
@@ -65,6 +65,7 @@ import { runHelp } from "./commands/help.js";
 import { runInitGateway } from "./commands/init-gateway.js";
 import { runModels } from "./commands/models.js";
 import { runRouteCommand } from "./commands/route.js";
+import { runInteractiveSetup } from "./commands/interactive-setup.js";
 
 async function runMcpServer() {
   const config = await loadConfig();
@@ -155,7 +156,7 @@ async function main() {
     return;
   }
 
-  // Gateway commands: need LLM gateway config (profiles, model routing)
+  // Gateway commands: need LLM gateway config (model routing)
   const GATEWAY_COMMANDS = new Set(["chat", "ask", "route", "models", "doctor", "init-gateway", "help"]);
   if (!command || GATEWAY_COMMANDS.has(command)) {
     const parsed = parseArgs(argv);
@@ -168,6 +169,13 @@ async function main() {
     if (parsed.command === "init-gateway") {
       await runInitGateway(baseCtx);
       return;
+    }
+
+    // If no command specified (user just runs `codemap`) and no config exists, run interactive setup
+    if (!command && !(await hasConfigOrEnvSetup())) {
+      await runInteractiveSetup();
+      // After setup, continue with chat
+      parsed.command = "chat";
     }
 
     const config = await loadGatewayConfig();
