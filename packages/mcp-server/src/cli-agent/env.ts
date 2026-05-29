@@ -1,11 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const packageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../..",
-);
+import { getPackageRoot } from "../lib/bundled-runtime.js";
+
+const packageRoot = getPackageRoot(import.meta.url);
 
 export async function loadDotEnv(cwd = process.cwd()): Promise<string[]> {
   const candidates = uniquePaths([

@@ -134,7 +134,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       mcpServers: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -147,7 +147,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       servers: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -155,14 +155,14 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
     2,
   );
 
-  const claudeCodeConfig = `claude mcp add codemap -- npx -y @codemap/mcp-server@latest`;
+  const claudeCodeConfig = `claude mcp add codemap -- npx -y @codemap/cli@latest`;
 
   const cursorConfig = JSON.stringify(
     {
       mcpServers: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -175,7 +175,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       mcpServers: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -188,7 +188,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       mcpServers: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -201,7 +201,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
       mcp: {
         codemap: {
           command: "npx",
-          args: ["-y", "@codemap/mcp-server@latest"],
+          args: ["-y", "@codemap/cli@latest"],
         },
       },
     },
@@ -211,7 +211,7 @@ export function McpSetupView({ apiBaseUrl }: { apiBaseUrl: string }) {
 
   const codexConfig = `[mcp_servers.codemap]
 command = "npx"
-args = ["-y", "@codemap/mcp-server@latest"]`;
+args = ["-y", "@codemap/cli@latest"]`;
 
   return (
     <div className="space-y-8">
@@ -384,7 +384,7 @@ args = ["-y", "@codemap/mcp-server@latest"]`;
           <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
             <Terminal className="size-3.5 shrink-0 mt-0.5" />
             <span>
-              The MCP server runs via <code className="font-mono">npx @codemap/mcp-server@latest</code> — no global install required. Node.js 18+ needed.
+              The MCP server runs via <code className="font-mono">npx @codemap/cli@latest</code> — no global install required. Node.js 18+ needed.
             </span>
           </div>
         </Step>

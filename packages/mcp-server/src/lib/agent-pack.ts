@@ -1,6 +1,7 @@
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+
+import { getPackageRoot } from "./bundled-runtime.js";
 
 export const AGENT_PACK_INDEX_URI = "codemap://agent-pack/index";
 export const AGENT_PACK_INSTALL_URI = "codemap://agent-pack/install";
@@ -56,13 +57,11 @@ export function skillResourceUri(skillName: AgentPackSkillName) {
 }
 
 export function getAgentPackRoot() {
-  const currentFile = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(currentFile), "../../agent-pack");
+  return path.join(getPackageRoot(import.meta.url), "agent-pack");
 }
 
 export function getPluginRoot() {
-  const currentFile = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(currentFile), "../..");
+  return getPackageRoot(import.meta.url);
 }
 
 export async function readAgentPackFile(relativePath: string) {

@@ -1,6 +1,6 @@
 # Installing CodeMap Agent Pack
 
-The Agent Pack is bundled with `@codemap/mcp-server`.
+The Agent Pack is bundled with `@codemap/cli`.
 
 Use:
 
