@@ -8,7 +8,7 @@ const MCP_JSON_SNIPPET = (key: string) =>
     `    "${key}": {`,
     `      "codemap-mcp": {`,
     `        "command": "npx",`,
-    `        "args": ["-y", "@codemap/cli"]`,
+    `        "args": ["-y", "@codemap-ai/cli"]`,
     `      }`,
     `    }`,
     `  }`,
@@ -53,7 +53,7 @@ function guide(title: string, step1Lines: string[]): string {
 const GUIDES: Record<OnboardingTarget, string> = {
   claude: guide("Claude Code", [
     "1. Add MCP server",
-    "   $ claude mcp add codemap-mcp -- npx -y @codemap/cli",
+    "   $ claude mcp add codemap-mcp -- npx -y @codemap-ai/cli",
   ]),
 
   cursor: guide("Cursor", [
@@ -66,7 +66,7 @@ const GUIDES: Record<OnboardingTarget, string> = {
     "1. Add MCP server — add to ~/.codex/config.toml:",
     "  [mcp_servers.codemap]",
     "  command = \"npx\"",
-    "  args = [\"-y\", \"@codemap/cli\"]",
+    "  args = [\"-y\", \"@codemap-ai/cli\"]",
   ]),
 
   gemini: guide("Gemini CLI", [
@@ -81,7 +81,7 @@ const GUIDES: Record<OnboardingTarget, string> = {
       "    \"mcp\": {",
       "      \"codemap-mcp\": {",
       "        \"command\": \"npx\",",
-      "        \"args\": [\"-y\", \"@codemap/cli\"],",
+      "        \"args\": [\"-y\", \"@codemap-ai/cli\"],",
       "        \"enabled\": true",
       "      }",
       "    }",

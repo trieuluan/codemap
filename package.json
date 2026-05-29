@@ -22,10 +22,10 @@
     "dev:web": "npm --workspace=@codemap/web run dev",
     "build:web": "npm run build:shared && npm --workspace=@codemap/web run build",
     "preview:web": "npm --workspace=@codemap/web run start",
-    "dev:mcp": "npm --workspace=@codemap/cli run dev",
-    "build:mcp": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/cli run build",
-    "start:mcp": "npm --workspace=@codemap/cli run start",
-    "version:patch": "npm version patch && npm version patch -w @codemap/cli -w @codemap/api -w @codemap/web -w @codemap/shared"
+    "dev:mcp": "npm --workspace=@codemap-ai/cli run dev",
+    "build:mcp": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap-ai/cli run build",
+    "start:mcp": "npm --workspace=@codemap-ai/cli run start",
+    "version:patch": "npm version patch && npm version patch -w @codemap-ai/cli -w @codemap/api -w @codemap/web -w @codemap/shared"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

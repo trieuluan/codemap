@@ -1,5 +1,5 @@
 {
-  "name": "@codemap/cli",
+  "name": "@codemap-ai/cli",
   "version": "0.1.0",
   "type": "module",
   "description": "CodeMap — AI-powered code intelligence and coding agent CLI",
