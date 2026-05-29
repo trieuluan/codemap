@@ -164,6 +164,19 @@ async function install9Router(): Promise<void> {
   execSync("npm install -g 9router", { stdio: "inherit" });
 }
 
+async function is9RouterRunning(): Promise<boolean> {
+  try {
+    await fetch(`http://localhost:${NINE_ROUTER_LOCAL_PORT}/v1/models`, {
+      method: "GET",
+      signal: AbortSignal.timeout(2000),
+    });
+    // Any response (even 401/403) means the server is running
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function start9Router(): void {
   console.log("   Starting 9router in the background...");
   const child = spawn("9router", ["--port", String(NINE_ROUTER_LOCAL_PORT)], {
@@ -264,8 +277,12 @@ You can use OpenAI, OpenRouter, a local model, or 9router — whichever you pref
     }
 
     if (is9RouterInstalled()) {
-      start9Router();
-      console.log(`   9router is running at http://localhost:${NINE_ROUTER_LOCAL_PORT}`);
+      if (await is9RouterRunning()) {
+        console.log(`   9router is already running at http://localhost:${NINE_ROUTER_LOCAL_PORT}`);
+      } else {
+        start9Router();
+        console.log(`   9router started at http://localhost:${NINE_ROUTER_LOCAL_PORT}`);
+      }
     }
 
     baseUrl = NINE_ROUTER_LOCAL_BASE_URL;
