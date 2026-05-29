@@ -1,32 +1,47 @@
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
 
+const KNOWN_PROFILE_LABELS = new Set(["planner", "coder", "reviewer"]);
+
 /**
  * Resolve the model ID to pass to the gateway.
  *
  * Resolution order:
  * 1. If `modelId` matches a combo ID → pass through (gateway handles routing).
  * 2. If `modelId` is in the available models list → use it as-is.
- * 3. If `available` is non-empty but `modelId` is not in it → use the first
+ * 3. If `availableModels` is non-empty but `modelId` is not in it → use the first
  *    available model. A warning is emitted so silent regressions are observable.
- * 4. If `available` is empty/undefined and `modelId` is non-empty → trust the
+ * 4. If `availableModels` is empty/undefined and `modelId` is non-empty → trust the
  *    caller's concrete ID directly.
  * 5. Last resort → return the configured FALLBACK_GATEWAY_MODEL with a warning.
+ *
+ * Callers should resolve profile labels ('planner', 'coder', 'reviewer') to a
+ * concrete model ID or combo ID before calling this function. If a profile label
+ * is passed and not found in availableCombos or availableModels, a warning is
+ * emitted so the violation is observable in logs.
  */
 export function resolveGatewayModel(
   modelId: string,
-  available: string[] | undefined,
+  availableModels: string[] | undefined,
   availableCombos?: string[],
 ): string {
   // Combo IDs pass through directly — the gateway handles combo routing.
   if (availableCombos?.includes(modelId)) return modelId;
 
-  if (available && available.length > 0) {
-    if (available.includes(modelId)) return modelId;
-    const fallback = available[0]!;
+  // Warn if a known profile label reaches this point without being resolved.
+  if (KNOWN_PROFILE_LABELS.has(modelId)) {
+    console.warn(
+      `[resolveGatewayModel] Received profile label "${modelId}" — callers should resolve ` +
+        `profiles to a concrete model ID or combo ID before calling this function.`,
+    );
+  }
+
+  if (availableModels && availableModels.length > 0) {
+    if (availableModels.includes(modelId)) return modelId;
+    const fallback = availableModels[0]!;
     console.warn(
       `[resolveGatewayModel] Model "${modelId}" not found in available list; ` +
-        `using "${fallback}" instead. Available: ${available.join(", ")}`,
+        `using "${fallback}" instead. Available: ${availableModels.join(", ")}`,
     );
     return fallback;
   }
@@ -44,10 +59,10 @@ export function resolveGatewayModel(
 
 export function resolveHarnessModelId(
   modelId: string,
-  available: string[] | undefined,
+  availableModels: string[] | undefined,
   availableCombos?: string[],
 ): string {
-  const resolved = resolveGatewayModel(modelId, available, availableCombos);
+  const resolved = resolveGatewayModel(modelId, availableModels, availableCombos);
   return resolved.startsWith("9router/") ? resolved : `9router/${resolved}`;
 }
 

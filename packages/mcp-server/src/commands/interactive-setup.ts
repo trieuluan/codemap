@@ -1,8 +1,12 @@
+import { execSync, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import {
   writeGatewayConfig,
   DEFAULT_BASE_URL,
 } from "../cli-agent/config.js";
+
+const NINE_ROUTER_LOCAL_PORT = 20128;
+const NINE_ROUTER_LOCAL_BASE_URL = `http://localhost:${NINE_ROUTER_LOCAL_PORT}/v1`;
 
 function prompt(question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
@@ -16,6 +20,45 @@ function prompt(question: string, defaultValue?: string): Promise<string> {
       resolve(answer || defaultValue || "");
     });
   });
+}
+
+function confirm(question: string, defaultValue = true): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const hint = defaultValue ? "(Y/n)" : "(y/N)";
+    rl.question(`${question} ${hint} `, (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      if (normalized === "") resolve(defaultValue);
+      else resolve(normalized === "y" || normalized === "yes");
+    });
+  });
+}
+
+function is9RouterInstalled(): boolean {
+  try {
+    execSync("which 9router", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function install9Router(): Promise<void> {
+  console.log("   Installing 9router globally...");
+  execSync("npm install -g 9router", { stdio: "inherit" });
+}
+
+function start9Router(): void {
+  console.log("   Starting 9router in the background...");
+  const child = spawn("9router", ["--port", String(NINE_ROUTER_LOCAL_PORT)], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
 }
 
 export async function runInteractiveSetup(): Promise<void> {
@@ -33,63 +76,82 @@ CodeMap needs a LLM gateway to power its AI features.
 The gateway is a proxy that routes your requests to LLM providers.
 It manages model routing, load balancing, and token accounting.
 
-• 9router (default): The managed gateway at 9router.dev
-  - Pre-configured model routing (planner, coder, reviewer)
-  - Usage-based billing, no per-model API keys needed
-  - Get your API key at: https://9router.dev/settings/api-keys
-
-• Self-hosted: Run your own gateway with OpenAI-compatible API
-  - Set baseUrl to your gateway URL (e.g., http://localhost:4000/v1)
-  - Useful for local models or custom routing logic
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 Default Model
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-CodeMap uses a single model for all tasks. The gateway handles
-routing automatically based on the model ID.
-
-Default model: coder (resolved by your gateway)
-
-To use a specific model, override in llm-gateway.json:
-  "defaultModel": "gpt-4o", "claude-sonnet-4-5", etc.
-
-Or via env var:
-  CODEMAP_LLM_GATEWAY_DEFAULT_MODEL=gpt-4o
-
-You only need to set:
-  1. Gateway URL (where to send requests)
-  2. API Key (for authentication, if required)
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `);
 
-  // Prompt 1: Base URL
-  console.log("━━━ Gateway Base URL ━━━");
-  console.log("The URL of your LLM gateway endpoint.");
-  console.log("For 9router: https://9router.dev/v1");
-  console.log("For local:   http://localhost:4000/v1");
+  console.log("━━━ Gateway Type ━━━");
   console.log("");
-  let baseUrl = await prompt("Gateway base URL", DEFAULT_BASE_URL);
-  while (baseUrl) {
-    try {
-      new URL(baseUrl);
-      break;
-    } catch {
-      console.log("❌ Invalid URL. Please try again.");
-      baseUrl = await prompt("Gateway base URL", DEFAULT_BASE_URL);
+  console.log("  1. 9router local (default)  — install and run locally");
+  console.log("     • Free, runs on your machine");
+  console.log("     • Pre-configured model routing (planner, coder, reviewer)");
+  console.log("     • No per-model API keys needed");
+  console.log("");
+  console.log("  2. 9router Cloud             — managed gateway at 9router.dev");
+  console.log("     • Usage-based billing");
+  console.log("     • Get your API key at: https://9router.dev/settings/api-keys");
+  console.log("");
+  console.log("  3. Self-hosted               — run your own gateway");
+  console.log("     • Set baseUrl to your gateway URL");
+  console.log("     • Useful for local models or custom routing logic");
+  console.log("");
+
+  const gatewayChoice = await prompt("Choose gateway type", "1");
+  const choice = gatewayChoice.trim();
+
+  let baseUrl: string;
+  let nineRouterDashUrl: string | undefined;
+
+  if (choice === "2") {
+    // 9router Cloud
+    baseUrl = "https://9router.dev/v1";
+    nineRouterDashUrl = "https://9router.dev/settings/api-keys";
+  } else if (choice === "3") {
+    // Self-hosted
+    console.log("");
+    console.log("━━━ Self-hosted Gateway URL ━━━");
+    console.log("Enter the base URL of your gateway (e.g. http://localhost:4000/v1)");
+    console.log("");
+    baseUrl = await prompt("Gateway base URL", DEFAULT_BASE_URL);
+    while (baseUrl) {
+      try {
+        new URL(baseUrl);
+        break;
+      } catch {
+        console.log("❌ Invalid URL. Please try again.");
+        baseUrl = await prompt("Gateway base URL", DEFAULT_BASE_URL);
+      }
     }
+  } else {
+    // 9router local (default)
+    console.log("");
+    if (!is9RouterInstalled()) {
+      console.log("9router is not installed yet.");
+      const doInstall = await confirm("Install 9router globally via npm?", true);
+      if (doInstall) {
+        await install9Router();
+      } else {
+        console.log("⚠️  Skipping 9router install. You'll need to install it manually: npm install -g 9router");
+      }
+    }
+
+    if (is9RouterInstalled()) {
+      start9Router();
+      console.log(`   9router is running at http://localhost:${NINE_ROUTER_LOCAL_PORT}`);
+    }
+
+    baseUrl = NINE_ROUTER_LOCAL_BASE_URL;
+    nineRouterDashUrl = `http://localhost:${NINE_ROUTER_LOCAL_PORT}/dashboard/endpoint`;
   }
 
   console.log("");
 
-  // Prompt 2: API Key
+  // Prompt: API Key
   console.log("━━━ API Key ━━━");
-  console.log("Your gateway API key for authentication.");
-  console.log("• For 9router: get key from https://9router.dev/settings/api-keys");
-  console.log("• For local/self-hosted: may be optional");
-  console.log("• Leave empty if your gateway doesn't require auth");
+  if (nineRouterDashUrl) {
+    console.log(`Get your API key from: ${nineRouterDashUrl}`);
+  }
+  console.log("Leave empty if your gateway doesn't require auth.");
   console.log("");
   const apiKey = await prompt(
     "API key (press Enter to skip)",
