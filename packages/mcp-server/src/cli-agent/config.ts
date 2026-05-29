@@ -18,6 +18,7 @@ export interface WriteGatewayConfigOptions {
   force?: boolean;
   baseUrl?: string;
   apiKey?: string;
+  defaultModel?: string;
 }
 
 export const DEFAULT_BASE_URL = "http://localhost:4000/v1";
@@ -61,6 +62,9 @@ export async function writeGatewayConfig(
   const config = buildDefaultGatewayFile({ baseUrl: options.baseUrl });
   if (options.apiKey) {
     config.apiKey = options.apiKey;
+  }
+  if (options.defaultModel) {
+    config.defaultModel = options.defaultModel;
   }
 
   try {

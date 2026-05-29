@@ -109,6 +109,47 @@ function confirm(question: string, defaultValue = true): Promise<boolean> {
   });
 }
 
+interface ModelInfo {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
+interface ModelsResponse {
+  data: ModelInfo[];
+  object: string;
+}
+
+async function fetchModels(baseUrl: string, apiKey?: string): Promise<ModelInfo[]> {
+  const url = `${baseUrl}/models`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      console.log(`⚠️  Failed to fetch models: HTTP ${response.status}`);
+      return [];
+    }
+
+    const data = (await response.json()) as ModelsResponse;
+    return data.data || [];
+  } catch (error) {
+    console.log("⚠️  Could not connect to API to fetch models.");
+    return [];
+  }
+}
+
 function is9RouterInstalled(): boolean {
   try {
     execSync("which 9router", { stdio: "ignore" });
@@ -251,6 +292,63 @@ You can use OpenAI, OpenRouter, a local model, or 9router — whichever you pref
 
   console.log("");
 
+  // Prompt: Default Model
+  console.log("━━━ Default Model ━━━");
+  console.log("Fetching available models...");
+  console.log("");
+
+  let defaultModel = "coder";
+  const models = await fetchModels(baseUrl, apiKey || undefined);
+
+  if (models.length > 0) {
+    console.log(`Found ${models.length} model(s):`);
+    console.log("");
+
+    const modelOptions: SelectOption[] = models.slice(0, 20).map((m) => ({
+      value: m.id,
+      label: m.id,
+      description: m.owned_by,
+    }));
+
+    // Add option to enter custom model ID
+    modelOptions.push({
+      value: "__custom__",
+      label: "Enter custom model ID",
+      description: "type your own model name",
+    });
+
+    const selectedModel = await select("Choose default model:", modelOptions);
+
+    if (selectedModel === "__custom__") {
+      defaultModel = await prompt("Model ID", "");
+      if (!defaultModel) {
+        defaultModel = "coder";
+        console.log("Using default profile: coder");
+      }
+    } else {
+      defaultModel = selectedModel;
+    }
+  } else {
+    console.log("No models returned by the API.");
+    console.log("");
+    console.log("You can enter a model ID manually, or use a profile label:");
+    console.log("  • coder    — for code generation tasks");
+    console.log("  • planner  — for planning and reasoning");
+    console.log("  • reviewer — for code review tasks");
+    console.log("");
+    console.log("Leave empty to use 'coder' profile.");
+    console.log("");
+
+    defaultModel = await prompt("Model ID or profile", "coder");
+    if (!defaultModel) {
+      defaultModel = "coder";
+    }
+  }
+
+  console.log("");
+  console.log(`   Default model set to: ${defaultModel}`);
+  console.log("");
+
   // Prompt 3: Global or Project
   console.log("━━━ Config Scope ━━━");
   console.log("");
@@ -275,6 +373,7 @@ You can use OpenAI, OpenRouter, a local model, or 9router — whichever you pref
     force: true,
     baseUrl,
     apiKey: apiKey || undefined,
+    defaultModel,
   });
 
   console.log(`
@@ -283,9 +382,10 @@ You can use OpenAI, OpenRouter, a local model, or 9router — whichever you pref
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Current settings:
-  • Base URL:  ${baseUrl}
-  • API Key:   ${apiKey ? apiKey.substring(0, 10) + "...***" : "(not set)"}
-  • Scope:     ${scope}
+  • Base URL:      ${baseUrl}
+  • API Key:       ${apiKey ? apiKey.substring(0, 10) + "...***" : "(not set)"}
+  • Default Model: ${defaultModel}
+  • Scope:         ${scope}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Advanced: Environment Variables

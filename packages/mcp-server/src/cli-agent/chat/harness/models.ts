@@ -1,8 +1,6 @@
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
 
-const KNOWN_PROFILE_LABELS = new Set(["planner", "coder", "reviewer"]);
-
 /**
  * Resolve the model ID to pass to the gateway.
  *
@@ -14,11 +12,6 @@ const KNOWN_PROFILE_LABELS = new Set(["planner", "coder", "reviewer"]);
  * 4. If `availableModels` is empty/undefined and `modelId` is non-empty → trust the
  *    caller's concrete ID directly.
  * 5. Last resort → return the configured FALLBACK_GATEWAY_MODEL with a warning.
- *
- * Callers should resolve profile labels ('planner', 'coder', 'reviewer') to a
- * concrete model ID or combo ID before calling this function. If a profile label
- * is passed and not found in availableCombos or availableModels, a warning is
- * emitted so the violation is observable in logs.
  */
 export function resolveGatewayModel(
   modelId: string,
@@ -27,14 +20,6 @@ export function resolveGatewayModel(
 ): string {
   // Combo IDs pass through directly — the gateway handles combo routing.
   if (availableCombos?.includes(modelId)) return modelId;
-
-  // Warn if a known profile label reaches this point without being resolved.
-  if (KNOWN_PROFILE_LABELS.has(modelId)) {
-    console.warn(
-      `[resolveGatewayModel] Received profile label "${modelId}" — callers should resolve ` +
-        `profiles to a concrete model ID or combo ID before calling this function.`,
-    );
-  }
 
   if (availableModels && availableModels.length > 0) {
     if (availableModels.includes(modelId)) return modelId;
