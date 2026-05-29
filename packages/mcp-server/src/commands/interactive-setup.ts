@@ -22,6 +22,77 @@ function prompt(question: string, defaultValue?: string): Promise<string> {
   });
 }
 
+interface SelectOption {
+  label: string;
+  description?: string;
+  value: string;
+}
+
+function select(question: string, options: SelectOption[]): Promise<string> {
+  return new Promise((resolve) => {
+    let current = 0;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    // Prevent normal line buffering
+    process.stdin.setRawMode?.(true);
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+
+    const render = () => {
+      // Move cursor up to overwrite previous render
+      if (rendered > 0) {
+        process.stdout.write(`\x1b[${rendered}A`);
+      }
+      process.stdout.write(`\r${question}\n`);
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const prefix = i === current ? "❯ " : "  ";
+        const line = `${prefix}${opt.label}${opt.description ? ` — ${opt.description}` : ""}`;
+        // Clear line then write
+        process.stdout.write(`\x1b[2K${line}\n`);
+      }
+      rendered = options.length + 1;
+    };
+
+    let rendered = 0;
+    render();
+
+    const onData = (key: string) => {
+      if (key === "\u001b[A") {
+        // Up arrow
+        current = (current - 1 + options.length) % options.length;
+        render();
+      } else if (key === "\u001b[B") {
+        // Down arrow
+        current = (current + 1) % options.length;
+        render();
+      } else if (key === "\r" || key === "\n") {
+        // Enter
+        cleanup();
+        process.stdout.write("\n");
+        resolve(options[current].value);
+      } else if (key >= "1" && key <= String(options.length)) {
+        // Number shortcut
+        cleanup();
+        process.stdout.write("\n");
+        resolve(options[Number(key) - 1].value);
+      } else if (key === "\u0003") {
+        // Ctrl+C
+        cleanup();
+        process.exit(0);
+      }
+    };
+
+    const cleanup = () => {
+      process.stdin.removeListener("data", onData);
+      process.stdin.setRawMode?.(false);
+      process.stdin.pause();
+      rl.close();
+    };
+
+    process.stdin.on("data", onData);
+  });
+}
+
 function confirm(question: string, defaultValue = true): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = createInterface({
@@ -64,48 +135,64 @@ function start9Router(): void {
 export async function runInteractiveSetup(): Promise<void> {
   console.log(`
 ╔══════════════════════════════════════════════════════════════════╗
-║                    🚀 CodeMap Gateway Setup                      ║
+║                    🚀 CodeMap Setup                              ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-CodeMap needs a LLM gateway to power its AI features.
+CodeMap needs an LLM API to power its AI features.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 What is a Gateway?
+📌 How it works
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The gateway is a proxy that routes your requests to LLM providers.
-It manages model routing, load balancing, and token accounting.
+CodeMap sends prompts to any OpenAI-compatible API endpoint.
+You can use OpenAI, OpenRouter, a local model, or 9router — whichever you prefer.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `);
 
-  console.log("━━━ Gateway Type ━━━");
-  console.log("");
-  console.log("  1. 9router local (default)  — install and run locally");
-  console.log("     • Free, runs on your machine");
-  console.log("     • Pre-configured model routing (planner, coder, reviewer)");
-  console.log("     • No per-model API keys needed");
-  console.log("");
-  console.log("  2. 9router Cloud             — managed gateway at 9router.dev");
-  console.log("     • Usage-based billing");
-  console.log("     • Get your API key at: https://9router.dev/settings/api-keys");
-  console.log("");
-  console.log("  3. Self-hosted               — run your own gateway");
-  console.log("     • Set baseUrl to your gateway URL");
-  console.log("     • Useful for local models or custom routing logic");
+  console.log("━━━ API Provider ━━━");
   console.log("");
 
-  const gatewayChoice = await prompt("Choose gateway type", "1");
-  const choice = gatewayChoice.trim();
+  const choice = await select("Choose API provider:", [
+    {
+      value: "1",
+      label: "9router local (recommended)",
+      description: "free, runs on your machine",
+    },
+    {
+      value: "2",
+      label: "OpenAI-compatible API",
+      description: "use your own API key",
+    },
+    {
+      value: "3",
+      label: "Self-hosted",
+      description: "run your own gateway",
+    },
+  ]);
 
   let baseUrl: string;
   let nineRouterDashUrl: string | undefined;
 
   if (choice === "2") {
-    // 9router Cloud
-    baseUrl = "https://9router.dev/v1";
-    nineRouterDashUrl = "https://9router.dev/settings/api-keys";
+    // OpenAI-compatible API
+    console.log("");
+    console.log("━━━ OpenAI-compatible API ━━━");
+    console.log("Common base URLs:");
+    console.log("  • OpenAI:     https://api.openai.com/v1");
+    console.log("  • OpenRouter: https://openrouter.ai/api/v1");
+    console.log("");
+    baseUrl = await prompt("Base URL", "https://api.openai.com/v1");
+    while (baseUrl) {
+      try {
+        new URL(baseUrl);
+        break;
+      } catch {
+        console.log("❌ Invalid URL. Please try again.");
+        baseUrl = await prompt("Base URL", "https://api.openai.com/v1");
+      }
+    }
   } else if (choice === "3") {
     // Self-hosted
     console.log("");
@@ -150,8 +237,12 @@ It manages model routing, load balancing, and token accounting.
   console.log("━━━ API Key ━━━");
   if (nineRouterDashUrl) {
     console.log(`Get your API key from: ${nineRouterDashUrl}`);
+    console.log("Leave empty if your gateway doesn't require auth.");
+  } else if (choice === "2") {
+    console.log("Enter your API key for the provider.");
+  } else {
+    console.log("Leave empty if your gateway doesn't require auth.");
   }
-  console.log("Leave empty if your gateway doesn't require auth.");
   console.log("");
   const apiKey = await prompt(
     "API key (press Enter to skip)",
@@ -162,17 +253,21 @@ It manages model routing, load balancing, and token accounting.
 
   // Prompt 3: Global or Project
   console.log("━━━ Config Scope ━━━");
-  console.log("• global  — ~/.codemap/llm-gateway.json (default, all projects)");
-  console.log("• project — .codemap/llm-gateway.json (current project only)");
   console.log("");
   let scope: "global" | "project" = "global";
-  const scopeInput = await prompt(
-    "Save config to",
-    "global"
-  );
-  if (scopeInput === "project") {
-    scope = "project";
-  }
+  const scopeChoice = await select("Save config to:", [
+    {
+      value: "global",
+      label: "Global",
+      description: "~/.codemap/llm-gateway.json (all projects)",
+    },
+    {
+      value: "project",
+      label: "Project",
+      description: ".codemap/llm-gateway.json (current project only)",
+    },
+  ]);
+  scope = scopeChoice as "global" | "project";
 
   // Write config with API key
   const result = await writeGatewayConfig({
@@ -198,7 +293,7 @@ Current settings:
 
 You can override config using environment variables:
 
-  CODEMAP_LLM_GATEWAY_BASE_URL        Gateway URL
+  CODEMAP_LLM_GATEWAY_BASE_URL        API base URL
   CODEMAP_LLM_GATEWAY_API_KEY         API key
   CODEMAP_LLM_GATEWAY_PLANNER_MODEL   Planner model ID
   CODEMAP_LLM_GATEWAY_CODER_MODEL     Coder model ID
