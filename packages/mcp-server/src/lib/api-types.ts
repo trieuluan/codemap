@@ -27,6 +27,7 @@ export type {
   EditLocationsResponse,
   FileReparseResult,
   GithubRepository,
+  GitlabRepository,
   GithubStatus,
   Project,
   ProjectFileContent,

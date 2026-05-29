@@ -26,7 +26,7 @@ import {
   runPreBashCommand,
 } from "./commands/hooks.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
-import { registerListGithubRepositoriesTool } from "./tools/list-github-repositories.js";
+import { registerListRepositoriesTool } from "./tools/list-repositories.js";
 import { registerCreateProjectTool } from "./tools/create-project.js";
 import { registerLinkProjectTool } from "./tools/link-project.js";
 import { registerReimportTool } from "./tools/reimport.js";
@@ -107,7 +107,7 @@ async function runMcpServer() {
     registerRenameSymbolTool(server, config);
     registerManageGitConnectionTool(server, config);
     registerGetCurrentWorkspaceInfoTool(server);
-    registerListGithubRepositoriesTool(server, config);
+    registerListRepositoriesTool(server, config);
   }
 
   // Resources — automatically surfaced to Claude as session context

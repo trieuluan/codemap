@@ -37,7 +37,7 @@ const TOOLS_LITE = [
   "- get_project_map — browse the full file tree",
   "- get_project — get the current linked project from .codemap/mcp.json; call with no arguments",
   "- link_project — link the workspace to an existing CodeMap project; auto-detects by git remote URL",
-  "- diff — show git diff. mode=\"working\" (default) for uncommitted local changes; mode=\"ref\" with from/to for committed ref diffs",
+  '- diff — show git diff. mode="working" (default) for uncommitted local changes; mode="ref" with from/to for committed ref diffs',
   "- refresh_local_index — refresh the local SQLite MCP index from disk; local-only, no auth or cloud API required",
   "- reimport — run a full cloud import and/or wait for completion (actions: trigger, wait, trigger_and_wait)",
   "- check_auth_status — verify MCP authentication, current API URL, user, and next action",
@@ -63,7 +63,6 @@ const TOOLS_FULL_EXTRA = [
   "- move_symbols — move functions/classes from one file to another and auto-update all import statements across the codebase",
   "- rename_symbol — rename a symbol codebase-wide; updates all call sites and imports automatically; call reimport after",
   "- manage_git_connection — check or initiate GitHub/GitLab OAuth for repository imports",
-  "- list_github_repositories — discover GitHub repositories (pass optional query to search)",
   "- get_current_workspace_info — inspect local git root, branch, commit, and remote before creating/linking a project",
 ];
 
@@ -75,7 +74,7 @@ const WORKFLOW_LITE = [
   "- Use explore_task first for any coding task — returns likelyFiles, entrypoints, symbols, risks, and suggestedNextTools in one call.",
   "- Follow suggestedNextTools returned by explore_task — it provides exact get_file calls to make next.",
   "- Use search_codebase when you know a specific keyword. Follow the read hint in each result.",
-  "- Use get_file with include: [\"outline\"] to see a file's symbol list, then include: [\"symbols\"] + symbol_names for specific function bodies.",
+  '- Use get_file with include: ["outline"] to see a file\'s symbol list, then include: ["symbols"] + symbol_names for specific function bodies.',
   "- Use diff after making edits to verify what changed before committing.",
   "- Use refresh_local_index after editing files to refresh local MCP search/read context without touching cloud indexing.",
   "- Use reimport when you need cloud indexing for web graph/insights.",
@@ -84,13 +83,13 @@ const WORKFLOW_LITE = [
 
 const WORKFLOW_STANDARD_EXTRA = [
   "- For broad tasks with unclear files, call explore_task before implementation; if exact files or symbols are already known, inspect them directly.",
-  "- After explore_task returns candidates, use get_file to batch-read their outlines in one call, then get_file with include: [\"symbols\"] to deep-dive the specific file to edit.",
+  '- After explore_task returns candidates, use get_file to batch-read their outlines in one call, then get_file with include: ["symbols"] to deep-dive the specific file to edit.',
   "- Use symbol to read the full body of a specific function or class when you already know its name and file.",
   "- Use symbol to locate definitions, occurrence ranges, and callers when refactoring a symbol. For TypeScript factory patterns (createXxxService etc.), symbol works directly on method names.",
   "- Use symbol to check static callers before deleting or refactoring a symbol; treat empty callers as a signal, not proof.",
   "- Use find_related_files with a natural-language query (e.g. 'login bug') to find related files across feature boundaries.",
   "- Use get_project_insights for global signals: orphans, cycles, top fan-out/fan-in files.",
-  "- Use diff(mode=\"ref\", from, to) to compare committed refs; use diff (default mode=\"working\") for uncommitted local changes.",
+  '- Use diff(mode="ref", from, to) to compare committed refs; use diff (default mode="working") for uncommitted local changes.',
 ];
 
 const WORKFLOW_FULL_EXTRA = [
@@ -189,41 +188,75 @@ function buildContextText(
 
   lines.push("");
   lines.push("## Supported Languages");
-  lines.push("CodeMap parses and indexes symbols from the following languages:");
-  lines.push("- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports; methods inside factory return-objects (e.g. createXxxService, createXxxController patterns) are also indexed as kind=method with parentSymbolName pointing to the factory — symbol works for these without needing grep");
+  lines.push(
+    "CodeMap parses and indexes symbols from the following languages:",
+  );
+  lines.push(
+    "- TypeScript / JavaScript (.ts, .tsx, .js, .jsx) — classes, functions, interfaces, imports, exports; methods inside factory return-objects (e.g. createXxxService, createXxxController patterns) are also indexed as kind=method with parentSymbolName pointing to the factory — symbol works for these without needing grep",
+  );
   lines.push("- Dart (.dart) — classes, mixins, enums, imports");
-  lines.push("- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements");
-  lines.push("- Python (.py) — classes, functions, methods, import/from-import statements");
-  lines.push("- Gettext (.po) — indexed by path only (no symbol extraction); use get_file with start_line/end_line to read specific ranges of large translation files without loading the full content");
-  lines.push("All other file types are indexed by path only (no symbol extraction).");
+  lines.push(
+    "- PHP (.php) — namespaces, classes, interfaces, traits, functions, use statements",
+  );
+  lines.push(
+    "- Python (.py) — classes, functions, methods, import/from-import statements",
+  );
+  lines.push(
+    "- Gettext (.po) — indexed by path only (no symbol extraction); use get_file with start_line/end_line to read specific ranges of large translation files without loading the full content",
+  );
+  lines.push(
+    "All other file types are indexed by path only (no symbol extraction).",
+  );
   lines.push("");
   lines.push("## Symbol Occurrence Tracking (TypeScript/JS)");
-  lines.push("symbol returns occurrences with occurrenceRole that indicates how a symbol appears:");
+  lines.push(
+    "symbol returns occurrences with occurrenceRole that indicates how a symbol appears:",
+  );
   lines.push("- definition — where the symbol is declared");
   lines.push("- call — direct function/method call: foo(), obj.method()");
-  lines.push("- reference — property access (OBJ.prop) or bare identifier usage (CONST in array/arg)");
-  lines.push("Cross-file calls are resolved via named imports ({ foo } from '...'). Wildcard imports (import * as ns) are also resolved: ns.foo() maps to foo in the target module.");
-  lines.push("Known false negatives — symbol may show 0 callers for symbols used via:");
-  lines.push("- Dynamic import: import('../lib/foo.js') with no importedNames — workers often use this pattern");
-  lines.push("- Framework registration: Fastify route handlers registered via object destructuring, not direct calls");
-  lines.push("- Runtime/dynamic access: obj[methodName], eval, require with variable path");
-  lines.push("Always cross-check with Bash grep before concluding a symbol is dead.");
+  lines.push(
+    "- reference — property access (OBJ.prop) or bare identifier usage (CONST in array/arg)",
+  );
+  lines.push(
+    "Cross-file calls are resolved via named imports ({ foo } from '...'). Wildcard imports (import * as ns) are also resolved: ns.foo() maps to foo in the target module.",
+  );
+  lines.push(
+    "Known false negatives — symbol may show 0 callers for symbols used via:",
+  );
+  lines.push(
+    "- Dynamic import: import('../lib/foo.js') with no importedNames — workers often use this pattern",
+  );
+  lines.push(
+    "- Framework registration: Fastify route handlers registered via object destructuring, not direct calls",
+  );
+  lines.push(
+    "- Runtime/dynamic access: obj[methodName], eval, require with variable path",
+  );
+  lines.push(
+    "Always cross-check with Bash grep before concluding a symbol is dead.",
+  );
 
   // ── Available Tools (filtered by toolMode) ──────────────────────────────────
   lines.push("");
   lines.push("## Available Tools");
   const toolList = [
     ...TOOLS_LITE,
-    ...(toolMode === "standard" || toolMode === "full" ? TOOLS_STANDARD_EXTRA : []),
+    ...(toolMode === "standard" || toolMode === "full"
+      ? TOOLS_STANDARD_EXTRA
+      : []),
     ...(toolMode === "full" ? TOOLS_FULL_EXTRA : []),
   ];
   toolList.forEach((t) => lines.push(t));
 
   lines.push("");
   lines.push("## Structured Tool Responses");
-  lines.push("Most CodeMap MCP tools return both human-readable text and structured data:");
+  lines.push(
+    "Most CodeMap MCP tools return both human-readable text and structured data:",
+  );
   lines.push("- summary — short text for humans and fallback clients");
-  lines.push("- data — machine-readable source of truth for agent workflow decisions");
+  lines.push(
+    "- data — machine-readable source of truth for agent workflow decisions",
+  );
   lines.push("- isError — only for unexpected tool/API failures");
   lines.push("");
   lines.push(
@@ -305,7 +338,9 @@ function buildContextText(
   lines.push("## Recommended Workflow");
   const workflow = [
     ...WORKFLOW_LITE,
-    ...(toolMode === "standard" || toolMode === "full" ? WORKFLOW_STANDARD_EXTRA : []),
+    ...(toolMode === "standard" || toolMode === "full"
+      ? WORKFLOW_STANDARD_EXTRA
+      : []),
     ...(toolMode === "full" ? WORKFLOW_FULL_EXTRA : []),
   ];
   workflow.forEach((w) => lines.push(w));
@@ -455,7 +490,13 @@ export function registerProjectContextResource(
           {
             uri: uri.href,
             mimeType: "text/plain",
-            text: buildContextText(project, latestImport, health, accountWorkspace, config.toolMode),
+            text: buildContextText(
+              project,
+              latestImport,
+              health,
+              accountWorkspace,
+              config.toolMode,
+            ),
           },
         ],
       };

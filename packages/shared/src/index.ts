@@ -1,6 +1,7 @@
 export * from "./auth";
 export * from "./admin";
 export * from "./github";
+export * from "./gitlab";
 export * from "./integration-schemas";
 export * from "./mcp-auth";
 export * from "./mcp-auth-schemas";
