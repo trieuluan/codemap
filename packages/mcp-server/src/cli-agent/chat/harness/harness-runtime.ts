@@ -162,6 +162,7 @@ interface HarnessSingleton {
 let _singleton: HarnessSingleton | null = null;
 let _uninstallFetchInterceptor: (() => void) | null = null;
 let _lastModelApiError: Error | null = null;
+let _currentEffort: "low" | "medium" | "high" | null = null;
 
 function installTemperatureInterceptor(baseUrl: string): void {
   _uninstallFetchInterceptor?.();
@@ -189,10 +190,16 @@ function installTemperatureInterceptor(baseUrl: string): void {
     ) {
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
+        let changed = false;
         if ("temperature" in parsed) {
           delete parsed.temperature;
-          init = { ...init, body: JSON.stringify(parsed) };
+          changed = true;
         }
+        if (_currentEffort) {
+          parsed.reasoning_effort = _currentEffort;
+          changed = true;
+        }
+        if (changed) init = { ...init, body: JSON.stringify(parsed) };
       } catch {
         // not JSON — pass through unchanged
       }
@@ -571,6 +578,7 @@ export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
 export async function runWithMastraHarness(
   input: SingleAgentRuntimeInput,
 ): Promise<AgentLoopResult> {
+  _currentEffort = input.effort ?? null;
   await drainHarness();
   const resolvedModel = resolveHarnessModelId(
     input.model,
@@ -612,13 +620,18 @@ export async function runWithMastraHarness(
     mcpServerIds: _singleton?.mcpServerIds,
   };
 
-  const result = await runHarness(
-    harness,
-    input.userMessage,
-    input.signal,
-    callbacks,
-    input.imageFiles,
-  );
+  let result: AgentLoopResult;
+  try {
+    result = await runHarness(
+      harness,
+      input.userMessage,
+      input.signal,
+      callbacks,
+      input.imageFiles,
+    );
+  } finally {
+    _currentEffort = null;
+  }
   if (!result.text.trim() && !input.signal?.aborted) {
     // Empty response usually means the singleton thread has accumulated bad
     // state (e.g. empty turns from previous failed runs, or the model returned
@@ -642,6 +655,7 @@ export async function runWithMastraHarness(
 export async function runMultiPhaseWithMastra(
   input: MultiPhaseLoopInput,
 ): Promise<AgentLoopResult> {
+  _currentEffort = input.effort ?? "high";
   await drainHarness();
   const resolvedCoderModel = resolveHarnessModelId(
     input.coderModel,
@@ -833,6 +847,8 @@ export async function runMultiPhaseWithMastra(
     ).catch((err: unknown) => {
       fail(err instanceof Error ? err : new Error(String(err)));
     });
+  }).finally(() => {
+    _currentEffort = null;
   });
 }
 

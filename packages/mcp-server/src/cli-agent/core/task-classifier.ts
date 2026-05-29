@@ -4,13 +4,14 @@ export interface TaskClassification {
   phase: "single" | "multi";
   tier: "planner" | "coder" | "reviewer";
   taskType: "feature" | "bugfix" | "debugging" | "review" | "refactor" | "research" | "general";
+  effort: "low" | "medium" | "high";
   reason: string;
 }
 
 const CLASSIFIER_SYSTEM = `You are a task router for a coding assistant. Analyze the user message and respond with ONLY a JSON object.
 
 Output format:
-{"phase":"single"|"multi","tier":"planner"|"coder"|"reviewer","taskType":"feature"|"bugfix"|"debugging"|"review"|"refactor"|"research"|"general","reason":"<one line>"}
+{"phase":"single"|"multi","tier":"planner"|"coder"|"reviewer","taskType":"feature"|"bugfix"|"debugging"|"review"|"refactor"|"research"|"general","effort":"low"|"medium"|"high","reason":"<one line>"}
 
 Rules:
 - phase "multi": ONLY for large features spanning multiple modules, major architectural refactors, or when user explicitly says "make a plan" / "plan first". Requires genuine multi-step planning before coding.
@@ -19,20 +20,25 @@ Rules:
 - tier "reviewer": find/search code, explain how X works, investigate where X is, read and understand files, audit, review diff — NO code changes, needs deep code reading
 - tier "coder": implement, fix, optimize, refactor — code changes expected
 - tier "planner": quick factual questions, general knowledge, non-code questions — no file reading needed
+- effort "high": complex multi-file debugging, architectural decisions, security/auth/payment changes, multi-phase tasks, user says "carefully"/"thoroughly"/"deep dive", investigating intermittent/hard-to-reproduce issues
+- effort "medium": standard coder tasks — add a feature, fix a bug, write tests, refactor a module (DEFAULT for coder tier)
+- effort "low": rename, one-liner fix, explaining code, lookup/search tasks, Q&A, all planner-tier tasks, all reviewer-tier tasks
 
 Examples:
-- "fix the bug in auth.ts" → single, coder
-- "add a unit test for parseDate" → single, coder
-- "rename variable X to Y in file Z" → single, coder
-- "sửa file X" / "edit X" / "update X" → single, coder
-- "explain how this function works" → single, reviewer
-- "tìm đoạn code render X" / "find where X is rendered" → single, reviewer
-- "chỗ nào xử lý X" / "where is X defined" → single, reviewer
-- "show me the code for X" / "xem code X ở đâu" → single, reviewer
-- "how does X work" / "X hoạt động như nào" → single, reviewer
-- "implement full OAuth2 system across auth/web/api modules" → multi, coder
-- "refactor the entire database layer" → multi, coder
-- "make a plan for adding notifications" → multi, planner
+- "fix the bug in auth.ts" → single, coder, medium
+- "add a unit test for parseDate" → single, coder, medium
+- "implement pagination for the project list" → single, coder, medium
+- "rename variable X to Y in file Z" → single, coder, low
+- "sửa 1 dòng trong file X" / "delete line X" → single, coder, low
+- "debug tại sao auth redirect bị lỗi" → single, coder, high
+- "fix the race condition in the payment flow" → single, coder, high
+- "investigate why the import worker crashes intermittently" → single, reviewer, high
+- "explain how this function works" → single, reviewer, low
+- "tìm đoạn code render X" / "find where X is rendered" → single, reviewer, low
+- "how does X work" / "chỗ nào xử lý X" → single, reviewer, low
+- "implement full OAuth2 system across auth/web/api modules" → multi, coder, high
+- "refactor the entire database layer" → multi, coder, high
+- "make a plan for adding notifications" → multi, planner, high
 
 Respond with ONLY the JSON.`;
 
@@ -40,6 +46,7 @@ const FALLBACK: TaskClassification = {
   phase: "single",
   tier: "coder",
   taskType: "general",
+  effort: "medium",
   reason: "classification failed",
 };
 
@@ -55,6 +62,7 @@ const CONFIRMATION_RESULT: TaskClassification = {
   phase: "single",
   tier: "coder",
   taskType: "general",
+  effort: "medium",
   reason: "confirmation — continuing coding task",
 };
 
@@ -119,6 +127,7 @@ function parseClassification(raw: string): TaskClassification {
     phase,
     tier: parsed.tier,
     taskType: parsed.taskType,
+    effort: isEffort(parsed.effort) ? parsed.effort : "low",
     reason: typeof parsed.reason === "string" ? parsed.reason : "",
   };
 }
@@ -141,4 +150,8 @@ function isTaskType(value: unknown): value is TaskClassification["taskType"] {
     value === "research" ||
     value === "general"
   );
+}
+
+function isEffort(value: unknown): value is TaskClassification["effort"] {
+  return value === "low" || value === "medium" || value === "high";
 }

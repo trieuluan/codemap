@@ -33,7 +33,10 @@ import { isStrongModel } from "../slash-commands/profiles.js";
 import { tryGetCurrentWorkspaceInfo } from "../../../lib/workspace-git.js";
 import { warmupFileSearch } from "../../core/file-search.js";
 import { loadOrSynthesizeAll } from "../../core/convention-synthesizer.js";
-import { createDebugLogger, type DebugLogger } from "../../core/debug-logger.js";
+import {
+  createDebugLogger,
+  type DebugLogger,
+} from "../../core/debug-logger.js";
 import { EventBus } from "./event-bus.js";
 import { Store, createInitialState, type Message } from "./store.js";
 import {
@@ -44,7 +47,11 @@ import {
   withToolCallSummary,
 } from "./tool-call-messages.js";
 import { loadThreadIntoUI } from "../slash-commands/sessions.js";
-import { buildLocalIndex, refreshLocalFile, removeLocalFile } from "../../../lib/local-index.js";
+import {
+  buildLocalIndex,
+  refreshLocalFile,
+  removeLocalFile,
+} from "../../../lib/local-index.js";
 
 // Re-export for backward compat with commands/index.ts
 export type { Message as ChatEntry } from "./store.js";
@@ -526,11 +533,24 @@ export class ChatTerminal {
     const dirtyLocalIndexPaths = new Set<string>();
     let fullIndexRefreshTimer: NodeJS.Timeout | null = null;
 
-    const extractEditedPath = (toolName: string, argsText: string): string | null => {
-      if (!["write_file", "string_replace_lsp", "ast_smart_edit", "delete_file"].includes(toolName)) return null;
+    const extractEditedPath = (
+      toolName: string,
+      argsText: string,
+    ): string | null => {
+      if (
+        ![
+          "write_file",
+          "string_replace_lsp",
+          "ast_smart_edit",
+          "delete_file",
+        ].includes(toolName)
+      )
+        return null;
       try {
         const args = JSON.parse(argsText) as { path?: unknown };
-        return typeof args.path === "string" && args.path.trim() ? args.path.trim() : null;
+        return typeof args.path === "string" && args.path.trim()
+          ? args.path.trim()
+          : null;
       } catch {
         return null;
       }
@@ -541,7 +561,10 @@ export class ChatTerminal {
       fullIndexRefreshTimer = setTimeout(() => {
         fullIndexRefreshTimer = null;
         void buildLocalIndex().catch((error: unknown) => {
-          this.logger?.logDebugInfo({ event: "local_index_refresh_failed", error: String(error) });
+          this.logger?.logDebugInfo({
+            event: "local_index_refresh_failed",
+            error: String(error),
+          });
         });
       }, 3_000);
     };
@@ -671,15 +694,19 @@ export class ChatTerminal {
             const refresh = isDelete
               ? removeLocalFile(relativePath).then((removed) => removed)
               : refreshLocalFile(relativePath).then((updated) => updated);
-            void refresh.then((changed) => {
-              if (changed) scheduleFullLocalIndexRefresh();
-            }).catch((error: unknown) => {
-              this.logger?.logDebugInfo({
-                event: isDelete ? "local_file_remove_failed" : "local_file_refresh_failed",
-                filePath: relativePath,
-                error: String(error),
+            void refresh
+              .then((changed) => {
+                if (changed) scheduleFullLocalIndexRefresh();
+              })
+              .catch((error: unknown) => {
+                this.logger?.logDebugInfo({
+                  event: isDelete
+                    ? "local_file_remove_failed"
+                    : "local_file_refresh_failed",
+                  filePath: relativePath,
+                  error: String(error),
+                });
               });
-            });
           }
         }
 
@@ -757,6 +784,7 @@ export class ChatTerminal {
         tier: "coder",
         taskType: "general",
         reason: "",
+        effort: "medium",
       };
 
       const planMode = this.store.getState().planMode;
@@ -831,6 +859,7 @@ export class ChatTerminal {
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
+            effort: "high",
             onPhaseStart: (phase, model) => {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
@@ -858,6 +887,7 @@ export class ChatTerminal {
             onPlanReady: handlePlanReady,
             onPlanWait: () => this.waitForPlanReview(),
             imageFiles,
+            effort: classification.effort,
             ...sharedCallbacks,
           });
 

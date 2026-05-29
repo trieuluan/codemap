@@ -92,6 +92,7 @@ export class NineRouterProvider implements GatewayProvider {
         tools: buildAiTools(request.tools),
         toolChoice: buildToolChoice(request.toolChoice),
         abortSignal: request.signal,
+        ...(request.effort ? { providerOptions: { openai: { reasoningEffort: request.effort } } } : {}),
       });
 
       return {
@@ -121,6 +122,7 @@ export class NineRouterProvider implements GatewayProvider {
         tools: buildAiTools(request.tools),
         toolChoice: buildToolChoice(request.toolChoice),
         abortSignal: request.signal,
+        ...(request.effort ? { providerOptions: { openai: { reasoningEffort: request.effort } } } : {}),
       });
     } catch (err) {
       if (request.signal?.aborted || isAbortError(err)) throw createAbortError();

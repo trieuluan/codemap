@@ -34,6 +34,7 @@ export interface SingleAgentRuntimeInput {
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
+  effort?: "low" | "medium" | "high";
 }
 
 export interface MultiPhaseLoopInput {
@@ -59,4 +60,5 @@ export interface MultiPhaseLoopInput {
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
+  effort?: "low" | "medium" | "high";
 }
