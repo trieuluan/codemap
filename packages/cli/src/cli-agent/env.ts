@@ -2,14 +2,16 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getPackageRoot } from "@codemap/core/lib/bundled-runtime.js";
+import { findMonorepoRoot } from "@codemap/core/lib/monorepo-root.js";
 
 const packageRoot = getPackageRoot(import.meta.url);
 
 export async function loadDotEnv(cwd = process.cwd()): Promise<string[]> {
+  const monorepoRoot = await findMonorepoRoot(cwd);
   const candidates = uniquePaths([
     path.join(cwd, ".env"),
     path.join(packageRoot, ".env"),
-    path.join(packageRoot, "../..", ".env"),
+    path.join(monorepoRoot, ".env"),
   ]);
   const loaded: string[] = [];
 

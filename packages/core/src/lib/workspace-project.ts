@@ -1,6 +1,7 @@
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
+import { findMonorepoRoot } from "./monorepo-root.js";
 
 const WORKSPACE_CONFIG_FILE = ".codemap/mcp.json";
 
@@ -102,6 +103,13 @@ export async function readWorkspaceProjectConfig(
       candidateRoots.add(workspace.repoRootPath);
       resolvedRepoRoot ??= workspace.repoRootPath;
     }
+  }
+
+  // Add monorepo root as candidate (pnpm/yarn/npm/bun workspaces)
+  try {
+    candidateRoots.add(await findMonorepoRoot(cwd));
+  } catch {
+    // findMonorepoRoot already has git fallback; ignore errors
   }
 
   for (const root of candidateRoots) {

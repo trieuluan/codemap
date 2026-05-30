@@ -44,7 +44,6 @@
   },
   "devDependencies": {
     "@codemap/code-index": "workspace:*",
-    "@codemap/shared": "workspace:*",
     "@mastra/core": "^1.35.0",
     "@types/node": "^24.12.2",
     "tsup": "^8.5.1",

@@ -4,6 +4,7 @@ import {
   tryGetCurrentWorkspaceInfo,
   type CurrentWorkspaceInfo,
 } from "./workspace-git.js";
+import { findMonorepoRoot } from "./monorepo-root.js";
 
 type ProjectLike = {
   localWorkspacePath?: string | null;
@@ -13,7 +14,7 @@ export interface ResolvedWorkspace {
   cwd: string;
   workspace: CurrentWorkspaceInfo | null;
   workspaceRootPath: string;
-  resolution: "git" | "linked_config" | "project_local_path" | "cwd_fallback";
+  resolution: "git" | "linked_config" | "project_local_path" | "monorepo" | "cwd_fallback";
 }
 
 export async function resolveWorkspace(input?: {
@@ -46,6 +47,16 @@ export async function resolveWorkspace(input?: {
       path: input.project.localWorkspacePath,
       resolution: "project_local_path",
     });
+  }
+
+  // Try monorepo root detection (pnpm/yarn/npm/bun workspaces)
+  try {
+    const monorepoRoot = await findMonorepoRoot(cwd);
+    if (monorepoRoot !== cwd) {
+      candidates.push({ path: monorepoRoot, resolution: "monorepo" });
+    }
+  } catch {
+    // findMonorepoRoot already has git fallback internally; ignore errors
   }
 
   const seen = new Set<string>();

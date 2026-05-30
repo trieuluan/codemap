@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { getPackages } from "@manypkg/get-packages";
+import { findMonorepoRoot } from "./lib/monorepo-root.js";
 
 export const DEFAULT_API_URL = "https://api.codemap.dev";
 
@@ -172,12 +172,7 @@ async function readConfigFile(configPath: string) {
 }
 
 async function findProjectRoot(cwd: string): Promise<string> {
-  try {
-    const { rootDir } = await getPackages(cwd);
-    return rootDir;
-  } catch {
-    return cwd;
-  }
+  return findMonorepoRoot(cwd);
 }
 
 function getConfigPaths(projectRoot: string) {

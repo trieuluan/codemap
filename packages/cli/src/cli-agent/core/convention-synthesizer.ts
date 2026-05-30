@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, stat, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { findMonorepoRoot } from "@codemap/core/lib/monorepo-root.js";
 import type { NineRouterProvider } from "./provider.js";
 
 // ─── Source definitions ───────────────────────────────────
@@ -37,17 +37,16 @@ interface SynthMeta {
 
 // ─── Paths ────────────────────────────────────────────────
 
-function getWorkspaceRoot(): string {
-  const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", cwd: process.cwd() });
-  return r.stdout?.trim() || process.cwd();
+async function getWorkspaceRoot(): Promise<string> {
+  return findMonorepoRoot(process.cwd());
 }
 
-function dotCodemap(): string {
-  return path.join(getWorkspaceRoot(), ".codemap");
+async function dotCodemap(): Promise<string> {
+  return path.join(await getWorkspaceRoot(), ".codemap");
 }
 
-function cachePaths() {
-  const dir = dotCodemap();
+async function cachePaths() {
+  const dir = await dotCodemap();
   return {
     conventions: { md: path.join(dir, "synthesized-conventions.md"), meta: path.join(dir, "conventions-meta.json") },
     rules:       { md: path.join(dir, "synthesized-rules.md"),       meta: path.join(dir, "rules-meta.json") },
@@ -152,7 +151,7 @@ async function loadCache(paths: { md: string; meta: string }, hash: string): Pro
 
 async function saveCache(paths: { md: string; meta: string }, content: string, hash: string, files: ScannedFile[]): Promise<void> {
   const meta: SynthMeta = { hash, scannedFiles: files.map((f) => f.filePath), tokenCount: estimateTokens(content), synthesizedAt: Date.now() };
-  await mkdir(dotCodemap(), { recursive: true });
+  await mkdir(await dotCodemap(), { recursive: true });
   await Promise.all([writeFile(paths.md, content, "utf8"), writeFile(paths.meta, JSON.stringify(meta, null, 2), "utf8")]);
 }
 
@@ -258,10 +257,10 @@ export async function loadOrSynthesizeAll(
   model: string,
   forceRefresh = false,
 ): Promise<SynthesisResult | null> {
-  const root = getWorkspaceRoot();
+  const root = await getWorkspaceRoot();
   const config = await readConfig(root);
   const maxTokens = config.conventionMaxTokens ?? null;
-  const cp = cachePaths();
+  const cp = await cachePaths();
 
   const [conventionFiles, ruleFiles, skillFiles] = await Promise.all([
     scanSources(root, CONVENTION_SOURCES),
@@ -289,7 +288,7 @@ export async function refreshAll(
 }
 
 export async function getCachedContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {
-  const cp = cachePaths();
+  const cp = await cachePaths();
   const [conventions, rules, skills] = await Promise.all([
     readFile(cp.conventions.md, "utf8").then((s) => s.trim() || null).catch(() => null),
     readFile(cp.rules.md, "utf8").then((s) => s.trim() || null).catch(() => null),
