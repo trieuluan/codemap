@@ -1,0 +1,36 @@
+{
+  "name": "@codemap-ai/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CodeMap MCP server for IDE integrations",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "codemap-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsup && chmod +x dist/index.js",
+    "build:tsc": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@codemap/core": "workspace:*",
+    "@types/node": "^24.12.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

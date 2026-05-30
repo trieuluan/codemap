@@ -1,0 +1,29 @@
+{
+  "name": "@codemap/core",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "CodeMap shared internal library",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./config.js": "./dist/config.js",
+    "./lib/*.js": "./dist/lib/*.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@codemap/code-index": "workspace:*",
+    "@codemap/shared": "workspace:*",
+    "jszip": "^3.10.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.2"
+  }
+}

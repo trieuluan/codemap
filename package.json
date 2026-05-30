@@ -22,10 +22,14 @@
     "dev:web": "npm --workspace=@codemap/web run dev",
     "build:web": "npm run build:shared && npm --workspace=@codemap/web run build",
     "preview:web": "npm --workspace=@codemap/web run start",
-    "dev:mcp": "npm --workspace=@codemap-ai/cli run dev",
-    "build:mcp": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap-ai/cli run build",
-    "start:mcp": "npm --workspace=@codemap-ai/cli run start",
-    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap/api --filter @codemap/web --filter @codemap/shared --no-git-tag-version"
+    "dev:mcp": "npm --workspace=@codemap-ai/mcp run dev",
+    "build:mcp": "npm run build:core && npm --workspace=@codemap-ai/mcp run build",
+    "start:mcp": "npm --workspace=@codemap-ai/mcp run start",
+    "dev:cli": "npm --workspace=@codemap-ai/cli run dev",
+    "build:cli": "npm run build:core && npm --workspace=@codemap-ai/cli run build",
+    "start:cli": "npm --workspace=@codemap-ai/cli run start",
+    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap/api --filter @codemap/web --filter @codemap/shared --no-git-tag-version",
+    "build:core": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/core run build"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

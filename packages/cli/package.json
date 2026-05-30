@@ -1,0 +1,56 @@
+{
+  "name": "@codemap-ai/cli",
+  "version": "0.1.7",
+  "type": "module",
+  "description": "CodeMap — AI-powered coding agent CLI",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "codemap": "dist/index.js"
+  },
+  "files": [
+    ".claude-plugin",
+    ".codex-plugin",
+    ".cursor-plugin",
+    "agent-pack",
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsup && chmod +x dist/index.js",
+    "build:tsc": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "dev:watch": "tsx watch src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@codemap/core": "workspace:*",
+    "@ai-sdk/openai": "^3.0.63",
+    "@earendil-works/pi-tui": "^0.74.0",
+    "@git-diff-view/core": "^0.1.3",
+    "@mastra/mcp": "1.7.0",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "ai": "^6.0.176",
+    "cfonts": "^3.3.1",
+    "execa": "^9.6.1",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "mastracode": "^0.19.1",
+    "shiki": "^4.0.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@codemap/code-index": "workspace:*",
+    "@codemap/shared": "workspace:*",
+    "@mastra/core": "^1.35.0",
+    "@types/node": "^24.12.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
