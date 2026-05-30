@@ -10,15 +10,59 @@ import {
   start9Router,
 } from "./9router-helpers.js";
 
+const RESET = "\x1b[0m";
+const C_ACTION = "\x1b[38;2;96;216;255m";
+const C_SUCCESS = "\x1b[38;2;34;197;94m";
+const C_MUTED = "\x1b[38;2;107;114;128m";
+const C_WHITE = "\x1b[38;2;229;231;235m";
+const STEP_TOTAL = 6;
+
+function gradientText(text: string): string {
+  const colors = [
+    "\x1b[38;2;96;216;255m",
+    "\x1b[38;2;125;211;252m",
+    "\x1b[38;2;147;197;253m",
+    "\x1b[38;2;196;181;253m",
+    "\x1b[38;2;216;180;254m",
+    "\x1b[38;2;244;114;182m",
+  ];
+
+  return Array.from(text)
+    .map((char, index) => `${colors[index % colors.length]}${char}`)
+    .join("") + RESET;
+}
+
+function buildBrandHeader(): string {
+  return [
+    `  ${gradientText("CODEMAP")}`,
+    `  ${C_MUTED}I N I T I A L   S E T U P  ·  G A T E W A Y${RESET}`,
+  ].join("\n");
+}
+
+function setupProgress(step: number): string {
+  const dots = Array.from({ length: STEP_TOTAL }, (_, i) => {
+    const n = i + 1;
+    if (n < step) return `${C_SUCCESS}●${RESET}`;
+    if (n === step) return `${C_ACTION}◆${RESET}`;
+    return `${C_MUTED}○${RESET}`;
+  }).join("  ");
+
+  return `${dots}  ${C_MUTED}step ${step} of ${STEP_TOTAL}${RESET}`;
+}
+
+function setupMessage(step: number, message: string): string {
+  return `${C_WHITE}CodeMap — AI-powered code intelligence${RESET}\n\n${setupProgress(step)}\n\n${message}`;
+}
+
 // ── Sub-flows ─────────────────────────────────────────────────────────
 
 async function setup9Router(): Promise<string | symbol> {
   if (!is9RouterInstalled()) {
     const doInstall = await p.select({
-      message: "9router is not installed yet. Would you like to install it?",
+      message: setupMessage(2, "9router is not installed yet. Install the local gateway now?"),
       options: [
-        { value: "install", label: "Install 9router", hint: "npm install -g 9router" },
-        { value: "skip", label: "Skip", hint: "I'll install it myself" },
+        { value: "install", label: "Install 9router", hint: "recommended · npm install -g 9router" },
+        { value: "skip", label: "Skip for now", hint: "I'll install it myself" },
       ],
     });
 
@@ -61,6 +105,7 @@ async function setup9Router(): Promise<string | symbol> {
 async function selectModel(
   baseUrl: string,
   apiKey?: string,
+  stepLabel = "Select default model",
 ): Promise<string | symbol> {
   const s = p.spinner();
   s.start("Fetching models");
@@ -78,7 +123,7 @@ async function selectModel(
     ];
 
     const selected = await p.autocomplete({
-      message: "Select default model",
+      message: stepLabel,
       options,
       placeholder: "Type to search models...",
       maxItems: 10,
@@ -105,7 +150,7 @@ async function selectModel(
 
   // No models returned — manual input
   const manual = await p.text({
-    message: "Enter default model ID",
+    message: `${stepLabel}\nEnter default model ID`,
     placeholder: "e.g. gpt-4o, claude-sonnet-4",
     defaultValue: "coder",
   });
@@ -117,7 +162,7 @@ async function selectModel(
 // ── Main setup wizard ─────────────────────────────────────────────────
 
 export async function runInteractiveSetup(): Promise<void> {
-  p.intro("CodeMap — AI-powered code intelligence");
+  p.intro(buildBrandHeader());
 
   let step = 1;
   let provider = "";
@@ -131,7 +176,7 @@ export async function runInteractiveSetup(): Promise<void> {
       // ── Step 1: Provider ──────────────────────────────────────────
       case 1: {
         const v = await p.select({
-          message: "Choose your LLM provider",
+          message: setupMessage(1, "Choose your LLM provider"),
           options: [
             { value: "9router", label: "9router (recommended)", hint: "local proxy, no API key needed" },
             { value: "openai", label: "OpenAI", hint: "platform.openai.com" },
@@ -160,7 +205,7 @@ export async function runInteractiveSetup(): Promise<void> {
             : DEFAULT_BASE_URL;
 
           const v = await p.text({
-            message: `Base URL for ${provider}`,
+            message: setupMessage(2, "Enter the gateway base URL"),
             defaultValue: defaultUrl,
             placeholder: defaultUrl,
           });
@@ -175,11 +220,11 @@ export async function runInteractiveSetup(): Promise<void> {
       // ── Step 3: API Key ──────────────────────────────────────────
       case 3: {
         const hint = provider === "9router"
-          ? `Get your key from: http://localhost:${NINE_ROUTER_LOCAL_PORT}/dashboard/endpoint`
-          : "Enter your API key for the provider";
+          ? `Paste the endpoint key from http://localhost:${NINE_ROUTER_LOCAL_PORT}/dashboard/endpoint`
+          : "Enter the API key for this gateway";
 
         const v = await p.password({
-          message: hint,
+          message: setupMessage(3, hint),
           mask: "•",
         });
 
@@ -195,7 +240,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
       // ── Step 4: Default Model ────────────────────────────────────
       case 4: {
-        const v = await selectModel(baseUrl, apiKey || undefined);
+        const v = await selectModel(baseUrl, apiKey || undefined, setupMessage(4, "Select default model"));
         if (p.isCancel(v)) { step = 3; break; }
         defaultModel = v;
         step = 5;
@@ -205,10 +250,10 @@ export async function runInteractiveSetup(): Promise<void> {
       // ── Step 5: Config Scope ─────────────────────────────────────
       case 5: {
         const v = await p.select({
-          message: "Where to save your configuration?",
+          message: setupMessage(5, "Where should CodeMap save this configuration?"),
           options: [
-            { value: "global", label: "Global", hint: "~/.codemap/llm-gateway.json (all projects)" },
-            { value: "project", label: "Project", hint: ".codemap/llm-gateway.json (current project only)" },
+            { value: "global", label: "Global", hint: "~/.codemap/llm-gateway.json · all projects" },
+            { value: "project", label: "Project", hint: ".codemap/llm-gateway.json · current repo only" },
           ],
         });
 
@@ -224,17 +269,19 @@ export async function runInteractiveSetup(): Promise<void> {
 
         p.note(
           [
-            `Provider:  ${provider}`,
+            setupProgress(6),
+            "",
+            `Gateway:   ${provider}`,
             `Base URL:  ${baseUrl}`,
-            `API Key:   ${maskedKey}`,
+            `API key:   ${maskedKey}`,
             `Model:     ${defaultModel}`,
-            `Scope:     ${scope}`,
+            `Saved to:  ${scope}`,
           ].join("\n"),
-          "Configuration summary",
+          "Review configuration",
         );
 
         const v = await p.confirm({
-          message: "Save this configuration?",
+          message: setupMessage(6, "Save this configuration?"),
         });
 
         if (p.isCancel(v)) { step = 5; break; }
@@ -258,17 +305,17 @@ export async function runInteractiveSetup(): Promise<void> {
 
         s.stop("Configuration saved");
 
-        p.note(result.path, "Config saved to");
+        p.note(result.path, "Config saved");
         p.note(
           [
             "CODEMAP_LLM_GATEWAY_BASE_URL",
             "CODEMAP_LLM_GATEWAY_API_KEY",
             "CODEMAP_LLM_GATEWAY_CODER_MODEL",
           ].join("\n"),
-          "Override with env vars",
+          "Environment overrides",
         );
 
-        p.outro("Setup complete! Run codemap to start.");
+        p.outro("Setup complete. Run codemap to start mapping your repo.");
         return;
       }
     }
