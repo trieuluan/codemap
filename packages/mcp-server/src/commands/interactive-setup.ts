@@ -172,7 +172,8 @@ async function is9RouterRunning(): Promise<boolean> {
     });
     // Any response (even 401/403) means the server is running
     return true;
-  } catch {
+  } catch (err) {
+    console.log(`   [debug] 9router not reachable at http://localhost:${NINE_ROUTER_LOCAL_PORT}: ${err instanceof Error ? err.message : String(err)}`);
     return false;
   }
 }
