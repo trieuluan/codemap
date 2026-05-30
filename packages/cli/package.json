@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@codemap/core": "workspace:*",
+    "@codemap-ai/mcp": "workspace:*",
     "@ai-sdk/openai": "^3.0.63",
     "@earendil-works/pi-tui": "^0.74.0",
     "@git-diff-view/core": "^0.1.3",

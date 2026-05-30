@@ -157,6 +157,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^3.0.63
         version: 3.0.66(zod@4.4.3)
+      '@codemap-ai/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@codemap/core':
         specifier: workspace:*
         version: link:../core

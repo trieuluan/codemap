@@ -251,26 +251,41 @@ function resolveServerCommand(runtime: {
   args: string[];
 } {
   const { packageRoot, isSourceRuntime } = runtime;
+
+  // In source/dev runtime: prefer mcp/src via tsx from monorepo sibling layout
   if (isSourceRuntime) {
-    return {
-      command: process.execPath,
-      args: [
-        require.resolve("tsx/cli"),
-        path.join(packageRoot, "src", "index.ts"),
-      ],
-    };
+    const mcpSrcEntry = path.join(
+      path.dirname(packageRoot),
+      "mcp",
+      "src",
+      "index.ts",
+    );
+    if (existsSync(mcpSrcEntry)) {
+      return {
+        command: process.execPath,
+        args: [require.resolve("tsx/cli"), mcpSrcEntry],
+      };
+    }
   }
 
-  const distEntry = path.join(packageRoot, "dist", "index.js");
-  if (existsSync(distEntry)) {
-    return { command: process.execPath, args: [distEntry] };
+  // Try @codemap-ai/mcp package (production dep or workspace symlink → dist/index.js)
+  try {
+    const mcpEntry = require.resolve("@codemap-ai/mcp");
+    return { command: process.execPath, args: [mcpEntry] };
+  } catch {
+    // Fallback: sibling mcp/dist in monorepo
+    const mcpDistEntry = path.join(
+      path.dirname(packageRoot),
+      "mcp",
+      "dist",
+      "index.js",
+    );
+    if (existsSync(mcpDistEntry)) {
+      return { command: process.execPath, args: [mcpDistEntry] };
+    }
   }
 
-  return {
-    command: process.execPath,
-    args: [
-      require.resolve("tsx/cli"),
-      path.join(packageRoot, "src", "index.ts"),
-    ],
-  };
+  throw new Error(
+    "Cannot locate CodeMap MCP server. Ensure @codemap-ai/mcp is installed.",
+  );
 }

@@ -171,9 +171,18 @@ async function readConfigFile(configPath: string) {
   }
 }
 
-function getConfigPaths(cwd = process.cwd()) {
+async function findProjectRoot(cwd: string): Promise<string> {
+  try {
+    const { rootDir } = await getPackages(cwd);
+    return rootDir;
+  } catch {
+    return cwd;
+  }
+}
+
+function getConfigPaths(projectRoot: string) {
   return {
-    projectConfigPath: path.join(cwd, ".codemap", "mcp.json"),
+    projectConfigPath: path.join(projectRoot, ".codemap", "mcp.json"),
     globalConfigPath: path.join(homedir(), ".codemap", "mcp.json"),
   };
 }
@@ -214,7 +223,8 @@ function applyLayer(resolved: McpServerConfig, layer: McpConfigFile | null) {
 export async function loadConfig(
   cwd = process.cwd(),
 ): Promise<McpServerConfig> {
-  const { projectConfigPath, globalConfigPath } = getConfigPaths(cwd);
+  const projectRoot = await findProjectRoot(cwd);
+  const { projectConfigPath, globalConfigPath } = getConfigPaths(projectRoot);
   const [projectConfig, globalConfig] = await Promise.all([
     readConfigFile(projectConfigPath),
     readConfigFile(globalConfigPath),
