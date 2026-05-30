@@ -1248,6 +1248,9 @@ export class ChatTerminal {
       newSession: () => this.startNewSession(),
       reinitHarness: async () => {
         await resetHarnessSingleton();
+        // Reconnect the toolClient's MCP server so slash commands (/projects, /status, etc.)
+        // use a fresh MCP process that re-reads the updated API token from disk.
+        await this.options.toolClient.reconnect().catch(() => {});
         await warmupHarness({
           toolClient: this.options.toolClient,
           baseUrl: this.options.provider.baseUrl,

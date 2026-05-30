@@ -19,6 +19,7 @@ import {
   C_SUCCESS,
   C_WHITE,
   RESET,
+  SPINNER,
 } from "./theme.js";
 
 function buildBannerLines(): string[] {
@@ -72,6 +73,7 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
     const terminal = new ProcessTerminal();
     const tui = new TUI(terminal, false);
     const root = new Container();
+    let loginActive = false;
 
     const bannerLines = buildBannerLines();
     const banner = new Text(bannerLines.join("\n"));
@@ -96,18 +98,39 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
       }
 
       // Login selected — show status and run auth flow
+      loginActive = true;
       root.removeChild(select);
       const status = new Text(`${C_ACTION}  Opening browser for CodeMap login...${RESET}`);
       root.addChild(status);
       tui.requestRender();
 
+      // Spinner animation while waiting for browser authorization
+      let spinnerFrame = 0;
+      const spinnerInterval = setInterval(() => {
+        spinnerFrame = (spinnerFrame + 1) % SPINNER.length;
+        status.setText(`${C_ACTION}  ${SPINNER[spinnerFrame]} Waiting for authorization in browser...${RESET}`);
+        tui.requestRender();
+      }, 80);
+
+      // Switch to spinner after a short delay (gives browser time to open)
+      const SPINNER_TRANSITION_MS = 1500;
+      setTimeout(() => {
+        if (!loginActive) return;
+        status.setText(`${C_ACTION}  ${SPINNER[0]} Waiting for authorization in browser...${RESET}`);
+        tui.requestRender();
+      }, SPINNER_TRANSITION_MS);
+
       try {
         const result = await runLoginFlow(config);
+        loginActive = false;
+        clearInterval(spinnerInterval);
         tui.stop();
         const name = result.user?.name ?? result.user?.email ?? "user";
         process.stdout.write(`\n${C_SUCCESS}  ✓ Logged in as ${name}${RESET}\n\n`);
         resolve("loggedin");
       } catch (err) {
+        loginActive = false;
+        clearInterval(spinnerInterval);
         const msg = err instanceof Error ? err.message : String(err);
         root.removeChild(status);
         root.addChild(new Text(`${C_ERROR}  Login failed: ${msg}${RESET}\n`));
@@ -140,6 +163,7 @@ export async function showLoginScreen(config: McpServerConfig): Promise<"loggedi
         resolve("exit");
         return { consume: true };
       }
+      if (loginActive) return { consume: false };
       select.handleInput(data);
       tui.requestRender();
       return { consume: true };

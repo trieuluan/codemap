@@ -3,8 +3,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "@codemap/core/config.js";
 import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
 import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import type { Project, ProjectImportDetail } from "@codemap/core/lib/api-types.js";
-import { buildImportHealth, formatShortCommit } from "@codemap/core/lib/import-health.js";
+import type {
+  Project,
+  ProjectImportDetail,
+} from "@codemap/core/lib/api-types.js";
+import {
+  buildImportHealth,
+  formatShortCommit,
+} from "@codemap/core/lib/import-health.js";
 import { resolveWorkspace } from "@codemap/core/lib/workspace-resolver.js";
 
 interface ProjectListItem extends Project {
@@ -33,7 +39,8 @@ function formatProject(p: ProjectListItem, index: number): string {
         ? `, parse: ${imp.parseStatus}`
         : "";
     lines.push(`   Latest import: ${imp.status}${parseInfo}`);
-    if (imp.commitSha) lines.push(`   Import commit: ${formatShortCommit(imp.commitSha)}`);
+    if (imp.commitSha)
+      lines.push(`   Import commit: ${formatShortCommit(imp.commitSha)}`);
     if (imp.completedAt) {
       lines.push(
         `   Last imported: ${new Date(imp.completedAt).toLocaleString()}`,
@@ -78,13 +85,10 @@ export function registerListProjectsTool(
       },
     },
     withToolError(async ({ status }) => {
-      const projects = await client.request<ProjectListItem[]>(
-        "/projects",
-        {
-          authRequired: true,
-          query: { include: "latestImport" },
-        },
-      );
+      const projects = await client.request<ProjectListItem[]>("/projects", {
+        authRequired: true,
+        query: { include: "latestImport" },
+      });
 
       const filtered = status
         ? projects.filter((p) => p.status === status)
@@ -92,8 +96,8 @@ export function registerListProjectsTool(
 
       if (filtered.length === 0) {
         const summary = status
-            ? `No projects with status "${status}" found.`
-            : "No cloud projects found. Use create_project to create one (local tools work without a cloud project).";
+          ? `No projects with status "${status}" found.`
+          : "No cloud projects found. Use create_project to create one (local tools work without a cloud project).";
 
         return success(summary, {
           items: [],

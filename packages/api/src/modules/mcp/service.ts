@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import type {
   CodeMapUser,
   McpAuthClaimResponse,
   McpAuthStatusResponse,
 } from "@codemap/shared";
 import { db } from "../../db";
-import { apikey } from "../../db/schema";
 import { auth } from "../../lib/auth";
 import { createWorkspaceService } from "../workspace/service";
 
@@ -16,6 +14,7 @@ const MCP_AUTH_SESSION_TTL_SECONDS = 60 * 5;
 const DEFAULT_POLL_INTERVAL_MS = 2000;
 const MCP_API_KEY_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 90;
 const MCP_API_KEY_NAME_MAX_LENGTH = 32;
+const MCP_API_KEY_CACHE_PREFIX = "mcp:apikey:raw:";
 
 type McpAuthSessionStatus = "pending" | "authorized" | "denied";
 
@@ -36,13 +35,6 @@ interface McpAuthSessionRecord {
 type McpAuthStatusResult = McpAuthStatusResponse;
 type McpAuthClaimResult = McpAuthClaimResponse;
 
-interface McpApiKeyMetadata {
-  client?: string;
-  clientName?: string;
-  deviceName?: string | null;
-  lastSessionId?: string;
-}
-
 function getSessionKey(sessionId: string) {
   return `${MCP_AUTH_SESSION_KEY_PREFIX}${sessionId}`;
 }
@@ -53,32 +45,6 @@ function getTtlSeconds(expiresAt: string) {
   );
 
   return Math.max(ttlSeconds, 1);
-}
-
-function parseMcpApiKeyMetadata(metadata: string | null): McpApiKeyMetadata | null {
-  if (!metadata) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(metadata) as Record<string, unknown>;
-
-    return {
-      client: typeof parsed.client === "string" ? parsed.client : undefined,
-      clientName:
-        typeof parsed.clientName === "string" ? parsed.clientName : undefined,
-      deviceName:
-        typeof parsed.deviceName === "string"
-          ? parsed.deviceName
-          : parsed.deviceName === null
-            ? null
-            : undefined,
-      lastSessionId:
-        typeof parsed.lastSessionId === "string" ? parsed.lastSessionId : undefined,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function buildMcpApiKeyMetadata(input: {
@@ -110,6 +76,10 @@ function buildMcpApiKeyName(input: {
   return normalizedName.slice(0, MCP_API_KEY_NAME_MAX_LENGTH).trimEnd();
 }
 
+function buildApiKeyCacheKey(userId: string, clientName: string, deviceName: string | null) {
+  return `${MCP_API_KEY_CACHE_PREFIX}${userId}:${clientName}:${deviceName ?? ""}`;
+}
+
 export function createMcpService(
   redis: Redis,
   webAppUrl: string,
@@ -135,38 +105,6 @@ export function createMcpService(
     return JSON.parse(rawValue) as McpAuthSessionRecord;
   }
 
-  async function findReusableApiKey(input: {
-    userId: string;
-    clientName: string;
-    deviceName: string | null;
-  }) {
-    const now = new Date();
-    const candidateKeys = await db
-      .select()
-      .from(apikey)
-      .where(
-        and(
-          eq(apikey.referenceId, input.userId),
-          eq(apikey.enabled, true),
-          or(isNull(apikey.expiresAt), gt(apikey.expiresAt, now)),
-        ),
-      )
-      .orderBy(desc(apikey.updatedAt), desc(apikey.createdAt));
-
-    for (const candidateKey of candidateKeys) {
-      const metadata = parseMcpApiKeyMetadata(candidateKey.metadata);
-
-      if (
-        metadata?.client === "mcp" &&
-        metadata.clientName === input.clientName &&
-        (metadata.deviceName ?? null) === input.deviceName
-      ) {
-        return candidateKey;
-      }
-    }
-
-    return null;
-  }
 
   async function prepareApiKeyForSession(input: {
     session: McpAuthSessionRecord;
@@ -176,32 +114,34 @@ export function createMcpService(
       name?: string | null;
     };
   }) {
-    const reusableKey = await findReusableApiKey({
-      userId: input.user.id,
-      clientName: input.session.clientName,
-      deviceName: input.session.deviceName,
-    });
+    // Check Redis cache for a previously created raw key.
+    // The DB only stores hashed keys, so we cache the raw key here to reuse
+    // across login sessions on the same device.
+    const cacheKey = buildApiKeyCacheKey(
+      input.user.id,
+      input.session.clientName,
+      input.session.deviceName,
+    );
+    const cachedRawKey = await redis.get(cacheKey);
 
-    if (reusableKey) {
-      await db
-        .update(apikey)
-        .set({
-          metadata: JSON.stringify(
-            buildMcpApiKeyMetadata({
-              clientName: input.session.clientName,
-              deviceName: input.session.deviceName,
-              lastSessionId: input.session.sessionId,
-            }),
-          ),
-        })
-        .where(eq(apikey.id, reusableKey.id));
+    if (cachedRawKey) {
+      // Refresh metadata on the DB record so the key appears active
+      const keyName = buildMcpApiKeyName({
+        clientName: input.session.clientName,
+        deviceName: input.session.deviceName,
+      });
+      // Best-effort update — don't fail login if this errors
+      await auth.api.updateApiKey({
+        body: { keyId: cachedRawKey.split("_")[1] ?? cachedRawKey, name: keyName },
+      }).catch(() => {});
 
       return {
-        key: reusableKey.key,
+        key: cachedRawKey,
         createdAt: new Date().toISOString(),
       };
     }
 
+    // No cached key — create a new one and cache the raw value
     const keyName = buildMcpApiKeyName({
       clientName: input.session.clientName,
       deviceName: input.session.deviceName,
@@ -218,6 +158,9 @@ export function createMcpService(
         }),
       },
     });
+
+    // Cache the raw key for reuse — same TTL as the key itself
+    await redis.setex(cacheKey, MCP_API_KEY_EXPIRES_IN_SECONDS, createdKey.key);
 
     return {
       key: createdKey.key,

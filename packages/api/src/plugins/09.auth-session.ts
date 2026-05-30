@@ -11,8 +11,15 @@ export default fp(async function authSessionPlugin(fastify: FastifyInstance) {
       session: Awaited<ReturnType<typeof auth.api.getSession>> | null;
     };
 
-    requestWithSession.session = await auth.api.getSession({
-      headers: fromNodeHeaders(request.headers),
-    });
+    try {
+      requestWithSession.session = await auth.api.getSession({
+        headers: fromNodeHeaders(request.headers),
+      });
+    } catch {
+      // An invalid/expired API key in headers should not block requests
+      // to public endpoints (e.g. /mcp/auth/start for login).
+      // Treat lookup failures as unauthenticated.
+      requestWithSession.session = null;
+    }
   });
 });

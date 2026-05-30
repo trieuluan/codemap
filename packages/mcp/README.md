@@ -22,5 +22,5 @@ Add to your MCP client config:
 
 ## Links
 
-- [codemap.dev](https://codemap.dev)
-- [Documentation](https://codemap.dev/docs)
+- [codemap.codes](https://codemap.codes)
+- [Documentation](https://codemap.codes/docs)

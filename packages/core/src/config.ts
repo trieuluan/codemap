@@ -3,7 +3,7 @@ import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { findMonorepoRoot } from "./lib/monorepo-root.js";
 
-export const DEFAULT_API_URL = "https://api.codemap.dev";
+export const DEFAULT_API_URL = "https://api.codemap.codes";
 
 export interface McpConfigUser {
   id?: string | null;

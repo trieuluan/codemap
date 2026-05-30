@@ -156,6 +156,24 @@ export class CodeMapMcpToolClient {
       .join("\n");
   }
 
+  /** Disconnect the current MCP server and spawn a fresh one that re-reads
+   *  config from disk (e.g. after login updates ~/.codemap/mcp.json). */
+  async reconnect(): Promise<void> {
+    await this._mcpClient.disconnect().catch(() => {});
+    this._cachedToolCount = 0;
+    this._mcpClient = new MCPClient({
+      id: "codemap-chat-client",
+      servers: {
+        codemap: {
+          command: this._serverConfig.command,
+          args: this._serverConfig.args,
+          env: { ...process.env as Record<string, string>, CODEMAP_TOOL_MODE: "full" },
+          stderr: "pipe",
+        },
+      },
+    });
+  }
+
   async close(): Promise<void> {
     await this._mcpClient.disconnect();
   }
