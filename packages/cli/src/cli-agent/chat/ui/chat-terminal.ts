@@ -389,7 +389,9 @@ export class ChatTerminal {
       baseUrl: this.options.provider.baseUrl,
       apiKey: this.options.provider.apiKey,
       modelId: startupModel,
-      availableModels: this.store.getState().config.availableModels.map(m => m.id),
+      availableModels: this.store
+        .getState()
+        .config.availableModels.map((m) => m.id),
       onDebug: undefined,
       extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
       mastraTools,
@@ -400,7 +402,10 @@ export class ChatTerminal {
     // Synthesize project conventions in background (non-blocking)
     this.store.dispatch({ synthRunning: true });
     this.bus.scheduleRefresh();
-    loadOrSynthesizeAll(this.options.provider, this.store.getState().config.model)
+    loadOrSynthesizeAll(
+      this.options.provider,
+      this.store.getState().config.model,
+    )
       .catch(() => {})
       .finally(() => {
         this.store.dispatch({ synthRunning: false });
@@ -791,12 +796,17 @@ export class ChatTerminal {
         );
         if (!this.isActiveTask(taskId, taskAbort)) return;
         this.store.dispatch({
-          task: { ...this.store.getState().task, phase: "thinking", effort: classification.effort },
+          task: {
+            ...this.store.getState().task,
+            phase: "thinking",
+            effort: classification.effort,
+          },
         });
         this.bus.scheduleRefresh();
       }
 
-      const useMultiPhase = forceMultiPhase || planMode || classification.phase === "multi";
+      const useMultiPhase =
+        forceMultiPhase || planMode || classification.phase === "multi";
 
       // Set effort into task state so the UI can display it.
       if (useMultiPhase) {
@@ -805,7 +815,10 @@ export class ChatTerminal {
         });
       } else {
         this.store.dispatch({
-          task: { ...this.store.getState().task, effort: classification.effort },
+          task: {
+            ...this.store.getState().task,
+            effort: classification.effort,
+          },
         });
       }
 
@@ -818,7 +831,7 @@ export class ChatTerminal {
         getMastraCurrentModelId() ??
         resolveGatewayModel(
           this.store.getState().config.model,
-          this.store.getState().config.availableModels.map(m => m.id),
+          this.store.getState().config.availableModels.map((m) => m.id),
         );
       const agentInstructions = buildCodeMapAgentInstructions(
         sessionResourceCtx,
@@ -835,7 +848,9 @@ export class ChatTerminal {
       const result = useMultiPhase
         ? await runMultiPhaseAgentRuntime({
             provider: this.options.provider,
-            availableModels: this.store.getState().config.availableModels.map(m => m.id),
+            availableModels: this.store
+              .getState()
+              .config.availableModels.map((m) => m.id),
             model: this.store.getState().config.model,
             agentInstructions,
             userMessage: {
@@ -849,7 +864,12 @@ export class ChatTerminal {
               if (!this.isActiveTask(taskId, taskAbort)) return;
               resetStreaming();
               this.store.dispatch({
-                task: { ...this.store.getState().task, phase, model, effort: "high" },
+                task: {
+                  ...this.store.getState().task,
+                  phase,
+                  model,
+                  effort: "high",
+                },
               });
               this.bus.scheduleRefresh();
             },
@@ -861,7 +881,9 @@ export class ChatTerminal {
         : await runSingleAgentRuntime({
             provider: this.options.provider,
             model: this.store.getState().config.model,
-            availableModels: this.store.getState().config.availableModels.map(m => m.id),
+            availableModels: this.store
+              .getState()
+              .config.availableModels.map((m) => m.id),
             agentInstructions,
             userMessage: {
               role: "user",
@@ -978,7 +1000,9 @@ export class ChatTerminal {
           (m) => m.id !== cs.model && isStrongModel(m.id),
         );
         const newModel =
-          strong[0] ?? cs.availableModels.find((m) => m.id !== cs.model) ?? null;
+          strong[0] ??
+          cs.availableModels.find((m) => m.id !== cs.model) ??
+          null;
         if (newModel) {
           this.store.dispatch({ config: { ...cs, model: newModel.id } });
           this.appendMessage({
@@ -1157,7 +1181,7 @@ export class ChatTerminal {
     return {
       currentModel: s.config.model,
       provider: this.options.provider,
-      availableModels: s.config.availableModels.map(m => m.id),
+      availableModels: s.config.availableModels.map((m) => m.id),
       toolClient: this.options.toolClient,
       getMessages: () => this.store.getState().messages as Message[],
       appendMessage: (
@@ -1229,7 +1253,9 @@ export class ChatTerminal {
           baseUrl: this.options.provider.baseUrl,
           apiKey: this.options.provider.apiKey,
           modelId: this.store.getState().config.model,
-          availableModels: this.store.getState().config.availableModels.map(m => m.id),
+          availableModels: this.store
+            .getState()
+            .config.availableModels.map((m) => m.id),
           onDebug: undefined,
           extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
         });

@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { getPackages } from "@manypkg/get-packages";
 
 export const DEFAULT_API_URL = "https://api.codemap.dev";
 
@@ -63,11 +64,15 @@ function normalizeConfigFile(input: unknown): McpConfigFile {
       ? record.apiToken.trim()
       : null;
   const userRecord =
-    record.user && typeof record.user === "object" && !Array.isArray(record.user)
+    record.user &&
+    typeof record.user === "object" &&
+    !Array.isArray(record.user)
       ? (record.user as Record<string, unknown>)
       : null;
   const authRecord =
-    record.auth && typeof record.auth === "object" && !Array.isArray(record.auth)
+    record.auth &&
+    typeof record.auth === "object" &&
+    !Array.isArray(record.auth)
       ? (record.auth as Record<string, unknown>)
       : null;
   const user = userRecord
@@ -90,7 +95,8 @@ function normalizeConfigFile(input: unknown): McpConfigFile {
     ? {
         method: "api_key" as const,
         createdAt:
-          typeof authRecord.createdAt === "string" && authRecord.createdAt.trim()
+          typeof authRecord.createdAt === "string" &&
+          authRecord.createdAt.trim()
             ? authRecord.createdAt.trim()
             : undefined,
         lastValidatedAt:
@@ -102,7 +108,9 @@ function normalizeConfigFile(input: unknown): McpConfigFile {
     : null;
 
   const mcpServersRaw =
-    record.mcpServers && typeof record.mcpServers === "object" && !Array.isArray(record.mcpServers)
+    record.mcpServers &&
+    typeof record.mcpServers === "object" &&
+    !Array.isArray(record.mcpServers)
       ? (record.mcpServers as Record<string, unknown>)
       : null;
   let mcpServers: Record<string, McpConfigMcpServer> | null = null;
@@ -114,15 +122,22 @@ function normalizeConfigFile(input: unknown): McpConfigFile {
         const server: McpConfigMcpServer = {};
         if (typeof sc.type === "string") server.type = sc.type;
         if (typeof sc.command === "string") server.command = sc.command;
-        if (Array.isArray(sc.args)) server.args = sc.args.filter((a): a is string => typeof a === "string");
+        if (Array.isArray(sc.args))
+          server.args = sc.args.filter(
+            (a): a is string => typeof a === "string",
+          );
         if (sc.env && typeof sc.env === "object" && !Array.isArray(sc.env)) {
           server.env = {};
-          for (const [k, v] of Object.entries(sc.env as Record<string, unknown>)) {
+          for (const [k, v] of Object.entries(
+            sc.env as Record<string, unknown>,
+          )) {
             if (typeof v === "string") server.env[k] = v;
           }
         }
         if (Array.isArray(sc.priorityResources)) {
-          server.priorityResources = sc.priorityResources.filter((r): r is string => typeof r === "string");
+          server.priorityResources = sc.priorityResources.filter(
+            (r): r is string => typeof r === "string",
+          );
         }
         mcpServers[name] = server;
       }
@@ -163,10 +178,7 @@ function getConfigPaths(cwd = process.cwd()) {
   };
 }
 
-function applyLayer(
-  resolved: McpServerConfig,
-  layer: McpConfigFile | null,
-) {
+function applyLayer(resolved: McpServerConfig, layer: McpConfigFile | null) {
   if (!layer) {
     return resolved;
   }
@@ -199,7 +211,9 @@ function applyLayer(
   return nextResolved;
 }
 
-export async function loadConfig(cwd = process.cwd()): Promise<McpServerConfig> {
+export async function loadConfig(
+  cwd = process.cwd(),
+): Promise<McpServerConfig> {
   const { projectConfigPath, globalConfigPath } = getConfigPaths(cwd);
   const [projectConfig, globalConfig] = await Promise.all([
     readConfigFile(projectConfigPath),

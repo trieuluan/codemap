@@ -23,23 +23,36 @@ async function readWorkspaceProjectConfigAt(configPath: string) {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
 
   let mcpServers: Record<string, McpServerConfig> | undefined;
-  if (parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)) {
+  if (
+    parsed.mcpServers &&
+    typeof parsed.mcpServers === "object" &&
+    !Array.isArray(parsed.mcpServers)
+  ) {
     mcpServers = {};
-    for (const [name, config] of Object.entries(parsed.mcpServers as Record<string, unknown>)) {
+    for (const [name, config] of Object.entries(
+      parsed.mcpServers as Record<string, unknown>,
+    )) {
       if (config && typeof config === "object" && !Array.isArray(config)) {
         const sc = config as Record<string, unknown>;
         const entry: McpServerConfig = {};
         if (typeof sc.type === "string") entry.type = sc.type;
         if (typeof sc.command === "string") entry.command = sc.command;
-        if (Array.isArray(sc.args)) entry.args = sc.args.filter((a): a is string => typeof a === "string");
+        if (Array.isArray(sc.args))
+          entry.args = sc.args.filter(
+            (a): a is string => typeof a === "string",
+          );
         if (sc.env && typeof sc.env === "object" && !Array.isArray(sc.env)) {
           entry.env = {};
-          for (const [k, v] of Object.entries(sc.env as Record<string, unknown>)) {
+          for (const [k, v] of Object.entries(
+            sc.env as Record<string, unknown>,
+          )) {
             if (typeof v === "string") entry.env[k] = v;
           }
         }
         if (Array.isArray(sc.priorityResources)) {
-          entry.priorityResources = sc.priorityResources.filter((r): r is string => typeof r === "string");
+          entry.priorityResources = sc.priorityResources.filter(
+            (r): r is string => typeof r === "string",
+          );
         }
         mcpServers[name] = entry;
       }
@@ -136,16 +149,31 @@ export async function readPriorityResources(
  */
 export async function readMcpServerConfigs(
   cwd = process.cwd(),
-  globalMcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>,
-): Promise<Map<string, { command: string; args?: string[]; env?: Record<string, string> }>> {
+  globalMcpServers?: Record<
+    string,
+    { command?: string; args?: string[]; env?: Record<string, string> }
+  >,
+): Promise<
+  Map<
+    string,
+    { command: string; args?: string[]; env?: Record<string, string> }
+  >
+> {
   const config = await readWorkspaceProjectConfig(cwd);
-  const result = new Map<string, { command: string; args?: string[]; env?: Record<string, string> }>();
+  const result = new Map<
+    string,
+    { command: string; args?: string[]; env?: Record<string, string> }
+  >();
 
   // Apply global servers first (lower priority)
   if (globalMcpServers) {
     for (const [name, entry] of Object.entries(globalMcpServers)) {
       if (entry.command) {
-        result.set(name, { command: entry.command, args: entry.args, env: entry.env });
+        result.set(name, {
+          command: entry.command,
+          args: entry.args,
+          env: entry.env,
+        });
       }
     }
   }
@@ -154,7 +182,11 @@ export async function readMcpServerConfigs(
   if (config.mcpServers) {
     for (const [name, entry] of Object.entries(config.mcpServers)) {
       if (entry.command) {
-        result.set(name, { command: entry.command, args: entry.args, env: entry.env });
+        result.set(name, {
+          command: entry.command,
+          args: entry.args,
+          env: entry.env,
+        });
       }
     }
   }
@@ -261,10 +293,6 @@ export async function removeMcpServerEntry(
   delete mcpServers[name];
   existing.mcpServers = mcpServers;
 
-  await writeFile(
-    configPath,
-    `${JSON.stringify(existing, null, 2)}\n`,
-    "utf8",
-  );
+  await writeFile(configPath, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
   return true;
 }

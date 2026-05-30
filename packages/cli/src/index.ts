@@ -3,9 +3,15 @@
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { version: CLI_VERSION } = require("../package.json") as { version: string };
+const { version: CLI_VERSION } = require("../package.json") as {
+  version: string;
+};
 
-import { runLoginCommand, runLogoutCommand, runWhoAmICommand } from "./commands/auth.js";
+import {
+  runLoginCommand,
+  runLogoutCommand,
+  runWhoAmICommand,
+} from "./commands/auth.js";
 import { runStatusCommand } from "./commands/status.js";
 import { runLocalIndexCommand } from "./commands/local-index.js";
 import {
@@ -49,7 +55,15 @@ async function main() {
   }
 
   // Gateway commands: need LLM gateway config (model routing)
-  const GATEWAY_COMMANDS = new Set(["chat", "ask", "route", "models", "doctor", "init-gateway", "help"]);
+  const GATEWAY_COMMANDS = new Set([
+    "chat",
+    "ask",
+    "route",
+    "models",
+    "doctor",
+    "init-gateway",
+    "help",
+  ]);
   if (!command || GATEWAY_COMMANDS.has(command)) {
     const parsed = parseArgs(argv);
     const baseCtx = createBaseContext(argv, parsed, CLI_VERSION);
@@ -74,11 +88,21 @@ async function main() {
     const ctx = { ...baseCtx, config };
 
     switch (parsed.command) {
-      case "chat": await runChat(ctx); return;
-      case "ask": await runAsk(ctx); return;
-      case "route": runRouteCommand(ctx); return;
-      case "models": await runModels(ctx); return;
-      case "doctor": await runDoctor(ctx); return;
+      case "chat":
+        await runChat(ctx);
+        return;
+      case "ask":
+        await runAsk(ctx);
+        return;
+      case "route":
+        runRouteCommand(ctx);
+        return;
+      case "models":
+        await runModels(ctx);
+        return;
+      case "doctor":
+        await runDoctor(ctx);
+        return;
     }
     return;
   }
@@ -128,7 +152,9 @@ async function main() {
       runOnboardingCommand(process.argv.slice(3));
       return;
     default:
-      console.error(`Unknown command: "${command}". Run "codemap help" for usage.`);
+      console.error(
+        `Unknown command: "${command}". Run "codemap help" for usage.`,
+      );
       process.exitCode = 1;
   }
 }

@@ -26,6 +26,7 @@
     "@better-auth/api-key": "^1.6.7",
     "@bull-board/api": "^6.21.1",
     "@bull-board/fastify": "^6.21.1",
+    "@bull-board/ui": "^7.1.5",
     "@codemap/code-index": "file:../code-index",
     "@codemap/shared": "file:../shared",
     "@fastify/autoload": "^6.3.1",

@@ -25,7 +25,7 @@
     "dev:mcp": "npm --workspace=@codemap-ai/mcp run dev",
     "build:mcp": "npm run build:core && npm --workspace=@codemap-ai/mcp run build",
     "start:mcp": "npm --workspace=@codemap-ai/mcp run start",
-    "dev:cli": "npm --workspace=@codemap-ai/cli run dev",
+    "dev:cli": "pnpm --filter @codemap-ai/cli run dev",
     "build:cli": "npm run build:core && npm --workspace=@codemap-ai/cli run build",
     "start:cli": "npm --workspace=@codemap-ai/cli run start",
     "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap/api --filter @codemap/web --filter @codemap/shared --no-git-tag-version",
@@ -43,5 +43,8 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "@manypkg/get-packages": "^3.1.0"
   }
 }
