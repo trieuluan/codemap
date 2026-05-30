@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { basename, extname, isAbsolute, resolve } from "node:path";
+import { optimizeImageForModel } from "../../../core/image-optimizer.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -20,9 +21,18 @@ export interface PastedImage {
   mimeType: string;
 }
 
+async function toPastedImage(marker: string, buffer: Buffer, mimeType: string): Promise<PastedImage> {
+  const optimized = await optimizeImageForModel(buffer, mimeType, { maxBytes: MAX_IMAGE_BYTES });
+  return {
+    marker,
+    data: optimized.buffer.toString("base64"),
+    mimeType: optimized.mimeType,
+  };
+}
+
 // Read PNG image from macOS clipboard via osascript.
-// Returns base64 PNG string or null if clipboard has no image.
-async function readClipboardImage(): Promise<string | null> {
+// Returns raw Buffer or null if clipboard has no image.
+async function readClipboardImage(): Promise<Buffer | null> {
   if (process.platform !== "darwin") return null;
   return new Promise((resolve) => {
     // osascript writes raw PNG bytes to stdout when clipboard contains an image
@@ -35,7 +45,7 @@ async function readClipboardImage(): Promise<string | null> {
         try {
           const hex = stdout.trim().replace(/\s+/g, "");
           const buf = Buffer.from(hex, "hex");
-          resolve(buf.toString("base64"));
+          resolve(buf);
         } catch {
           resolve(null);
         }
@@ -57,15 +67,8 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
   if (dataUrl) {
     const mime = dataUrl[1]!.toLowerCase();
     const base64 = dataUrl[2]!.replace(/\s+/g, "");
-    const approxBytes = Math.floor((base64.length * 3) / 4);
-    if (approxBytes > MAX_IMAGE_BYTES) {
-      throw new Error("Image paste is too large. Max size is 5 MB.");
-    }
-    return {
-      marker: `[image: pasted ${mime.split("/")[1]}]`,
-      data: base64,
-      mimeType: mime,
-    };
+    const buffer = Buffer.from(base64, "base64");
+    return toPastedImage(`[image: pasted ${mime.split("/")[1]}]`, buffer, mime);
   }
 
   const pathText = extractSinglePath(trimmed);
@@ -87,17 +90,9 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
     try {
       const info = await stat(filePath);
       if (!info.isFile()) continue;
-      if (info.size > MAX_IMAGE_BYTES) {
-        throw new Error(`Image is too large (${Math.ceil(info.size / 1024 / 1024)} MB). Max size is 5 MB.`);
-      }
       const bytes = await readFile(filePath);
-      const base64 = bytes.toString("base64");
       const name = basename(filePath);
-      return {
-        marker: `[image: ${name}]`,
-        data: base64,
-        mimeType: mime,
-      };
+      return toPastedImage(`[image: ${name}]`, bytes, mime);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       // ENOENT — try next candidate or fall through to clipboard
@@ -107,14 +102,10 @@ export async function imageFromPaste(data: string): Promise<PastedImage | null> 
   // File not found via path — try clipboard (covers browser drag-drop where
   // the temp file is cleaned up before we can read it, like Claude Code does)
   if (ext === ".png" || mime === "image/png") {
-    const clipBase64 = await readClipboardImage();
-    if (clipBase64) {
+    const clipBuffer = await readClipboardImage();
+    if (clipBuffer) {
       const name = basename(pathText);
-      return {
-        marker: `[image: ${name}]`,
-        data: clipBase64,
-        mimeType: "image/png",
-      };
+      return toPastedImage(`[image: ${name}]`, clipBuffer, "image/png");
     }
   }
 

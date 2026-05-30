@@ -38,7 +38,7 @@ import { runHelp } from "./commands/help.js";
 import { runInitGateway } from "./commands/init-gateway.js";
 import { runModels } from "./commands/models.js";
 import { runRouteCommand } from "./commands/route.js";
-import { runInteractiveSetup } from "./cli-agent/first-run-setup.js";
+import { runInteractiveSetup } from "./cli-agent/setup/index.js";
 
 async function main() {
   const command = process.argv[2];
