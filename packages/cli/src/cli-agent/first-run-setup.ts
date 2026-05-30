@@ -11,6 +11,7 @@ import {
   Text,
   TUI,
 } from "@earendil-works/pi-tui";
+import cfonts from "cfonts";
 import { writeGatewayConfig, DEFAULT_BASE_URL } from "../cli-agent/config.js";
 import {
   BOLD,
@@ -36,6 +37,50 @@ const SELECT_THEME = {
   scrollInfo:     (t: string) => `${C_GRAY}${t}${RESET}`,
   noMatch:        (t: string) => `${C_GRAY}${t}${RESET}`,
 };
+
+// ── Banner ────────────────────────────────────────────────────────────
+
+function buildBannerLines(): string[] {
+  try {
+    const result = cfonts.render("CODEMAP", {
+      font: "simple3d",
+      gradient: ["cyan", "magenta"],
+      transitionColors: true,
+      env: "node",
+    });
+    const raw: string = (result as { string: string }).string ?? "";
+    const lines = raw.split("\n");
+    let s = 0, e = lines.length - 1;
+    while (s <= e && (lines[s] ?? "").replace(/\x1b\[[0-9;]*m/g, "").trim() === "") s++;
+    while (e >= s && (lines[e] ?? "").replace(/\x1b\[[0-9;]*m/g, "").trim() === "") e--;
+    return lines.slice(s, e + 1);
+  } catch {
+    return ["  CODEMAP"];
+  }
+}
+
+// ── Progress indicator ────────────────────────────────────────────────
+
+function buildProgressLine(currentStep: number, totalSteps: number): string {
+  const width = 30;
+  const filled = Math.round((currentStep / totalSteps) * width);
+  const empty = width - filled;
+  const bar = "━".repeat(filled) + "─".repeat(empty);
+  return `${C_GRAY}  Step ${currentStep}/${totalSteps}  ${bar}${RESET}`;
+}
+
+// ── Keyboard hints ────────────────────────────────────────────────────
+
+function buildKeyboardHints(hasDefault: boolean = false): string {
+  const hints = ["↑↓ Navigate", "Enter Select", "Esc Back", "Ctrl+C Exit"];
+  if (hasDefault) hints.splice(1, 0, "Tab Fill default");
+  return `\n${C_GRAY}  ${hints.join("  │  ")}${RESET}`;
+}
+
+function formatCell(value: string, width: number): string {
+  const visible = value.length > width ? `${value.slice(0, Math.max(0, width - 1))}…` : value;
+  return visible.padEnd(width);
+}
 
 // ── Business logic helpers (unchanged) ────────────────────────────────
 
@@ -119,12 +164,29 @@ function start9Router(): void {
 function showSelectScreen(
   lines: string[],
   items: SelectItem[],
+  options?: { currentStep?: number; totalSteps?: number; showBanner?: boolean },
 ): Promise<string> {
   return new Promise((resolve) => {
     const terminal = new ProcessTerminal();
     terminal.clearScreen();
     const tui = new TUI(terminal, false);
     const root = new Container();
+
+    // Banner
+    if (options?.showBanner) {
+      const bannerLines = buildBannerLines();
+      for (const line of bannerLines) {
+        root.addChild(new Text(line));
+      }
+      root.addChild(new Text(`${C_GRAY}  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM${RESET}`));
+      root.addChild(new Spacer(1));
+    }
+
+    // Progress indicator
+    if (options?.currentStep && options?.totalSteps) {
+      root.addChild(new Text(buildProgressLine(options.currentStep, options.totalSteps)));
+      root.addChild(new Spacer(1));
+    }
 
     for (const line of lines) {
       root.addChild(new Text(line));
@@ -142,6 +204,7 @@ function showSelectScreen(
     };
 
     root.addChild(select);
+    root.addChild(new Text(buildKeyboardHints()));
     tui.addChild(root);
     tui.setFocus(select);
 
@@ -162,6 +225,7 @@ function showSelectScreen(
 function showInputScreen(
   lines: string[],
   defaultValue?: string,
+  options?: { currentStep?: number; totalSteps?: number; showBanner?: boolean },
 ): Promise<string> {
   return new Promise((resolve) => {
     const terminal = new ProcessTerminal();
@@ -169,16 +233,33 @@ function showInputScreen(
     const tui = new TUI(terminal, false);
     const root = new Container();
 
+    // Banner
+    if (options?.showBanner) {
+      const bannerLines = buildBannerLines();
+      for (const line of bannerLines) {
+        root.addChild(new Text(line));
+      }
+      root.addChild(new Text(`${C_GRAY}  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM${RESET}`));
+      root.addChild(new Spacer(1));
+    }
+
+    // Progress indicator
+    if (options?.currentStep && options?.totalSteps) {
+      root.addChild(new Text(buildProgressLine(options.currentStep, options.totalSteps)));
+      root.addChild(new Spacer(1));
+    }
+
     for (const line of lines) {
       root.addChild(new Text(line));
     }
     root.addChild(new Spacer(1));
 
-    const promptLabel = defaultValue
-      ? `${C_ACTION}> ${RESET}${C_GRAY}[${defaultValue}]${RESET} `
-      : `${C_ACTION}> ${RESET}`;
+    // Show hint line if defaultValue provided
+    if (defaultValue) {
+      root.addChild(new Text(`${C_GRAY}  Press Enter for default: ${defaultValue}${RESET}`));
+      root.addChild(new Spacer(1));
+    }
 
-    const label = new Text(promptLabel);
     const input = new Input();
     if (defaultValue) {
       input.setValue(defaultValue);
@@ -193,8 +274,8 @@ function showInputScreen(
       resolve("__back__");
     };
 
-    root.addChild(label);
     root.addChild(input);
+    root.addChild(new Text(buildKeyboardHints(!!defaultValue)));
     tui.addChild(root);
     tui.setFocus(input);
 
@@ -212,11 +293,31 @@ function showInputScreen(
   });
 }
 
-function showStatusScreen(lines: string[], durationMs = 1500): Promise<void> {
+function showStatusScreen(
+  lines: string[],
+  durationMs = 1500,
+  options?: { currentStep?: number; totalSteps?: number; showBanner?: boolean },
+): Promise<void> {
   return new Promise((resolve) => {
     const terminal = new ProcessTerminal();
     const tui = new TUI(terminal, false);
     const root = new Container();
+
+    // Banner
+    if (options?.showBanner) {
+      const bannerLines = buildBannerLines();
+      for (const line of bannerLines) {
+        root.addChild(new Text(line));
+      }
+      root.addChild(new Text(`${C_GRAY}  AI-POWERED CODE INTELLIGENCE & AGENT PLATFORM${RESET}`));
+      root.addChild(new Spacer(1));
+    }
+
+    // Progress indicator
+    if (options?.currentStep && options?.totalSteps) {
+      root.addChild(new Text(buildProgressLine(options.currentStep, options.totalSteps)));
+      root.addChild(new Spacer(1));
+    }
 
     for (const line of lines) {
       root.addChild(new Text(line));
@@ -249,7 +350,7 @@ export async function runInteractiveSetup(): Promise<void> {
       case 1: {
         const v = await showSelectScreen(
           [
-            `${C_WHITE}${BOLD}  CodeMap Setup${RESET}`,
+            `${C_WHITE}${BOLD}  Welcome to CodeMap Setup${RESET}`,
             ``,
             `  ${C_GRAY}CodeMap needs an LLM API to power its AI features.${RESET}`,
             `  ${C_GRAY}You can use OpenAI, OpenRouter, a local model, or 9router.${RESET}`,
@@ -266,6 +367,7 @@ export async function runInteractiveSetup(): Promise<void> {
               description: "",
             },
           ],
+          { currentStep: 1, totalSteps: 8, showBanner: true },
         );
 
         if (v === "exit" || v === "__back__") {
@@ -281,6 +383,7 @@ export async function runInteractiveSetup(): Promise<void> {
           [
             `${C_WHITE}${BOLD}  API Provider${RESET}`,
             ``,
+            `  ${C_GRAY}Choose your LLM API provider:${RESET}`,
           ],
           [
             {
@@ -299,6 +402,7 @@ export async function runInteractiveSetup(): Promise<void> {
               description: "run your own gateway",
             },
           ],
+          { currentStep: 2, totalSteps: 8 },
         );
 
         if (v === "__back__") {
@@ -322,6 +426,7 @@ export async function runInteractiveSetup(): Promise<void> {
               `  ${C_GRAY}• OpenRouter: https://openrouter.ai/api/v1${RESET}`,
             ],
             "https://api.openai.com/v1",
+            { currentStep: 3, totalSteps: 8 },
           );
 
           if (v === "__back__") {
@@ -338,6 +443,7 @@ export async function runInteractiveSetup(): Promise<void> {
               `  ${C_GRAY}(e.g. http://localhost:4000/v1)${RESET}`,
             ],
             DEFAULT_BASE_URL,
+            { currentStep: 3, totalSteps: 8 },
           );
 
           if (v === "__back__") {
@@ -379,13 +485,26 @@ export async function runInteractiveSetup(): Promise<void> {
           );
         }
 
-        const v = await showInputScreen(apiKeyLines, "");
+        const v = await showInputScreen(apiKeyLines, "", { currentStep: 4, totalSteps: 8 });
 
         if (v === "__back__") {
           step = 3;
           break;
         }
         apiKey = v;
+        if (apiKey) {
+          const looksValid = apiKey.length >= 8;
+          await showStatusScreen(
+            [
+              looksValid
+                ? `  ${C_SUCCESS}✓ API key captured${RESET}`
+                : `  ${C_YELLOW}⚠ API key looks short; continuing anyway${RESET}`,
+              `  ${C_GRAY}Stored value will be masked in the summary.${RESET}`,
+            ],
+            900,
+            { currentStep: 4, totalSteps: 8 },
+          );
+        }
         step = 5;
         break;
       }
@@ -409,6 +528,7 @@ export async function runInteractiveSetup(): Promise<void> {
           [
             `${C_WHITE}${BOLD}  Config Scope${RESET}`,
             ``,
+            `  ${C_GRAY}Where to save your configuration:${RESET}`,
           ],
           [
             {
@@ -422,6 +542,7 @@ export async function runInteractiveSetup(): Promise<void> {
               description: ".codemap/llm-gateway.json (current project only)",
             },
           ],
+          { currentStep: 6, totalSteps: 8 },
         );
 
         if (v === "__back__") {
@@ -433,8 +554,50 @@ export async function runInteractiveSetup(): Promise<void> {
         break;
       }
 
-      // ── Step 7: Write config & Done ─────────────────────────────────
+      // ── Step 7: Summary ────────────────────────────────────────────
       case 7: {
+        const maskedKey = apiKey ? `${apiKey.substring(0, 10)}...***` : "(not set)";
+        const v = await showSelectScreen(
+          [
+            `${C_WHITE}${BOLD}  Configuration Summary${RESET}`,
+            ``,
+            `  ${C_GRAY}Please review your configuration:${RESET}`,
+            ``,
+            `  ${C_WHITE}╭────────────────────────────────────────────╮${RESET}`,
+            `  ${C_WHITE}│                                            │${RESET}`,
+            `  ${C_WHITE}│  Provider:     ${C_ACTION}${formatCell(provider, 25)}${C_WHITE}│${RESET}`,
+            `  ${C_WHITE}│  Base URL:     ${C_ACTION}${formatCell(baseUrl, 25)}${C_WHITE}│${RESET}`,
+            `  ${C_WHITE}│  API Key:      ${C_ACTION}${formatCell(maskedKey, 25)}${C_WHITE}│${RESET}`,
+            `  ${C_WHITE}│  Model:        ${C_ACTION}${formatCell(defaultModel, 25)}${C_WHITE}│${RESET}`,
+            `  ${C_WHITE}│  Scope:        ${C_ACTION}${formatCell(scope, 25)}${C_WHITE}│${RESET}`,
+            `  ${C_WHITE}│                                            │${RESET}`,
+            `  ${C_WHITE}╰────────────────────────────────────────────╯${RESET}`,
+          ],
+          [
+            {
+              value: "confirm",
+              label: "Save configuration",
+              description: "write config to disk",
+            },
+            {
+              value: "back",
+              label: "Go back",
+              description: "change settings",
+            },
+          ],
+          { currentStep: 7, totalSteps: 8 },
+        );
+
+        if (v === "back" || v === "__back__") {
+          step = 6;
+          break;
+        }
+        step = 8;
+        break;
+      }
+
+      // ── Step 8: Write config & Done ─────────────────────────────────
+      case 8: {
         // Write config
         const result = await writeGatewayConfig({
           scope: scope as "global" | "project",
@@ -448,14 +611,18 @@ export async function runInteractiveSetup(): Promise<void> {
         const maskedKey = apiKey ? `${apiKey.substring(0, 10)}...***` : "(not set)";
         const v = await showSelectScreen(
           [
-            `${C_SUCCESS}${BOLD}  Setup complete!${RESET}`,
+            `${C_SUCCESS}${BOLD}  ✓ Setup complete!${RESET}`,
             ``,
             `  ${C_WHITE}Config saved to: ${result.path}${RESET}`,
             ``,
-            `  ${C_GRAY}• Base URL:      ${baseUrl}${RESET}`,
-            `  ${C_GRAY}• API Key:       ${maskedKey}${RESET}`,
-            `  ${C_GRAY}• Default Model: ${defaultModel}${RESET}`,
-            `  ${C_GRAY}• Scope:         ${scope}${RESET}`,
+            `  ${C_GRAY}╭────────────────────────────────────────────╮${RESET}`,
+            `  ${C_GRAY}│                                            │${RESET}`,
+            `  ${C_GRAY}│  Base URL:      ${C_WHITE}${formatCell(baseUrl, 24)}${C_GRAY}│${RESET}`,
+            `  ${C_GRAY}│  API Key:       ${C_WHITE}${formatCell(maskedKey, 24)}${C_GRAY}│${RESET}`,
+            `  ${C_GRAY}│  Default Model: ${C_WHITE}${formatCell(defaultModel, 24)}${C_GRAY}│${RESET}`,
+            `  ${C_GRAY}│  Scope:         ${C_WHITE}${formatCell(scope, 24)}${C_GRAY}│${RESET}`,
+            `  ${C_GRAY}│                                            │${RESET}`,
+            `  ${C_GRAY}╰────────────────────────────────────────────╯${RESET}`,
             ``,
             `  ${C_GRAY}Tip: override with env vars:${RESET}`,
             `  ${C_GRAY}  CODEMAP_LLM_GATEWAY_BASE_URL${RESET}`,
@@ -474,6 +641,7 @@ export async function runInteractiveSetup(): Promise<void> {
               description: "",
             },
           ],
+          { currentStep: 8, totalSteps: 8 },
         );
 
         if (v === "exit") {
@@ -492,8 +660,9 @@ export async function runInteractiveSetup(): Promise<void> {
 async function promptForUrl(
   lines: string[],
   defaultValue: string,
+  options?: { currentStep?: number; totalSteps?: number },
 ): Promise<string> {
-  let url = await showInputScreen(lines, defaultValue);
+  let url = await showInputScreen(lines, defaultValue, options);
 
   if (url === "__back__") {
     return "__back__";
@@ -509,7 +678,7 @@ async function promptForUrl(
         ``,
         `  ${C_ERROR}Invalid URL. Please try again.${RESET}`,
       ];
-      url = await showInputScreen(errorLines, defaultValue);
+      url = await showInputScreen(errorLines, defaultValue, options);
       if (url === "__back__") {
         return "__back__";
       }
@@ -542,6 +711,7 @@ async function setup9Router(): Promise<string> {
           description: "install manually later",
         },
       ],
+      { currentStep: 3, totalSteps: 8 },
     );
 
     if (doInstall === "__back__") {
@@ -554,6 +724,8 @@ async function setup9Router(): Promise<string> {
       terminal.clearScreen();
       const tui = new TUI(terminal, false);
       const root = new Container();
+      root.addChild(new Text(buildProgressLine(3, 8)));
+      root.addChild(new Spacer(1));
       const status = new Text(
         `  ${C_ACTION}${SPINNER[0]} Installing 9router...${RESET}`,
       );
@@ -579,6 +751,7 @@ async function setup9Router(): Promise<string> {
             `  ${C_SUCCESS}✓ 9router installed${RESET}`,
           ],
           800,
+          { currentStep: 3, totalSteps: 8 },
         );
       } catch {
         clearInterval(spinInterval);
@@ -589,6 +762,7 @@ async function setup9Router(): Promise<string> {
             `  ${C_GRAY}Install manually: npm install -g 9router${RESET}`,
           ],
           2000,
+          { currentStep: 3, totalSteps: 8 },
         );
       }
     } else {
@@ -598,6 +772,7 @@ async function setup9Router(): Promise<string> {
           `  ${C_GRAY}Install manually: npm install -g 9router${RESET}`,
         ],
         1500,
+        { currentStep: 3, totalSteps: 8 },
       );
     }
   }
@@ -610,6 +785,7 @@ async function setup9Router(): Promise<string> {
           `  ${C_SUCCESS}✓ 9router already running at http://localhost:${NINE_ROUTER_LOCAL_PORT}${RESET}`,
         ],
         800,
+        { currentStep: 3, totalSteps: 8 },
       );
     } else {
       start9Router();
@@ -618,6 +794,7 @@ async function setup9Router(): Promise<string> {
           `  ${C_ACTION}Starting 9router...${RESET}`,
         ],
         2000,
+        { currentStep: 3, totalSteps: 8 },
       );
 
       if (await is9RouterRunning()) {
@@ -626,6 +803,7 @@ async function setup9Router(): Promise<string> {
             `  ${C_SUCCESS}✓ 9router started at http://localhost:${NINE_ROUTER_LOCAL_PORT}${RESET}`,
           ],
           800,
+          { currentStep: 3, totalSteps: 8 },
         );
       } else {
         await showStatusScreen(
@@ -633,6 +811,7 @@ async function setup9Router(): Promise<string> {
             `  ${C_YELLOW}⚠ 9router may not have started. Check manually.${RESET}`,
           ],
           2000,
+          { currentStep: 3, totalSteps: 8 },
         );
       }
     }
@@ -650,6 +829,11 @@ async function selectModel(
   terminal.clearScreen();
   const tui = new TUI(terminal, false);
   const root = new Container();
+
+  // Progress indicator
+  root.addChild(new Text(buildProgressLine(5, 8)));
+  root.addChild(new Spacer(1));
+
   const status = new Text(
     `  ${C_WHITE}${BOLD}  Default Model${RESET}\n\n  ${C_ACTION}${SPINNER[0]} Fetching models...${RESET}`,
   );
@@ -690,6 +874,7 @@ async function selectModel(
         `  ${C_GRAY}Found ${models.length} model(s)${RESET}`,
       ],
       items,
+      { currentStep: 5, totalSteps: 8 },
     );
 
     if (selected === "__back__") {
@@ -704,6 +889,7 @@ async function selectModel(
           `  ${C_GRAY}Enter the model ID to use${RESET}`,
         ],
         "",
+        { currentStep: 5, totalSteps: 8 },
       );
       if (custom === "__back__") {
         return "__back__";
@@ -726,6 +912,7 @@ async function selectModel(
       `  ${C_GRAY}  • reviewer — code review tasks${RESET}`,
     ],
     "coder",
+    { currentStep: 5, totalSteps: 8 },
   );
 
   if (manual === "__back__") {
