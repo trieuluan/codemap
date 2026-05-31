@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Message } from "./store.js";
+import { stripAnsi } from "./pi-tui/text.js";
 import {
   appendToLastToolCallSummary,
   markLastPendingToolCallCanceled,
@@ -24,6 +25,7 @@ test("withToolCallSummary creates and reuses a matching tool_call", () => {
     toolCallId: "call_1",
     content: "package.json",
     timestamp: next[1]?.timestamp,
+    startedAtMs: next[1]?.startedAtMs,
   });
 
   const reused = withToolCallSummary(next, "server__get_file", "{}", "call_1");
@@ -40,7 +42,7 @@ test("markToolDone attaches a tool result to the latest matching tool_call", () 
   const toolCall = next[1];
 
   assert.equal(toolCall?.role, "tool_call");
-  assert.equal(toolCall?.content, "package.json ✓");
+  assert.equal(stripAnsi(toolCall?.content ?? ""), "package.json ✓");
   assert.equal(toolCall?.expandedContent, JSON.stringify({ summary: "done" }));
   assert.equal(toolCall?.toolResults?.length, 1);
   assert.equal(toolCall?.toolResults?.[0]?.content, "done");
@@ -57,7 +59,7 @@ test("markToolDone treats body containing [ERROR] without prefix as success", ()
   const next = markToolDone(messages, "view", fileBody);
   const toolCall = next[1];
 
-  assert.equal(toolCall?.content, "mastra-events.ts ✓");
+  assert.equal(stripAnsi(toolCall?.content ?? ""), "mastra-events.ts ✓");
   assert.equal(toolCall?.toolResults?.[0]?.success, true);
 });
 
@@ -70,7 +72,7 @@ test("markToolDone marks failure only when [ERROR] is the prefix", () => {
   const next = markToolDone(messages, "view", "[ERROR] File not found");
   const toolCall = next[1];
 
-  assert.equal(toolCall?.content, "missing.ts ✗");
+  assert.equal(stripAnsi(toolCall?.content ?? ""), "missing.ts ✗");
   assert.equal(toolCall?.toolResults?.[0]?.success, false);
 });
 
@@ -84,7 +86,7 @@ test("markToolDone matches by toolCallId when tool_end has no name", () => {
   const toolCall = next[1];
 
   assert.equal(toolCall?.role, "tool_call");
-  assert.equal(toolCall?.content, "a.txt ✓");
+  assert.equal(stripAnsi(toolCall?.content ?? ""), "a.txt ✓");
   assert.equal(toolCall?.toolResults?.[0]?.name, "write_file");
   assert.equal(toolCall?.toolResults?.[0]?.content, "done");
 });
@@ -104,9 +106,32 @@ test("markLastPendingToolCallCanceled only marks pending tool calls", () => {
   const next = markLastPendingToolCallCanceled(messages);
 
   assert.equal(next[1]?.toolResults?.length, 1);
-  assert.equal(next[2]?.content, "package.json ✗");
+  assert.equal(stripAnsi(next[2]?.content ?? ""), "package.json ✗");
   assert.equal(next[2]?.toolResults?.[0]?.success, false);
   assert.equal(next[2]?.toolResults?.[0]?.fullContent, "[ERROR] Canceled by user.");
+});
+
+test("markToolDone appends elapsed time when a tool_call timestamp exists", () => {
+  const baseNow = 1_700_000_000_000;
+  const originalDateNow = Date.now;
+  Date.now = () => baseNow;
+
+  try {
+    const messages: Message[] = [
+      { role: "user", content: "go" },
+      {
+        role: "tool_call",
+        name: "run_tests",
+        content: "npm run test",
+        timestamp: baseNow - 1250,
+      },
+    ];
+
+    const next = markToolDone(messages, "run_tests", JSON.stringify({ summary: "ok" }));
+    assert.equal(stripAnsi(next[1]?.content ?? ""), "npm run test ✓ 1.3s");
+  } finally {
+    Date.now = originalDateNow;
+  }
 });
 
 test("appendToLastToolCallSummary appends preview text to expandedContent", () => {

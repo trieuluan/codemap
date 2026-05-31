@@ -27,6 +27,8 @@ export interface Message {
   previewContent?: string; // passive tool preview shown inline
   welcomeData?: WelcomeData;
   timestamp?: number;
+  /** Actual wall-clock time the tool started (not grouped by HarnessMessage.createdAt). */
+  startedAtMs?: number;
 }
 
 export interface WelcomeData {

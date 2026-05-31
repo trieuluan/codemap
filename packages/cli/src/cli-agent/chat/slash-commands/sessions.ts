@@ -2,6 +2,8 @@ import type { Command } from "./types.js";
 import type { HarnessMessage, HarnessThread } from "../harness/events.js";
 import { listMastraThreads } from "../harness/harness-runtime.js";
 import type { Message } from "../ui/store.js";
+import { normalizeToolDisplayName } from "../ui/tool-call-messages.js";
+import { C_SUCCESS, C_ERROR, RESET } from "../ui/pi-tui/theme.js";
 
 function stringifyToolResult(result: unknown): string {
   return typeof result === "string" ? result : JSON.stringify(result ?? "");
@@ -29,25 +31,24 @@ function attachToolResult(
       msg.role === "tool_call" &&
       (msg.toolCallId === part.id || (!msg.toolCallId && msg.name === part.name))
     ) {
+      const marker = part.isError ? ` ${C_ERROR}✗${RESET}` : ` ${C_SUCCESS}✓${RESET}`;
       messages[i] = {
         ...msg,
         toolCallId: msg.toolCallId ?? part.id,
         toolResults: [...(msg.toolResults ?? []), toolResult],
         expandedContent: content,
-        content:
-          msg.content.endsWith(" ✓") || msg.content.endsWith(" ✗")
-            ? msg.content
-            : `${msg.content}${part.isError ? " ✗" : " ✓"}`,
+        content: msg.content.includes(`${RESET}`) ? msg.content : `${msg.content}${marker}`,
       };
       return;
     }
   }
 
+  const marker = part.isError ? ` ${C_ERROR}✗${RESET}` : ` ${C_SUCCESS}✓${RESET}`;
   messages.push({
     role: "tool_call",
     name: part.name,
     toolCallId: part.id,
-    content: `Call ${part.name}${part.isError ? " ✗" : " ✓"}`,
+    content: `${normalizeToolDisplayName(part.name)}${marker}`,
     toolResults: [toolResult],
     expandedContent: content,
     timestamp,
@@ -82,16 +83,30 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
       for (const part of msg.content) {
         if (part.type === "text") {
           textParts += (part as { type: "text"; text: string }).text;
+        } else if (part.type === "thinking") {
+          textParts += `[Thinking]: ${(part as { type: "thinking"; thinking: string }).thinking}
+`;
         } else if (part.type === "tool_call") {
           const p = part as { type: "tool_call"; id: string; name: string };
           if (textParts.trim()) {
             result.push({ role: "assistant", content: textParts.trim(), timestamp: ts });
             textParts = "";
           }
-          result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content: `Call ${p.name}`, timestamp: ts });
+          result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content: normalizeToolDisplayName(p.name), timestamp: ts });
         } else if (part.type === "tool_result") {
           attachToolResult(result, part as { type: "tool_result"; id: string; name: string; result: unknown; isError: boolean }, ts);
+        } else if (part.type === "image") {
+          const p = part as { type: "image"; mimeType: string };
+          result.push({ role: "system", content: `[Image: ${p.mimeType}]`, timestamp: ts });
+        } else if (part.type === "file") {
+          const p = part as { type: "file"; mediaType: string; filename?: string };
+          const label = p.filename ? `${p.filename} (${p.mediaType})` : p.mediaType;
+          result.push({ role: "system", content: `[File: ${label}]`, timestamp: ts });
+        } else if (part.type === "system_reminder") {
+          const p = part as { type: "system_reminder"; message: string };
+          result.push({ role: "system", content: `[Reminder] ${p.message}`, timestamp: ts });
         }
+        // om_observation_start/end/failed, om_thread_title_updated → internal, skip
       }
       if (textParts.trim()) {
         result.push({ role: "assistant", content: textParts.trim(), timestamp: ts });
@@ -104,7 +119,7 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
   return result;
 }
 
-function formatAge(date: Date | string): string {
+export function formatAge(date: Date | string): string {
   const diff = Date.now() - toTimestamp(date);
   const m = Math.floor(diff / 60_000);
   if (m < 60) return `${m}m ago`;
@@ -123,65 +138,44 @@ function getThreadTokenUsage(
   return t.tokenUsage;
 }
 
-function formatThread(t: HarnessThread, current: boolean): string {
+export function formatSessionLabel(t: HarnessThread, current: boolean): string {
   const usage = getThreadTokenUsage(t);
   const tok = usage?.totalTokens ? ` · ${Math.round(usage.totalTokens / 1000)}k tok` : "";
   const title = t.title ?? t.id.slice(0, 8);
   const bullet = current ? " ●" : "";
-  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt as Date | string)}`;
+  return `${t.id.slice(0, 8)}${bullet} ${title}${tok}  ${formatAge(t.updatedAt as Date | string)}`;
+}
+
+/** Sort threads by updatedAt descending (newest first). */
+export function sortThreads(threads: HarnessThread[]): HarnessThread[] {
+  return [...threads].sort(
+    (a, b) => toTimestamp(b.updatedAt as Date | string) - toTimestamp(a.updatedAt as Date | string),
+  );
 }
 
 export const sessionsCommand: Command = {
   name: "sessions",
-  description: "List saved chat threads. Usage: /sessions [thread-id-prefix]",
-  execute: async (args, ctx) => {
+  description: "List saved chat threads. Use the picker to switch.",
+  /** When true, pi-tui-app will open the inline session picker instead of printing a list. */
+  triggerSessionPicker: true,
+  execute: async (_args, ctx) => {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content, timestamp: Date.now() }]);
 
-    const query = args.trim();
     const threads = await listMastraThreads();
     if (threads.length === 0) {
       append("No saved threads yet.");
       return;
     }
 
-    const sortedThreads = [...threads].sort(
-      (a, b) => toTimestamp(b.updatedAt as Date | string) - toTimestamp(a.updatedAt as Date | string),
-    );
+    const sortedThreads = sortThreads(threads);
 
-    if (query) {
-      const matches = sortedThreads.filter((t) => t.id.startsWith(query));
-      if (matches.length === 0) {
-        append(`No saved thread matches \`${query}\`.`);
-        return;
-      }
-      if (matches.length > 1) {
-        append([`Multiple threads match \`${query}\`:`, "", ...matches.slice(0, 10).map((t) => formatThread(t, false))].join("\n"));
-        return;
-      }
-
-      const thread = matches[0]!;
-      if (!ctx.switchMastraThread || !ctx.loadMastraThreadMessages) {
-        append("Session switching is not available in this UI.");
-        return;
-      }
-
-      const switched = await ctx.switchMastraThread(thread.id);
-      if (!switched) {
-        append(`Failed to switch to thread \`${thread.id.slice(0, 8)}\`.`);
-        return;
-      }
-
-      await ctx.loadMastraThreadMessages(thread.id);
-      append(`Switched to \`${thread.id.slice(0, 8)}\` ${thread.title ?? "Untitled thread"}.`);
-      return;
-    }
-
+    // Fallback for non-TUI contexts: print list.
     const currentId = ctx.getMastraThreadId?.() ?? null;
-    const lines = ["**Recent threads** (newest first):", "", "Run `/sessions <id-prefix>` to switch.", ""];
+    const lines = ["**Recent threads** (newest first):", ""];
     sortedThreads
       .slice(0, 10)
-      .forEach((t) => lines.push(formatThread(t, t.id === currentId)));
+      .forEach((t) => lines.push(`\`${formatSessionLabel(t, t.id === currentId)}\``));
     append(lines.join("\n"));
   },
 };

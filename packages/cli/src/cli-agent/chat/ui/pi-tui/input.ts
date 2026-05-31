@@ -1,6 +1,8 @@
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { searchIndexedFiles } from "../../../core/file-search.js";
 import type { GatewayModel } from "../../../types.js";
+import type { HarnessThread } from "../../harness/events.js";
+import { formatSessionLabel } from "../../slash-commands/sessions.js";
 
 /**
  * Dedicated provider for the model picker overlay.
@@ -63,6 +65,70 @@ export class ModelPickerProvider implements AutocompleteProvider {
     // Schedule close after this tick so editor finishes apply before provider swaps back
     setTimeout(() => this.onClose(), 0);
     // Clear the input line
+    const newLines = [...lines];
+    newLines[cursorLine] = "";
+    return { lines: newLines, cursorLine, cursorCol: 0 };
+  }
+}
+
+/**
+ * Dedicated provider for the session/thread picker overlay.
+ * Shows a flat list of saved chat threads filtered by query.
+ * applyCompletion calls onSelect then onClose (scheduled after current tick).
+ */
+export class SessionPickerProvider implements AutocompleteProvider {
+  constructor(
+    private getThreads: () => HarnessThread[],
+    private getCurrentThreadId: () => string | null,
+    private onSelect: (threadId: string) => void,
+    private onClose: () => void,
+  ) {}
+
+  async getSuggestions(
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    _options: { signal: AbortSignal; force?: boolean },
+  ): Promise<AutocompleteSuggestions | null> {
+    const currentId = this.getCurrentThreadId();
+    const threads = this.getThreads();
+
+    if (threads.length === 0) return null;
+
+    const query = (lines[cursorLine] ?? "").slice(0, cursorCol).toLowerCase();
+    const filtered = query
+      ? threads.filter(
+          (t) =>
+            t.id.toLowerCase().includes(query) ||
+            (t.title ?? "").toLowerCase().includes(query),
+        )
+      : threads;
+
+    if (filtered.length === 0) {
+      return { prefix: query, items: [{ value: "", label: "No matches", description: "" }] };
+    }
+
+    const items: AutocompleteItem[] = filtered.map((t) => ({
+      value: t.id,
+      label: formatSessionLabel(t, t.id === currentId),
+      description: t.id === currentId ? "✓ active" : "",
+    }));
+
+    return { prefix: query, items };
+  }
+
+  applyCompletion(
+    lines: string[],
+    cursorLine: number,
+    _cursorCol: number,
+    item: AutocompleteItem,
+    _prefix: string,
+  ): { lines: string[]; cursorLine: number; cursorCol: number } {
+    if (!item.value) {
+      return { lines: [...lines], cursorLine, cursorCol: 0 };
+    }
+    this.onSelect(item.value);
+    setTimeout(() => this.onClose(), 0);
     const newLines = [...lines];
     newLines[cursorLine] = "";
     return { lines: newLines, cursorLine, cursorCol: 0 };

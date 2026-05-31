@@ -51,6 +51,7 @@ export interface BridgeCallbacks {
   currentStreamTextRef: Ref<string>;
   finalTextRef: Ref<string>;
   usedToolsRef: Ref<boolean>;
+  onMessageStart?: (createdAt: number) => void;
   onPlanApproval?: (planId: string, plan: string) => void;
   onEnd: (
     usage:
@@ -123,6 +124,17 @@ export function bridgeCommonEvent(
   event: HarnessEvent,
   cb: BridgeCallbacks,
 ): void {
+  if (event.type === "message_start") {
+    const message = event.message;
+    if (message?.role === "assistant" && message.createdAt) {
+      const ts = message.createdAt instanceof Date
+        ? message.createdAt.getTime()
+        : new Date(message.createdAt).getTime();
+      cb.onMessageStart?.(ts);
+    }
+    return;
+  }
+
   if (event.type === "message_update") {
     const message = event.message;
     if (message?.role !== "assistant") return;

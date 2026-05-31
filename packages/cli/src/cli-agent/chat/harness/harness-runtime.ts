@@ -4,8 +4,8 @@ import type { RequestContext } from "@mastra/core/request-context";
 import type { AgentLoopResult } from "../../core/agent-loop.js";
 import type {
   SingleAgentRuntimeInput,
-  MultiPhaseLoopInput,
   PlanReviewAction,
+  AgentPhase,
 } from "./types.js";
 import {
   bridgeCommonEvent,
@@ -14,10 +14,7 @@ import {
   type HarnessLike,
   summarizeHarnessEvent,
 } from "./events.js";
-import {
-  resolveHarnessModelId,
-  stripNineRouterPrefix,
-} from "./models.js";
+import { resolveHarnessModelId, stripNineRouterPrefix } from "./models.js";
 import {
   createManagedMastraSettings,
   upsertGlobalMastraProvider,
@@ -248,6 +245,7 @@ type RunHarnessCallbacks = Omit<
 > & {
   onPlanReady?: (plan: string) => void;
   onPlanWait?: () => Promise<PlanReviewAction>;
+  onPhaseStart?: (phase: AgentPhase, model: string) => void;
 };
 
 // ─── Drain tracking ───────────────────────────────────────────────────────────
@@ -354,17 +352,16 @@ async function createFreshHarness(
   // servers from .codemap/mcp.json still spawn their own children as before.
   const extraServerKeys = Object.keys(opts.extraServerConfigs ?? {});
   const baseMcpServers = opts.mastraTools
-    ? (extraServerKeys.length > 0 ? opts.extraServerConfigs : undefined)
+    ? extraServerKeys.length > 0
+      ? opts.extraServerConfigs
+      : undefined
     : { codemap: serverConfig, ...opts.extraServerConfigs };
 
   // getMastraTools() now returns keys with server prefix (e.g. "codemap_explore_task"),
   // so MASTRA_DISABLED_TOOLS exact-name matching works without pre-filtering here.
   const filteredMastraTools = opts.mastraTools ?? undefined;
 
-  const mcpServerIds = new Set([
-    "codemap",
-    ...extraServerKeys,
-  ]);
+  const mcpServerIds = new Set(["codemap", ...extraServerKeys]);
   const { harness, mcpManager } = await createMastraCode({
     settingsPath,
     ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
@@ -545,7 +542,11 @@ function applyAgentInstructions(
 async function getOrCreateHarness(
   opts: CreateHarnessOptions,
 ): Promise<HarnessLike> {
-  const wanted = resolveHarnessModelId(opts.modelId, opts.availableModels, opts.availableCombos);
+  const wanted = resolveHarnessModelId(
+    opts.modelId,
+    opts.availableModels,
+    opts.availableCombos,
+  );
   if (
     _singleton &&
     _singleton.baseUrl === opts.baseUrl &&
@@ -609,15 +610,22 @@ export async function runWithMastraHarness(
   });
   applyAgentInstructions(harness, input.agentInstructions);
 
+  // Switch to plan mode if requested (plan → approve → execute flow).
+  if (input.planMode) {
+    await harness.switchMode?.({ modeId: "plan" });
+  }
+
   const callbacks = {
     onToken: input.onToken,
     onStreamReset: input.onStreamReset,
     onToolStart: input.onToolStart,
     onToolResult: input.onToolResult,
+    onMessageStart: input.onMessageStart,
     onUsage: input.onUsage,
     onDebug: input.onDebug,
     onPlanReady: input.onPlanReady,
     onPlanWait: input.onPlanWait,
+    onPhaseStart: input.onPhaseStart,
     onOMObservation: input.onOMObservation,
     onOMReflection: input.onOMReflection,
     onAskQuestion: input.onAskQuestion,
@@ -648,208 +656,6 @@ export async function runWithMastraHarness(
     await resetHarnessSingleton();
   }
   return result;
-}
-
-/**
- * Run the plan → approve → execute flow through the Mastra Harness.
- *
- * Uses mastracode's built-in "plan" mode (with submit_plan tool) and "build" mode.
- * Plan approval bridges via plan_approval_required → onPlanWait → respondToPlanApproval.
- */
-export async function runMultiPhaseWithMastra(
-  input: MultiPhaseLoopInput,
-): Promise<AgentLoopResult> {
-  _currentEffort = input.effort ?? "high";
-  await drainHarness();
-  const harness = await getOrCreateHarness({
-    toolClient: input.toolClient,
-    baseUrl: input.provider.baseUrl,
-    apiKey: input.provider.apiKey,
-    modelId: input.model,
-    availableModels: input.availableModels,
-    availableCombos: input.availableCombos,
-    onDebug: input.onDebug,
-    extraServerConfigs: input.toolClient.getExtraServerConfigs(),
-  });
-  startDrainTracking(harness);
-
-  await harness.switchMode?.({ modeId: "plan" });
-  applyAgentInstructions(harness, input.agentInstructions);
-  input.onDebug?.({
-    event: "mastra_model_resolved",
-    requested: input.model,
-    resolved: harness.getCurrentModelId?.() ?? input.model,
-    availableCount: input.availableModels?.length ?? 0,
-  });
-
-  return new Promise<AgentLoopResult>((resolve, reject) => {
-    _lastModelApiError = null;
-    let finalText = "";
-    let currentStreamText = "";
-    let usedTools = false;
-    let settled = false;
-    let lastHarnessError: Error | null = null;
-
-    let unsubscribe = () => {};
-
-    const finish = (result: AgentLoopResult) => {
-      if (settled) return;
-      // If the harness resolved with empty text but saw an upstream error,
-      // reject so the catch block can display the real error to the user.
-      const upstreamError = lastHarnessError ?? _lastModelApiError;
-      if (!result.text && upstreamError) {
-        fail(upstreamError);
-        return;
-      }
-      settled = true;
-      input.onDebug?.({
-        event: "mastra_run_finish",
-        mode: "multi",
-        textLength: result.text.length,
-        usedTools: result.usedTools,
-        unsupportedToolCalling: result.unsupportedToolCalling,
-      });
-      input.signal?.removeEventListener("abort", onAbort);
-      unsubscribe();
-      resolve(result);
-    };
-
-    const fail = (err: unknown) => {
-      if (settled) return;
-      settled = true;
-      input.onDebug?.({
-        event: "mastra_run_fail",
-        mode: "multi",
-        error: err instanceof Error ? err.message : String(err),
-      });
-      input.signal?.removeEventListener("abort", onAbort);
-      unsubscribe();
-      reject(err);
-    };
-
-    const handlePlanApproval = async (planId: string, plan: string) => {
-      input.onPlanReady?.(plan);
-      if (!input.onPlanWait) {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "approved" },
-        });
-        return;
-      }
-      const raw = await input.onPlanWait();
-      const action = normalizePlanAction(raw);
-      if (action === "cancel") {
-        harness.abort?.();
-        finish({
-          text: "Plan cancelled.",
-          messages: [],
-          usedTools: false,
-          unsupportedToolCalling: false,
-        });
-        return;
-      }
-      if (action === "apply") {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "approved" },
-        });
-        try {
-          const signal = harness.sendSignal?.({
-            type: "system-reminder",
-            contents: "The user has approved the plan, begin executing.",
-          });
-          if (signal) await signal.accepted;
-        } catch {
-          /* non-fatal — harness starts build phase even if signal is not accepted */
-        }
-      } else {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "rejected", feedback: action },
-        });
-      }
-    };
-
-    const onAbort = () => {
-      harness.abort?.();
-      fail(createAbortError());
-    };
-
-    unsubscribe = harness.subscribe((event: HarnessEvent) => {
-      input.onDebug?.(
-        summarizeHarnessEvent(event, currentStreamText, finalText),
-      );
-      if (event.type === "mode_changed") {
-        const ev = event as HarnessEvent & { modeId?: string };
-        const modelId = harness.getCurrentModelId?.() ?? "";
-        if (ev.modeId === "plan") input.onPhaseStart?.("planning", modelId);
-        else if (ev.modeId === "build")
-          input.onPhaseStart?.("executing", modelId);
-        return;
-      }
-      bridgeCommonEvent(event, {
-        onToken: input.onToken,
-        onStreamReset: input.onStreamReset,
-        onToolStart: input.onToolStart,
-        onToolResult: input.onToolResult,
-        onUsage: input.onUsage,
-        onDebug: input.onDebug,
-        onOMObservation: input.onOMObservation,
-        onOMReflection: input.onOMReflection,
-        onAskQuestion: input.onAskQuestion,
-        harness,
-        currentStreamTextRef: {
-          get: () => currentStreamText,
-          set: (v) => {
-            currentStreamText = v;
-          },
-        },
-        finalTextRef: {
-          get: () => finalText,
-          set: (v) => {
-            finalText = v;
-            currentStreamText = "";
-          },
-        },
-        usedToolsRef: {
-          get: () => usedTools,
-          set: (v) => {
-            usedTools = v;
-          },
-        },
-        onPlanApproval: (planId, plan) => {
-          handlePlanApproval(planId, plan).catch(fail);
-        },
-        mcpServerIds: _singleton?.mcpServerIds,
-        onEnd: (usage) => {
-          finish({
-            text: finalText || currentStreamText,
-            messages: [input.userMessage],
-            usedTools,
-            unsupportedToolCalling: false,
-            usage,
-          });
-        },
-        onError: (err) => {
-          lastHarnessError = err instanceof Error ? err : new Error(String(err));
-          fail(lastHarnessError);
-        },
-      });
-    });
-
-    input.signal?.addEventListener("abort", onAbort, { once: true });
-
-    sendHarnessInput(
-      harness,
-      input.userMessage.content,
-      input.imageFiles,
-      input.onDebug,
-    ).catch((err: unknown) => {
-      fail(err instanceof Error ? err : new Error(String(err)));
-    });
-  }).finally(() => {
-    _currentEffort = null;
-  });
 }
 
 /** Drive the harness for a single-turn message and resolve when agent_end fires. */
@@ -950,6 +756,12 @@ function runHarness(
       }
     };
 
+    const toolCallMeta = new Map<
+      string,
+      { toolName: string; argsKey: string }
+    >();
+    const failedToolCounts = new Map<string, number>();
+
     const unsubscribe = harness.subscribe((event: HarnessEvent) => {
       callbacks.onDebug?.(
         summarizeHarnessEvent(event, currentStreamText, finalText),
@@ -981,6 +793,15 @@ function runHarness(
           unsupportedToolCalling: false,
           usage,
         });
+        return;
+      }
+      // Handle mode_changed for plan → build phase transitions.
+      if (event.type === "mode_changed") {
+        const ev = event as HarnessEvent & { modeId?: string };
+        const modelId = harness.getCurrentModelId?.() ?? "";
+        if (ev.modeId === "plan") callbacks.onPhaseStart?.("planning", modelId);
+        else if (ev.modeId === "build")
+          callbacks.onPhaseStart?.("executing", modelId);
         return;
       }
       bridgeCommonEvent(event, {
@@ -1017,10 +838,37 @@ function runHarness(
           });
         },
         onError: (err) => {
-          lastHarnessError = err instanceof Error ? err : new Error(String(err));
+          lastHarnessError =
+            err instanceof Error ? err : new Error(String(err));
           fail(lastHarnessError);
         },
       });
+      if (event.type === "tool_start") {
+        const argsKey = `${event.toolName}:${JSON.stringify(event.args ?? {})}`;
+        toolCallMeta.set(event.toolCallId ?? event.toolName, {
+          toolName: event.toolName,
+          argsKey,
+        });
+      }
+      if (event.type === "tool_end" && event.isError) {
+        const meta = toolCallMeta.get(event.toolCallId ?? "");
+        if (meta) {
+          const count = (failedToolCounts.get(meta.argsKey) ?? 0) + 1;
+          failedToolCounts.set(meta.argsKey, count);
+          if (count >= 3) {
+            const extra =
+              meta.toolName === "recall"
+                ? ' The "recall" tool requires a valid message ID as cursor value — strings like "latest", "current", or "cur" are not valid. Stop calling this tool and continue from your current conversation context.'
+                : ` Stop retrying "${meta.toolName}" and continue from your current conversation context.`;
+            harness
+              .sendSignal?.({
+                type: "system-reminder",
+                contents: `"${meta.toolName}" has failed ${count} consecutive times with identical arguments.${extra}`,
+              })
+              ?.accepted?.catch(() => {});
+          }
+        }
+      }
       if (event.type === "message_end" && finalText.trim()) {
         callbacks.onDebug?.({
           event: "mastra_finish_on_message_end",

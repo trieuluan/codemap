@@ -1,6 +1,6 @@
 import type { Message, TaskListItem, ToolResult } from "./store.js";
 import type { Store } from "./store.js";
-import { C_SUCCESS, C_ERROR, RESET } from "./pi-tui/theme.js";
+import { C_SUCCESS, C_ERROR, C_MUTED, RESET } from "./pi-tui/theme.js";
 
 export function normalizeToolDisplayName(toolName: string): string {
   return toolName.includes("__")
@@ -70,11 +70,22 @@ function summarizeToolResult(resultText: string): string {
   return isError ? `${errorPrefix}${content}` : content;
 }
 
+function formatElapsedDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
 export function withToolCallSummary(
   messages: Message[],
   toolName: string,
   args: string,
   toolCallId?: string,
+  createdAt?: number,
 ): Message[] {
   const displayName = normalizeToolDisplayName(toolName);
   const next = [...messages];
@@ -98,7 +109,8 @@ export function withToolCallSummary(
     name: displayName,
     toolCallId,
     content: childLine,
-    timestamp: Date.now(),
+    timestamp: createdAt ?? Date.now(),
+    startedAtMs: Date.now(),
   };
   next.push(toolCallMsg);
   return next;
@@ -112,7 +124,7 @@ export function markToolDone(
   toolCallId?: string,
 ): Message[] {
   const success = !resultText.startsWith("[ERROR] ");
-  const marker = success ? ` ${C_SUCCESS}✓${RESET}` : ` ${C_ERROR}✗${RESET}`;
+  const statusMarker = success ? ` ${C_SUCCESS}✓${RESET}` : ` ${C_ERROR}✗${RESET}`;
   const displayName = normalizeToolDisplayName(toolName);
   const summarizedResult = summarizeToolResult(resultText);
   const next = [...messages];
@@ -145,6 +157,12 @@ export function markToolDone(
       success,
     };
     const existingResults = next[toolCallIndex].toolResults ?? [];
+    const startedAt = next[toolCallIndex].startedAtMs ?? next[toolCallIndex].timestamp;
+    const elapsed = typeof startedAt === "number" ? Date.now() - startedAt : -1;
+    const durationSuffix = formatElapsedDuration(elapsed);
+    const marker = durationSuffix
+      ? `${statusMarker} ${C_MUTED}${durationSuffix}${RESET}`
+      : statusMarker;
     next[toolCallIndex] = {
       ...next[toolCallIndex],
       toolResults: [...existingResults, toolResult],
@@ -208,9 +226,10 @@ export function markLastPendingToolCallCanceled(messages: Message[]): Message[] 
     next[i] = {
       ...msg,
       content:
-        msg.content.endsWith(" ✓") || msg.content.endsWith(" ✗")
+        msg.content.replace(/\x1b\[[0-9;]*m/g, "").endsWith(" ✓") ||
+        msg.content.replace(/\x1b\[[0-9;]*m/g, "").endsWith(" ✗")
           ? msg.content
-          : `${msg.content} ✗`,
+          : `${msg.content} ${C_ERROR}✗${RESET}`,
       toolResults: [
         ...(msg.toolResults ?? []),
         {

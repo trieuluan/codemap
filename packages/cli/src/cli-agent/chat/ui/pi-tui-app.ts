@@ -12,6 +12,7 @@ import { headerLines, messageLines } from "./pi-tui/message-renderer.js";
 import {
   MentionAutocompleteProvider,
   ModelPickerProvider,
+  SessionPickerProvider,
 } from "./pi-tui/input.js";
 import { getCommandList } from "../slash-commands/index.js";
 import { initShiki } from "./pi-tui/shiki-highlight.js";
@@ -27,7 +28,8 @@ import {
 } from "./pi-tui/theme.js";
 import { workspaceStateCardLines } from "./pi-tui/text.js";
 import { buildPanel, isActiveTaskPhase } from "./pi-tui/panel-builder.js";
-import { getMastraMessages } from "../harness/harness-runtime.js";
+import { getMastraMessages, getMastraThreadId, listMastraThreads, switchMastraThread } from "../harness/harness-runtime.js";
+import { sortThreads } from "../slash-commands/sessions.js";
 import { formatTime } from "./ink-utils.js";
 
 export { isActiveTaskPhase };
@@ -366,12 +368,77 @@ export async function startPiTuiApp(
     editor.handleInput("\t");
   };
 
+  // ── Session/thread picker ─────────────────────────────────────────────────
+
+  let sessionPickerActive = false;
+  let sessionThreads: import("../harness/events.js").HarnessThread[] = [];
+
+  const closeSessionPicker = () => {
+    if (!sessionPickerActive) return;
+    sessionPickerActive = false;
+    editor.setAutocompleteProvider(defaultAutocompleteProvider);
+    editor.setText("");
+  };
+
+  const openSessionPicker = async () => {
+    const threads = await listMastraThreads();
+    if (threads.length === 0) {
+      chatTerminal.store.dispatch((prev) => ({
+        messages: [
+          ...prev.messages,
+          { role: "system" as const, content: "No saved threads yet.", timestamp: Date.now() },
+        ],
+      }));
+      return;
+    }
+    sessionThreads = sortThreads(threads);
+    sessionPickerActive = true;
+    editor.setText("");
+    editor.setAutocompleteProvider(
+      new SessionPickerProvider(
+        () => sessionThreads,
+        () => getMastraThreadId(),
+        async (threadId: string) => {
+          const ok = await switchMastraThread(threadId);
+          if (!ok) {
+            chatTerminal.store.dispatch((prev) => ({
+              messages: [
+                ...prev.messages,
+                { role: "system" as const, content: `Failed to switch to thread \`${threadId.slice(0, 8)}\`.`, timestamp: Date.now() },
+              ],
+            }));
+            return;
+          }
+          const { mapHarnessMessagesToUI } = await import("../slash-commands/sessions.js");
+          const { listMastraThreadMessages } = await import("../harness/harness-runtime.js");
+          const msgs = await listMastraThreadMessages(threadId);
+          chatTerminal.store.dispatch((prev) => ({
+            messages: mapHarnessMessagesToUI(msgs),
+            sessionTokens: 0,
+          }));
+          chatTerminal.bus.scheduleRefresh();
+          chatTerminal.store.dispatch((prev) => ({
+            messages: [
+              ...prev.messages,
+              { role: "system" as const, content: `Switched to thread \`${threadId.slice(0, 8)}\`.`, timestamp: Date.now() },
+            ],
+          }));
+        },
+        closeSessionPicker,
+      ),
+    );
+    editor.handleInput("\t");
+  };
+
   editor.setAutocompleteProvider(defaultAutocompleteProvider);
   editor.onChange = (text) => {
     // Selecting /models from slash autocomplete via Tab leaves a trailing
     // space in input; immediately replace it with the inline picker.
     if (!modelPickerActive && /^\/models?\s$/i.test(text)) {
       openModelPicker();
+    }
+    if (!sessionPickerActive && /^\/sessions?\s$/i.test(text)) {
+      void openSessionPicker();
     }
   };
 
@@ -406,6 +473,10 @@ export async function startPiTuiApp(
     // Picker commands open inline overlays and clear/hide the input text.
     if (/^\/models?$/i.test(trimmed)) {
       openModelPicker();
+      return;
+    }
+    if (/^\/sessions?$/i.test(trimmed)) {
+      void openSessionPicker();
       return;
     }
     const imageFiles = pendingImages.map((img) => ({

@@ -43,4 +43,6 @@ export interface Command {
   name: string;
   description: string;
   execute: (args: string, ctx: CommandContext) => void | Promise<void>;
+  /** When true, pi-tui-app should intercept Enter on this command and open an inline picker instead. */
+  triggerSessionPicker?: boolean;
 }

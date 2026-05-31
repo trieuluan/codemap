@@ -27,6 +27,7 @@ export interface SingleAgentRuntimeInput {
   onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
   onToolResult?: (name: string, result: string, id?: string) => void;
+  onMessageStart?: (createdAt: number) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
   onPlanReady?: (plan: string) => void;
@@ -34,33 +35,11 @@ export interface SingleAgentRuntimeInput {
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
+  onPhaseStart?: (phase: AgentPhase, model: string) => void;
+  /** When true, switch harness to "plan" mode before sending. */
+  planMode?: boolean;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
   effort?: "low" | "medium" | "high";
 }
 
-export interface MultiPhaseLoopInput {
-  provider: NineRouterProvider;
-  model: string;
-  availableModels?: string[];
-  availableCombos?: string[];
-  agentInstructions?: string;
-  onStreamReset?: () => void;
-  userMessage: ChatMessage;
-  toolClient: CodeMapMcpToolClient;
-  onPhaseStart?: (phase: AgentPhase, model: string) => void;
-  onPlanReady?: (plan: string) => void;
-  onPlanWait?: () => Promise<PlanReviewAction>;
-  onToken?: (text: string) => void;
-  onModel?: (model: string) => void;
-  onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
-  onToolResult?: (name: string, result: string, id?: string) => void;
-  onUsage?: (usage: TokenUsage) => void;
-  onDebug?: (info: Record<string, unknown>) => void;
-  onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
-  onOMReflection?: (compressedTokens: number) => void;
-  onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
-  signal?: AbortSignal;
-  imageFiles?: Array<{ data: string; mimeType: string }>;
-  effort?: "low" | "medium" | "high";
-}

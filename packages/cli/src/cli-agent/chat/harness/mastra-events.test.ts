@@ -175,3 +175,25 @@ test("auto-approves Mastra tool approval requests", async () => {
 function nextTick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
+
+test("routes plan_approval_required to onPlanApproval callback", () => {
+  let receivedPlanId: string | undefined;
+  let receivedPlan: string | undefined;
+  const cb = callbacks(() => {});
+  cb.onPlanApproval = (planId, plan) => {
+    receivedPlanId = planId;
+    receivedPlan = plan;
+  };
+
+  bridgeCommonEvent(
+    {
+      type: "plan_approval_required",
+      planId: "plan_123",
+      plan: "## Plan\n1. Do thing\n2. Do other thing",
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.equal(receivedPlanId, "plan_123");
+  assert.equal(receivedPlan, "## Plan\n1. Do thing\n2. Do other thing");
+});

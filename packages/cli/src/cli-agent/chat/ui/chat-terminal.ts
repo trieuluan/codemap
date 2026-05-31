@@ -5,7 +5,6 @@ import type { CodeMapMcpToolClient } from "../mcp-tools/mcp-tool-client.js";
 import { fetchResourceContext } from "../mcp-tools/mcp-tool-client.js";
 import { getCachedContext } from "../../core/convention-synthesizer.js";
 import {
-  runMultiPhaseAgentRuntime,
   runSingleAgentRuntime,
   type ChatUiMode,
 } from "../harness/cli-runtime.js";
@@ -518,6 +517,7 @@ export class ChatTerminal {
 
     let streamingContent = "";
     let hasStreamingEntry = false;
+    let currentMessageCreatedAt: number | undefined;
     const toolArgsById = new Map<string, { name: string; args: string }>();
     const dirtyLocalIndexPaths = new Set<string>();
     let fullIndexRefreshTimer: NodeJS.Timeout | null = null;
@@ -570,10 +570,14 @@ export class ChatTerminal {
       onStreamReset: () => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
         streamingContent = "";
+        currentMessageCreatedAt = undefined;
         this.store.dispatch({
           streaming: { active: false, content: "", entryIndex: -1 },
         });
         this.bus.scheduleRefresh();
+      },
+      onMessageStart: (createdAt: number) => {
+        currentMessageCreatedAt = createdAt;
       },
       onToken: (token: string) => {
         if (!this.isActiveTask(taskId, taskAbort)) return;
@@ -643,7 +647,7 @@ export class ChatTerminal {
           },
         });
         this.store.dispatch((prev) => {
-          const newMsgs = withToolCallSummary(prev.messages, name, args, id);
+          const newMsgs = withToolCallSummary(prev.messages, name, args, id, currentMessageCreatedAt);
           return {
             messages: preview ? setToolCallPreview(newMsgs, preview) : newMsgs,
           };
@@ -836,40 +840,7 @@ export class ChatTerminal {
         resetStreaming();
       };
 
-      const result = useMultiPhase
-        ? await runMultiPhaseAgentRuntime({
-            provider: this.options.provider,
-            availableModels: this.store
-              .getState()
-              .config.availableModels.map((m) => m.id),
-            model: this.store.getState().config.model,
-            agentInstructions,
-            userMessage: {
-              role: "user",
-              content: buildCurrentTaskContent(mentionContext.content),
-            },
-            toolClient: this.options.toolClient,
-            signal: taskAbort.signal,
-            effort: "high",
-            onPhaseStart: (phase, model) => {
-              if (!this.isActiveTask(taskId, taskAbort)) return;
-              resetStreaming();
-              this.store.dispatch({
-                task: {
-                  ...this.store.getState().task,
-                  phase,
-                  model,
-                  effort: "high",
-                },
-              });
-              this.bus.scheduleRefresh();
-            },
-            onPlanReady: handlePlanReady,
-            onPlanWait: () => this.waitForPlanReview(),
-            imageFiles,
-            ...sharedCallbacks,
-          })
-        : await runSingleAgentRuntime({
+      const result = await runSingleAgentRuntime({
             provider: this.options.provider,
             model: this.store.getState().config.model,
             availableModels: this.store
@@ -882,10 +853,26 @@ export class ChatTerminal {
             },
             toolClient: this.options.toolClient,
             signal: taskAbort.signal,
+            effort: useMultiPhase ? "high" : classification.effort,
+            planMode: useMultiPhase || undefined,
+            onPhaseStart: useMultiPhase
+              ? (phase, model) => {
+                  if (!this.isActiveTask(taskId, taskAbort)) return;
+                  resetStreaming();
+                  this.store.dispatch({
+                    task: {
+                      ...this.store.getState().task,
+                      phase,
+                      model,
+                      effort: "high",
+                    },
+                  });
+                  this.bus.scheduleRefresh();
+                }
+              : undefined,
             onPlanReady: handlePlanReady,
             onPlanWait: () => this.waitForPlanReview(),
             imageFiles,
-            effort: classification.effort,
             ...sharedCallbacks,
           });
 
