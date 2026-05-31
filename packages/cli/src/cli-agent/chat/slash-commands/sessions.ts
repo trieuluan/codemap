@@ -1,9 +1,6 @@
 import type { Command } from "./types.js";
 import type { HarnessMessage, HarnessThread } from "../harness/events.js";
-import {
-  listMastraThreads,
-  listMastraThreadMessages,
-} from "../harness/harness-runtime.js";
+import { listMastraThreads } from "../harness/harness-runtime.js";
 import type { Message } from "../ui/store.js";
 
 function stringifyToolResult(result: unknown): string {
@@ -57,35 +54,6 @@ function attachToolResult(
   });
 }
 
-function formatAge(date: Date): string {
-  const diff = Date.now() - date.getTime();
-  const m = Math.floor(diff / 60_000);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function getThreadTokenUsage(t: HarnessThread): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined {
-  // Token usage is stored in metadata.tokenUsage (persisted by harness after each generate call)
-  const metaUsage = (t.metadata as Record<string, unknown> | undefined)?.tokenUsage as
-    | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
-    | undefined;
-  if (metaUsage?.totalTokens) return metaUsage;
-  // Fallback to top-level tokenUsage (legacy)
-  return t.tokenUsage;
-}
-
-function formatThread(t: HarnessThread, current: boolean): string {
-  const usage = getThreadTokenUsage(t);
-  const tok = usage?.totalTokens
-    ? ` · ${Math.round(usage.totalTokens / 1000)}k tok`
-    : "";
-  const title = t.title ?? t.id.slice(0, 8);
-  const bullet = current ? " ●" : "";
-  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt)}`;
-}
-
 function extractText(content: HarnessMessage["content"]): string {
   return content
     .filter((p) => p.type === "text")
@@ -132,63 +100,57 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
   return result;
 }
 
+function formatAge(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function getThreadTokenUsage(
+  t: HarnessThread,
+): { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined {
+  const metaUsage = (t.metadata as Record<string, unknown> | undefined)?.tokenUsage as
+    | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+    | undefined;
+  if (metaUsage?.totalTokens) return metaUsage;
+  return t.tokenUsage;
+}
+
+function formatThread(t: HarnessThread, current: boolean): string {
+  const usage = getThreadTokenUsage(t);
+  const tok = usage?.totalTokens ? ` · ${Math.round(usage.totalTokens / 1000)}k tok` : "";
+  const title = t.title ?? t.id.slice(0, 8);
+  const bullet = current ? " ●" : "";
+  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt)}`;
+}
+
 export const sessionsCommand: Command = {
   name: "sessions",
-  description: "List or load Mastra chat threads. Usage: /sessions [new|load <thread-id>]",
+  description: "List saved chat threads. Usage: /sessions",
   execute: async (args, ctx) => {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content, timestamp: Date.now() }]);
 
-    const [sub, ...rest] = args.trim().split(/\s+/);
-
-    if (sub === "new") {
-      ctx.newSession?.();
-      append("Started a new session.");
+    if (args.trim()) {
+      append("Usage: /sessions");
       return;
     }
 
-    if (sub === "load" && rest[0]) {
-      const prefix = rest[0];
-      const threads = await listMastraThreads();
-      const target = threads.find((t) => t.id.startsWith(prefix));
-      if (!target) {
-        append(`No thread matching \`${prefix}\`. Run /sessions to list.`);
-        return;
-      }
-      await ctx.loadThreadById?.(target.id);
-      return;
-    }
-
-    // List
     const threads = await listMastraThreads();
     if (threads.length === 0) {
       append("No saved threads yet.");
       return;
     }
+
     const currentId = ctx.getMastraThreadId?.() ?? null;
     const lines = ["**Recent threads** (newest first):", ""];
     [...threads]
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, 10)
       .forEach((t) => lines.push(formatThread(t, t.id === currentId)));
-    lines.push("", "_/sessions new · /sessions load <thread-id>_");
     append(lines.join("\n"));
   },
 };
-
-export async function loadThreadIntoUI(
-  threadId: string,
-  setMessages: (msgs: Message[]) => void,
-  appendMessage: (msg: { role: string; content: string }) => void,
-): Promise<void> {
-  const harnessMessages = await listMastraThreadMessages(threadId, 200);
-  if (harnessMessages.length === 0) {
-    appendMessage({ role: "system", content: "Thread is empty." });
-    return;
-  }
-  const uiMessages = mapHarnessMessagesToUI(harnessMessages);
-  setMessages([
-    ...uiMessages,
-    { role: "system", content: `_Thread loaded · ${uiMessages.filter(m => m.role === "user").length} turns_`, timestamp: Date.now() },
-  ]);
-}

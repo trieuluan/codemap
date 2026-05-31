@@ -15,10 +15,9 @@ import type {
 } from "../harness/events.js";
 import {
   resetHarnessSingleton,
-  getMastraThreadId,
   getMastraCurrentModelId,
+  getMastraThreadId,
   getMastraThreadTokenUsage,
-  switchMastraThread,
   warmupHarness,
 } from "../harness/harness-runtime.js";
 import { resolveGatewayModel } from "../harness/models.js";
@@ -50,7 +49,6 @@ import {
   syncTaskListFromTool,
   withToolCallSummary,
 } from "./tool-call-messages.js";
-import { loadThreadIntoUI } from "../slash-commands/sessions.js";
 import {
   buildLocalIndex,
   refreshLocalFile,
@@ -433,25 +431,6 @@ export class ChatTerminal {
     });
   }
 
-  async loadThreadById(threadId: string): Promise<void> {
-    try {
-      await switchMastraThread(threadId);
-      await loadThreadIntoUI(
-        threadId,
-        (msgs) => this.store.dispatch({ messages: msgs }),
-        (msg) => this.appendMessage(msg as Message),
-      );
-      const threadUsage = await getMastraThreadTokenUsage().catch(() => null);
-      this.store.dispatch({
-        sessionTokens: threadUsage?.totalTokens ?? 0,
-      });
-    } catch (err) {
-      this.appendMessage({
-        role: "system",
-        content: `Failed to load thread: ${err}`,
-      });
-    }
-  }
 
   // ─── Submit ──────────────────────────────────────────────
 
@@ -1246,6 +1225,7 @@ export class ChatTerminal {
         process.exit(0);
       },
       newSession: () => this.startNewSession(),
+      getMastraThreadId: () => getMastraThreadId(),
       reinitHarness: async () => {
         await resetHarnessSingleton();
         // Reconnect the toolClient's MCP server so slash commands (/projects, /status, etc.)
@@ -1263,8 +1243,6 @@ export class ChatTerminal {
           extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
         });
       },
-      getMastraThreadId: () => getMastraThreadId(),
-      loadThreadById: (id: string) => this.loadThreadById(id),
       startSubprocess: (command: string) => {
         this.store.dispatch({
           subprocess: { active: true, command, logLines: [] },

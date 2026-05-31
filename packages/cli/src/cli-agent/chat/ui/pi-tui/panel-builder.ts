@@ -421,7 +421,7 @@ export function buildPanel(
   }
 
   // Editor + autocomplete.
-  // When the model picker is active, show a navigation hint above the editor.
+  // When a picker is active, show a navigation hint above the editor.
   if (modelPickerActive) {
     out.push(
       fitLine(

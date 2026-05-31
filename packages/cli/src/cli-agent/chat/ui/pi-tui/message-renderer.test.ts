@@ -4,6 +4,22 @@ import { messageLines } from "./message-renderer.js";
 import { stripAnsi } from "./text.js";
 import type { Message } from "../store.js";
 
+
+test("messageLines shows repeated timestamps only once per adjacent block", () => {
+  const timestamp = new Date("2026-01-01T12:34:56.000Z").getTime();
+  const messages: Message[] = [
+    { role: "assistant", content: "first", timestamp },
+    { role: "assistant", content: "second", timestamp: timestamp + 200 },
+    { role: "assistant", content: "third", timestamp: timestamp + 1000 },
+  ];
+
+  const rendered = messageLines(messages, 100).map(stripAnsi).join("\n");
+  const timestamps = rendered.match(/\b\d{2}:\d{2}:\d{2}\b/g) ?? [];
+
+  assert.equal(timestamps.length, 2);
+  assert.notEqual(timestamps[0], timestamps[1]);
+});
+
 test("messageLines renders fenced diff previews inline", () => {
   const messages: Message[] = [
     {

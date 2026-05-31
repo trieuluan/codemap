@@ -28,6 +28,7 @@ import {
 import { workspaceStateCardLines } from "./pi-tui/text.js";
 import { buildPanel, isActiveTaskPhase } from "./pi-tui/panel-builder.js";
 import { getMastraMessages } from "../harness/harness-runtime.js";
+import { formatTime } from "./ink-utils.js";
 
 export { isActiveTaskPhase };
 
@@ -179,6 +180,7 @@ export async function startPiTuiApp(
   function messageRenderSignature(
     msg: ReturnType<typeof chatTerminal.store.getState>["messages"][number],
     idx: number,
+    suppressInitialTimestamp: boolean,
   ): string {
     // NOTE: frame is intentionally excluded from the signature.
     // Including it would invalidate the cache every 120ms (spinner tick),
@@ -188,6 +190,8 @@ export async function startPiTuiApp(
     return [
       idx,
       msg.role,
+      msg.timestamp,
+      suppressInitialTimestamp ? "suppress-time" : "show-time",
       msg.name ?? "",
       msg.expanded ? "1" : "0",
       msg.expandedResultIndex ?? "",
@@ -238,7 +242,10 @@ export async function startPiTuiApp(
           firstDirty = idx;
           break;
         }
-        const signature = messageRenderSignature(msg, idx);
+        const prevMsg = state.messages[idx - 1];
+        const suppressInitialTimestamp =
+          !!prevMsg && formatTime(prevMsg.timestamp) === formatTime(msg.timestamp);
+        const signature = messageRenderSignature(msg, idx, suppressInitialTimestamp);
         if (prev.signature !== signature || prev.contentRef !== msg.content) {
           firstDirty = idx;
           break;
@@ -251,13 +258,17 @@ export async function startPiTuiApp(
     for (let idx = firstDirty; idx < state.messages.length; idx += 1) {
       const msg = state.messages[idx];
       if (!msg) continue;
-      const signature = messageRenderSignature(msg, idx);
+      const prevMsg = state.messages[idx - 1];
+      const suppressInitialTimestamp =
+        !!prevMsg && formatTime(prevMsg.timestamp) === formatTime(msg.timestamp);
+      const signature = messageRenderSignature(msg, idx, suppressInitialTimestamp);
       const prev = !widthChanged ? _cachedBlocks[idx] : undefined;
       const lines =
         prev?.signature === signature && prev.contentRef === msg.content
           ? prev.lines
           : messageLines([msg], contentWidth, frame, {
               showRawToolData: state.config.debug,
+              suppressFirstTimestamp: suppressInitialTimestamp,
             });
       nextBlocks[idx] = { signature, contentRef: msg.content, lines };
     }
@@ -357,8 +368,8 @@ export async function startPiTuiApp(
 
   editor.setAutocompleteProvider(defaultAutocompleteProvider);
   editor.onChange = (text) => {
-    // Selecting /models from slash autocomplete via Tab leaves "/models " in input;
-    // immediately replace it with the inline model picker and hide the input text.
+    // Selecting /models from slash autocomplete via Tab leaves a trailing
+    // space in input; immediately replace it with the inline picker.
     if (!modelPickerActive && /^\/models?\s$/i.test(text)) {
       openModelPicker();
     }
@@ -392,12 +403,11 @@ export async function startPiTuiApp(
 
     if (!trimmed || state.input.busy) return;
 
-    // "/models" Enter → open inline model picker and clear/hide the input text.
+    // Picker commands open inline overlays and clear/hide the input text.
     if (/^\/models?$/i.test(trimmed)) {
       openModelPicker();
       return;
     }
-
     const imageFiles = pendingImages.map((img) => ({
       data: img.data,
       mimeType: img.mimeType,

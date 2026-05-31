@@ -1215,11 +1215,6 @@ export async function listMastraThreadMessages(
   }
 }
 
-export async function switchMastraThread(threadId: string): Promise<void> {
-  if (!_singleton) return;
-  await _singleton.harness.switchThread({ threadId });
-}
-
 export function getMastraOMStatus(): {
   observationTokens: number;
   status: string;

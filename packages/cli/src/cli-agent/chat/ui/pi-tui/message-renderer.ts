@@ -198,7 +198,7 @@ export function messageLines(
   messages: Message[],
   width: number,
   frame = 0,
-  opts: { showRawToolData?: boolean } = {},
+  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean } = {},
 ): string[] {
   return renderMessageLines(messages, width, frame, opts);
 }
@@ -207,7 +207,7 @@ function renderMessageLines(
   messages: Message[],
   width: number,
   frame = 0,
-  opts: { showRawToolData?: boolean } = {},
+  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean } = {},
 ): string[] {
   if (messages.length === 0) {
     return [
@@ -218,8 +218,15 @@ function renderMessageLines(
   }
 
   const out: string[] = [];
-  for (const msg of messages) {
-    const time = `${C_MUTED}${formatTime(msg.timestamp)}${RESET}`;
+  let lastRenderedTime: string | undefined;
+  for (const [idx, msg] of messages.entries()) {
+    const timeText = formatTime(msg.timestamp);
+    const shouldSuppressTime =
+      timeText === lastRenderedTime || (idx === 0 && opts.suppressFirstTimestamp);
+    const time = shouldSuppressTime
+      ? " ".repeat(timeText.length)
+      : `${C_MUTED}${timeText}${RESET}`;
+    lastRenderedTime = timeText;
     if (msg.role === "user") {
       const bg = (raw: string) =>
         BG_USER +
