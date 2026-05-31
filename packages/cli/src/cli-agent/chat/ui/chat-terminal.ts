@@ -18,6 +18,8 @@ import {
   getMastraCurrentModelId,
   getMastraThreadId,
   getMastraThreadTokenUsage,
+  listMastraThreadMessages,
+  switchMastraThread,
   warmupHarness,
 } from "../harness/harness-runtime.js";
 import { resolveGatewayModel } from "../harness/models.js";
@@ -27,6 +29,7 @@ import {
   type TaskClassification,
 } from "../../core/task-classifier.js";
 import { executeCommand, getCommandList } from "../slash-commands/index.js";
+import { mapHarnessMessagesToUI } from "../slash-commands/sessions.js";
 import { runShell } from "../slash-commands/shell.js";
 function isStrongModel(model: string): boolean {
   return /\b(strong|opus|sonnet|gpt-5|gpt-4|o3|o4|deepseek-r1|qwen3-coder)\b/i.test(
@@ -431,6 +434,15 @@ export class ChatTerminal {
     });
   }
 
+  async loadMastraThreadMessages(threadId: string): Promise<void> {
+    const messages = await listMastraThreadMessages(threadId);
+    this.store.dispatch((prev) => ({
+      messages: mapHarnessMessagesToUI(messages),
+      sessionTokens: 0,
+      input: { ...prev.input, history: [] },
+    }));
+    this.bus.scheduleRefresh();
+  }
 
   // ─── Submit ──────────────────────────────────────────────
 
@@ -1226,6 +1238,8 @@ export class ChatTerminal {
       },
       newSession: () => this.startNewSession(),
       getMastraThreadId: () => getMastraThreadId(),
+      switchMastraThread: (threadId: string) => switchMastraThread(threadId),
+      loadMastraThreadMessages: (threadId: string) => this.loadMastraThreadMessages(threadId),
       reinitHarness: async () => {
         await resetHarnessSingleton();
         // Reconnect the toolClient's MCP server so slash commands (/projects, /status, etc.)

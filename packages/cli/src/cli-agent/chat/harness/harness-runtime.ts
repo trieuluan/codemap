@@ -1215,6 +1215,16 @@ export async function listMastraThreadMessages(
   }
 }
 
+export async function switchMastraThread(threadId: string): Promise<boolean> {
+  if (!_singleton) return false;
+  try {
+    await _singleton.harness.switchThread({ threadId });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getMastraOMStatus(): {
   observationTokens: number;
   status: string;

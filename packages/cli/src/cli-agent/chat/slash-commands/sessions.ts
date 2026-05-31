@@ -66,10 +66,14 @@ function extractTaskContent(raw: string): string {
   return match?.[1]?.trim() ?? raw.trim();
 }
 
+function toTimestamp(date: Date | string): number {
+  return date instanceof Date ? date.getTime() : new Date(date).getTime();
+}
+
 export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
   const result: Message[] = [];
   for (const msg of messages) {
-    const ts = msg.createdAt.getTime();
+    const ts = toTimestamp(msg.createdAt as Date | string);
     if (msg.role === "user") {
       const raw = extractText(msg.content);
       result.push({ role: "user", content: extractTaskContent(raw), timestamp: ts });
@@ -100,8 +104,8 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
   return result;
 }
 
-function formatAge(date: Date): string {
-  const diff = Date.now() - date.getTime();
+function formatAge(date: Date | string): string {
+  const diff = Date.now() - toTimestamp(date);
   const m = Math.floor(diff / 60_000);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
@@ -124,31 +128,58 @@ function formatThread(t: HarnessThread, current: boolean): string {
   const tok = usage?.totalTokens ? ` · ${Math.round(usage.totalTokens / 1000)}k tok` : "";
   const title = t.title ?? t.id.slice(0, 8);
   const bullet = current ? " ●" : "";
-  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt)}`;
+  return `\`${t.id.slice(0, 8)}\`${bullet} ${title}${tok}  ${formatAge(t.updatedAt as Date | string)}`;
 }
 
 export const sessionsCommand: Command = {
   name: "sessions",
-  description: "List saved chat threads. Usage: /sessions",
+  description: "List saved chat threads. Usage: /sessions [thread-id-prefix]",
   execute: async (args, ctx) => {
     const append = (content: string) =>
       ctx.setMessages((prev) => [...prev, { role: "system" as const, content, timestamp: Date.now() }]);
 
-    if (args.trim()) {
-      append("Usage: /sessions");
-      return;
-    }
-
+    const query = args.trim();
     const threads = await listMastraThreads();
     if (threads.length === 0) {
       append("No saved threads yet.");
       return;
     }
 
+    const sortedThreads = [...threads].sort(
+      (a, b) => toTimestamp(b.updatedAt as Date | string) - toTimestamp(a.updatedAt as Date | string),
+    );
+
+    if (query) {
+      const matches = sortedThreads.filter((t) => t.id.startsWith(query));
+      if (matches.length === 0) {
+        append(`No saved thread matches \`${query}\`.`);
+        return;
+      }
+      if (matches.length > 1) {
+        append([`Multiple threads match \`${query}\`:`, "", ...matches.slice(0, 10).map((t) => formatThread(t, false))].join("\n"));
+        return;
+      }
+
+      const thread = matches[0]!;
+      if (!ctx.switchMastraThread || !ctx.loadMastraThreadMessages) {
+        append("Session switching is not available in this UI.");
+        return;
+      }
+
+      const switched = await ctx.switchMastraThread(thread.id);
+      if (!switched) {
+        append(`Failed to switch to thread \`${thread.id.slice(0, 8)}\`.`);
+        return;
+      }
+
+      await ctx.loadMastraThreadMessages(thread.id);
+      append(`Switched to \`${thread.id.slice(0, 8)}\` ${thread.title ?? "Untitled thread"}.`);
+      return;
+    }
+
     const currentId = ctx.getMastraThreadId?.() ?? null;
-    const lines = ["**Recent threads** (newest first):", ""];
-    [...threads]
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    const lines = ["**Recent threads** (newest first):", "", "Run `/sessions <id-prefix>` to switch.", ""];
+    sortedThreads
       .slice(0, 10)
       .forEach((t) => lines.push(formatThread(t, t.id === currentId)));
     append(lines.join("\n"));
