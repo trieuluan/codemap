@@ -1,6 +1,6 @@
-import type { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
-import { fetchResourceContext } from "../../agent/tools/mcp/mcp-tool-client.js";
-import { getCachedContext } from "../../agent/core/convention-synthesizer.js";
+import type { CodeMapMcpToolClient } from "../../../agent/tools/mcp/mcp-tool-client.js";
+import { fetchResourceContext } from "../../../agent/tools/mcp/mcp-tool-client.js";
+import { getCachedContext } from "../../../agent/core/convention-synthesizer.js";
 
 export interface ProjectContext {
   conventions: string | null;

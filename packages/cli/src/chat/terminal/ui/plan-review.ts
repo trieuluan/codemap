@@ -1,9 +1,9 @@
-import type { EventBus } from "../events/event-bus.js";
-import type { Store } from "../state/store.js";
+import type { EventBus } from "../../events/event-bus.js";
+import type { Store } from "../../state/store.js";
 import type {
   AskQuestionOption,
   HarnessQuestionAnswer,
-} from "../../agent/runtime/events.js";
+} from "../../../agent/runtime/events.js";
 
 export interface PlanReviewContext {
   bus: EventBus;

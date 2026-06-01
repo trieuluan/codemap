@@ -12,6 +12,6 @@ export {
 export {
   buildCodeMapAgentInstructions,
   buildCurrentTaskContent,
-} from "./agent-instructions.js";
+} from "./config/agent-instructions.js";
 
 export type { Message as ChatEntry } from "../state/store.js";

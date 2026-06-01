@@ -1,20 +1,20 @@
-import type { EventBus, TaskPhase } from "../events/event-bus.js";
-import type { Store, Message } from "../state/store.js";
-import type { DebugLogger } from "../../agent/core/debug-logger.js";
-import type { GatewayModel } from "../../agent/types.js";
-import type { ChatTerminalOptions } from "./types.js";
-import { markToolDone } from "./tool-call-messages.js";
-import { runShell } from "../slash-commands/shell.js";
-import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "./agent-instructions.js";
-import { runSingleAgentRuntime } from "../../agent/runtime/cli-runtime.js";
-import { classifyTask } from "../../agent/core/task-classifier.js";
-import { getMastraCurrentModelId, getMastraThreadTokenUsage } from "../../agent/runtime/harness-runtime.js";
-import { resolveGatewayModel } from "../../agent/runtime/config/models.js";
-import { hydrateMentionContext } from "../../agent/core/mention-context.js";
-import { abortable, isAbortError } from "./submit/abort.js";
-import { handleSubmitError } from "./submit/errors.js";
-import { createSubmitLocalIndexTracker } from "./submit/local-index.js";
-import { createSubmitRuntimeCallbacks } from "./submit/runtime-callbacks.js";
+import type { EventBus, TaskPhase } from "../../events/event-bus.js";
+import type { Store, Message } from "../../state/store.js";
+import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import type { GatewayModel } from "../../../agent/types.js";
+import type { ChatTerminalOptions } from "../config/types.js";
+import { markToolDone } from "../ui/tool-call-messages.js";
+import { runShell } from "../../slash-commands/shell.js";
+import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
+import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
+import { classifyTask } from "../../../agent/core/task-classifier.js";
+import { getMastraCurrentModelId, getMastraThreadTokenUsage } from "../../../agent/runtime/harness-runtime.js";
+import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
+import { hydrateMentionContext } from "../../../agent/core/mention-context.js";
+import { abortable, isAbortError } from "./abort.js";
+import { handleSubmitError } from "./errors.js";
+import { createSubmitLocalIndexTracker } from "./local-index.js";
+import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
 
 export interface SubmitHandlerContext {
   store: Store;
@@ -189,7 +189,7 @@ export async function handleSubmitWithContent(
         : undefined,
       onPlanReady: handlePlanReady,
       onPlanWait: () =>
-        import("./plan-review.js").then(({ waitForPlanReview }) =>
+        import("../ui/plan-review.js").then(({ waitForPlanReview }) =>
           waitForPlanReview(ctx),
         ),
       imageFiles,

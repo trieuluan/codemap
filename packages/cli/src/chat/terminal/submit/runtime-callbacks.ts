@@ -10,9 +10,9 @@ import {
   withToolCallSummary,
   markToolDone,
   setToolCallPreview,
-} from "../tool-call-messages.js";
-import { syncTaskListFromTool } from "../tool-call-messages.js";
-import type { SubmitHandlerContext } from "../submit-handler.js";
+} from "../ui/tool-call-messages.js";
+import { syncTaskListFromTool } from "../ui/tool-call-messages.js";
+import type { SubmitHandlerContext } from "./handler.js";
 import type { SubmitLocalIndexTracker } from "./local-index.js";
 
 interface SubmitRuntimeCallbacksOptions {
@@ -236,7 +236,7 @@ export function createSubmitRuntimeCallbacks({
     ) => {
       if (!ctx.isActiveTask(taskId, taskAbort)) return;
       // Lazy import to avoid circular dep with plan-review
-      void import("../plan-review.js").then(({ waitForAskQuestion }) => {
+      void import("../ui/plan-review.js").then(({ waitForAskQuestion }) => {
         waitForAskQuestion(ctx, questionId, question, askOptions, selectionMode)
           .then((answer) => {
             respond(answer);

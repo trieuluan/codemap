@@ -2,7 +2,7 @@ import type { Command } from "./types.js";
 import type { HarnessMessage, HarnessThread } from "../../agent/runtime/events.js";
 import { listMastraThreads } from "../../agent/runtime/harness-runtime.js";
 import type { Message } from "../state/store.js";
-import { normalizeToolDisplayName } from "../terminal/tool-call-messages.js";
+import { normalizeToolDisplayName } from "../terminal/ui/tool-call-messages.js";
 import { C_SUCCESS, C_ERROR, RESET } from "../../tui/theme.js";
 
 function stringifyToolResult(result: unknown): string {

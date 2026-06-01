@@ -1,17 +1,17 @@
-import type { DebugLogger } from "../../agent/core/debug-logger.js";
-import { createDebugLogger } from "../../agent/core/debug-logger.js";
+import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import { createDebugLogger } from "../../../agent/core/debug-logger.js";
 import {
   getMastraThreadId,
   resetHarnessSingleton,
   switchMastraThread,
   warmupHarness,
-} from "../../agent/runtime/harness-runtime.js";
-import { getCommandList } from "../slash-commands/index.js";
-import type { CommandContext } from "../slash-commands/types.js";
-import type { EventBus } from "../events/event-bus.js";
-import type { Message } from "../state/store.js";
-import type { Store } from "../state/store.js";
-import type { ChatTerminalOptions } from "./types.js";
+} from "../../../agent/runtime/harness-runtime.js";
+import { getCommandList } from "../../slash-commands/index.js";
+import type { CommandContext } from "../../slash-commands/types.js";
+import type { EventBus } from "../../events/event-bus.js";
+import type { Message } from "../../state/store.js";
+import type { Store } from "../../state/store.js";
+import type { ChatTerminalOptions } from "../config/types.js";
 
 interface BuildChatCommandContextOptions {
   store: Store;

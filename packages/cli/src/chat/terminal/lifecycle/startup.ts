@@ -1,10 +1,10 @@
-import { loadOrSynthesizeAll } from "../../agent/core/convention-synthesizer.js";
-import { warmupFileSearch } from "../../agent/core/file-search.js";
-import { warmupHarness } from "../../agent/runtime/harness-runtime.js";
-import type { EventBus } from "../events/event-bus.js";
-import type { Store } from "../state/store.js";
-import type { ChatTerminalLike } from "./ui-types.js";
-import type { ChatTerminalOptions } from "./types.js";
+import { loadOrSynthesizeAll } from "../../../agent/core/convention-synthesizer.js";
+import { warmupFileSearch } from "../../../agent/core/file-search.js";
+import { warmupHarness } from "../../../agent/runtime/harness-runtime.js";
+import type { EventBus } from "../../events/event-bus.js";
+import type { Store } from "../../state/store.js";
+import type { ChatTerminalLike } from "../ui/types.js";
+import type { ChatTerminalOptions } from "../config/types.js";
 
 interface StartChatTerminalRuntimeOptions {
   terminal: ChatTerminalLike;
@@ -22,7 +22,7 @@ export async function startChatTerminalRuntime({
   refreshWorkspaceCommits,
 }: StartChatTerminalRuntimeOptions): Promise<void> {
   if (!options.apiToken && options.mcpConfig) {
-    const { showLoginScreen } = await import("../../tui/login-screen.js");
+    const { showLoginScreen } = await import("../../../tui/login-screen.js");
     const result = await showLoginScreen(options.mcpConfig);
     if (result === "exit") return;
   }
@@ -58,6 +58,6 @@ export async function startChatTerminalRuntime({
       bus.scheduleRefresh();
     });
 
-  const { startPiTuiApp } = await import("../../tui/app.js");
+  const { startPiTuiApp } = await import("../../../tui/app.js");
   await startPiTuiApp(terminal);
 }

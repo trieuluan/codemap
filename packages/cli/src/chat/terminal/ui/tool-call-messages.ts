@@ -1,6 +1,6 @@
-import type { Message, TaskListItem, ToolResult } from "../state/store.js";
-import type { Store } from "../state/store.js";
-import { C_SUCCESS, C_ERROR, C_MUTED, RESET } from "../../tui/theme.js";
+import type { Message, TaskListItem, ToolResult } from "../../state/store.js";
+import type { Store } from "../../state/store.js";
+import { C_SUCCESS, C_ERROR, C_MUTED, RESET } from "../../../tui/theme.js";
 
 export function normalizeToolDisplayName(toolName: string): string {
   return toolName.includes("__")

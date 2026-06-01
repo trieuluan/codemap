@@ -12,11 +12,11 @@ import {
 } from "../../agent/core/debug-logger.js";
 import { EventBus } from "../events/event-bus.js";
 import { Store, createInitialState } from "../state/store.js";
-import { markLastPendingToolCallCanceled } from "./tool-call-messages.js";
+import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
 
-import { buildChatCommandContext } from "./command-context.js";
-import { startChatTerminalRuntime } from "./startup.js";
-import { extractCloudCommitFromGetProject } from "./workspace-helpers.js";
+import { buildChatCommandContext } from "./lifecycle/command-context.js";
+import { startChatTerminalRuntime } from "./lifecycle/startup.js";
+import { extractCloudCommitFromGetProject } from "./lifecycle/workspace-helpers.js";
 
 export { extractCloudCommitFromGetProject };
 import {
@@ -25,26 +25,26 @@ import {
   finishTask,
   isActiveTask,
   type TaskManagerState,
-} from "./task-manager.js";
+} from "./ui/task-manager.js";
 import {
   waitForPlanReview,
   resolvePlanReview,
   cancelPendingPrompts,
-} from "./plan-review.js";
+} from "./ui/plan-review.js";
 import {
   createSessionContextCache,
   getSessionResourceContext,
   getSessionProjectContext,
   type SessionContextCache,
-} from "./session-context.js";
+} from "./lifecycle/session-context.js";
 import {
   handleSubmitWithContent,
   handleShellSubmit,
   type SubmitHandlerContext,
-} from "./submit-handler.js";
-import type { ChatTerminalOptions } from "./types.js";
+} from "./submit/handler.js";
+import type { ChatTerminalOptions } from "./config/types.js";
 
-export type { ChatTerminalOptions } from "./types.js";
+export type { ChatTerminalOptions } from "./config/types.js";
 
 export class ChatTerminal {
   // Public so App and InputArea can access
@@ -73,12 +73,6 @@ export class ChatTerminal {
     if (debug) this.logger = createDebugLogger();
     this.taskState = createTaskManagerState();
     this.sessionCache = createSessionContextCache();
-  }
-
-  // ─── Submit ──────────────────────────────────────────────
-
-  async handleSubmit(text: string): Promise<void> {
-    await this.handleSubmitWithContent(text);
   }
 
   async handleSubmitWithContent(
@@ -220,7 +214,7 @@ export class ChatTerminal {
   resolveAskQuestion(
     answer: import("../../agent/runtime/events.js").HarnessQuestionAnswer,
   ): void {
-    const { resolveAskQuestion } = require("./plan-review.js");
+    const { resolveAskQuestion } = require("./ui/plan-review.js");
     resolveAskQuestion({ bus: this.bus, store: this.store }, answer);
   }
 
@@ -341,7 +335,7 @@ export class ChatTerminal {
       setLogger: (logger) => {
         this.logger = logger;
       },
-      handleSubmit: (text) => this.handleSubmit(text),
+      handleSubmit: (text) => this.handleSubmitWithContent(text),
       startNewSession: () => this.startNewSession(),
       loadMastraThreadMessages: (threadId) =>
         this.loadMastraThreadMessages(threadId),

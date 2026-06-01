@@ -1,6 +1,6 @@
 import type { Store } from "../../state/store.js";
 import type { GatewayModel } from "../../../agent/types.js";
-import { isStrongModel } from "../workspace-helpers.js";
+import { isStrongModel } from "../lifecycle/workspace-helpers.js";
 
 export function handleSubmitError(
   err: unknown,

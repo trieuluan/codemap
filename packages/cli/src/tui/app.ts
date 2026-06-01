@@ -7,7 +7,7 @@ import {
   TUI,
   type Component,
 } from "@earendil-works/pi-tui";
-import type { ChatTerminalLike } from "../chat/terminal/ui-types.js";
+import type { ChatTerminalLike } from "../chat/terminal/ui/types.js";
 import { headerLines, messageLines } from "./renderer/message-renderer.js";
 import {
   MentionAutocompleteProvider,
