@@ -636,8 +636,13 @@ export async function startPiTuiApp(
     }
 
     editor.handleInput(data);
-    if (modelPickerActive && matchesKey(data, Key.escape)) {
-      closeModelPicker();
+    if (matchesKey(data, Key.escape)) {
+      if (modelPickerActive) {
+        closeModelPicker();
+      }
+      if (sessionPickerActive) {
+        closeSessionPicker();
+      }
     }
     const currentText = editor.getText();
     for (let i = pendingImages.length - 1; i >= 0; i--) {
