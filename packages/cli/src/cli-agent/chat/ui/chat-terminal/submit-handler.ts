@@ -3,10 +3,8 @@ import path from "node:path";
 import type { EventBus, TaskPhase } from "../event-bus.js";
 import type { Store, Message } from "../store.js";
 import type { DebugLogger } from "../../../core/debug-logger.js";
-import type { NineRouterProvider } from "../../../core/provider.js";
-import type { CodeMapMcpToolClient } from "../../mcp-tools/mcp-tool-client.js";
 import type { GatewayModel, TokenUsage } from "../../../types.js";
-import type { ChatUiMode } from "../../harness/cli-runtime.js";
+import type { ChatTerminalOptions } from "./types.js";
 import type {
   AskQuestionOption,
   HarnessQuestionAnswer,
@@ -39,16 +37,6 @@ function createAbortError(): Error {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
-}
-
-export interface ChatTerminalOptions {
-  provider: NineRouterProvider;
-  model: string;
-  toolClient: CodeMapMcpToolClient;
-  availableModels?: GatewayModel[];
-  apiToken?: string;
-  mcpConfig?: import("@codemap/core/config.js").McpServerConfig;
-  uiMode?: ChatUiMode;
 }
 
 export interface SubmitHandlerContext {

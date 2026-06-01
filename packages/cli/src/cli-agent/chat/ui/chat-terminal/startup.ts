@@ -3,8 +3,8 @@ import { warmupFileSearch } from "../../../core/file-search.js";
 import { warmupHarness } from "../../harness/harness-runtime.js";
 import type { EventBus } from "../event-bus.js";
 import type { Store } from "../store.js";
-import type { ChatTerminal } from "./index.js";
-import type { ChatTerminalOptions } from "./submit-handler.js";
+import type { ChatTerminal } from "./types.js";
+import type { ChatTerminalOptions } from "./types.js";
 
 interface StartChatTerminalRuntimeOptions {
   terminal: ChatTerminal;

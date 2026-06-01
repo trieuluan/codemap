@@ -40,11 +40,11 @@ import {
 import {
   handleSubmitWithContent,
   handleShellSubmit,
-  type ChatTerminalOptions,
   type SubmitHandlerContext,
 } from "./submit-handler.js";
+import type { ChatTerminalOptions } from "./types.js";
 
-export type { ChatTerminalOptions };
+export type { ChatTerminalOptions } from "./types.js";
 
 export class ChatTerminal {
   // Public so App and InputArea can access
