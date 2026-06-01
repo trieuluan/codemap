@@ -4,7 +4,7 @@ import {
   buildMastraPermissionRules,
   buildToolPreview,
   isMutatingApprovalTool,
-} from "./tool-approval-policy.js";
+} from "./config/tool-approval-policy.js";
 
 test("buildMastraPermissionRules asks for mutating tools without asking for all MCP tools", () => {
   const rules = buildMastraPermissionRules(["codemap", "github"]);

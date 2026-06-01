@@ -9,7 +9,7 @@ import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "./agent-
 import { runSingleAgentRuntime } from "../../agent/runtime/cli-runtime.js";
 import { classifyTask } from "../../agent/core/task-classifier.js";
 import { getMastraCurrentModelId, getMastraThreadTokenUsage } from "../../agent/runtime/harness-runtime.js";
-import { resolveGatewayModel } from "../../agent/runtime/models.js";
+import { resolveGatewayModel } from "../../agent/runtime/config/models.js";
 import { hydrateMentionContext } from "../../agent/core/mention-context.js";
 import { abortable, isAbortError } from "./submit/abort.js";
 import { handleSubmitError } from "./submit/errors.js";

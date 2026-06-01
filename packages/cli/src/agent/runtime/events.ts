@@ -1,4 +1,4 @@
-import { buildToolPreview } from "./tool-approval-policy.js";
+import { buildToolPreview } from "./config/tool-approval-policy.js";
 import type {
   HarnessThread,
   HarnessMessage,
