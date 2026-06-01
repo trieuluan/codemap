@@ -1,16 +1,11 @@
 import type { Message } from "../store.js";
 import {
-  resetHarnessSingleton,
-  getMastraThreadId,
   listMastraThreadMessages,
-  switchMastraThread,
-  warmupHarness,
+  resetHarnessSingleton,
 } from "../../harness/harness-runtime.js";
-import { executeCommand, getCommandList } from "../../slash-commands/index.js";
+import { executeCommand } from "../../slash-commands/index.js";
 import { mapHarnessMessagesToUI } from "../../slash-commands/sessions.js";
 import { tryGetCurrentWorkspaceInfo } from "@codemap/core/lib/workspace-git.js";
-import { warmupFileSearch } from "../../../core/file-search.js";
-import { loadOrSynthesizeAll } from "../../../core/convention-synthesizer.js";
 import {
   createDebugLogger,
   type DebugLogger,
@@ -19,6 +14,8 @@ import { EventBus } from "../event-bus.js";
 import { Store, createInitialState } from "../store.js";
 import { markLastPendingToolCallCanceled } from "../tool-call-messages.js";
 
+import { buildChatCommandContext } from "./command-context.js";
+import { startChatTerminalRuntime } from "./startup.js";
 import { extractCloudCommitFromGetProject } from "./workspace-helpers.js";
 
 export { extractCloudCommitFromGetProject };
@@ -273,50 +270,13 @@ export class ChatTerminal {
   // ─── Startup ─────────────────────────────────────────────
 
   async start(): Promise<void> {
-    if (!this.options.apiToken && this.options.mcpConfig) {
-      const { showLoginScreen } = await import("../pi-tui/login-screen.js");
-      const result = await showLoginScreen(this.options.mcpConfig);
-      if (result === "exit") return;
-    }
-
-    warmupFileSearch()
-      .catch(() => {})
-      .finally(() => this.bus.scheduleRefresh());
-
-    await this.refreshWorkspaceCommits();
-
-    const startupModel = this.store.getState().config.model;
-    const mastraTools = await this.options.toolClient
-      .getMastraTools()
-      .catch(() => undefined);
-
-    warmupHarness({
-      toolClient: this.options.toolClient,
-      baseUrl: this.options.provider.baseUrl,
-      apiKey: this.options.provider.apiKey,
-      modelId: startupModel,
-      availableModels: this.store
-        .getState()
-        .config.availableModels.map((m) => m.id),
-      onDebug: undefined,
-      extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
-      mastraTools,
-    }).catch(() => {});
-
-    this.store.dispatch({ synthRunning: true });
-    this.bus.scheduleRefresh();
-    loadOrSynthesizeAll(
-      this.options.provider,
-      this.store.getState().config.model,
-    )
-      .catch(() => {})
-      .finally(() => {
-        this.store.dispatch({ synthRunning: false });
-        this.bus.scheduleRefresh();
-      });
-
-    const { startPiTuiApp } = await import("../pi-tui-app.js");
-    await startPiTuiApp(this);
+    await startChatTerminalRuntime({
+      terminal: this,
+      store: this.store,
+      bus: this.bus,
+      options: this.options,
+      refreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
+    });
   }
 
   // ─── Session management ──────────────────────────────────
@@ -373,114 +333,19 @@ export class ChatTerminal {
   // ─── Command context ─────────────────────────────────────
 
   private buildCommandContext() {
-    const s = this.store.getState();
-    return {
-      currentModel: s.config.model,
-      provider: this.options.provider,
-      availableModels: s.config.availableModels.map((m) => m.id),
-      toolClient: this.options.toolClient,
-      getMessages: () => this.store.getState().messages as Message[],
-      appendMessage: (
-        msg: Partial<Message> & { role: string; content: string },
-      ) => {
-        this.store.dispatch((prev) => ({
-          messages: [
-            ...prev.messages,
-            { timestamp: Date.now(), ...msg } as Message,
-          ],
-        }));
-        this.bus.scheduleRefresh();
+    return buildChatCommandContext({
+      store: this.store,
+      bus: this.bus,
+      options: this.options,
+      getLogger: () => this.logger,
+      setLogger: (logger) => {
+        this.logger = logger;
       },
-      setMessages: (updater: Message[] | ((prev: Message[]) => Message[])) => {
-        if (typeof updater === "function") {
-          this.store.dispatch((prev) => ({ messages: updater(prev.messages) }));
-        } else {
-          this.store.dispatch({ messages: updater });
-        }
-      },
-      setInputHistory: (updater: string[] | ((prev: string[]) => string[])) => {
-        if (typeof updater === "function") {
-          this.store.dispatch((prev) => ({
-            input: { ...prev.input, history: updater(prev.input.history) },
-          }));
-        } else {
-          this.store.dispatch((prev) => ({
-            input: { ...prev.input, history: updater },
-          }));
-        }
-      },
-      setCurrentModel: (m: string) => {
-        this.store.dispatch((prev) => ({
-          config: { ...prev.config, model: m },
-        }));
-      },
-      setBusy: (b: boolean) => {
-        this.store.dispatch((prev) => ({ input: { ...prev.input, busy: b } }));
-      },
-      debug: s.debug,
-      setDebug: (d: boolean) => {
-        this.store.dispatch((prev) => ({
-          debug: d,
-          config: { ...prev.config, debug: d },
-        }));
-        if (d && !this.logger) this.logger = createDebugLogger();
-        if (!d) this.logger = null;
-      },
-      debugLogFile: this.logger?.logFile ?? null,
-      lastUserText: s.input.lastUserText,
-      persistSession: () => {
-        /* no-op */
-      },
-      getSessionTokens: () => this.store.getState().sessionTokens,
-      resend: () => {
-        const cs = this.store.getState();
-        if (cs.input.lastUserText && !cs.input.busy)
-          this.handleSubmit(cs.input.lastUserText);
-      },
-      exit: () => {
-        process.stdout.write("\x1b[?1000l\x1b[?1006l");
-        process.exit(0);
-      },
-      newSession: () => this.startNewSession(),
-      getMastraThreadId: () => getMastraThreadId(),
-      switchMastraThread: (threadId: string) => switchMastraThread(threadId),
-      loadMastraThreadMessages: (threadId: string) =>
+      handleSubmit: (text) => this.handleSubmit(text),
+      startNewSession: () => this.startNewSession(),
+      loadMastraThreadMessages: (threadId) =>
         this.loadMastraThreadMessages(threadId),
-      reinitHarness: async () => {
-        await resetHarnessSingleton();
-        await this.options.toolClient.reconnect().catch(() => {});
-        await warmupHarness({
-          toolClient: this.options.toolClient,
-          baseUrl: this.options.provider.baseUrl,
-          apiKey: this.options.provider.apiKey,
-          modelId: this.store.getState().config.model,
-          availableModels: this.store
-            .getState()
-            .config.availableModels.map((m) => m.id),
-          onDebug: undefined,
-          extraServerConfigs: this.options.toolClient.getExtraServerConfigs(),
-        });
-      },
-      startSubprocess: (command: string) => {
-        this.store.dispatch({
-          subprocess: { active: true, command, logLines: [] },
-        });
-      },
-      logSubprocess: (line: string) => {
-        this.store.dispatch((prev) => ({
-          subprocess: {
-            ...prev.subprocess,
-            logLines: [...prev.subprocess.logLines, line],
-          },
-        }));
-      },
-      endSubprocess: () => {
-        this.store.dispatch({
-          subprocess: { active: false, command: "", logLines: [] },
-        });
-      },
       refreshWorkspaceCommits: () => this.refreshWorkspaceCommits(),
-      getCommandList,
-    };
+    });
   }
 }
