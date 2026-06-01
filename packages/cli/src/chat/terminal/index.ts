@@ -37,11 +37,8 @@ import {
   getSessionProjectContext,
   type SessionContextCache,
 } from "./lifecycle/session-context.js";
-import {
-  handleSubmitWithContent,
-  handleShellSubmit,
-  type SubmitHandlerContext,
-} from "./submit/handler.js";
+import { handleSubmitWithContent, handleShellSubmit } from "./submit/handler.js";
+import type { SubmitHandlerContext } from "./submit/context.js";
 import type { ChatTerminalOptions } from "./config/types.js";
 
 export type { ChatTerminalOptions } from "./config/types.js";

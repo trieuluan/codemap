@@ -12,7 +12,7 @@ import {
   setToolCallPreview,
 } from "../ui/tool-call-messages.js";
 import { syncTaskListFromTool } from "../ui/tool-call-messages.js";
-import type { SubmitHandlerContext } from "./handler.js";
+import type { SubmitHandlerContext } from "./context.js";
 import type { SubmitLocalIndexTracker } from "./local-index.js";
 
 interface SubmitRuntimeCallbacksOptions {

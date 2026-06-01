@@ -1,8 +1,5 @@
-import type { EventBus, TaskPhase } from "../../events/event-bus.js";
-import type { Store, Message } from "../../state/store.js";
-import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import type { TaskPhase } from "../../events/event-bus.js";
 import type { GatewayModel } from "../../../agent/types.js";
-import type { ChatTerminalOptions } from "../config/types.js";
 import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
 import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
@@ -12,31 +9,10 @@ import { getMastraCurrentModelId, getMastraThreadTokenUsage } from "../../../age
 import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
 import { hydrateMentionContext } from "../../../agent/core/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
+import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";
 import { createSubmitLocalIndexTracker } from "./local-index.js";
 import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
-
-export interface SubmitHandlerContext {
-  store: Store;
-  bus: EventBus;
-  logger: DebugLogger | null;
-  options: ChatTerminalOptions;
-
-  appendMessage(msg: Message): number;
-  updateLastAssistantMessage(content: string): void;
-  refreshWorkspaceCommits(): Promise<void>;
-
-  beginTask(controller: AbortController): number;
-  finishTask(taskId: number): void;
-  isActiveTask(taskId: number, controller: AbortController): boolean;
-
-  getSessionResourceContext(signal?: AbortSignal): Promise<string | null>;
-  getSessionProjectContext(): Promise<{
-    conventions: string | null;
-    rules: string | null;
-    skills: string | null;
-  }>;
-}
 
 export async function handleSubmitWithContent(
   ctx: SubmitHandlerContext,
