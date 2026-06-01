@@ -1,6 +1,6 @@
-import type { EventBus } from "../events/event-bus.js";
-import type { Store } from "../state/store.js";
-import type { DebugLogger } from "../../agent/core/debug-logger.js";
+import type { EventBus } from "../../events/event-bus.js";
+import type { Store } from "../../state/store.js";
+import type { DebugLogger } from "../../../agent/core/debug-logger.js";
 
 export interface TaskManagerContext {
   store: Store;

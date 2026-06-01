@@ -7,6 +7,7 @@ import {
   TUI,
   type Component,
 } from "@earendil-works/pi-tui";
+import type { UIState } from "../chat/state/store.js";
 import type { ChatTerminalLike } from "../chat/terminal/ui/types.js";
 import { headerLines, messageLines } from "./renderer/message-renderer.js";
 import {
@@ -66,7 +67,7 @@ async function toggleAllToolCallsExpanded(
   }
 
   if (toolCallIdxs.length === 0) {
-    chatTerminal.store.dispatch((prev) => ({
+    chatTerminal.store.dispatch((prev: UIState) => ({
       messages: [
         ...prev.messages,
         {
@@ -83,7 +84,7 @@ async function toggleAllToolCallsExpanded(
   const anyExpanded = toolCallIdxs.some((i) => messages[i]!.expanded);
 
   if (anyExpanded) {
-    chatTerminal.store.dispatch((prev) => {
+    chatTerminal.store.dispatch((prev: UIState) => {
       const msgs = [...prev.messages];
       for (const idx of toolCallIdxs) {
         msgs[idx] = { ...msgs[idx]!, expanded: false };
@@ -123,7 +124,7 @@ async function toggleAllToolCallsExpanded(
     }
   }
 
-  chatTerminal.store.dispatch((prev) => {
+  chatTerminal.store.dispatch((prev: UIState) => {
     const msgs = [...prev.messages];
     for (const idx of toolCallIdxs) {
       const existing = msgs[idx]!;
@@ -333,8 +334,8 @@ export async function startPiTuiApp(
 
   const switchModel = (model: string) => {
     const prev = chatTerminal.store.getState();
-    chatTerminal.store.dispatch((s) => ({ config: { ...s.config, model } }));
-    chatTerminal.store.dispatch((s) => ({
+    chatTerminal.store.dispatch((s: UIState) => ({ config: { ...s.config, model } }));
+    chatTerminal.store.dispatch((s: UIState) => ({
       messages: [
         ...s.messages,
         {
@@ -383,7 +384,7 @@ export async function startPiTuiApp(
   const openSessionPicker = async () => {
     const threads = await listMastraThreads();
     if (threads.length === 0) {
-      chatTerminal.store.dispatch((prev) => ({
+      chatTerminal.store.dispatch((prev: UIState) => ({
         messages: [
           ...prev.messages,
           { role: "system" as const, content: "No saved threads yet.", timestamp: Date.now() },
@@ -401,7 +402,7 @@ export async function startPiTuiApp(
         async (threadId: string) => {
           const ok = await switchMastraThread(threadId);
           if (!ok) {
-            chatTerminal.store.dispatch((prev) => ({
+            chatTerminal.store.dispatch((prev: UIState) => ({
               messages: [
                 ...prev.messages,
                 { role: "system" as const, content: `Failed to switch to thread \`${threadId.slice(0, 8)}\`.`, timestamp: Date.now() },
@@ -412,12 +413,12 @@ export async function startPiTuiApp(
           const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
           const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
           const msgs = await listMastraThreadMessages(threadId);
-          chatTerminal.store.dispatch((prev) => ({
+          chatTerminal.store.dispatch((prev: UIState) => ({
             messages: mapHarnessMessagesToUI(msgs),
             sessionTokens: 0,
           }));
           chatTerminal.bus.scheduleRefresh();
-          chatTerminal.store.dispatch((prev) => ({
+          chatTerminal.store.dispatch((prev: UIState) => ({
             messages: [
               ...prev.messages,
               { role: "system" as const, content: `Switched to thread \`${threadId.slice(0, 8)}\`.`, timestamp: Date.now() },
@@ -484,7 +485,7 @@ export async function startPiTuiApp(
       mimeType: img.mimeType,
     }));
     pendingImages.length = 0;
-    chatTerminal.store.dispatch((prev) => ({
+    chatTerminal.store.dispatch((prev: UIState) => ({
       input: { ...prev.input, history: [...prev.input.history, trimmed] },
     }));
     editor.addToHistory(trimmed);
@@ -598,7 +599,7 @@ export async function startPiTuiApp(
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      chatTerminal.store.dispatch((prev) => ({
+      chatTerminal.store.dispatch((prev: UIState) => ({
         messages: [
           ...prev.messages,
           {
@@ -677,7 +678,7 @@ export async function startPiTuiApp(
 
     // Ctrl+T — toggle task list widget
     if (matchesKey(data, Key.ctrl("t"))) {
-      chatTerminal.store.dispatch((prev) => ({
+      chatTerminal.store.dispatch((prev: UIState) => ({
         taskListVisible: !prev.taskListVisible,
       }));
       tui.requestRender();
@@ -713,7 +714,7 @@ export async function startPiTuiApp(
           }
           if (isMultiSelect && data === " ") {
             const selected = aq.selected.includes(sel)
-              ? aq.selected.filter((idx) => idx !== sel)
+              ? aq.selected.filter((idx: number) => idx !== sel)
               : [...aq.selected, sel];
             chatTerminal.store.dispatch({ askQuestion: { ...aq, selected } });
             tui.requestRender();
@@ -723,8 +724,8 @@ export async function startPiTuiApp(
             if (isMultiSelect) {
               chatTerminal.resolveAskQuestion(
                 aq.selected
-                  .map((idx) => options[idx]?.label)
-                  .filter((label): label is string => Boolean(label)),
+                  .map((idx: number) => options[idx]?.label)
+                  .filter((label: string | undefined): label is string => Boolean(label)),
               );
             } else {
               const selected = options[sel];

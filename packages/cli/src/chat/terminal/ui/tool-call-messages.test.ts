@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Message } from "../state/store.js";
-import { stripAnsi } from "../../tui/text/text.js";
+import type { Message } from "../../state/store.js";
+import { stripAnsi } from "../../../tui/text/text.js";
 import {
   appendToLastToolCallSummary,
   markLastPendingToolCallCanceled,
