@@ -11,34 +11,34 @@ import {
   runLoginCommand,
   runLogoutCommand,
   runWhoAmICommand,
-} from "./commands/auth.js";
-import { runStatusCommand } from "./commands/status.js";
-import { runLocalIndexCommand } from "./commands/local-index.js";
+} from "./cli/commands/auth.js";
+import { runStatusCommand } from "./cli/commands/status.js";
+import { runLocalIndexCommand } from "./cli/commands/local-index.js";
 import {
   runInitAgentPackCommand,
   runDoctorAgentPackCommand,
   runAgentPackPathCommand,
   runCleanAgentPackBackupsCommand,
   runOnboardingCommand,
-} from "./commands/agent-pack.js";
+} from "./cli/commands/agent-pack.js";
 import {
   runSessionHintCommand,
   runPreEditCommand,
   runPreReadCommand,
   runPreBashCommand,
-} from "./commands/hooks.js";
-import { parseArgs } from "./cli-agent/args.js";
-import { createBaseContext } from "./cli-agent/command-context.js";
-import { loadGatewayConfig, hasConfigOrEnvSetup } from "./cli-agent/config.js";
-import { loadDotEnv } from "./cli-agent/env.js";
-import { runAsk } from "./commands/ask.js";
-import { runChat } from "./commands/chat.js";
-import { runDoctor } from "./commands/doctor.js";
-import { runHelp } from "./commands/help.js";
-import { runInitGateway } from "./commands/init-gateway.js";
-import { runModels } from "./commands/models.js";
-import { runRouteCommand } from "./commands/route.js";
-import { runInteractiveSetup } from "./cli-agent/setup/index.js";
+} from "./cli/commands/hooks.js";
+import { parseArgs } from "./cli/args.js";
+import { createBaseContext } from "./cli/command-context.js";
+import { loadGatewayConfig, hasConfigOrEnvSetup } from "./cli/config.js";
+import { loadDotEnv } from "./cli/env.js";
+import { runAsk } from "./cli/commands/ask.js";
+import { runChat } from "./cli/commands/chat.js";
+import { runDoctor } from "./cli/commands/doctor.js";
+import { runHelp } from "./cli/commands/help.js";
+import { runInitGateway } from "./cli/commands/init-gateway.js";
+import { runModels } from "./cli/commands/models.js";
+import { runRouteCommand } from "./cli/commands/route.js";
+import { runInteractiveSetup } from "./agent/setup/index.js";
 
 async function main() {
   const command = process.argv[2];
