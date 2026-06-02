@@ -379,6 +379,7 @@ export interface HarnessLike {
     includeForkedSubagents?: boolean;
   }): Promise<HarnessThread[]>;
   switchThread(options: { threadId: string }): Promise<void>;
+  deleteThread?(options: { threadId: string }): Promise<void>;
   getCurrentModelId?(): string;
   getTokenUsage?():
     | { promptTokens?: number; completionTokens?: number; totalTokens?: number }

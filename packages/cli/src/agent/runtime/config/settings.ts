@@ -10,6 +10,7 @@ export interface MastraSettingsOptions {
   baseUrl: string;
   apiKey: string | undefined;
   availableModels?: string[];
+  modeDefaults?: { build?: string; plan?: string; fast?: string };
 }
 
 export async function upsertGlobalMastraProvider(
@@ -47,6 +48,27 @@ export async function upsertGlobalMastraProvider(
     ...(settings.onboarding && typeof settings.onboarding === "object" ? settings.onboarding : {}),
     completedAt: new Date().toISOString(),
   };
+
+  // Write modeDefaults so mastracode picks up the right model per mode
+  if (opts.modeDefaults || harnessModelId) {
+    const prefix = providerId === "openai" ? "openai" : providerId;
+    const addPrefix = (id: string | undefined): string => {
+      const value = id ?? harnessModelId;
+      return value.includes("/") ? value : `${prefix}/${value}`;
+    };
+    const existingModels =
+      settings.models && typeof settings.models === "object" && !Array.isArray(settings.models)
+        ? (settings.models as Record<string, unknown>)
+        : {};
+    settings.models = {
+      ...existingModels,
+      modeDefaults: {
+        build: addPrefix(opts.modeDefaults?.build),
+        plan: addPrefix(opts.modeDefaults?.plan),
+        fast: addPrefix(opts.modeDefaults?.fast),
+      },
+    };
+  }
 
   await mkdir(path.dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");

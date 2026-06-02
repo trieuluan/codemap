@@ -2,10 +2,16 @@ import type { TaskPhase } from "../../events/event-bus.js";
 import type { GatewayModel } from "../../../agent/types.js";
 import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
-import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
+import {
+  buildCodeMapAgentInstructions,
+  buildCurrentTaskContent,
+} from "../config/agent-instructions.js";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
 import { classifyTask } from "../../../agent/core/task-classifier.js";
-import { getMastraCurrentModelId, getMastraThreadTokenUsage } from "../../../agent/runtime/harness-runtime.js";
+import {
+  getMastraCurrentModelId,
+  getMastraThreadTokenUsage,
+} from "../../../agent/runtime/harness-runtime.js";
 import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
 import { hydrateMentionContext } from "../../../agent/core/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
@@ -200,9 +206,7 @@ export async function handleSubmitWithContent(
           (m: { toolCalls?: { function: { name: string } }[] }) =>
             m.toolCalls ?? [],
         )
-        .map(
-          (tc: { function: { name: string } }) => tc.function.name,
-        );
+        .map((tc: { function: { name: string } }) => tc.function.name);
       logger.logSummary({
         totalChunks: 0,
         textChunks: 0,
@@ -220,11 +224,7 @@ export async function handleSubmitWithContent(
       });
     }
 
-    if (
-      useMultiPhase &&
-      !result.usedTools &&
-      !result.unsupportedToolCalling
-    ) {
+    if (useMultiPhase && !result.usedTools && !result.unsupportedToolCalling) {
       ctx.appendMessage({
         role: "system",
         content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nCheck your coder profile configuration or start a new session with /new.`,
@@ -232,7 +232,9 @@ export async function handleSubmitWithContent(
     }
 
     if (runtimeCallbacks.hasStreamingEntry() && result.text) {
-      runtimeCallbacks.updateFinalStreamingMessage(result.text || "(no response)");
+      runtimeCallbacks.updateFinalStreamingMessage(
+        result.text || "(no response)",
+      );
     } else if (!runtimeCallbacks.hasStreamingEntry()) {
       ctx.appendMessage({
         role: "assistant",

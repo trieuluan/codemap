@@ -68,6 +68,7 @@ const dynamicImport = new Function(
 ) as DynamicImport;
 
 let singleton: HarnessSingleton | null = null;
+let pendingNewThread = false;
 
 async function forceHarnessModel(
   harness: HarnessLike,
@@ -106,7 +107,7 @@ async function getOrCreateHarness(
     }
     singleton = null;
   }
-  return createFreshHarness(opts);
+  return createFreshHarness(opts, wanted);
 }
 
 /** Pre-initialize the harness singleton in the background so the first chat turn has no cold-start delay. */
@@ -122,12 +123,6 @@ export async function runWithMastraHarness(
 ): Promise<AgentLoopResult> {
   setCurrentEffort(input.effort ?? null);
   await drainHarness();
-  const resolvedModel = resolveHarnessModelId(
-    input.model,
-    input.availableModels,
-    input.availableCombos,
-    input.providerId,
-  );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
     baseUrl: input.provider.baseUrl,
@@ -140,6 +135,7 @@ export async function runWithMastraHarness(
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
+  await ensureMastraThread();
   startDrainTracking(harness);
 
   const modelId = harness.getCurrentModelId?.();
@@ -147,7 +143,7 @@ export async function runWithMastraHarness(
   input.onDebug?.({
     event: "mastra_model_resolved",
     requested: input.model,
-    resolved: resolvedModel,
+    resolved: modelId,
     availableCount: input.availableModels?.length ?? 0,
   });
   applyAgentInstructions(harness, input.agentInstructions);
@@ -195,6 +191,13 @@ export async function runWithMastraHarness(
   return result;
 }
 
+/** Ensure a thread exists — lazy thread creation on first message. */
+export async function ensureMastraThread(): Promise<void> {
+  if (!pendingNewThread || !singleton) return;
+  pendingNewThread = false;
+  await singleton.harness.createThread();
+}
+
 /** Destroy and forget the current harness — call when starting a new chat session. */
 export async function resetHarnessSingleton(): Promise<void> {
   if (!singleton) return;
@@ -202,6 +205,22 @@ export async function resetHarnessSingleton(): Promise<void> {
   uninstallFetchInterceptor();
   const old = singleton;
   singleton = null;
+  pendingNewThread = false;
+
+  // Clean up empty threads (threads with no user messages)
+  try {
+    const threadId = old.harness.getCurrentThreadId?.();
+    if (threadId) {
+      const messages = await old.harness.listMessagesForThread({ threadId });
+      const hasUserMessage = messages.some((m) => m.role === "user");
+      if (!hasUserMessage) {
+        await old.harness.deleteThread?.({ threadId });
+      }
+    }
+  } catch {
+    /* best-effort cleanup */
+  }
+
   try {
     await old.mcpManager?.disconnect?.();
   } catch {
@@ -217,6 +236,7 @@ export async function resetHarnessSingleton(): Promise<void> {
 /** Create a brand-new harness and store it as the singleton. */
 async function createFreshHarness(
   opts: CreateHarnessOptions,
+  harnessModelId: string,
 ): Promise<HarnessLike> {
   const mod = await dynamicImport("mastracode");
   const createMastraCode = mod.createMastraCode as (
@@ -227,20 +247,13 @@ async function createFreshHarness(
 
   installTemperatureInterceptor(opts.baseUrl);
 
-  const harnessModelId = resolveHarnessModelId(
-    opts.modelId,
-    opts.availableModels,
-    opts.availableCombos,
-    opts.providerId,
-  );
-  await upsertGlobalMastraProvider(opts, harnessModelId);
-  const providerPrefix = (opts.providerId ?? "9router") === "openai"
-    ? "openai"
-    : (opts.providerId ?? "9router");
-  const normalizeModel = (id: string | undefined) => {
-    const value = id || harnessModelId;
-    return value.includes("/") ? value : `${providerPrefix}/${value}`;
-  };
+  await upsertGlobalMastraProvider({
+    provider: opts.providerId,
+    baseUrl: opts.baseUrl,
+    apiKey: opts.apiKey,
+    availableModels: opts.availableModels,
+    modeDefaults: opts.modeDefaults,
+  }, harnessModelId);
 
   opts.onDebug?.({
     event: "mastra_provider_configured",
@@ -255,15 +268,10 @@ async function createFreshHarness(
       ? opts.extraServerConfigs
       : undefined
     : { codemap: serverConfig, ...opts.extraServerConfigs };
-  const filteredMastraTools = opts.mastraTools ?? undefined;
+  const filteredMastraTools = opts.mastraTools;
 
   const mcpServerIds = new Set(["codemap", ...extraServerKeys]);
   const { harness, mcpManager } = await createMastraCode({
-    modes: [
-      { id: "build", default: true, defaultModelId: normalizeModel(opts.modeDefaults?.build) },
-      { id: "plan", defaultModelId: normalizeModel(opts.modeDefaults?.plan) },
-      { id: "fast", defaultModelId: normalizeModel(opts.modeDefaults?.fast) },
-    ],
     ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
       ? { mcpServers: baseMcpServers }
       : {}),
@@ -279,7 +287,7 @@ async function createFreshHarness(
   });
 
   await harness.init();
-  await harness.createThread();
+  pendingNewThread = true;
   await forceHarnessModel(harness, harnessModelId);
 
   const mcpInitPromise = startMastraMcpInitialization(mcpManager, opts.onDebug);
@@ -410,9 +418,43 @@ export async function switchMastraThread(threadId: string): Promise<boolean> {
   if (!singleton) return false;
   try {
     await singleton.harness.switchThread({ threadId });
+    pendingNewThread = false;
     return true;
   } catch {
     return false;
+  }
+}
+
+const AUTO_RESUME_MAX_AGE_DAYS = 7;
+
+/**
+ * Auto-resume the latest workspace thread if it's recent enough.
+ * Returns the resumed thread ID, or null if starting fresh.
+ */
+export async function autoResumeLatestThread(): Promise<string | null> {
+  if (!singleton) return null;
+  try {
+    const threads = await singleton.harness.listThreads();
+    if (!threads.length) return null;
+
+    const sorted = [...threads].sort(
+      (a, b) =>
+        new Date(b.updatedAt ?? 0).getTime() -
+        new Date(a.updatedAt ?? 0).getTime(),
+    );
+    const latest = sorted[0]!;
+    const updatedAt = new Date(latest.updatedAt ?? 0).getTime();
+    const maxAge = AUTO_RESUME_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+    if (Date.now() - updatedAt > maxAge) {
+      return null;
+    }
+
+    await singleton.harness.switchThread({ threadId: latest.id });
+    pendingNewThread = false;
+    return latest.id;
+  } catch {
+    return null;
   }
 }
 

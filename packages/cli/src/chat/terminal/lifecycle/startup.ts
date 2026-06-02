@@ -1,6 +1,6 @@
 import { loadOrSynthesizeAll } from "../../../agent/core/convention-synthesizer.js";
 import { warmupFileSearch } from "../../../agent/core/file-search.js";
-import { warmupHarness } from "../../../agent/runtime/harness-runtime.js";
+import { warmupHarness, autoResumeLatestThread, listMastraThreadMessages } from "../../../agent/runtime/harness-runtime.js";
 import type { EventBus } from "../../events/event-bus.js";
 import type { Store } from "../../state/store.js";
 import type { ChatTerminalLike } from "../ui/types.js";
@@ -47,10 +47,27 @@ export async function startChatTerminalRuntime({
     apiKey: options.provider.apiKey,
     modelId: startupModel,
     availableModels: store.getState().config.availableModels.map((m) => m.id),
+    providerId: options.gatewayConfig.provider,
+    modeDefaults: options.gatewayConfig.modeDefaults,
     onDebug: undefined,
     extraServerConfigs: options.toolClient.getExtraServerConfigs(),
     mastraTools,
-  }).catch(() => {});
+  })
+    .then(async () => {
+      const resumedThreadId = await autoResumeLatestThread();
+      if (resumedThreadId) {
+        const { mapHarnessMessagesToUI } = await import(
+          "../../../chat/slash-commands/sessions.js"
+        );
+        const messages = await listMastraThreadMessages(resumedThreadId, 100);
+        store.dispatch((prev) => ({
+          messages: mapHarnessMessagesToUI(messages),
+          sessionTokens: 0,
+        }));
+        bus.scheduleRefresh();
+      }
+    })
+    .catch(() => {});
 
   store.dispatch({ synthRunning: true });
   bus.scheduleRefresh();

@@ -412,7 +412,7 @@ export async function startPiTuiApp(
           }
           const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
           const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
-          const msgs = await listMastraThreadMessages(threadId);
+          const msgs = await listMastraThreadMessages(threadId, 100);
           chatTerminal.store.dispatch((prev: UIState) => ({
             messages: mapHarnessMessagesToUI(msgs),
             sessionTokens: 0,

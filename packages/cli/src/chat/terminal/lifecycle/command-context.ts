@@ -116,6 +116,8 @@ export function buildChatCommandContext({
         availableModels: store
           .getState()
           .config.availableModels.map((m) => m.id),
+        providerId: options.gatewayConfig.provider,
+        modeDefaults: options.gatewayConfig.modeDefaults,
         onDebug: undefined,
         extraServerConfigs: options.toolClient.getExtraServerConfigs(),
       });
