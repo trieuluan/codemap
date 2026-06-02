@@ -68,7 +68,7 @@ export function stripAnsi(s: string): string {
     .replace(CURSOR_MARKER, "");
 }
 
-function visibleTextWidth(text: string): number {
+export function visibleTextWidth(text: string): number {
   return visibleWidth(stripAnsi(text));
 }
 
@@ -113,6 +113,18 @@ export function truncateVisible(line: string, width: number, silent = false): st
     i++;
   }
   if (i >= line.length) return line;
+  // Consume any trailing ANSI sequences — if only zero-width escapes remain,
+  // the content fits exactly and no truncation marker is needed.
+  let j = i;
+  while (j < line.length) {
+    const nextAnsiIndex = ansiSequenceEnd(line, j);
+    if (nextAnsiIndex !== null) {
+      j = nextAnsiIndex;
+      continue;
+    }
+    break;
+  }
+  if (j >= line.length) return line;
   return silent ? line.slice(0, i) : line.slice(0, i) + "…";
 }
 

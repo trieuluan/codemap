@@ -17,7 +17,7 @@ import {
   RESET,
   SPINNER,
 } from "../theme.js";
-import { fitLine, padToWidth, stripAnsi, truncateVisible } from "../text/text.js";
+import { fitLine, padToWidth, truncateVisible, visibleTextWidth } from "../text/text.js";
 import { isGatewayOffline } from "../stderr-interceptor.js";
 
 function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
@@ -91,13 +91,13 @@ export function buildStatusBar(
 
   if (!reimportHint) return fitLine(left, w);
 
-  const hintWidth = stripAnsi(reimportHint).length;
+  const hintWidth = visibleTextWidth(reimportHint);
   const gap = "  ";
   const maxLeftWidth = Math.max(0, w - hintWidth - gap.length);
   const clippedLeft = truncateVisible(left, maxLeftWidth);
   const paddingWidth = Math.max(
     0,
-    w - stripAnsi(clippedLeft).length - hintWidth,
+    w - visibleTextWidth(clippedLeft) - hintWidth,
   );
   return fitLine(clippedLeft + " ".repeat(paddingWidth) + reimportHint, w);
 }
