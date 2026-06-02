@@ -69,6 +69,7 @@ const dynamicImport = new Function(
 
 let singleton: HarnessSingleton | null = null;
 let pendingNewThread = false;
+let pendingThreadPromise: Promise<void> | null = null;
 
 async function forceHarnessModel(
   harness: HarnessLike,
@@ -143,7 +144,7 @@ export async function runWithMastraHarness(
   input.onDebug?.({
     event: "mastra_model_resolved",
     requested: input.model,
-    resolved: modelId,
+    resolved: modelId ?? input.model,
     availableCount: input.availableModels?.length ?? 0,
   });
   applyAgentInstructions(harness, input.agentInstructions);
@@ -194,8 +195,16 @@ export async function runWithMastraHarness(
 /** Ensure a thread exists — lazy thread creation on first message. */
 export async function ensureMastraThread(): Promise<void> {
   if (!pendingNewThread || !singleton) return;
+  // Deduplicate concurrent calls: reuse in-flight promise
+  if (pendingThreadPromise) {
+    await pendingThreadPromise;
+    return;
+  }
   pendingNewThread = false;
-  await singleton.harness.createThread();
+  pendingThreadPromise = singleton.harness.createThread().then(() => {}, () => {}).finally(() => {
+    pendingThreadPromise = null;
+  });
+  await pendingThreadPromise;
 }
 
 /** Destroy and forget the current harness — call when starting a new chat session. */
@@ -206,30 +215,31 @@ export async function resetHarnessSingleton(): Promise<void> {
   const old = singleton;
   singleton = null;
   pendingNewThread = false;
+  pendingThreadPromise = null;
 
   // Clean up empty threads (threads with no user messages)
   try {
     const threadId = old.harness.getCurrentThreadId?.();
-    if (threadId) {
+    if (threadId && old.harness.deleteThread) {
       const messages = await old.harness.listMessagesForThread({ threadId });
       const hasUserMessage = messages.some((m) => m.role === "user");
       if (!hasUserMessage) {
-        await old.harness.deleteThread?.({ threadId });
+        await old.harness.deleteThread({ threadId });
       }
     }
-  } catch {
-    /* best-effort cleanup */
+  } catch (err) {
+    console.debug("[harness] thread cleanup failed:", err);
   }
 
   try {
     await old.mcpManager?.disconnect?.();
-  } catch {
-    /* best-effort */
+  } catch (err) {
+    console.debug("[harness] mcp disconnect failed:", err);
   }
   try {
     await old.harness.destroy?.();
-  } catch {
-    /* best-effort */
+  } catch (err) {
+    console.debug("[harness] destroy failed:", err);
   }
 }
 

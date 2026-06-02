@@ -52,21 +52,23 @@ export async function upsertGlobalMastraProvider(
   // Write modeDefaults so mastracode picks up the right model per mode
   if (opts.modeDefaults || harnessModelId) {
     const prefix = providerId === "openai" ? "openai" : providerId;
-    const addPrefix = (id: string | undefined): string => {
-      const value = id ?? harnessModelId;
-      return value.includes("/") ? value : `${prefix}/${value}`;
+    const addPrefix = (id: string): string => {
+      return id.includes("/") ? id : `${prefix}/${id}`;
     };
     const existingModels =
       settings.models && typeof settings.models === "object" && !Array.isArray(settings.models)
         ? (settings.models as Record<string, unknown>)
         : {};
+    const modeDefaults: Record<string, string> = {};
+    const buildModel = opts.modeDefaults?.build ?? harnessModelId;
+    const planModel = opts.modeDefaults?.plan;
+    const fastModel = opts.modeDefaults?.fast;
+    if (buildModel) modeDefaults.build = addPrefix(buildModel);
+    if (planModel) modeDefaults.plan = addPrefix(planModel);
+    if (fastModel) modeDefaults.fast = addPrefix(fastModel);
     settings.models = {
       ...existingModels,
-      modeDefaults: {
-        build: addPrefix(opts.modeDefaults?.build),
-        plan: addPrefix(opts.modeDefaults?.plan),
-        fast: addPrefix(opts.modeDefaults?.fast),
-      },
+      modeDefaults,
     };
   }
 
