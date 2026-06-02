@@ -12,7 +12,6 @@ import {
   runLogoutCommand,
   runWhoAmICommand,
 } from "./cli/commands/auth.js";
-import { runStatusCommand } from "./cli/commands/status.js";
 import { runLocalIndexCommand } from "./cli/commands/local-index.js";
 import {
   runInitAgentPackCommand,
@@ -31,13 +30,10 @@ import { parseArgs } from "./cli/args.js";
 import { createBaseContext } from "./cli/command-context.js";
 import { loadGatewayConfig, hasConfigOrEnvSetup } from "./cli/config.js";
 import { loadDotEnv } from "./cli/env.js";
-import { runAsk } from "./cli/commands/ask.js";
 import { runChat } from "./cli/commands/chat.js";
 import { runDoctor } from "./cli/commands/doctor.js";
 import { runHelp } from "./cli/commands/help.js";
-import { runInitGateway } from "./cli/commands/init-gateway.js";
 import { runModels } from "./cli/commands/models.js";
-import { runRouteCommand } from "./cli/commands/route.js";
 import { runInteractiveSetup } from "./agent/setup/index.js";
 
 async function main() {
@@ -57,11 +53,8 @@ async function main() {
   // Gateway commands: need LLM gateway config (model routing)
   const GATEWAY_COMMANDS = new Set([
     "chat",
-    "ask",
-    "route",
     "models",
     "doctor",
-    "init-gateway",
     "help",
   ]);
   if (!command || GATEWAY_COMMANDS.has(command)) {
@@ -72,11 +65,6 @@ async function main() {
       runHelp(baseCtx);
       return;
     }
-    if (parsed.command === "init-gateway") {
-      await runInitGateway(baseCtx);
-      return;
-    }
-
     // If no command specified (user just runs `codemap`) and no config exists, run interactive setup
     if (!command && !(await hasConfigOrEnvSetup())) {
       await runInteractiveSetup();
@@ -90,12 +78,6 @@ async function main() {
     switch (parsed.command) {
       case "chat":
         await runChat(ctx);
-        return;
-      case "ask":
-        await runAsk(ctx);
-        return;
-      case "route":
-        runRouteCommand(ctx);
         return;
       case "models":
         await runModels(ctx);
@@ -117,9 +99,6 @@ async function main() {
       return;
     case "whoami":
       await runWhoAmICommand();
-      return;
-    case "status":
-      await runStatusCommand();
       return;
     case "init-agent-pack":
       await runInitAgentPackCommand(process.argv.slice(3));

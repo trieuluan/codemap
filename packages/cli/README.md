@@ -31,16 +31,12 @@ codemap chat               # Interactive chat (explicit)
 codemap ask "explain X"    # Single prompt, exit
 codemap route "task"       # Show which model handles a task
 codemap models             # List available models
-codemap doctor             # Diagnose gateway config
-codemap init-gateway       # Create gateway config file (--project | --global)
-                           #   --base-url <url>   Override gateway base URL
-                           #   --force            Overwrite existing config
+codemap doctor             # Diagnose workspace, project, gateway, and model config
 ```
 
 ### Workspace
 
 ```bash
-codemap status               # Git, index, auth, project status
 codemap local-index          # Build/update local code index
   --force                    # Full rebuild
   --status                   # Show index info without rebuilding

@@ -129,7 +129,7 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number): st
   const rendered = renderMarkdownish(normalized, renderW);
   const indent = " ".repeat(prefixW);
   const fitPreviewLine = (line: string) =>
-    truncateVisible(`${indent}${line}`, prefixW + bodyW);
+    truncateVisible(`${indent}${line}`, prefixW + bodyW, true);
   const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
   out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
   return out;

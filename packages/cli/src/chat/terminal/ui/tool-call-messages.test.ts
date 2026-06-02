@@ -76,6 +76,20 @@ test("markToolDone marks failure only when [ERROR] is the prefix", () => {
   assert.equal(toolCall?.toolResults?.[0]?.success, false);
 });
 
+test("markToolDone ignores duplicate tool_end results", () => {
+  const messages: Message[] = [
+    { role: "user", content: "go" },
+    { role: "tool_call", name: "view", toolCallId: "call_1", content: "a.ts" },
+  ];
+
+  const first = markToolDone(messages, "view", JSON.stringify({ summary: "done" }), "call_1");
+  const second = markToolDone(first, "view", JSON.stringify({ summary: "done" }), "call_1");
+  const toolCall = second[1];
+
+  assert.equal(stripAnsi(toolCall?.content ?? ""), "a.ts ✓");
+  assert.equal(toolCall?.toolResults?.length, 1);
+});
+
 test("markToolDone matches by toolCallId when tool_end has no name", () => {
   const messages: Message[] = [
     { role: "user", content: "go" },

@@ -5,6 +5,7 @@ import type { EventBus } from "../../events/event-bus.js";
 import type { Store } from "../../state/store.js";
 import type { ChatTerminalLike } from "../ui/types.js";
 import type { ChatTerminalOptions } from "../config/types.js";
+import { loadTerminalTheme } from "../../../tui/theme-loader.js";
 
 interface StartChatTerminalRuntimeOptions {
   terminal: ChatTerminalLike;
@@ -21,6 +22,8 @@ export async function startChatTerminalRuntime({
   options,
   refreshWorkspaceCommits,
 }: StartChatTerminalRuntimeOptions): Promise<void> {
+  await loadTerminalTheme();
+
   if (!options.apiToken && options.mcpConfig) {
     const { showLoginScreen } = await import("../../../tui/login-screen.js");
     const result = await showLoginScreen(options.mcpConfig);

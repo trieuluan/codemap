@@ -104,7 +104,7 @@ export function registerLinkProjectTool(server: McpServer, config: McpServerConf
 
         const lines = [
           `Workspace linked to project "${project.name}".`,
-          `Project ID saved to .codemap/mcp.json — future tools will use it automatically.`,
+          `Project ID saved to .codemap/settings.json — future tools will use it automatically.`,
         ];
 
         if (needsRepo) {

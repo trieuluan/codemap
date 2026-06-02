@@ -142,7 +142,7 @@ async function showStatus(ctx: Parameters<Command["execute"]>[1]) {
     lines.push("  Send a chat message first, then run /mcp again.");
     lines.push("");
     lines.push("Add external servers: /mcp add <name> <command> [args...]");
-    lines.push("Or configure in .codemap/mcp.json → mcpServers");
+    lines.push("Or configure in .codemap/settings.json → mcpServers");
     ctx.setMessages((prev) => [
       ...prev,
       { role: "system", content: lines.join("\n") },
@@ -182,7 +182,7 @@ async function showStatus(ctx: Parameters<Command["execute"]>[1]) {
   if (statuses.length + skipped.length <= 1) {
     lines.push("");
     lines.push("Add external servers: /mcp add <name> <command> [args...]");
-    lines.push("Or configure in .codemap/mcp.json → mcpServers");
+    lines.push("Or configure in .codemap/settings.json → mcpServers");
   }
 
   ctx.setMessages((prev) => [

@@ -68,9 +68,11 @@ test("messageLines clamps diff preview lines to terminal width", () => {
     },
   ];
 
-  const rendered = messageLines(messages, width).map(stripAnsi);
+  const rawRendered = messageLines(messages, width);
+  const rendered = rawRendered.map(stripAnsi);
 
   assert.ok(rendered.length > 0);
+  assert.match(rawRendered.join("\n"), /\x1b\[48;2;/);
   for (const line of rendered) {
     assert.ok(
       line.length <= width,

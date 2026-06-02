@@ -252,8 +252,8 @@ export async function runInteractiveSetup(): Promise<void> {
         const v = await p.select({
           message: setupMessage(5, "Where should CodeMap save this configuration?"),
           options: [
-            { value: "global", label: "Global", hint: "~/.codemap/llm-gateway.json · all projects" },
-            { value: "project", label: "Project", hint: ".codemap/llm-gateway.json · current repo only" },
+            { value: "global", label: "Global", hint: "~/.codemap/settings.json · all projects" },
+            { value: "project", label: "Project", hint: ".codemap/settings.json · current repo only" },
           ],
         });
 

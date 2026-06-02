@@ -13,6 +13,8 @@ import {
   C_ERROR,
   C_WARNING,
   RESET,
+  BG_DIFF_ADD,
+  BG_DIFF_DELETE,
 } from "../theme.js";
 import { highlightBlock, isShikiReady } from "../renderer/shiki-highlight.js";
 
@@ -59,9 +61,6 @@ const RENDERER_METHODS = [
   "text",
 ] as const;
 
-const BG_DIFF_DELETE = "\x1b[48;2;69;10;10m";
-const BG_DIFF_ADD = "\x1b[48;2;0;55;18m";
-
 export function stripAnsi(s: string): string {
   return s
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") // CSI sequences (colors, cursor, etc.)
@@ -69,23 +68,61 @@ export function stripAnsi(s: string): string {
     .replace(CURSOR_MARKER, "");
 }
 
+function visibleTextWidth(text: string): number {
+  return visibleWidth(stripAnsi(text));
+}
+
+function ansiSequenceEnd(text: string, index: number): number | null {
+  if (text.charCodeAt(index) !== 0x1b) return null;
+  if (text[index + 1] === "[") {
+    for (let i = index + 2; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code >= 0x40 && code <= 0x7e) return i + 1;
+    }
+  }
+  if (text[index + 1] === "]") {
+    const bel = text.indexOf("\x07", index + 2);
+    const st = text.indexOf("\x1b\\", index + 2);
+    if (bel !== -1 && (st === -1 || bel < st)) return bel + 1;
+    if (st !== -1) return st + 2;
+  }
+  return null;
+}
+
 export function padToWidth(line: string, width: number): string {
-  const pad = Math.max(0, width - visibleWidth(line));
+  const pad = Math.max(0, width - visibleTextWidth(line));
   return line + " ".repeat(pad);
 }
 
-export function truncateVisible(line: string, width: number): string {
-  if (visibleWidth(line) <= width) return line;
-  let out = "";
-  for (const ch of line) {
-    if (visibleWidth(out + ch) > Math.max(0, width - 1)) break;
-    out += ch;
+export function truncateVisible(line: string, width: number, silent = false): string {
+  const max = Math.max(0, width);
+  // Fast path: no ANSI and fits.
+  if (line.indexOf("\x1b") === -1) {
+    if (line.length <= max) return line;
+    return silent ? line.slice(0, max) : line.slice(0, Math.max(0, max - 1)) + "…";
   }
-  return out + "…";
+  let vis = 0;
+  let i = 0;
+  while (i < line.length && vis < max) {
+    const nextAnsiIndex = ansiSequenceEnd(line, i);
+    if (nextAnsiIndex !== null) {
+      i = nextAnsiIndex;
+      continue;
+    }
+    vis += visibleWidth(line[i] ?? "");
+    i++;
+  }
+  if (i >= line.length) return line;
+  return silent ? line.slice(0, i) : line.slice(0, i) + "…";
 }
 
 export function fitLine(line: string, width: number): string {
   return padToWidth(truncateVisible(line, width), width);
+}
+
+/** Like fitLine but clips silently — no ellipsis. Used for diff line rendering. */
+export function fitLineSilent(line: string, width: number): string {
+  return padToWidth(truncateVisible(line, width, true), width);
 }
 
 export function wrapPlain(text: string, width: number): string[] {
@@ -97,21 +134,20 @@ export function wrapPlain(text: string, width: number): string[] {
       out.push("");
       continue;
     }
-    while (visibleWidth(remaining) > max) {
+    while (visibleTextWidth(remaining) > max) {
       // Walk char-by-char skipping ANSI sequences to find the correct break byte index
       let vis = 0;
       let i = 0;
       let lastSpaceI = -1;
       while (i < remaining.length) {
-        if (remaining.charCodeAt(i) === 0x1b && remaining[i + 1] === "[") {
-          const end = remaining.indexOf("m", i + 2);
-          if (end !== -1) {
-            i = end + 1;
-            continue;
-          }
+        const nextAnsiIndex = ansiSequenceEnd(remaining, i);
+        if (nextAnsiIndex !== null) {
+          i = nextAnsiIndex;
+          continue;
         }
-        if (remaining[i] === " ") lastSpaceI = i;
-        vis++;
+        const char = remaining[i] ?? "";
+        if (char === " ") lastSpaceI = i;
+        vis += visibleWidth(char);
         i++;
         if (vis >= max) break;
       }
@@ -341,10 +377,12 @@ function renderUnifiedDiff(
   // Collect every content line text (strips trailing newline only).
   // We pass all lines as one block to Shiki so it has full context for
   // accurate tokenization — per-line calls would break multi-line constructs.
+  // Expand tabs to 4 spaces so that visibleWidth/padToWidth matches terminal rendering.
+  const expandTabs = (s: string) => s.replace(/\t/g, "    ");
   const contentTexts: string[] = [];
   for (const hunk of parsed.hunks) {
     for (const line of hunk.lines.slice(1)) {
-      contentTexts.push(line.text.replace(/\n$/, ""));
+      contentTexts.push(expandTabs(line.text.replace(/\n$/, "")));
     }
   }
 
@@ -390,23 +428,24 @@ function renderUnifiedDiff(
       const marker = isAdd ? "+" : isDelete ? "-" : " ";
       const markerColor = isAdd ? C_SUCCESS : isDelete ? C_ERROR : C_MUTED;
       const highlighted = preHighlighted[lineIdx++] ?? "";
-      const wrapped = wrapPlain(highlighted, codeWidth);
+      const segment = fitLineSilent(highlighted, codeWidth).trimEnd();
       const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
-
-      for (const [index, segment] of wrapped.entries()) {
-        let gutter: string;
-        if (index === 0 && lineNoW > 0) {
-          const lineNo = (isAdd ? line.newLineNumber : line.oldLineNumber) ?? null;
-          const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
-          // Reset before number so bg color doesn't tint the gutter; restore bg after │ if needed.
-          gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET}${bg} `;
-        } else {
-          gutter = index === 0 ? `${markerColor}${marker}${RESET} ` : " ".repeat(gutterWidth);
-        }
-        const rendered = `${gutter}${segment}${RESET}`;
-        out.push(
-          bg ? reapplyBackground(padToWidth(rendered, width), bg) : rendered,
-        );
+      let gutter: string;
+      if (lineNoW > 0) {
+        const lineNo = (isAdd ? line.newLineNumber : line.oldLineNumber) ?? null;
+        const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
+        gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET} `;
+      } else {
+        gutter = `${markerColor}${marker}${RESET} `;
+      }
+      if (bg) {
+        // Pad code to codeWidth so background fills the full code column.
+        // Background applies only to the code portion — gutter keeps no background.
+        const paddedCode = padToWidth(segment, codeWidth);
+        const coloredCode = reapplyBackground(paddedCode, bg);
+        out.push(`${gutter}${coloredCode}${RESET}`);
+      } else {
+        out.push(`${gutter}${segment}${RESET}`);
       }
     }
   }

@@ -3,7 +3,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
 import { findMonorepoRoot } from "./monorepo-root.js";
 
-const WORKSPACE_CONFIG_FILE = ".codemap/mcp.json";
+const WORKSPACE_CONFIG_FILE = ".codemap/settings.json";
 
 export interface McpServerConfig {
   type?: string;
@@ -22,6 +22,14 @@ export interface WorkspaceProjectConfig {
 async function readWorkspaceProjectConfigAt(configPath: string) {
   const raw = await readFile(configPath, "utf8");
   const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+  // settings.json nests projectId/workspaceRootPath under "codemap"
+  const codemap =
+    parsed.codemap &&
+    typeof parsed.codemap === "object" &&
+    !Array.isArray(parsed.codemap)
+      ? (parsed.codemap as Record<string, unknown>)
+      : null;
 
   let mcpServers: Record<string, McpServerConfig> | undefined;
   if (
@@ -60,15 +68,17 @@ async function readWorkspaceProjectConfigAt(configPath: string) {
     }
   }
 
+  const src = codemap ?? parsed;
+
   return {
     projectId:
-      typeof parsed.projectId === "string" && parsed.projectId.trim()
-        ? parsed.projectId.trim()
+      typeof src.projectId === "string" && src.projectId.trim()
+        ? src.projectId.trim()
         : null,
     workspaceRootPath:
-      typeof parsed.workspaceRootPath === "string" &&
-      parsed.workspaceRootPath.trim()
-        ? parsed.workspaceRootPath.trim()
+      typeof src.workspaceRootPath === "string" &&
+      src.workspaceRootPath.trim()
+        ? src.workspaceRootPath.trim()
         : null,
     mcpServers,
   };
@@ -138,7 +148,7 @@ export async function readWorkspaceProjectConfig(
 }
 
 /**
- * Reads priority resource URIs for a given MCP server name from `.codemap/mcp.json`.
+ * Reads priority resource URIs for a given MCP server name from `.codemap/settings.json`.
  * Returns empty array if no config or no priorityResources found.
  */
 export async function readPriorityResources(
@@ -150,8 +160,8 @@ export async function readPriorityResources(
 }
 
 /**
- * Reads external MCP server configs from both global (`~/.codemap/mcp.json`) and
- * project-level (`.codemap/mcp.json`) configs, merging them with project taking precedence.
+ * Reads external MCP server configs from both global (`~/.codemap/settings.json`) and
+ * project-level (`.codemap/settings.json`) configs, merging them with project taking precedence.
  * Only returns entries that have a `command` field (valid stdio servers).
  * Returns a Map of server name → entry config.
  */
@@ -204,7 +214,7 @@ export async function readMcpServerConfigs(
 
 /**
  * Reads the CodeMap project ID linked to a workspace directory.
- * Looks for a `projectId` field inside `.codemap/mcp.json` at the repo root.
+ * Looks for a `projectId` field inside `.codemap/settings.json` at the repo root.
  * Returns null if the file doesn't exist or contains no projectId.
  */
 export async function readWorkspaceProjectId(
@@ -224,8 +234,8 @@ export async function readWorkspacePath(cwd = process.cwd()): Promise<string> {
 }
 
 /**
- * Saves a CodeMap project ID into `.codemap/mcp.json` at the given workspace root.
- * Merges with any existing fields in the file so auth config is preserved.
+ * Saves a CodeMap project ID into `.codemap/settings.json` at the given workspace root.
+ * Merges with any existing fields in the file so other config is preserved.
  */
 export async function saveWorkspaceProjectId(
   workspaceRoot: string,
@@ -241,16 +251,23 @@ export async function saveWorkspaceProjectId(
     // File doesn't exist yet — start fresh
   }
 
+  const existingCodemap =
+    existing.codemap &&
+    typeof existing.codemap === "object" &&
+    !Array.isArray(existing.codemap)
+      ? (existing.codemap as Record<string, unknown>)
+      : {};
+
   await mkdir(path.dirname(configPath), { recursive: true });
   await writeFile(
     configPath,
-    `${JSON.stringify({ ...existing, projectId, workspaceRootPath: workspaceRoot }, null, 2)}\n`,
+    `${JSON.stringify({ ...existing, codemap: { ...existingCodemap, projectId, workspaceRootPath: workspaceRoot } }, null, 2)}\n`,
     "utf8",
   );
 }
 
 /**
- * Adds or updates an MCP server entry in `.codemap/mcp.json`.
+ * Adds or updates an MCP server entry in `.codemap/settings.json`.
  */
 export async function saveMcpServerEntry(
   workspaceRoot: string,
@@ -279,7 +296,7 @@ export async function saveMcpServerEntry(
 }
 
 /**
- * Removes an MCP server entry from `.codemap/mcp.json`.
+ * Removes an MCP server entry from `.codemap/settings.json`.
  */
 export async function removeMcpServerEntry(
   workspaceRoot: string,

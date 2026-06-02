@@ -78,7 +78,3 @@ export async function getWorkspaceStatusLines(): Promise<string[]> {
 
   return lines;
 }
-
-export async function runStatusCommand(): Promise<void> {
-  console.log((await getWorkspaceStatusLines()).join("\n"));
-}

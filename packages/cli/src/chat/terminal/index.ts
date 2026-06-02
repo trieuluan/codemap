@@ -13,6 +13,7 @@ import {
 import { EventBus } from "../events/event-bus.js";
 import { Store, createInitialState } from "../state/store.js";
 import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
+import { resolveAskQuestion as resolveAskQuestionHelper } from "./ui/plan-review.js";
 
 import { buildChatCommandContext } from "./lifecycle/command-context.js";
 import { startChatTerminalRuntime } from "./lifecycle/startup.js";
@@ -211,8 +212,7 @@ export class ChatTerminal {
   resolveAskQuestion(
     answer: import("../../agent/runtime/events.js").HarnessQuestionAnswer,
   ): void {
-    const { resolveAskQuestion } = require("./ui/plan-review.js");
-    resolveAskQuestion({ bus: this.bus, store: this.store }, answer);
+    resolveAskQuestionHelper({ bus: this.bus, store: this.store }, answer);
   }
 
   // ─── Workspace ───────────────────────────────────────────

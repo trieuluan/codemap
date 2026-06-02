@@ -157,7 +157,7 @@ export class CodeMapMcpToolClient {
   }
 
   /** Disconnect the current MCP server and spawn a fresh one that re-reads
-   *  config from disk (e.g. after login updates ~/.codemap/mcp.json). */
+   *  config from disk (e.g. after login updates ~/.codemap/settings.json). */
   async reconnect(): Promise<void> {
     await this._mcpClient.disconnect().catch(() => {});
     this._cachedToolCount = 0;

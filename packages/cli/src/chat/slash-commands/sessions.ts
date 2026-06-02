@@ -2,7 +2,8 @@ import type { Command } from "./types.js";
 import type { HarnessMessage, HarnessThread } from "../../agent/runtime/events.js";
 import { listMastraThreads } from "../../agent/runtime/harness-runtime.js";
 import type { Message } from "../state/store.js";
-import { normalizeToolDisplayName } from "../terminal/ui/tool-call-messages.js";
+import { normalizeToolDisplayName, summarizeToolArgs } from "../terminal/ui/tool-call-messages.js";
+import { buildToolPreview } from "../../agent/runtime/config/tool-approval-policy.js";
 import { C_SUCCESS, C_ERROR, RESET } from "../../tui/theme.js";
 
 function stringifyToolResult(result: unknown): string {
@@ -87,12 +88,18 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
           textParts += `[Thinking]: ${(part as { type: "thinking"; thinking: string }).thinking}
 `;
         } else if (part.type === "tool_call") {
-          const p = part as { type: "tool_call"; id: string; name: string };
+          const p = part as { type: "tool_call"; id: string; name: string; args?: unknown };
           if (textParts.trim()) {
             result.push({ role: "assistant", content: textParts.trim(), timestamp: ts });
             textParts = "";
           }
-          result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content: normalizeToolDisplayName(p.name), timestamp: ts });
+          const argsStr = typeof p.args === "string" ? p.args : p.args != null ? JSON.stringify(p.args) : undefined;
+          const content = argsStr ? summarizeToolArgs(p.name, argsStr) : normalizeToolDisplayName(p.name);
+          const parsedArgs = (p.args && typeof p.args === "object" && !Array.isArray(p.args))
+            ? p.args as Record<string, unknown>
+            : {};
+          const previewContent = buildToolPreview(p.name, parsedArgs);
+          result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content, previewContent, timestamp: ts });
         } else if (part.type === "tool_result") {
           attachToolResult(result, part as { type: "tool_result"; id: string; name: string; result: unknown; isError: boolean }, ts);
         } else if (part.type === "image") {

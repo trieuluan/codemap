@@ -1,145 +1,98 @@
-import { homedir } from "node:os";
-import path from "node:path";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-
+import { access } from "node:fs/promises";
 import type { GatewayConfig } from "../agent/types.js";
+import {
+  type SettingsScope,
+  loadSettings,
+  writeGatewayToSettings,
+  hasSettingsOrLegacy,
+  getProjectSettingsPath,
+  getGlobalSettingsPath,
+  SETTINGS_DEFAULTS,
+} from "./settings.js";
 
-export interface FileGatewayConfig {
-  baseUrl?: string;
-  apiKey?: string;
-  defaultModel?: string;
-}
+export const DEFAULT_BASE_URL = SETTINGS_DEFAULTS.gateway!.baseUrl!;
+export const DEFAULT_MODEL = SETTINGS_DEFAULTS.gateway!.defaultModel!;
 
-export type GatewayConfigScope = "project" | "global";
+export async function loadGatewayConfig(): Promise<GatewayConfig> {
+  const settings = await loadSettings();
+  const gw = settings.gateway ?? {};
 
-export interface WriteGatewayConfigOptions {
-  scope: GatewayConfigScope;
-  cwd?: string;
-  force?: boolean;
-  baseUrl?: string;
-  apiKey?: string;
-  defaultModel?: string;
-}
+  const baseUrl = gw.baseUrl ?? DEFAULT_BASE_URL;
+  const apiKey = gw.apiKey;
+  const defaultModel = gw.defaultModel ?? DEFAULT_MODEL;
 
-export const DEFAULT_BASE_URL = "http://localhost:4000/v1";
-
-export async function loadGatewayConfig(
-  cwd = process.cwd(),
-): Promise<GatewayConfig> {
-  const fileConfig = await readFirstJsonConfig([
-    getGatewayConfigPath("project", cwd),
-    getGatewayConfigPath("global", cwd),
-  ]);
-  const baseUrl =
-    fileConfig.value?.baseUrl ??
-    process.env.CODEMAP_LLM_GATEWAY_BASE_URL ??
-    DEFAULT_BASE_URL;
-  const apiKey =
-    process.env.CODEMAP_LLM_GATEWAY_API_KEY ?? fileConfig.value?.apiKey;
-  const defaultModel =
-    fileConfig.value?.defaultModel ??
-    process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ??
-    "coder";
+  const hasEnv = hasGatewayEnv();
+  const configSource = hasEnv
+    ? "env vars"
+    : await hasSettingsOrLegacy()
+      ? "file"
+      : "built-in defaults";
 
   return {
-    baseUrl: trimTrailingSlash(baseUrl),
+    baseUrl,
     apiKey,
     defaultModel,
-    models: [],
-    configSource:
-      fileConfig.source ??
-      (hasEnvironmentConfig() ? "environment" : "built-in defaults"),
+    models: [defaultModel],
+    configSource,
   };
 }
 
-export async function writeGatewayConfig(
-  options: WriteGatewayConfigOptions,
-): Promise<{ path: string; created: boolean }> {
-  const configPath = getGatewayConfigPath(
-    options.scope,
-    options.cwd ?? process.cwd(),
+export async function writeGatewayConfig(config: {
+  scope: SettingsScope;
+  force?: boolean;
+  baseUrl: string;
+  apiKey?: string;
+  defaultModel?: string;
+}): Promise<{ path: string; scope: SettingsScope; created: boolean }> {
+  const targetPath = getGatewayConfigPath(config.scope);
+  const existed = await fileExists(targetPath);
+
+  if (existed && !config.force) {
+    return { path: targetPath, scope: config.scope, created: false };
+  }
+
+  const filePath = await writeGatewayToSettings(
+    config.scope,
+    {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      defaultModel: config.defaultModel,
+    },
   );
-  const config = buildDefaultGatewayFile({ baseUrl: options.baseUrl });
-  if (options.apiKey) {
-    config.apiKey = options.apiKey;
-  }
-  if (options.defaultModel) {
-    config.defaultModel = options.defaultModel;
-  }
-
-  try {
-    await mkdir(path.dirname(configPath), { recursive: true });
-    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
-      flag: options.force ? "w" : "wx",
-    });
-    return { path: configPath, created: true };
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "EEXIST"
-    ) {
-      return { path: configPath, created: false };
-    }
-    throw error;
-  }
-}
-
-export function getGatewayConfigPath(
-  scope: GatewayConfigScope,
-  cwd = process.cwd(),
-): string {
-  if (scope === "project")
-    return path.join(cwd, ".codemap", "llm-gateway.json");
-  return path.join(homedir(), ".codemap", "llm-gateway.json");
+  return { path: filePath, scope: config.scope, created: !existed };
 }
 
 export async function hasConfigOrEnvSetup(): Promise<boolean> {
-  const projectPath = getGatewayConfigPath("project");
-  const globalPath = getGatewayConfigPath("global");
-  
-  try {
-    await access(projectPath);
-    return true;
-  } catch {
-    // Check global config
-  }
-  
-  try {
-    await access(globalPath);
-    return true;
-  } catch {
-    // Check environment
-  }
-  
-  return hasEnvironmentConfig();
+  return hasSettingsOrLegacy();
 }
 
-export function buildDefaultGatewayFile(
-  overrides: Pick<FileGatewayConfig, "baseUrl"> = {},
-): FileGatewayConfig {
-  return {
-    baseUrl: trimTrailingSlash(overrides.baseUrl ?? DEFAULT_BASE_URL),
-    defaultModel: "coder",
-  };
+/** Return the settings.json file path for the given scope. */
+export function getGatewayConfigPath(scope: SettingsScope): string {
+  return scope === "project"
+    ? getProjectSettingsPath()
+    : getGlobalSettingsPath();
 }
 
+export function buildDefaultGatewayFile(): string {
+  return JSON.stringify(
+    {
+      gateway: {
+        baseUrl: DEFAULT_BASE_URL,
+        defaultModel: DEFAULT_MODEL,
+      },
+    },
+    null,
+    2,
+  );
+}
 
-
-async function readFirstJsonConfig(paths: string[]): Promise<{
-  source?: string;
-  value?: FileGatewayConfig;
-}> {
-  for (const configPath of paths) {
-    if (!(await fileExists(configPath))) continue;
-    const raw = await readFile(configPath, "utf8");
-    return {
-      source: configPath,
-      value: JSON.parse(raw) as FileGatewayConfig,
-    };
-  }
-  return {};
+function hasGatewayEnv(): boolean {
+  return [
+    "CODEMAP_LLM_GATEWAY_BASE_URL",
+    "CODEMAP_LLM_GATEWAY_API_KEY",
+    "CODEMAP_LLM_GATEWAY_DEFAULT_MODEL",
+    "CODEMAP_LLM_GATEWAY_CODER_MODEL",
+  ].some((k) => process.env[k]);
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -149,22 +102,4 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function hasEnvironmentConfig(): boolean {
-  return [
-    "CODEMAP_LLM_GATEWAY_BASE_URL",
-    "CODEMAP_LLM_GATEWAY_API_KEY",
-    "CODEMAP_LLM_GATEWAY_MODE",
-    "CODEMAP_LLM_GATEWAY_DEFAULT_PROFILE",
-    "CODEMAP_LLM_GATEWAY_DEFAULT_MODEL",
-    "CODEMAP_LLM_GATEWAY_PLANNER_MODEL",
-    "CODEMAP_LLM_GATEWAY_CODER_MODEL",
-    "CODEMAP_LLM_GATEWAY_REVIEWER_MODEL",
-    "CODEMAP_LLM_GATEWAY_LOCAL_MODEL",
-  ].some((key) => process.env[key]);
 }

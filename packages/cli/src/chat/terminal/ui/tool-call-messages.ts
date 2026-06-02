@@ -157,6 +157,9 @@ export function markToolDone(
       success,
     };
     const existingResults = next[toolCallIndex].toolResults ?? [];
+    if (existingResults.some((result) => result.fullContent === resultText)) {
+      return next;
+    }
     const startedAt = next[toolCallIndex].startedAtMs ?? next[toolCallIndex].timestamp;
     const elapsed = typeof startedAt === "number" ? Date.now() - startedAt : -1;
     const durationSuffix = formatElapsedDuration(elapsed);

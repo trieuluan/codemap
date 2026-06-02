@@ -10,12 +10,8 @@ Usage:
 Chat:
   codemap chat                Enter interactive chat (explicit)
   codemap ask "<prompt>"      Run a single prompt and exit
-  codemap route "<task>"      Show which model profile would handle a task
   codemap models              List default model and available gateway models
-  codemap doctor              Diagnose gateway connection and model configuration
-  codemap init-gateway        Create gateway config file (--project | --global)
-                              --base-url <url>   Override gateway base URL
-                              --force            Overwrite existing config
+  codemap doctor              Diagnose workspace, project, gateway, and model configuration
 
 Auth:
   codemap login               Authenticate with CodeMap (opens browser)
@@ -23,7 +19,6 @@ Auth:
   codemap whoami              Show current authenticated user
 
 Workspace:
-  codemap status              Show git, local index, auth, and linked project status
   codemap local-index         Build or update the local code index
                               --force    Force full rebuild
                               --status   Show index info without rebuilding
@@ -58,7 +53,7 @@ Gateway config:
   CODEMAP_LLM_GATEWAY_REVIEWER_MODEL   Model for reviewer profile
 
 Config files:
-  .codemap/llm-gateway.json    Project-level gateway config
-  ~/.codemap/llm-gateway.json  User-level gateway config`);
+  .codemap/settings.json      Project-level settings
+  ~/.codemap/settings.json    User-level settings`);
 }
 

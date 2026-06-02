@@ -54,7 +54,14 @@ function normalizeConfigFile(input: unknown): McpConfigFile {
     return {};
   }
 
-  const record = input as Record<string, unknown>;
+  const rootRecord = input as Record<string, unknown>;
+  const codemapRecord =
+    rootRecord.codemap &&
+    typeof rootRecord.codemap === "object" &&
+    !Array.isArray(rootRecord.codemap)
+      ? (rootRecord.codemap as Record<string, unknown>)
+      : null;
+  const record = codemapRecord ? { ...rootRecord, ...codemapRecord } : rootRecord;
   const apiUrl =
     typeof record.apiUrl === "string" && record.apiUrl.trim()
       ? record.apiUrl.trim()
@@ -177,8 +184,8 @@ async function findProjectRoot(cwd: string): Promise<string> {
 
 function getConfigPaths(projectRoot: string) {
   return {
-    projectConfigPath: path.join(projectRoot, ".codemap", "mcp.json"),
-    globalConfigPath: path.join(homedir(), ".codemap", "mcp.json"),
+    projectConfigPath: path.join(projectRoot, ".codemap", "settings.json"),
+    globalConfigPath: path.join(homedir(), ".codemap", "settings.json"),
   };
 }
 
@@ -200,16 +207,16 @@ function applyLayer(resolved: McpServerConfig, layer: McpConfigFile | null) {
     }
   }
 
-  if (layer.apiToken !== undefined) {
-    nextResolved.apiToken = layer.apiToken ?? null;
+  if (layer.apiToken != null) {
+    nextResolved.apiToken = layer.apiToken;
   }
 
-  if (layer.user !== undefined) {
-    nextResolved.user = layer.user ?? null;
+  if (layer.user != null) {
+    nextResolved.user = layer.user;
   }
 
-  if (layer.auth !== undefined) {
-    nextResolved.auth = layer.auth ?? null;
+  if (layer.auth != null) {
+    nextResolved.auth = layer.auth;
   }
 
   return nextResolved;
@@ -245,15 +252,44 @@ export async function loadConfig(
     globalMcpServers: globalConfig?.mcpServers ?? {},
   };
 
-  resolved = applyLayer(resolved, envConfig);
   resolved = applyLayer(resolved, globalConfig);
   resolved = applyLayer(resolved, projectConfig);
+  resolved = applyLayer(resolved, envConfig);
 
   return resolved;
 }
 
 async function writeConfigFile(configPath: string, config: McpConfigFile) {
   await mkdir(path.dirname(configPath), { recursive: true });
+
+  if (path.basename(configPath) === "settings.json") {
+    let existing: Record<string, unknown> = {};
+    try {
+      existing = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+    } catch {
+      existing = {};
+    }
+
+    const existingCodemap =
+      existing.codemap && typeof existing.codemap === "object" && !Array.isArray(existing.codemap)
+        ? (existing.codemap as Record<string, unknown>)
+        : {};
+
+    const nextConfig = {
+      ...existing,
+      codemap: {
+        ...existingCodemap,
+        apiUrl: config.apiUrl,
+        apiToken: config.apiToken,
+        user: config.user,
+        auth: config.auth,
+      },
+    };
+
+    await writeFile(configPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
+    return;
+  }
+
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
