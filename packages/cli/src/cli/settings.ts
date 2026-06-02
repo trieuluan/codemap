@@ -5,9 +5,15 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 // ─── Schema ───────────────────────────────────────────────────────
 
 export interface SettingsGateway {
+  provider?: "9router" | "openai" | "self-hosted";
   baseUrl?: string;
   apiKey?: string;
   defaultModel?: string;
+  modeDefaults?: {
+    build?: string;
+    plan?: string;
+    fast?: string;
+  };
 }
 
 export interface SettingsCodemap {
@@ -38,8 +44,14 @@ export type SettingsScope = "global" | "project";
 
 export const SETTINGS_DEFAULTS: Required<Pick<SettingsFile, "gateway">> = {
   gateway: {
+    provider: "9router",
     baseUrl: "http://localhost:4000/v1",
     defaultModel: "coder",
+    modeDefaults: {
+      build: "coder",
+      plan: "gpt-5",
+      fast: "gpt-5-mini",
+    },
   },
 };
 
@@ -98,6 +110,11 @@ function applyEnvOverrides(settings: SettingsFile): SettingsFile {
   const result = { ...settings };
   const gw: SettingsGateway = { ...result.gateway };
 
+  const envProvider = process.env.CODEMAP_LLM_GATEWAY_PROVIDER?.trim();
+  if (envProvider === "9router" || envProvider === "openai" || envProvider === "self-hosted") {
+    gw.provider = envProvider;
+  }
+
   const envBaseUrl = process.env.CODEMAP_LLM_GATEWAY_BASE_URL?.trim();
   if (envBaseUrl) gw.baseUrl = envBaseUrl;
 
@@ -107,6 +124,18 @@ function applyEnvOverrides(settings: SettingsFile): SettingsFile {
   const envModel = process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL?.trim()
     ?? process.env.CODEMAP_LLM_GATEWAY_CODER_MODEL?.trim();
   if (envModel) gw.defaultModel = envModel;
+
+  const envBuildModel = process.env.CODEMAP_LLM_GATEWAY_BUILD_MODEL?.trim();
+  const envPlanModel = process.env.CODEMAP_LLM_GATEWAY_PLAN_MODEL?.trim();
+  const envFastModel = process.env.CODEMAP_LLM_GATEWAY_FAST_MODEL?.trim();
+  if (envBuildModel || envPlanModel || envFastModel) {
+    gw.modeDefaults = {
+      ...gw.modeDefaults,
+      ...(envBuildModel ? { build: envBuildModel } : {}),
+      ...(envPlanModel ? { plan: envPlanModel } : {}),
+      ...(envFastModel ? { fast: envFastModel } : {}),
+    };
+  }
 
   const envTheme = process.env.CODEMAP_THEME?.trim();
   if (envTheme) result.theme = envTheme;
@@ -173,10 +202,14 @@ export async function hasSettingsOrLegacy(cwd = process.cwd()): Promise<boolean>
 
 function hasGatewayEnv(): boolean {
   return [
+    "CODEMAP_LLM_GATEWAY_PROVIDER",
     "CODEMAP_LLM_GATEWAY_BASE_URL",
     "CODEMAP_LLM_GATEWAY_API_KEY",
     "CODEMAP_LLM_GATEWAY_DEFAULT_MODEL",
     "CODEMAP_LLM_GATEWAY_CODER_MODEL",
+    "CODEMAP_LLM_GATEWAY_BUILD_MODEL",
+    "CODEMAP_LLM_GATEWAY_PLAN_MODEL",
+    "CODEMAP_LLM_GATEWAY_FAST_MODEL",
   ].some((key) => process.env[key]);
 }
 

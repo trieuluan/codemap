@@ -1,57 +1,15 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
-import { stripNineRouterPrefix } from "./models.js";
+import { stripProviderPrefix } from "./models.js";
+
+export type MastraProviderId = "9router" | "openai" | "self-hosted";
 
 export interface MastraSettingsOptions {
+  provider?: MastraProviderId;
   baseUrl: string;
   apiKey: string | undefined;
   availableModels?: string[];
-}
-
-export async function createManagedMastraSettings(
-  opts: MastraSettingsOptions,
-  harnessModelId: string,
-): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "codemap-mastra-"));
-  const settingsPath = path.join(dir, "settings.json");
-  const rawModels = getRawModels(opts, harnessModelId);
-  const modeDefaults = {
-    build: harnessModelId,
-    plan: harnessModelId,
-    fast: harnessModelId,
-  };
-
-  await writeFile(settingsPath, JSON.stringify({
-    onboarding: {
-      completedAt: new Date().toISOString(),
-      modePackId: null,
-      omPackId: null,
-    },
-    models: {
-      activeModelPackId: null,
-      modeDefaults,
-      subagentModels: {},
-    },
-    customProviders: [{
-      name: "9router",
-      url: opts.baseUrl,
-      ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-      models: rawModels,
-    }],
-    customModelPacks: [{
-      name: "codemap-9router",
-      models: modeDefaults,
-      createdAt: new Date().toISOString(),
-    }],
-    preferences: {
-      yolo: false,
-      thinkingLevel: "medium",
-      quietMode: false,
-    },
-  }, null, 2), "utf8");
-
-  return settingsPath;
 }
 
 export async function upsertGlobalMastraProvider(
@@ -60,24 +18,35 @@ export async function upsertGlobalMastraProvider(
 ): Promise<string> {
   const settingsPath = getMastraGlobalSettingsPath();
   const settings = await readJsonObject(settingsPath);
+  const providerId = opts.provider ?? "9router";
+
   const rawProviders = Array.isArray(settings.customProviders)
     ? settings.customProviders.filter((provider) => {
         const name = typeof provider === "object" && provider !== null
           ? (provider as Record<string, unknown>).name
           : undefined;
-        return getCustomProviderId(typeof name === "string" ? name : "") !== "9router";
+        return getCustomProviderId(typeof name === "string" ? name : "") !== providerId;
       })
     : [];
 
-  settings.customProviders = [
-    ...rawProviders,
-    {
-      name: "9router",
-      url: opts.baseUrl,
-      ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-      models: getRawModels(opts, harnessModelId),
-    },
-  ];
+  if (providerId === "openai") {
+    settings.customProviders = rawProviders;
+  } else {
+    settings.customProviders = [
+      ...rawProviders,
+      {
+        name: providerId,
+        url: opts.baseUrl,
+        ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
+        models: getRawModels(opts, harnessModelId),
+      },
+    ];
+  }
+
+  settings.onboarding = {
+    ...(settings.onboarding && typeof settings.onboarding === "object" ? settings.onboarding : {}),
+    completedAt: new Date().toISOString(),
+  };
 
   await mkdir(path.dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
@@ -85,9 +54,10 @@ export async function upsertGlobalMastraProvider(
 }
 
 function getRawModels(opts: MastraSettingsOptions, harnessModelId: string): string[] {
+  const providerId = opts.provider ?? "9router";
   return Array.from(new Set([
-    stripNineRouterPrefix(harnessModelId),
-    ...(opts.availableModels ?? []),
+    stripProviderPrefix(harnessModelId, providerId),
+    ...(opts.availableModels ?? []).map((id) => stripProviderPrefix(id, providerId)),
   ].filter(Boolean)));
 }
 

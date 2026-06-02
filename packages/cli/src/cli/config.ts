@@ -10,16 +10,20 @@ import {
   SETTINGS_DEFAULTS,
 } from "./settings.js";
 
+export const DEFAULT_PROVIDER = SETTINGS_DEFAULTS.gateway!.provider!;
 export const DEFAULT_BASE_URL = SETTINGS_DEFAULTS.gateway!.baseUrl!;
 export const DEFAULT_MODEL = SETTINGS_DEFAULTS.gateway!.defaultModel!;
+export const DEFAULT_MODE_DEFAULTS = SETTINGS_DEFAULTS.gateway!.modeDefaults!;
 
 export async function loadGatewayConfig(): Promise<GatewayConfig> {
   const settings = await loadSettings();
   const gw = settings.gateway ?? {};
 
+  const provider = gw.provider ?? DEFAULT_PROVIDER;
   const baseUrl = gw.baseUrl ?? DEFAULT_BASE_URL;
   const apiKey = gw.apiKey;
-  const defaultModel = gw.defaultModel ?? DEFAULT_MODEL;
+  const modeDefaults = { ...DEFAULT_MODE_DEFAULTS, ...gw.modeDefaults };
+  const defaultModel = gw.defaultModel ?? modeDefaults.build ?? DEFAULT_MODEL;
 
   const hasEnv = hasGatewayEnv();
   const configSource = hasEnv
@@ -29,10 +33,12 @@ export async function loadGatewayConfig(): Promise<GatewayConfig> {
       : "built-in defaults";
 
   return {
+    provider,
     baseUrl,
     apiKey,
     defaultModel,
-    models: [defaultModel],
+    modeDefaults,
+    models: Array.from(new Set([defaultModel, ...Object.values(modeDefaults)].filter(Boolean))),
     configSource,
   };
 }
@@ -43,6 +49,8 @@ export async function writeGatewayConfig(config: {
   baseUrl: string;
   apiKey?: string;
   defaultModel?: string;
+  modeDefaults?: { build?: string; plan?: string; fast?: string };
+  provider?: GatewayConfig["provider"];
 }): Promise<{ path: string; scope: SettingsScope; created: boolean }> {
   const targetPath = getGatewayConfigPath(config.scope);
   const existed = await fileExists(targetPath);
@@ -54,9 +62,11 @@ export async function writeGatewayConfig(config: {
   const filePath = await writeGatewayToSettings(
     config.scope,
     {
+      provider: config.provider,
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       defaultModel: config.defaultModel,
+      modeDefaults: config.modeDefaults,
     },
   );
   return { path: filePath, scope: config.scope, created: !existed };
@@ -77,8 +87,10 @@ export function buildDefaultGatewayFile(): string {
   return JSON.stringify(
     {
       gateway: {
+        provider: DEFAULT_PROVIDER,
         baseUrl: DEFAULT_BASE_URL,
         defaultModel: DEFAULT_MODEL,
+        modeDefaults: DEFAULT_MODE_DEFAULTS,
       },
     },
     null,
@@ -88,10 +100,14 @@ export function buildDefaultGatewayFile(): string {
 
 function hasGatewayEnv(): boolean {
   return [
+    "CODEMAP_LLM_GATEWAY_PROVIDER",
     "CODEMAP_LLM_GATEWAY_BASE_URL",
     "CODEMAP_LLM_GATEWAY_API_KEY",
     "CODEMAP_LLM_GATEWAY_DEFAULT_MODEL",
     "CODEMAP_LLM_GATEWAY_CODER_MODEL",
+    "CODEMAP_LLM_GATEWAY_BUILD_MODEL",
+    "CODEMAP_LLM_GATEWAY_PLAN_MODEL",
+    "CODEMAP_LLM_GATEWAY_FAST_MODEL",
   ].some((k) => process.env[k]);
 }
 

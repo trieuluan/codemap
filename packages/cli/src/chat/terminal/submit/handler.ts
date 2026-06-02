@@ -135,7 +135,9 @@ export async function handleSubmitWithContent(
 
     const result = await runSingleAgentRuntime({
       provider: ctx.options.provider,
+      providerId: ctx.options.gatewayConfig.provider,
       model: store.getState().config.model,
+      modeDefaults: ctx.options.gatewayConfig.modeDefaults,
       availableModels: store
         .getState()
         .config.availableModels.map((m: GatewayModel) => m.id),

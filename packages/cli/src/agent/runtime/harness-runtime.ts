@@ -1,5 +1,3 @@
-import { rm } from "node:fs/promises";
-import path from "node:path";
 import type { AgentLoopResult } from "../core/agent-loop.js";
 import type { SingleAgentRuntimeInput } from "./types.js";
 import type { HarnessLike } from "./events.js";
@@ -18,10 +16,9 @@ import {
   type MastraMcpStatusSummary,
   startMastraMcpInitialization,
 } from "./mcp/index.js";
-import { resolveHarnessModelId, stripNineRouterPrefix } from "./config/models.js";
+import { resolveHarnessModelId, stripProviderPrefix } from "./config/models.js";
 import { runHarness } from "./harness/harness-runner.js";
 import {
-  createManagedMastraSettings,
   upsertGlobalMastraProvider,
 } from "./config/settings.js";
 import { buildMastraPermissionRules } from "./config/tool-approval-policy.js";
@@ -44,6 +41,8 @@ interface CreateHarnessOptions {
   modelId: string;
   availableModels?: string[];
   availableCombos?: string[];
+  providerId?: "9router" | "openai" | "self-hosted";
+  modeDefaults?: { build?: string; plan?: string; fast?: string };
   onDebug?: (info: Record<string, unknown>) => void;
   extraServerConfigs?: Record<
     string,
@@ -57,9 +56,9 @@ interface HarnessSingleton {
   harness: HarnessLike;
   mcpManager: MastraMcpManagerLike | undefined;
   mcpInitPromise: Promise<MastraMcpInitResult> | undefined;
+  provider: "9router" | "openai" | "self-hosted";
   baseUrl: string;
   apiKey: string | undefined;
-  settingsPath: string;
   mcpServerIds: Set<string>;
 }
 
@@ -85,9 +84,11 @@ async function getOrCreateHarness(
     opts.modelId,
     opts.availableModels,
     opts.availableCombos,
+    opts.providerId,
   );
   if (
     singleton &&
+    singleton.provider === (opts.providerId ?? "9router") &&
     singleton.baseUrl === opts.baseUrl &&
     singleton.apiKey === opts.apiKey
   ) {
@@ -125,6 +126,7 @@ export async function runWithMastraHarness(
     input.model,
     input.availableModels,
     input.availableCombos,
+    input.providerId,
   );
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
@@ -133,6 +135,8 @@ export async function runWithMastraHarness(
     modelId: input.model,
     availableModels: input.availableModels,
     availableCombos: input.availableCombos,
+    providerId: input.providerId,
+    modeDefaults: input.modeDefaults,
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
   });
@@ -208,11 +212,6 @@ export async function resetHarnessSingleton(): Promise<void> {
   } catch {
     /* best-effort */
   }
-  try {
-    await rm(path.dirname(old.settingsPath), { recursive: true, force: true });
-  } catch {
-    /* best-effort */
-  }
 }
 
 /** Create a brand-new harness and store it as the singleton. */
@@ -232,18 +231,22 @@ async function createFreshHarness(
     opts.modelId,
     opts.availableModels,
     opts.availableCombos,
+    opts.providerId,
   );
-  const settingsPath = await createManagedMastraSettings(opts, harnessModelId);
-  const globalSettingsPath = await upsertGlobalMastraProvider(
-    opts,
-    harnessModelId,
-  );
+  await upsertGlobalMastraProvider(opts, harnessModelId);
+  const providerPrefix = (opts.providerId ?? "9router") === "openai"
+    ? "openai"
+    : (opts.providerId ?? "9router");
+  const normalizeModel = (id: string | undefined) => {
+    const value = id || harnessModelId;
+    return value.includes("/") ? value : `${providerPrefix}/${value}`;
+  };
+
   opts.onDebug?.({
-    event: "mastra_9router_provider_configured",
+    event: "mastra_provider_configured",
     harnessModelId,
+    provider: opts.providerId ?? "9router",
     baseUrl: opts.baseUrl,
-    settingsPath,
-    globalSettingsPath,
   });
 
   const extraServerKeys = Object.keys(opts.extraServerConfigs ?? {});
@@ -256,7 +259,11 @@ async function createFreshHarness(
 
   const mcpServerIds = new Set(["codemap", ...extraServerKeys]);
   const { harness, mcpManager } = await createMastraCode({
-    settingsPath,
+    modes: [
+      { id: "build", default: true, defaultModelId: normalizeModel(opts.modeDefaults?.build) },
+      { id: "plan", defaultModelId: normalizeModel(opts.modeDefaults?.plan) },
+      { id: "fast", defaultModelId: normalizeModel(opts.modeDefaults?.fast) },
+    ],
     ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
       ? { mcpServers: baseMcpServers }
       : {}),
@@ -281,9 +288,9 @@ async function createFreshHarness(
     harness,
     mcpManager,
     mcpInitPromise,
+    provider: opts.providerId ?? "9router",
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
-    settingsPath,
     mcpServerIds,
   };
 
@@ -302,7 +309,7 @@ async function createFreshHarness(
 export function getMastraCurrentModelId(): string | null {
   if (!singleton) return null;
   const raw = singleton.harness.getCurrentModelId?.() ?? null;
-  return raw ? stripNineRouterPrefix(raw) : null;
+  return raw ? stripProviderPrefix(raw, singleton.provider) : null;
 }
 
 export function getMastraThreadId(): string | null {

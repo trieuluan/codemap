@@ -43,6 +43,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
       await import("../../chat/terminal/chat-terminal.js");
     const terminal = new ChatTerminal({
       provider,
+      gatewayConfig: ctx.config,
       model,
       toolClient,
       availableModels,

@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import { writeGatewayConfig, DEFAULT_BASE_URL } from "../../cli/config.js";
+import type { GatewayModeDefaults, GatewayProviderId } from "../types.js";
 import {
   NINE_ROUTER_LOCAL_PORT,
   NINE_ROUTER_LOCAL_BASE_URL,
@@ -103,15 +104,9 @@ async function setup9Router(): Promise<string | symbol> {
 }
 
 async function selectModel(
-  baseUrl: string,
-  apiKey?: string,
-  stepLabel = "Select default model",
+  models: Awaited<ReturnType<typeof fetchModels>>,
+  stepLabel = "Select model",
 ): Promise<string | symbol> {
-  const s = p.spinner();
-  s.start("Fetching models");
-  const models = await fetchModels(baseUrl, apiKey);
-  s.stop(`Found ${models.length} model(s)`);
-
   if (models.length > 0) {
     const options = [
       ...models.map((m) => ({
@@ -140,23 +135,31 @@ async function selectModel(
       const custom = await p.text({
         message: "Enter custom model ID",
         placeholder: "e.g. gpt-4o, claude-sonnet-4",
+        validate: (value) => value.trim() ? undefined : "Model ID is required",
       });
       if (p.isCancel(custom)) return custom;
-      return custom || "coder";
+      return custom;
     }
 
     return selected;
   }
 
-  // No models returned — manual input
   const manual = await p.text({
-    message: `${stepLabel}\nEnter default model ID`,
+    message: `${stepLabel}\nEnter model ID`,
     placeholder: "e.g. gpt-4o, claude-sonnet-4",
-    defaultValue: "coder",
+    validate: (value) => value.trim() ? undefined : "Model ID is required",
   });
 
   if (p.isCancel(manual)) return manual;
-  return manual || "coder";
+  return manual;
+}
+
+async function fetchAvailableModels(baseUrl: string, apiKey?: string): Promise<Awaited<ReturnType<typeof fetchModels>>> {
+  const s = p.spinner();
+  s.start("Fetching models");
+  const models = await fetchModels(baseUrl, apiKey);
+  s.stop(`Found ${models.length} model(s)`);
+  return models;
 }
 
 // ── Main setup wizard ─────────────────────────────────────────────────
@@ -165,10 +168,11 @@ export async function runInteractiveSetup(): Promise<void> {
   p.intro(buildBrandHeader());
 
   let step = 1;
-  let provider = "";
+  let provider: GatewayProviderId = "9router";
   let baseUrl = "";
   let apiKey = "";
   let defaultModel = "";
+  let modeDefaults: GatewayModeDefaults = {};
   let scope = "";
 
   while (step >= 1) {
@@ -180,7 +184,7 @@ export async function runInteractiveSetup(): Promise<void> {
           options: [
             { value: "9router", label: "9router (recommended)", hint: "local proxy, no API key needed" },
             { value: "openai", label: "OpenAI", hint: "platform.openai.com" },
-            { value: "selfhosted", label: "Self-hosted / Other", hint: "any OpenAI-compatible API" },
+            { value: "self-hosted", label: "Self-hosted / Other", hint: "any OpenAI-compatible API" },
           ],
         });
 
@@ -188,7 +192,7 @@ export async function runInteractiveSetup(): Promise<void> {
           p.cancel("Setup cancelled.");
           return;
         }
-        provider = v;
+        provider = v as GatewayProviderId;
         step = 2;
         break;
       }
@@ -238,11 +242,25 @@ export async function runInteractiveSetup(): Promise<void> {
         break;
       }
 
-      // ── Step 4: Default Model ────────────────────────────────────
+      // ── Step 4: Mode Models ─────────────────────────────────────
       case 4: {
-        const v = await selectModel(baseUrl, apiKey || undefined, setupMessage(4, "Select default model"));
-        if (p.isCancel(v)) { step = 3; break; }
-        defaultModel = v;
+        const models = await fetchAvailableModels(baseUrl, apiKey || undefined);
+
+        const buildModel = await selectModel(models, setupMessage(4, "Select model for build mode"));
+        if (p.isCancel(buildModel)) { step = 3; break; }
+
+        const planModel = await selectModel(models, setupMessage(4, "Select model for plan mode"));
+        if (p.isCancel(planModel)) { step = 3; break; }
+
+        const fastModel = await selectModel(models, setupMessage(4, "Select model for fast mode"));
+        if (p.isCancel(fastModel)) { step = 3; break; }
+
+        modeDefaults = {
+          build: buildModel,
+          plan: planModel,
+          fast: fastModel,
+        };
+        defaultModel = buildModel;
         step = 5;
         break;
       }
@@ -275,6 +293,7 @@ export async function runInteractiveSetup(): Promise<void> {
             `Base URL:  ${baseUrl}`,
             `API key:   ${maskedKey}`,
             `Model:     ${defaultModel}`,
+            `Modes:     build=${modeDefaults.build}, plan=${modeDefaults.plan}, fast=${modeDefaults.fast}`,
             `Saved to:  ${scope}`,
           ].join("\n"),
           "Review configuration",
@@ -298,9 +317,11 @@ export async function runInteractiveSetup(): Promise<void> {
         const result = await writeGatewayConfig({
           scope: scope as "global" | "project",
           force: true,
+          provider,
           baseUrl,
           apiKey: apiKey || undefined,
           defaultModel,
+          modeDefaults,
         });
 
         s.stop("Configuration saved");
@@ -308,9 +329,13 @@ export async function runInteractiveSetup(): Promise<void> {
         p.note(result.path, "Config saved");
         p.note(
           [
+            "CODEMAP_LLM_GATEWAY_PROVIDER",
             "CODEMAP_LLM_GATEWAY_BASE_URL",
             "CODEMAP_LLM_GATEWAY_API_KEY",
             "CODEMAP_LLM_GATEWAY_CODER_MODEL",
+            "CODEMAP_LLM_GATEWAY_BUILD_MODEL",
+            "CODEMAP_LLM_GATEWAY_PLAN_MODEL",
+            "CODEMAP_LLM_GATEWAY_FAST_MODEL",
           ].join("\n"),
           "Environment overrides",
         );

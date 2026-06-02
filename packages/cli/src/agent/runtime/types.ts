@@ -2,7 +2,7 @@
 // Extracted here to break the circular dependency between the two files.
 
 import type { NineRouterProvider } from "../core/provider.js";
-import type { ChatMessage, TokenUsage } from "../types.js";
+import type { ChatMessage, GatewayModeDefaults, GatewayProviderId, TokenUsage } from "../types.js";
 import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.js";
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode } from "./events.js";
 
@@ -13,7 +13,9 @@ export type PlanReviewAction = "apply" | "cancel" | string;
 
 export interface SingleAgentRuntimeInput {
   provider: NineRouterProvider;
+  providerId?: GatewayProviderId;
   model: string;
+  modeDefaults?: GatewayModeDefaults;
   /** Real model IDs from the gateway — used to resolve profile aliases like "coder". */
   availableModels?: string[];
   /** Combo IDs from the gateway — passed through without model resolution. */
