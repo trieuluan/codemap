@@ -1,6 +1,7 @@
 import { loadOrSynthesizeAll } from "../../../agent/core/convention-synthesizer.js";
 import { warmupFileSearch } from "../../../agent/core/file-search.js";
 import { warmupHarness, autoResumeLatestThread, listMastraThreadMessages } from "../../../agent/runtime/harness-runtime.js";
+import { maybeCleanupMastraDb } from "../../../agent/runtime/mastra-db-cleanup.js";
 import type { EventBus } from "../../events/event-bus.js";
 import type { Store } from "../../state/store.js";
 import type { ChatTerminalLike } from "../ui/types.js";
@@ -68,6 +69,8 @@ export async function startChatTerminalRuntime({
       }
     })
     .catch(() => {});
+
+  maybeCleanupMastraDb();
 
   store.dispatch({ synthRunning: true });
   bus.scheduleRefresh();

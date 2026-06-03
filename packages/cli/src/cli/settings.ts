@@ -31,11 +31,16 @@ export interface SettingsMcpServer {
   priorityResources?: string[];
 }
 
+export interface SettingsMaintenance {
+  lastSpanCleanupAt?: number;
+}
+
 export interface SettingsFile {
   gateway?: SettingsGateway;
   codemap?: SettingsCodemap;
   mcpServers?: Record<string, SettingsMcpServer>;
   theme?: string;
+  maintenance?: SettingsMaintenance;
 }
 
 export type SettingsScope = "global" | "project";
@@ -99,6 +104,9 @@ function mergeSettings(base: SettingsFile, override: SettingsFile): SettingsFile
   }
   if (override.mcpServers) {
     result.mcpServers = { ...base.mcpServers, ...override.mcpServers };
+  }
+  if (override.maintenance) {
+    result.maintenance = { ...base.maintenance, ...override.maintenance };
   }
 
   return result;
