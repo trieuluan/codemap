@@ -199,6 +199,7 @@ export async function startPiTuiApp(
       msg.expanded ? "1" : "0",
       msg.expandedResultIndex ?? "",
       chatTerminal.store.getState().config.debug ? "debug" : "",
+      chatTerminal.store.getState().previewDiffExpanded ? "diff-x" : "",
       msg.toolCalls?.length ?? 0,
       msg.toolResults?.length ?? 0,
     ].join(":");
@@ -272,6 +273,7 @@ export async function startPiTuiApp(
           : messageLines([msg], contentWidth, frame, {
               showRawToolData: state.config.debug,
               suppressFirstTimestamp: suppressInitialTimestamp,
+              previewDiffExpanded: state.previewDiffExpanded,
             });
       nextBlocks[idx] = { signature, contentRef: msg.content, lines };
     }
@@ -673,6 +675,15 @@ export async function startPiTuiApp(
     // Ctrl+O — open last tool result in pager
     if (matchesKey(data, Key.ctrl("o"))) {
       void toggleAllToolCallsExpanded(chatTerminal);
+      return { consume: true };
+    }
+
+    // Ctrl+E — toggle diff preview expand/collapse
+    if (matchesKey(data, Key.ctrl("e"))) {
+      chatTerminal.store.dispatch((prev: UIState) => ({
+        previewDiffExpanded: !prev.previewDiffExpanded,
+      }));
+      tui.requestRender();
       return { consume: true };
     }
 

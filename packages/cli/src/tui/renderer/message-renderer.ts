@@ -107,7 +107,10 @@ function generateBanner(): string[] {
 
 const BANNER_LINES = generateBanner();
 
-function renderPreviewLines(preview: string, bodyW: number, prefixW: number): string[] {
+/** Maximum rendered preview lines before truncating (after Shiki highlight). */
+const MAX_PREVIEW_LINES = 20;
+
+function renderPreviewLines(preview: string, bodyW: number, prefixW: number, expanded?: boolean): string[] {
   const normalized = preview.replace(/^~~~([^\n]*)/gm, "```$1").replace(/^~~~$/gm, "```");
   const body = normalized.split("\n").filter((line) => !line.startsWith("File:"));
   const added = body.filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
@@ -126,12 +129,24 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number): st
 
   const previewIndentW = 3;
   const renderW = Math.max(20, bodyW - previewIndentW);
-  const rendered = renderMarkdownish(normalized, renderW);
+  let rendered = renderMarkdownish(normalized, renderW);
+
+  // Truncate long previews after Shiki highlight (unless expanded via Ctrl+E)
+  const totalRendered = rendered.length;
+  const truncated = !expanded && totalRendered > MAX_PREVIEW_LINES;
+  if (truncated) {
+    rendered = rendered.slice(0, MAX_PREVIEW_LINES);
+  }
+
   const indent = " ".repeat(prefixW);
   const fitPreviewLine = (line: string) =>
     truncateVisible(`${indent}${line}`, prefixW + bodyW, true);
   const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
   out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
+  if (truncated) {
+    const hidden = totalRendered - MAX_PREVIEW_LINES;
+    out.push(fitPreviewLine(`${" ".repeat(previewIndentW)}${C_MUTED}... ${hidden} more lines hidden (Ctrl+E to expand)${RESET}`));
+  }
   return out;
 }
 
@@ -198,7 +213,7 @@ export function messageLines(
   messages: Message[],
   width: number,
   frame = 0,
-  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean } = {},
+  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean; previewDiffExpanded?: boolean } = {},
 ): string[] {
   return renderMessageLines(messages, width, frame, opts);
 }
@@ -207,7 +222,7 @@ function renderMessageLines(
   messages: Message[],
   width: number,
   frame = 0,
-  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean } = {},
+  opts: { showRawToolData?: boolean; suppressFirstTimestamp?: boolean; previewDiffExpanded?: boolean } = {},
 ): string[] {
   if (messages.length === 0) {
     return [
@@ -286,7 +301,7 @@ function renderMessageLines(
       out.push(`${headerPrefix}${headerContent}${headerSuffix}`);
 
       if (msg.previewContent)
-        out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW));
+        out.push(...renderPreviewLines(msg.previewContent, bodyW, prefixW, opts.previewDiffExpanded));
 
       if (msg.expanded && msg.expandedContent) {
         const expandedLines = formatExpandedContent(

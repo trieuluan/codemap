@@ -169,6 +169,9 @@ export interface UIState {
   // Debug
   debug: boolean;
   debugLogFile: string | null;
+
+  // When true, diff previews are not truncated (toggled via Ctrl+E)
+  previewDiffExpanded: boolean;
 }
 
 // ─── Initial State ───────────────────────────────────────
@@ -231,6 +234,7 @@ export function createInitialState(opts: {
     askQuestion: null,
     debug: opts.debug ?? false,
     debugLogFile: null,
+    previewDiffExpanded: false,
   };
 }
 

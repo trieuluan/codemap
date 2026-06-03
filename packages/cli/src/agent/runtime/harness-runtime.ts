@@ -22,6 +22,7 @@ import {
   upsertGlobalMastraProvider,
 } from "./config/settings.js";
 import { buildMastraPermissionRules } from "./config/tool-approval-policy.js";
+import { Memory } from "@mastra/memory";
 
 export type {
   MastraMcpConfigPaths,
@@ -31,6 +32,22 @@ export type {
 } from "./mcp/index.js";
 
 export { MASTRA_DISABLED_TOOLS, drainHarness };
+
+/** Working memory template for CodeMap CLI context. */
+const CODEMAP_WORKING_MEMORY_TEMPLATE = `# User Context
+
+## Preferences
+<!-- Agent records user preferences here -->
+
+## Active Project
+<!-- Current project name, repo, and branch -->
+
+## Recent Decisions
+<!-- Key decisions made during this session -->
+
+## Notes
+<!-- Anything else the agent should remember -->
+`;
 
 type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
 
@@ -287,6 +304,15 @@ async function createFreshHarness(
       : {}),
     ...(filteredMastraTools ? { extraTools: filteredMastraTools } : {}),
     disabledTools: MASTRA_DISABLED_TOOLS,
+    memory: () =>
+      new Memory({
+        options: {
+          workingMemory: {
+            enabled: true,
+            template: CODEMAP_WORKING_MEMORY_TEMPLATE,
+          },
+        },
+      }),
     initialState: {
       currentModelId: harnessModelId,
       permissionRules: buildMastraPermissionRules(mcpServerIds),

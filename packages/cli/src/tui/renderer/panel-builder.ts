@@ -113,6 +113,12 @@ function formatTaskStatusIcon(status: TaskListItem["status"]): string {
   }
 }
 
+function formatToggleHint(key: string, label: string, enabled: boolean): string {
+  return enabled
+    ? `${C_ACTION}${key}${RESET} ${C_WHITE}${label}${RESET} ${C_SUCCESS}on${RESET}`
+    : `${C_ACTION}${key}${RESET} ${C_GRAY}${label}${RESET}`;
+}
+
 function renderTaskList(tasks: TaskListItem[], w: number): string[] {
   const lines: string[] = [];
   const completed = tasks.filter((t) => t.status === "completed").length;
@@ -178,7 +184,8 @@ export function buildPanel(
         `  ${C_ACTION}@${RESET} ${C_GRAY}mention file${RESET}  ` +
           `${C_ACTION}!<cmd>${RESET} ${C_GRAY}shell${RESET}  ` +
           `${C_ACTION}PgUp/Dn${RESET} ${C_GRAY}scroll${RESET}  ` +
-          `${C_ACTION}Ctrl+T${RESET} ${C_GRAY}tasks${RESET}`,
+          formatToggleHint("Ctrl+T", "tasks", state.taskListVisible) +
+          `  ${formatToggleHint("Ctrl+E", "expand", state.previewDiffExpanded)}`,
         w,
       ),
       fitLine(`  ${C_ACTION}Esc${RESET} ${C_GRAY}to close${RESET}`, w),
@@ -413,7 +420,8 @@ export function buildPanel(
           `  ${C_ACTION}@${RESET} ${C_GRAY}files${RESET}` +
           `  ${C_ACTION}!${RESET} ${C_GRAY}shell${RESET}` +
           `  ${C_ACTION}/help${RESET} ${C_GRAY}commands${RESET}` +
-          `  ${C_ACTION}Ctrl+T${RESET} ${C_GRAY}tasks${RESET}` +
+          `  ${formatToggleHint("Ctrl+E", "expand", state.previewDiffExpanded)}` +
+          `  ${formatToggleHint("Ctrl+T", "tasks", state.taskListVisible)}` +
           `  ${C_ACTION}Ctrl+C${RESET} ${C_GRAY}exit${RESET}`,
         w,
       ),
