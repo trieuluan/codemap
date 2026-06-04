@@ -34,14 +34,6 @@ codemap models             # List available models
 codemap doctor             # Diagnose workspace, project, gateway, and model config
 ```
 
-### Workspace
-
-```bash
-codemap local-index          # Build/update local code index
-  --force                    # Full rebuild
-  --status                   # Show index info without rebuilding
-```
-
 ### Agent Pack (Editor Integration)
 
 ```bash
@@ -59,20 +51,6 @@ codemap agent-pack-path      # Print the agent pack plugin root path
 codemap clean-agent-pack-backups  # Remove backup files left by upgrades
   --root <dir>               # Workspace root
   --dry-run                  # Preview without deleting
-
-codemap onboarding           # Print setup guide for an editor
-  --target <editor>          # claude | cursor | codex | gemini | opencode | copilot | all
-```
-
-### Claude Code Hooks
-
-These are called automatically by Claude Code hook config, not by hand:
-
-```bash
-codemap session-hint         # Emit index status hint on session start
-codemap pre-edit             # Emit blast radius hint before a file edit
-codemap pre-read             # Emit index hint before a file read
-codemap pre-bash             # Emit search hint before a bash command
 ```
 
 ## Gateway Configuration

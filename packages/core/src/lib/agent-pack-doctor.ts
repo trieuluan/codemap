@@ -183,7 +183,6 @@ function expectationsFor(target: ConcreteTarget): FileExpectation[] {
         name: "Claude hooks",
         relativePath: ".claude/settings.json",
         required: false,
-        phrases: ["codemap session-hint", "codemap pre-edit", "codemap local-index"],
       },
       ...skillExpectations(target),
     ];

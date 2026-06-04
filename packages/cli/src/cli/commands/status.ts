@@ -42,7 +42,7 @@ export async function getWorkspaceStatusLines(): Promise<string[]> {
     lines.push(`  Files:      ${summary.fileCount}`);
     lines.push(`  Symbols:    ${summary.symbolCount}`);
   } else {
-    lines.push("  Run `codemap local-index` to build the local index.");
+    lines.push("  Use `refresh_local_index` MCP tool to build the local index.");
   }
   lines.push("");
   lines.push(`Auth:      ${config.apiToken ? "authenticated" : "not authenticated"}`);

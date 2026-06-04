@@ -21,6 +21,9 @@ import {
   startMastraMcpInitialization,
 } from "./mcp/index.js";
 import { resolveHarnessModelId, stripProviderPrefix } from "./config/models.js";
+import { loadCustomTools, getCustomToolPaths } from "../tools/custom/index.js";
+import { syncHooksToMastra } from "../tools/hooks/index.js";
+import type { ResolvedCustomTool } from "../tools/custom/index.js";
 import { runHarness } from "./harness/harness-runner.js";
 import { upsertGlobalMastraProvider } from "./config/settings.js";
 import { buildMastraPermissionRules } from "./config/tool-approval-policy.js";
@@ -107,6 +110,7 @@ interface HarnessSingleton {
   harness: HarnessLike;
   mcpManager: MastraMcpManagerLike | undefined;
   mcpInitPromise: Promise<MastraMcpInitResult> | undefined;
+  hookManager: { reload: () => void } | undefined;
   provider: "9router" | "openai" | "self-hosted";
   baseUrl: string;
   apiKey: string | undefined;
@@ -119,6 +123,7 @@ const dynamicImport = new Function(
 ) as DynamicImport;
 
 let singleton: HarnessSingleton | null = null;
+let cachedCustomTools: ResolvedCustomTool[] = [];
 let pendingNewThread = false;
 let pendingThreadPromise: Promise<void> | null = null;
 
@@ -317,6 +322,7 @@ async function createFreshHarness(
       options?: Record<string, unknown>,
     ) => unknown;
     effectiveDefaults: Record<string, string>;
+    hookManager?: { reload: () => void };
   }>;
 
   const serverConfig = opts.toolClient.getServerConfig();
@@ -349,13 +355,40 @@ async function createFreshHarness(
     : { codemap: serverConfig, ...opts.extraServerConfigs };
   const filteredMastraTools = opts.mastraTools;
 
+  // Load custom tools from .codemap/tools/ (project + global)
+  let mergedExtraTools: Record<string, unknown> | undefined;
+  try {
+    const { readWorkspacePath } = await import("@codemap/core/lib/workspace-project.js");
+    const workspaceRoot = await readWorkspacePath();
+    const { tools: customTools, mastraTools: customMastraTools } =
+      await loadCustomTools(workspaceRoot);
+    cachedCustomTools = customTools;
+
+    if (Object.keys(customMastraTools).length > 0) {
+      mergedExtraTools = {
+        ...(filteredMastraTools ?? {}),
+        ...customMastraTools,
+      };
+      opts.onDebug?.({
+        event: "custom_tools_loaded",
+        count: Object.keys(customMastraTools).length,
+        names: Object.keys(customMastraTools),
+      });
+    } else if (filteredMastraTools) {
+      mergedExtraTools = filteredMastraTools;
+    }
+  } catch {
+    // Custom tools loading is non-fatal
+    mergedExtraTools = filteredMastraTools;
+  }
+
   const mcpServerIds = new Set(["codemap", ...extraServerKeys]);
-  const { harness, mcpManager, resolveModel, effectiveDefaults } =
+  const { harness, mcpManager, resolveModel, effectiveDefaults, hookManager } =
     await createMastraCode({
       ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
         ? { mcpServers: baseMcpServers }
         : {}),
-      ...(filteredMastraTools ? { extraTools: filteredMastraTools } : {}),
+      ...(mergedExtraTools ? { extraTools: mergedExtraTools } : {}),
       disabledTools: MASTRA_DISABLED_TOOLS,
       memory: () => {
         if (cachedMemoryInstance) {
@@ -453,6 +486,18 @@ async function createFreshHarness(
     });
 
   await harness.init();
+
+  // Sync CodeMap built-in hooks + user hooks to .mastracode/hooks.json
+  // and reload the Mastra HookManager so they take effect.
+  try {
+    const workspaceRoot =
+      process.env.WORKSPACE_ROOT ?? process.cwd();
+    syncHooksToMastra(workspaceRoot);
+    hookManager?.reload?.();
+  } catch {
+    /* non-fatal: hooks are optional */
+  }
+
   pendingNewThread = true;
   await forceHarnessModel(harness, harnessModelId);
 
@@ -462,6 +507,7 @@ async function createFreshHarness(
     harness,
     mcpManager,
     mcpInitPromise,
+    hookManager,
     provider: opts.providerId ?? "9router",
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
@@ -478,6 +524,28 @@ async function createFreshHarness(
   });
 
   return harness;
+}
+
+/** Get the list of loaded custom tools (for /tools command). */
+export function getLoadedCustomTools(): ResolvedCustomTool[] {
+  return cachedCustomTools;
+}
+
+/** Get the paths where custom tools are discovered. */
+export { getCustomToolPaths };
+
+/**
+ * Re-sync hooks from .codemap/hooks.json to .mastracode/hooks.json
+ * and reload the Mastra HookManager. Used by the /hooks command.
+ */
+export function reloadHooks(): void {
+  try {
+    const workspaceRoot = process.env.WORKSPACE_ROOT ?? process.cwd();
+    syncHooksToMastra(workspaceRoot);
+    singleton?.hookManager?.reload?.();
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export function getMastraCurrentModelId(): string | null {

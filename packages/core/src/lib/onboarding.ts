@@ -27,7 +27,7 @@ const COMMON_STEPS_AFTER_SERVER = [
   "         (or create_project if no CodeMap project exists yet)",
   "",
   "5. Build local index",
-  "   $ codemap local-index",
+  "   Call: refresh_local_index",
 ].join("\n");
 
 const FOOTER = [

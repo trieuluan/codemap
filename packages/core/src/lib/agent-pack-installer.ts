@@ -144,61 +144,22 @@ async function planCodex(root: string): Promise<PlannedWrite[]> {
   ];
 }
 
-type HookEntry = { matcher?: string; hooks: Array<{ type: string; command: string }> };
-type SettingsShape = {
-  hooks?: { UserPromptSubmit?: HookEntry[]; PreToolUse?: HookEntry[]; PostToolUse?: HookEntry[]; [k: string]: unknown };
-  [k: string]: unknown;
-};
-
-const CODEMAP_HOOKS = {
-  sessionHint: { command: "codemap session-hint 2>/dev/null || true", marker: "codemap session-hint" },
-  preEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap pre-edit 2>/dev/null || true", marker: "codemap pre-edit" },
-  postEdit: { matcher: "Write|Edit|MultiEdit|NotebookEdit", command: "codemap local-index 2>/dev/null || true", marker: "codemap local-index" },
-} as const;
-
-function hasCodemapMarker(entry: HookEntry, marker: string): boolean {
-  return entry.hooks.some((h) => h.command.startsWith(marker));
-}
-
-function upsertHook(list: HookEntry[], marker: string, newEntry: HookEntry): HookEntry[] {
-  return [...list.filter((e) => !hasCodemapMarker(e, marker)), newEntry];
-}
-
 async function mergeClaudeSettings(root: string): Promise<PlannedWrite> {
   const settingsPath = path.join(root, ".claude", "settings.json");
 
-  let settings: SettingsShape = {};
+  let settings: Record<string, unknown> = {};
   try {
-    settings = JSON.parse(await readFile(settingsPath, "utf8")) as SettingsShape;
+    settings = JSON.parse(await readFile(settingsPath, "utf8")) as Record<string, unknown>;
   } catch (error) {
     if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
   }
 
-  const h = settings.hooks ?? {};
+  // Ensure hooks key exists (empty) for forward compatibility
+  if (!settings.hooks) {
+    settings.hooks = {};
+  }
 
-  const merged: SettingsShape = {
-    ...settings,
-    hooks: {
-      ...h,
-      UserPromptSubmit: upsertHook(
-        Array.isArray(h.UserPromptSubmit) ? (h.UserPromptSubmit as HookEntry[]) : [],
-        CODEMAP_HOOKS.sessionHint.marker,
-        { hooks: [{ type: "command", command: CODEMAP_HOOKS.sessionHint.command }] },
-      ),
-      PreToolUse: upsertHook(
-        Array.isArray(h.PreToolUse) ? (h.PreToolUse as HookEntry[]) : [],
-        CODEMAP_HOOKS.preEdit.marker,
-        { matcher: CODEMAP_HOOKS.preEdit.matcher, hooks: [{ type: "command", command: CODEMAP_HOOKS.preEdit.command }] },
-      ),
-      PostToolUse: upsertHook(
-        Array.isArray(h.PostToolUse) ? (h.PostToolUse as HookEntry[]) : [],
-        CODEMAP_HOOKS.postEdit.marker,
-        { matcher: CODEMAP_HOOKS.postEdit.matcher, hooks: [{ type: "command", command: CODEMAP_HOOKS.postEdit.command }] },
-      ),
-    },
-  };
-
-  return { path: settingsPath, content: JSON.stringify(merged, null, 2), overwrite: true };
+  return { path: settingsPath, content: JSON.stringify(settings, null, 2), overwrite: true };
 }
 
 async function planClaude(root: string): Promise<PlannedWrite[]> {

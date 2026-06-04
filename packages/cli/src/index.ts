@@ -12,20 +12,12 @@ import {
   runLogoutCommand,
   runWhoAmICommand,
 } from "./cli/commands/auth.js";
-import { runLocalIndexCommand } from "./cli/commands/local-index.js";
 import {
   runInitAgentPackCommand,
   runDoctorAgentPackCommand,
   runAgentPackPathCommand,
   runCleanAgentPackBackupsCommand,
-  runOnboardingCommand,
 } from "./cli/commands/agent-pack.js";
-import {
-  runSessionHintCommand,
-  runPreEditCommand,
-  runPreReadCommand,
-  runPreBashCommand,
-} from "./cli/commands/hooks.js";
 import { parseArgs } from "./cli/args.js";
 import { createBaseContext } from "./cli/command-context.js";
 import { loadGatewayConfig, hasConfigOrEnvSetup } from "./cli/config.js";
@@ -111,24 +103,6 @@ async function main() {
       return;
     case "clean-agent-pack-backups":
       runCleanAgentPackBackupsCommand(process.argv.slice(3));
-      return;
-    case "local-index":
-      await runLocalIndexCommand(process.argv.slice(3));
-      return;
-    case "session-hint":
-      await runSessionHintCommand();
-      return;
-    case "pre-edit":
-      await runPreEditCommand(process.argv.slice(3));
-      return;
-    case "pre-read":
-      await runPreReadCommand();
-      return;
-    case "pre-bash":
-      await runPreBashCommand();
-      return;
-    case "onboarding":
-      runOnboardingCommand(process.argv.slice(3));
       return;
     default:
       console.error(

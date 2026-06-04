@@ -68,25 +68,3 @@ export async function runCleanAgentPackBackupsCommand(args: string[]): Promise<v
     process.exitCode = 1;
   }
 }
-
-export function runOnboardingCommand(args: string[]): void {
-  let target = "all";
-  for (let i = 0; i < args.length; i++) {
-    if ((args[i] === "--target" || args[i] === "-t") && args[i + 1]) {
-      target = args[i + 1] ?? "all";
-      break;
-    }
-    if (args[i]?.startsWith("--target=")) {
-      target = args[i]!.slice("--target=".length);
-      break;
-    }
-  }
-
-  if (!isOnboardingTarget(target) && target !== "all") {
-    console.error(`Unknown target: ${target}`);
-    console.error("Valid targets: claude, cursor, codex, gemini, opencode, copilot, all");
-    process.exitCode = 1;
-    return;
-  }
-  console.log(buildOnboardingGuide(target));
-}

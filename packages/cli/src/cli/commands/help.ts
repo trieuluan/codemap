@@ -18,11 +18,6 @@ Auth:
   codemap logout              Clear stored credentials
   codemap whoami              Show current authenticated user
 
-Workspace:
-  codemap local-index         Build or update the local code index
-                              --force    Force full rebuild
-                              --status   Show index info without rebuilding
-
 Agent pack (editor integration):
   codemap init-agent-pack     Install CodeMap agent rules into an editor
                               --target <editor>  claude | cursor | codex | gemini | opencode | copilot | all
@@ -35,14 +30,6 @@ Agent pack (editor integration):
   codemap clean-agent-pack-backups   Remove backup files left by agent pack upgrades
                               --root <dir>   Workspace root
                               --dry-run      Preview without deleting
-  codemap onboarding          Print setup guide for an editor
-                              --target <editor>  claude | cursor | codex | gemini | opencode | copilot | all
-
-Claude Code hooks (called automatically by hook config, not by hand):
-  codemap session-hint        Emit index status hint on session start
-  codemap pre-edit            Emit blast radius hint before a file edit
-  codemap pre-read            Emit index hint before a file read
-  codemap pre-bash            Emit search hint before a bash command
 
 Gateway config:
   CODEMAP_LLM_GATEWAY_BASE_URL         OpenAI-compatible base URL (default: http://localhost:4000/v1)
