@@ -1,4 +1,5 @@
 import { buildToolPreview } from "./config/tool-approval-policy.js";
+import type { TreeNode } from "../../chat/session-tree.js";
 import type {
   HarnessThread,
   HarnessMessage,
@@ -11,6 +12,7 @@ import type {
   HarnessDisplayState,
 } from "@mastra/core/harness";
 export type { HarnessThread, HarnessMessage, HarnessMessageContent };
+export type { TreeNode } from "../../chat/session-tree.js";
 export type { HarnessQuestionOption as AskQuestionOption };
 export type { HarnessRequestContext, HarnessQuestionAnswer };
 export type { HarnessQuestionSelectionMode };
@@ -380,6 +382,21 @@ export interface HarnessLike {
   }): Promise<HarnessThread[]>;
   switchThread(options: { threadId: string }): Promise<void>;
   deleteThread?(options: { threadId: string }): Promise<void>;
+
+  // --- Session tree methods (branching) ---
+  /** Move the active branch pointer within a thread. Next message appends as child of entryId. */
+  branchThread?(options: { entryId: string }): Promise<void>;
+  /** Fork: create a new thread from a branch point of the current thread. */
+  forkThread?(options: {
+    fromThreadId: string;
+    fromEntryId?: string;
+    title?: string;
+  }): Promise<string>;
+  /** Get the session tree for a thread (for UI rendering). */
+  getThreadTree?(threadId: string): Promise<TreeNode | null>;
+  /** Get the current active leaf entry ID for a thread. */
+  getActiveLeafId?(threadId: string): string | null;
+
   getCurrentModelId?(): string;
   getTokenUsage?():
     | { promptTokens?: number; completionTokens?: number; totalTokens?: number }

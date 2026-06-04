@@ -21,6 +21,7 @@ import { createCommand } from "./create.js";
 import { importCommand } from "./import.js";
 import { sessionsCommand } from "./sessions.js";
 import { hooksCommand } from "./hooks.js";
+import { treeCommand, forkCommand, branchesCommand } from "./tree-commands.js";
 
 import type { CommandContext, Command } from "./types.js";
 
@@ -47,6 +48,9 @@ const commands: Command[] = [
   debugCommand,
   mcpCommand,
   hooksCommand,
+  treeCommand,
+  forkCommand,
+  branchesCommand,
   exitCommand,
 ];
 

@@ -33,6 +33,12 @@ import { LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import {
+  loadThreadTree,
+  branchThread as branchThreadStore,
+  forkThread as forkThreadStore,
+} from "../../chat/session-tree-store.js";
+import type { TreeNode } from "../../chat/session-tree.js";
 
 export type {
   MastraMcpConfigPaths,
@@ -705,6 +711,84 @@ export function getMastraOMStatus(): {
       observationTokens: ds.omProgress.observationTokens ?? 0,
       status: ds.omProgress.status ?? "idle",
     };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session Tree operations (branching)
+// ---------------------------------------------------------------------------
+
+function getWorkspaceRoot(): string {
+  return process.cwd();
+}
+
+/**
+ * Branch the active conversation to a different entry in the current thread.
+ * Next message will be appended as a child of `entryId`.
+ */
+export async function branchMastraThread(entryId: string): Promise<void> {
+  if (!singleton) return;
+  const threadId = singleton.harness.getCurrentThreadId?.();
+  if (!threadId) throw new Error("No active thread to branch");
+  await branchThreadStore(singleton.harness, threadId, entryId, getWorkspaceRoot());
+}
+
+/**
+ * Fork: create a new thread from a branch point of the current thread.
+ * Returns the new thread ID and switches to it.
+ */
+export async function forkMastraThread(
+  fromEntryId?: string,
+  title?: string,
+): Promise<string> {
+  if (!singleton) throw new Error("No active harness");
+  const threadId = singleton.harness.getCurrentThreadId?.();
+  if (!threadId) throw new Error("No active thread to fork from");
+  const newThreadId = await forkThreadStore(
+    singleton.harness,
+    threadId,
+    fromEntryId,
+    title,
+    getWorkspaceRoot(),
+  );
+  // Switch to the new thread
+  await singleton.harness.switchThread({ threadId: newThreadId });
+  pendingNewThread = false;
+  return newThreadId;
+}
+
+/**
+ * Get the session tree for the current thread (for UI rendering).
+ */
+export async function getMastraThreadTree(
+  threadId?: string,
+): Promise<TreeNode[] | null> {
+  if (!singleton) return null;
+  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
+  if (!tid) return null;
+  try {
+    const tree = await loadThreadTree(singleton.harness, tid, getWorkspaceRoot());
+    const { buildTree } = await import("../../chat/session-tree.js");
+    return buildTree(tree);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the current active leaf entry ID for a thread.
+ */
+export async function getMastraActiveLeafId(
+  threadId?: string,
+): Promise<string | null> {
+  if (!singleton) return null;
+  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
+  if (!tid) return null;
+  try {
+    const tree = await loadThreadTree(singleton.harness, tid, getWorkspaceRoot());
+    return tree.leafId;
   } catch {
     return null;
   }

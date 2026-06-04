@@ -30,6 +30,17 @@ function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   return !(local.startsWith(cloud) || cloud.startsWith(local));
 }
 
+function formatAge(ts: number): string {
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  return `${d}d ago`;
+}
+
 export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return (
     phase === "thinking" ||
@@ -409,6 +420,141 @@ export function buildPanel(
         ),
       );
     }
+
+    // Bottom separator
+    out.push(fitLine(`  ${sep}`, w));
+  } else if (state.treePicker?.active) {
+    const tp = state.treePicker;
+    const items = tp.items;
+    const sel = tp.selectedIndex;
+    const FILTER_LABELS = ["default", "no-tools", "user-only", "all"];
+
+    // Top separator
+    out.push(fitLine(`  ${sep}`, w));
+    out.push(
+      fitLine(
+        `    ${C_AI}🌳${RESET} ${C_WHITE}${BOLD}Session Tree${RESET}  ${C_GRAY}· filter: ${RESET}${C_ACTION}${FILTER_LABELS[tp.filterMode] ?? "default"}${RESET}${C_GRAY}${RESET}`,
+        w,
+      ),
+    );
+    out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 50))}${RESET}`, w));
+
+    // Calculate available lines for the tree (reserve ~5 lines for header/footer)
+    const treeHeight = Math.max(5, Math.min(items.length, 20));
+
+    // Windowed: center selection in the visible area
+    let windowStart = 0;
+    if (items.length > treeHeight) {
+      windowStart = Math.max(0, sel - Math.floor(treeHeight / 2));
+      windowStart = Math.min(windowStart, items.length - treeHeight);
+    }
+    const windowEnd = Math.min(items.length, windowStart + treeHeight);
+
+    for (let i = windowStart; i < windowEnd; i++) {
+      const item = items[i]!;
+      const isSel = i === sel;
+      const indent = "  ".repeat(item.depth);
+      const isUser = item.type === "user";
+      const isGroupHeader = isUser;
+
+      // Group separator before user message groups (except first)
+      if (isGroupHeader && i > windowStart) {
+        out.push(fitLine(`    ${C_MUTED}${"─".repeat(Math.min(w - 8, 40))}${RESET}`, w));
+      }
+
+      // Status marker
+      let marker = "";
+      if (isGroupHeader) {
+        // User messages: ▸ group header
+        marker = item.isLeaf
+          ? ` ${C_SUCCESS}◀${RESET}`
+          : item.isActive
+            ? ` ${C_ACTION}▸${RESET}`
+            : ` ${C_MUTED}▸${RESET}`;
+      } else if (item.isLeaf) {
+        marker = ` ${C_SUCCESS}◀ leaf${RESET}`;
+      } else if (item.isActive) {
+        marker = ` ${C_SUCCESS}●${RESET}`;
+      } else {
+        marker = ` ${C_MUTED}○${RESET}`;
+      }
+
+      // Branch point badge
+      let branchTag = "";
+      if (item.isBranchPoint) {
+        branchTag = ` ${C_WARNING}⑂${item.childCount}${RESET}`;
+      }
+
+      // Fold indicator for branch points
+      const foldTag = item.isBranchPoint && tp.foldedIds.has(item.entryId) ? ` ${C_GRAY}[+]${RESET}` : "";
+
+      // Type label for non-user entries
+      let typeLabel = "";
+      if (!isUser) {
+        if (item.type === "tool") {
+          typeLabel = ` ${C_MUTED}[tool]${RESET}`;
+        } else if (item.type === "system") {
+          typeLabel = ` ${C_MUTED}[sys]${RESET}`;
+        } else if (item.type === "branch_summary") {
+          typeLabel = ` ${C_WARNING}[summary]${RESET}`;
+        } else if (item.type === "assistant") {
+          typeLabel = ` ${C_GRAY}[assistant]${RESET}`;
+        }
+      }
+
+      // Content
+      const content = item.content || item.entryId.slice(0, 8);
+
+      // Selection prefix
+      const prefix = isSel ? `${C_ACTION}>${RESET}` : " ";
+
+      // Style: user messages bold, selected white+bold, active path white, rest dimmed
+      let textStyle: string;
+      if (isSel) {
+        textStyle = isGroupHeader ? `${C_WHITE}${BOLD}` : `${C_WHITE}${BOLD}`;
+      } else if (isGroupHeader) {
+        textStyle = item.isActive ? `${C_WHITE}${BOLD}` : `${C_GRAY}`;
+      } else {
+        textStyle = item.isActive ? C_WHITE : C_GRAY;
+      }
+
+      // Indent children more under group headers
+      const childIndent = isGroupHeader ? indent : `  ${indent}`;
+
+      out.push(
+        fitLine(
+          `    ${prefix}${childIndent}${textStyle}${content}${RESET}${marker}${branchTag}${foldTag}${typeLabel}`,
+          w,
+        ),
+      );
+
+      // Show timestamp line below selected item
+      if (isSel) {
+        const age = formatAge(item.timestamp);
+        out.push(
+          fitLine(`      ${C_GRAY}${age}${RESET}`, w),
+        );
+      }
+    }
+
+    // Scroll indicator
+    if (items.length > treeHeight) {
+      out.push(
+        fitLine(
+          `    ${C_GRAY}… ${sel + 1}/${items.length}${RESET}`,
+          w,
+        ),
+      );
+    }
+
+    // Spacer + help text
+    out.push(fitLine(``, w));
+    out.push(
+      fitLine(
+        `    ${C_ACTION}↑↓${RESET}${C_GRAY} navigate · ${RESET}${C_ACTION}←→${RESET}${C_GRAY} page · ${RESET}${C_ACTION}Ctrl+←${RESET}${C_GRAY} fold/unfold · ${RESET}${C_ACTION}Ctrl+O${RESET}${C_GRAY} filter · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} select · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY} cancel${RESET}`,
+        w,
+      ),
+    );
 
     // Bottom separator
     out.push(fitLine(`  ${sep}`, w));

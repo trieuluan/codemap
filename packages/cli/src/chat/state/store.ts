@@ -79,6 +79,22 @@ export interface ChatContextState {
 
 
 
+// ─── Tree Picker ──────────────────────────────────────────
+
+export interface TreePickerFlatItem {
+  entryId: string;
+  parentId: string | null;
+  type: string; // "user" | "assistant" | "tool" | "system" | "branch_summary"
+  content: string;
+  timestamp: number;
+  depth: number;
+  isActive: boolean; // on active path root→leaf
+  isLeaf: boolean; // IS current leaf
+  hasChildren: boolean;
+  isBranchPoint: boolean; // has >1 children
+  childCount: number;
+}
+
 export interface UIState {
   // Current screen
   screen: Screen;
@@ -105,6 +121,10 @@ export interface UIState {
 
   // Total tokens consumed in the current thread (synced from Mastra thread storage).
   sessionTokens: number;
+
+  // Session tree state (branching)
+  activeLeafId?: string;
+  treeBranchCount: number;
 
   // Streaming buffer
   streaming: {
@@ -166,6 +186,17 @@ export interface UIState {
     selected: number[]; // indices of toggled options in multi-select
   } | null;
 
+  // Tree picker: fullscreen interactive session tree selector (like pi.dev /tree)
+  treePicker: {
+    active: boolean;
+    mode: "branch" | "fork"; // branch = move leaf, fork = create new thread
+    items: TreePickerFlatItem[];
+    selectedIndex: number;
+    foldedIds: Set<string>;
+    filterMode: number; // 0=default, 1=no-tools, 2=user-only, 3=all
+    activeLeafId: string | null;
+  } | null;
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -191,6 +222,7 @@ export function createInitialState(opts: {
       toolsCalled: 0,
     },
     sessionTokens: 0,
+    treeBranchCount: 0,
     streaming: {
       active: false,
       content: "",
@@ -232,6 +264,7 @@ export function createInitialState(opts: {
     planMode: false,
     planReview: { active: false, selection: 0, reviseMode: false },
     askQuestion: null,
+    treePicker: null,
     debug: opts.debug ?? false,
     debugLogFile: null,
     previewDiffExpanded: false,

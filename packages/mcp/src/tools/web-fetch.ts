@@ -67,7 +67,7 @@ export function registerWebFetchTool(
         "For GitHub repos, pass the file URL directly — no need to manually construct raw URLs.",
       inputSchema: {
         url: z
-          .url()
+          .string()
           .max(2000)
           .describe(
             "URL to fetch. GitHub blob URLs are auto-converted to raw content. " +

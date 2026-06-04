@@ -3,6 +3,8 @@ import { searchIndexedFiles } from "../../agent/core/file-search.js";
 import type { GatewayModel } from "../../agent/types.js";
 import type { HarnessThread } from "../../agent/runtime/events.js";
 import { formatSessionLabel } from "../../chat/slash-commands/sessions.js";
+import type { TreeNode } from "../../chat/session-tree.js";
+import type { TreePickerFlatItem } from "../../chat/state/store.js";
 
 /**
  * Dedicated provider for the model picker overlay.
@@ -264,4 +266,71 @@ export class PlanReviewAutocompleteProvider implements AutocompleteProvider {
     newLines[cursorLine] = newLine;
     return { lines: newLines, cursorLine, cursorCol: before.length + item.value.length };
   }
+}
+
+// ─── Tree Picker flatten helper ───────────────────────────
+
+/**
+ * Flatten a SessionTree into a picker-compatible list.
+ *
+ * Filter modes:
+ *  0 = default  — all entries visible
+ *  1 = no-tools — hide tool/system entries
+ *  2 = user-only — show only user and branch_summary entries
+ *  3 = all      — all entries (same as default for now)
+ */
+export function flattenTreeForPicker(
+  nodes: TreeNode[],
+  filterMode: number,
+  foldedIds: Set<string>,
+): TreePickerFlatItem[] {
+  const result: TreePickerFlatItem[] = [];
+
+  function flattenNode(node: TreeNode): void {
+    const { entry, isActive, isLeaf } = node;
+    const childCount = node.children.length;
+    const isBranchPoint = childCount > 1;
+    const content = (entry.content ?? "").replace(/\n/g, " ").slice(0, 80);
+
+    result.push({
+      entryId: entry.id,
+      parentId: entry.parentId,
+      type: entry.type,
+      content,
+      timestamp: entry.timestamp,
+      depth: node.depth,
+      isActive,
+      isLeaf,
+      hasChildren: childCount > 0,
+      isBranchPoint,
+      childCount,
+    });
+
+    // Recurse children: newest first (reverse timestamp order from buildTree)
+    const isFolded = foldedIds.has(entry.id);
+    const isUser = entry.type === "user";
+
+    if (!isFolded || isUser) {
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        flattenNode(node.children[i]!);
+      }
+    }
+  }
+
+  // Newest root first
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    flattenNode(nodes[i]!);
+  }
+
+  // Apply filter mode
+  if (filterMode === 1) {
+    // no-tools: hide tool and system entries
+    return result.filter((i) => i.type !== "tool" && i.type !== "system");
+  }
+  if (filterMode === 2) {
+    // user-only: show only user and branch_summary entries
+    return result.filter((i) => i.type === "user" || i.type === "branch_summary");
+  }
+  // 0 = default, 3 = all — show everything
+  return result;
 }
