@@ -13,7 +13,18 @@ export type TaskType =
 
 export type RiskLevel = "low" | "medium" | "high";
 
-export type GatewayProviderId = "9router" | "openai" | "self-hosted";
+export type GatewayProviderId =
+  | "9router"
+  | "openai"
+  | "self-hosted"
+  | "anthropic"
+  | "google"
+  | "azure"
+  | "groq"
+  | "openrouter"
+  | "deepseek"
+  | "ollama"
+  | "mistral";
 
 export interface GatewayModeDefaults {
   build?: string;

@@ -1,9 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import type { GatewayProviderId } from "../../types.js";
 import { stripProviderPrefix } from "./models.js";
 
-export type MastraProviderId = "9router" | "openai" | "self-hosted";
+export type MastraProviderId = GatewayProviderId;
 
 export interface MastraSettingsOptions {
   provider?: MastraProviderId;

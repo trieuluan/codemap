@@ -1,4 +1,5 @@
 import type { AgentLoopResult } from "../core/agent-loop.js";
+import type { GatewayProviderId } from "../types.js";
 import type { SingleAgentRuntimeInput } from "./types.js";
 import type { HarnessLike } from "./events.js";
 import {
@@ -95,7 +96,7 @@ interface CreateHarnessOptions {
   modelId: string;
   availableModels?: string[];
   availableCombos?: string[];
-  providerId?: "9router" | "openai" | "self-hosted";
+  providerId?: GatewayProviderId;
   modeDefaults?: { build?: string; plan?: string; fast?: string };
   onDebug?: (info: Record<string, unknown>) => void;
   extraServerConfigs?: Record<
@@ -111,7 +112,7 @@ interface HarnessSingleton {
   mcpManager: MastraMcpManagerLike | undefined;
   mcpInitPromise: Promise<MastraMcpInitResult> | undefined;
   hookManager: { reload: () => void } | undefined;
-  provider: "9router" | "openai" | "self-hosted";
+  provider: GatewayProviderId;
   baseUrl: string;
   apiKey: string | undefined;
   mcpServerIds: Set<string>;

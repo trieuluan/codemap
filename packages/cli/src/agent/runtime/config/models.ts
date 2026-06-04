@@ -1,3 +1,5 @@
+import type { GatewayProviderId } from "../../types.js";
+
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
 
@@ -46,17 +48,18 @@ export function resolveHarnessModelId(
   modelId: string,
   availableModels: string[] | undefined,
   availableCombos?: string[],
-  provider: "9router" | "openai" | "self-hosted" = "9router",
+  provider: GatewayProviderId = "9router",
 ): string {
   const resolved = resolveGatewayModel(modelId, availableModels, availableCombos);
   const prefix = provider === "openai" ? "openai" : provider;
   return resolved.startsWith(`${prefix}/`) ? resolved : `${prefix}/${resolved}`;
 }
 
-export function stripProviderPrefix(id: string, provider: "9router" | "openai" | "self-hosted" = "9router"): string {
+export function stripProviderPrefix(id: string, provider: GatewayProviderId = "9router"): string {
   const prefix = `${provider}/`;
   if (id.startsWith(prefix)) return id.slice(prefix.length);
-  return id.startsWith("openai/") || id.startsWith("9router/") || id.startsWith("self-hosted/")
-    ? id.slice(id.indexOf("/") + 1)
-    : id;
+  // Strip any known provider prefix
+  const slashIdx = id.indexOf("/");
+  if (slashIdx > 0) return id.slice(slashIdx + 1);
+  return id;
 }

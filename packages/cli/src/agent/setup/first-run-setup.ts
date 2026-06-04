@@ -10,6 +10,7 @@ import {
   is9RouterRunning,
   start9Router,
 } from "./9router-helpers.js";
+import { PROVIDER_REGISTRY, getProviderMeta } from "./provider-registry.js";
 
 const RESET = "\x1b[0m";
 const C_ACTION = "\x1b[38;2;96;216;255m";
@@ -181,11 +182,11 @@ export async function runInteractiveSetup(): Promise<void> {
       case 1: {
         const v = await p.select({
           message: setupMessage(1, "Choose your LLM provider"),
-          options: [
-            { value: "9router", label: "9router (recommended)", hint: "local proxy, no API key needed" },
-            { value: "openai", label: "OpenAI", hint: "platform.openai.com" },
-            { value: "self-hosted", label: "Self-hosted / Other", hint: "any OpenAI-compatible API" },
-          ],
+          options: PROVIDER_REGISTRY.map((meta) => ({
+            value: meta.id,
+            label: meta.label,
+            hint: meta.hint,
+          })),
         });
 
         if (p.isCancel(v)) {
@@ -193,20 +194,21 @@ export async function runInteractiveSetup(): Promise<void> {
           return;
         }
         provider = v as GatewayProviderId;
+        const meta = getProviderMeta(provider);
+        baseUrl = meta?.defaultBaseUrl ?? DEFAULT_BASE_URL;
         step = 2;
         break;
       }
 
       // ── Step 2: Provider config ───────────────────────────────────
       case 2: {
-        if (provider === "9router") {
+        const meta = getProviderMeta(provider);
+        if (meta?.needsLocalSetup) {
           const url = await setup9Router();
           if (p.isCancel(url)) { step = 1; break; }
           baseUrl = url;
         } else {
-          const defaultUrl = provider === "openai"
-            ? "https://api.openai.com/v1"
-            : DEFAULT_BASE_URL;
+          const defaultUrl = meta?.defaultBaseUrl ?? DEFAULT_BASE_URL;
 
           const v = await p.text({
             message: setupMessage(2, "Enter the gateway base URL"),

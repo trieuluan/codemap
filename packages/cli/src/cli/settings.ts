@@ -1,11 +1,12 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import type { GatewayProviderId } from "../agent/types.js";
 
 // ─── Schema ───────────────────────────────────────────────────────
 
 export interface SettingsGateway {
-  provider?: "9router" | "openai" | "self-hosted";
+  provider?: GatewayProviderId;
   baseUrl?: string;
   apiKey?: string;
   defaultModel?: string;
@@ -118,9 +119,13 @@ function applyEnvOverrides(settings: SettingsFile): SettingsFile {
   const result = { ...settings };
   const gw: SettingsGateway = { ...result.gateway };
 
+  const ALL_PROVIDERS: GatewayProviderId[] = [
+    "9router", "openai", "self-hosted",
+    "anthropic", "google", "azure", "groq", "openrouter", "deepseek", "ollama", "mistral",
+  ];
   const envProvider = process.env.CODEMAP_LLM_GATEWAY_PROVIDER?.trim();
-  if (envProvider === "9router" || envProvider === "openai" || envProvider === "self-hosted") {
-    gw.provider = envProvider;
+  if (envProvider && ALL_PROVIDERS.includes(envProvider as GatewayProviderId)) {
+    gw.provider = envProvider as GatewayProviderId;
   }
 
   const envBaseUrl = process.env.CODEMAP_LLM_GATEWAY_BASE_URL?.trim();
