@@ -290,7 +290,7 @@ export function flattenTreeForPicker(
     const { entry, isActive, isLeaf } = node;
     const childCount = node.children.length;
     const isBranchPoint = childCount > 1;
-    const content = (entry.content ?? "").replace(/\n/g, " ").slice(0, 80);
+    const content = (entry.content ?? "").replace(/\n/g, " ").slice(0, 60);
 
     result.push({
       entryId: entry.id,
@@ -317,20 +317,61 @@ export function flattenTreeForPicker(
     }
   }
 
-  // Newest root first
-  for (let i = nodes.length - 1; i >= 0; i--) {
+  // Oldest root first (buildTree returns roots oldest→newest)
+  for (let i = 0; i < nodes.length; i++) {
     flattenNode(nodes[i]!);
   }
+
+  // Reverse so newest messages appear at the top of the picker
+  result.reverse();
 
   // Apply filter mode
   if (filterMode === 1) {
     // no-tools: hide tool and system entries
-    return result.filter((i) => i.type !== "tool" && i.type !== "system");
+    return recomputeDepth(result.filter((i) => i.type !== "tool" && i.type !== "system"));
   }
   if (filterMode === 2) {
     // user-only: show only user and branch_summary entries
-    return result.filter((i) => i.type === "user" || i.type === "branch_summary");
+    return recomputeDepth(result.filter((i) => i.type === "user" || i.type === "branch_summary"));
   }
-  // 0 = default, 3 = all — show everything
+  // 0 = default, 3 = all — show everything (depth already correct from full tree)
   return result;
+}
+
+/**
+ * After filtering, the visible items may have gaps in the parentId chain
+ * (e.g. user-only mode hides all assistant/tool nodes in between).
+ * This recomputes `depth` based solely on the visible items so that
+ * indentation stays compact and never accumulates from hidden nodes.
+ *
+ * Algorithm:
+ *  - Build a Set of visible entryIds.
+ *  - For each item, walk up its parentId chain until we find a visible
+ *    ancestor or reach the root. Assign depth = visibleAncestorDepth + 1.
+ *  - Root items (no visible ancestor) get depth 0.
+ */
+function recomputeDepth(items: TreePickerFlatItem[]): TreePickerFlatItem[] {
+  // Map from entryId → index in the filtered array for O(1) lookup
+  const depthByEntryId = new Map<string, number>();
+  // Map from entryId → parentId for the full result (including filtered-out nodes)
+  // We already have parentId on each item; we just need to walk up the chain.
+  // Build an entryId set for fast membership test
+  const visibleIds = new Set(items.map((i) => i.entryId));
+
+  // Process in order — because flattenNode traverses the tree top-down,
+  // parents always appear before children in `items`.
+  for (const item of items) {
+    if (item.parentId === null || !visibleIds.has(item.parentId)) {
+      // No visible parent → compact root, depth 0
+      depthByEntryId.set(item.entryId, 0);
+    } else {
+      const parentDepth = depthByEntryId.get(item.parentId) ?? 0;
+      depthByEntryId.set(item.entryId, parentDepth + 1);
+    }
+  }
+
+  return items.map((item) => ({
+    ...item,
+    depth: depthByEntryId.get(item.entryId) ?? 0,
+  }));
 }

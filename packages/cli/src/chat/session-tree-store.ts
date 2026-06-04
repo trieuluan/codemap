@@ -11,12 +11,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { HarnessLike, HarnessMessage, HarnessThread } from "../agent/runtime/events.js";
+import type { HarnessLike, HarnessMessage } from "../agent/runtime/events.js";
 import {
   createTree,
   appendEntry,
   branch,
   getPath,
+  getActivePathIds,
   buildTree,
   extractPath,
   buildBranchSummary,
@@ -158,27 +159,30 @@ export async function loadThreadTree(
   const hasStoredData = Object.keys(parentMap).length > 0;
 
   const entries: TreeEntry[] = [];
+  // Track the previous entry ID for linear fallback when a message
+  // is not in the parentMap (e.g. new messages after branch cleanup).
+  let prevEntryId: string | null = null;
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     if (!msg) continue;
     let parentId: string | null;
     if (hasStoredData) {
-      parentId = parentMap[msg.id] ?? null;
+      // Use stored parent if available, otherwise fall back to previous message
+      parentId = parentMap[msg.id] ?? prevEntryId ?? null;
     } else {
       // First message has no parent, rest chain linearly
       parentId = i > 0 ? messages[i - 1]!.id : null;
     }
     entries.push(messageToEntry(msg, parentId));
+    prevEntryId = msg.id;
   }
 
   const tree = deserializeTree(meta, entries);
 
-  // If no stored data, set leafId to last message
-  if (!hasStoredData && messages.length > 0) {
-    tree.leafId = messages[messages.length - 1]!.id;
-    // Persist initial metadata
-    await persistTreeMeta(cwd, threadId, tree);
-  }
+  // If no stored data, leave leafId as null.
+  // Active path is only computed once a real mutation (fork/branch/recordMessage)
+  // has set a leafId — until then the picker shows all messages with no active
+  // highlight, which is the correct UX before any branch has occurred.
 
   treeCache.set(threadId, { tree, loadedAt: Date.now() });
   return tree;
@@ -252,20 +256,66 @@ export async function forkThread(
   // Extract the path from root → fork point
   const pathEntries = extractPath(tree, forkPointId);
 
-  // Create new thread
-  const newThread = (await harness.createThread({
-    title: title ?? `Fork from ${fromThreadId.slice(0, 8)}`,
-  })) as HarnessThread;
+  // If the fork point is a user message, also include the next assistant
+  // response (if any) so the fork preserves the full turn — tools, thinking,
+  // and all assistant content that was generated for that user message.
+  const lastEntry = pathEntries[pathEntries.length - 1];
+  if (lastEntry && lastEntry.type === "user") {
+    const nextEntries = Array.from(tree.entries.values())
+      .filter((e) => e.parentId === lastEntry.id)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    for (const next of nextEntries) {
+      if (!pathEntries.some((p) => p.id === next.id)) {
+        pathEntries.push(next);
+      }
+    }
+  }
 
+  // Collect source message IDs on the active path
+  const sourceMsgIds = pathEntries
+    .map((e) => e.harnessMessageId)
+    .filter((id): id is string => !!id);
+
+  // Clone thread with only the active-path messages via memory API
+  const memory = await harness.getResolvedMemory?.();
+  if (!memory) {
+    throw new Error("Cannot fork: memory not available");
+  }
+
+  // Guard: if no harnessMessageIds resolved, we'd clone ALL source messages.
+  // Refuse instead of risking an unbounded clone + embedding spike.
+  if (sourceMsgIds.length === 0) {
+    throw new Error("Cannot fork: no harness message IDs on the selected path");
+  }
+
+  const threadTitle = title ?? `Fork from ${fromThreadId.slice(0, 8)}`;
+  const { thread: newThread, clonedMessages } = await memory.cloneThread(
+    {
+      sourceThreadId: fromThreadId,
+      title: threadTitle,
+      options: { messageFilter: { messageIds: sourceMsgIds } },
+    },
+    // Skip expensive fastembed ONNX embedding during clone — embeddings will
+    // be created lazily when the user interacts with the new thread.
+    { semanticRecall: false },
+  );
   const newThreadId = newThread.id;
 
-  // Build new tree with the extracted path
+  // Build new tree with the extracted path, mapping to cloned message IDs.
+  // Use cloned message IDs as entry IDs so that the persisted parentMap keys
+  // match the harness message IDs that loadThreadTree uses for parent lookups.
   const newTree = createTree();
-  for (const entry of pathEntries) {
+  for (let i = 0; i < pathEntries.length; i++) {
+    const entry = pathEntries[i]!;
+    const clonedMsg = clonedMessages[i]; // cloned in same order as source
+    const newId = clonedMsg?.id ?? crypto.randomUUID();
     const newEntry: TreeEntry = {
-      ...entry,
-      id: crypto.randomUUID(), // new IDs for the new thread
-      harnessMessageId: entry.harnessMessageId,
+      id: newId,
+      parentId: i === 0 ? null : (clonedMessages[i - 1]?.id ?? pathEntries[i - 1]!.id),
+      timestamp: entry.timestamp,
+      type: entry.type,
+      content: entry.content,
+      harnessMessageId: clonedMsg?.id ?? entry.harnessMessageId,
     };
     appendEntry(newTree, newEntry);
   }
@@ -286,9 +336,16 @@ export async function recordMessage(
   type: TreeEntryType,
   content: string | undefined,
   cwd: string,
+  harness?: HarnessLike,
 ): Promise<void> {
-  const cached = treeCache.get(threadId);
-  if (!cached) return; // tree not loaded — will be rebuilt on next access
+  let cached = treeCache.get(threadId);
+  if (!cached) {
+    // Tree not cached (e.g. after branch cleanup) — reload to get correct parent chain
+    if (!harness) return;
+    await loadThreadTree(harness, threadId, cwd);
+    cached = treeCache.get(threadId);
+    if (!cached) return;
+  }
 
   const tree = cached.tree;
   const entry: TreeEntry = {
@@ -301,6 +358,39 @@ export async function recordMessage(
   };
   appendEntry(tree, entry);
   await persistTreeMeta(cwd, threadId, tree);
+}
+
+/**
+ * Delete harness messages that are NOT on the active tree path after branching.
+ * This mirrors pi.dev's behavior: all entries remain in the session file,
+ * but only active-path messages exist in the harness after a branch.
+ */
+export async function deleteOffPathMessages(
+  harness: HarnessLike,
+  threadId: string,
+  cwd: string,
+): Promise<number> {
+  const tree = await loadThreadTree(harness, threadId, cwd);
+  const activeIds = getActivePathIds(tree);
+
+  const offPathIds: Array<{ id: string }> = [];
+  for (const [id] of tree.entries) {
+    if (!activeIds.has(id)) {
+      offPathIds.push({ id });
+    }
+  }
+
+  if (offPathIds.length === 0) return 0;
+
+  const memory = await harness.getResolvedMemory?.();
+  if (!memory) return 0;
+
+  await memory.deleteMessages(offPathIds);
+
+  // Clear cache so the tree is rebuilt from harness on next access
+  treeCache.delete(threadId);
+
+  return offPathIds.length;
 }
 
 /**

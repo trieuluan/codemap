@@ -1,4 +1,5 @@
 import type { Editor } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { UIState, TaskListItem } from "../../chat/state/store.js";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
@@ -429,15 +430,20 @@ export function buildPanel(
     const sel = tp.selectedIndex;
     const FILTER_LABELS = ["default", "no-tools", "user-only", "all"];
 
+    // Safe fit: truncate with pi-tui's own width calc, then pad with spaces
+    const safeFit = (line: string): string => {
+      const truncated = truncateToWidth(line, w);
+      return truncated + " ".repeat(Math.max(0, w - visibleWidth(truncated)));
+    };
+
     // Top separator
-    out.push(fitLine(`  ${sep}`, w));
+    out.push(safeFit(`  ${sep}`));
     out.push(
-      fitLine(
+      safeFit(
         `    ${C_AI}🌳${RESET} ${C_WHITE}${BOLD}Session Tree${RESET}  ${C_GRAY}· filter: ${RESET}${C_ACTION}${FILTER_LABELS[tp.filterMode] ?? "default"}${RESET}${C_GRAY}${RESET}`,
-        w,
       ),
     );
-    out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 50))}${RESET}`, w));
+    out.push(safeFit(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 50))}${RESET}`));
 
     // Calculate available lines for the tree (reserve ~5 lines for header/footer)
     const treeHeight = Math.max(5, Math.min(items.length, 20));
@@ -450,16 +456,59 @@ export function buildPanel(
     }
     const windowEnd = Math.min(items.length, windowStart + treeHeight);
 
+    // Compute depths that are actual branch points (have multiple children)
+    const branchDepths = new Set<number>();
+    for (let j = windowStart; j < windowEnd - 1; j++) {
+      const d = items[j]!.depth;
+      const nd = items[j + 1]!.depth;
+      if (nd > d) {
+        // items[j] has a child at depth nd
+        // Check if there's another item at depth nd later (sibling)
+        for (let k = j + 2; k < windowEnd; k++) {
+          if (items[k]!.depth === nd) { branchDepths.add(nd); break; }
+          if (items[k]!.depth < nd) break;
+        }
+      }
+    }
+
     for (let i = windowStart; i < windowEnd; i++) {
       const item = items[i]!;
       const isSel = i === sel;
-      const indent = "  ".repeat(item.depth);
       const isUser = item.type === "user";
       const isGroupHeader = isUser;
+      const nextItem = i < windowEnd - 1 ? items[i + 1]! : null;
+      const nextDepth = nextItem?.depth ?? 0;
+
+      // Compute visual depth: count only ancestor depths that are actual branches
+      let visualDepth = 0;
+      for (let d = 1; d < item.depth; d++) {
+        if (branchDepths.has(d)) visualDepth++;
+      }
+
+      // Build tree prefix with connectors (Pi.dev-style)
+      let treePrefix = "";
+      if (visualDepth > 0) {
+        const totalChars = visualDepth * 3;
+        const prefixChars: string[] = [];
+        for (let ci = 0; ci < totalChars; ci++) {
+          const level = Math.floor(ci / 3);
+          const posInLevel = ci % 3;
+          // Show │ at ancestor gutters
+          if (level < visualDepth - 1) {
+            prefixChars.push(posInLevel === 0 ? "│" : " ");
+          } else {
+            // Last level: connector
+            if (posInLevel === 0) prefixChars.push(nextDepth >= item.depth ? "├" : "└");
+            else if (posInLevel === 1) prefixChars.push("─");
+            else prefixChars.push(" ");
+          }
+        }
+        treePrefix = prefixChars.join("");
+      }
 
       // Group separator before user message groups (except first)
       if (isGroupHeader && i > windowStart) {
-        out.push(fitLine(`    ${C_MUTED}${"─".repeat(Math.min(w - 8, 40))}${RESET}`, w));
+        out.push(safeFit(`    ${C_MUTED}${"─".repeat(Math.min(w - 8, 40))}${RESET}`));
       }
 
       // Status marker
@@ -503,28 +552,25 @@ export function buildPanel(
       }
 
       // Content
-      const content = item.content || item.entryId.slice(0, 8);
+      const content = (item.content || item.entryId.slice(0, 8));
 
       // Selection prefix
       const prefix = isSel ? `${C_ACTION}>${RESET}` : " ";
 
-      // Style: user messages bold, selected white+bold, active path white, rest dimmed
+      // Style: selected = cyan bold, active-path = white bold, inactive = gray
       let textStyle: string;
       if (isSel) {
-        textStyle = isGroupHeader ? `${C_WHITE}${BOLD}` : `${C_WHITE}${BOLD}`;
+        textStyle = `${C_ACTION}${BOLD}`;
       } else if (isGroupHeader) {
         textStyle = item.isActive ? `${C_WHITE}${BOLD}` : `${C_GRAY}`;
       } else {
         textStyle = item.isActive ? C_WHITE : C_GRAY;
       }
 
-      // Indent children more under group headers
-      const childIndent = isGroupHeader ? indent : `  ${indent}`;
-
+      // Tree prefix with connectors (Pi.dev-style)
       out.push(
-        fitLine(
-          `    ${prefix}${childIndent}${textStyle}${content}${RESET}${marker}${branchTag}${foldTag}${typeLabel}`,
-          w,
+        safeFit(
+          `    ${prefix}${treePrefix}${textStyle}${content}${RESET}${marker}${branchTag}${foldTag}${typeLabel}`,
         ),
       );
 
@@ -532,7 +578,7 @@ export function buildPanel(
       if (isSel) {
         const age = formatAge(item.timestamp);
         out.push(
-          fitLine(`      ${C_GRAY}${age}${RESET}`, w),
+          safeFit(`      ${C_GRAY}${age}${RESET}`),
         );
       }
     }
@@ -540,24 +586,22 @@ export function buildPanel(
     // Scroll indicator
     if (items.length > treeHeight) {
       out.push(
-        fitLine(
+        safeFit(
           `    ${C_GRAY}… ${sel + 1}/${items.length}${RESET}`,
-          w,
         ),
       );
     }
 
     // Spacer + help text
-    out.push(fitLine(``, w));
+    out.push(safeFit(``));
     out.push(
-      fitLine(
+      safeFit(
         `    ${C_ACTION}↑↓${RESET}${C_GRAY} navigate · ${RESET}${C_ACTION}←→${RESET}${C_GRAY} page · ${RESET}${C_ACTION}Ctrl+←${RESET}${C_GRAY} fold/unfold · ${RESET}${C_ACTION}Ctrl+O${RESET}${C_GRAY} filter · ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} select · ${RESET}${C_ACTION}Esc${RESET}${C_GRAY} cancel${RESET}`,
-        w,
       ),
     );
 
     // Bottom separator
-    out.push(fitLine(`  ${sep}`, w));
+    out.push(safeFit(`  ${sep}`));
   } else {
     out.push(
       fitLine(

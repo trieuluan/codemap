@@ -29,7 +29,7 @@ import { runHarness } from "./harness/harness-runner.js";
 import { upsertGlobalMastraProvider } from "./config/settings.js";
 import { buildMastraPermissionRules } from "./config/tool-approval-policy.js";
 import { Memory } from "@mastra/memory";
-import { LibSQLVector } from "@mastra/libsql";
+import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -37,6 +37,7 @@ import {
   loadThreadTree,
   branchThread as branchThreadStore,
   forkThread as forkThreadStore,
+  deleteOffPathMessages,
 } from "../../chat/session-tree-store.js";
 import type { TreeNode } from "../../chat/session-tree.js";
 
@@ -64,6 +65,26 @@ const CODEMAP_WORKING_MEMORY_TEMPLATE = `# User Context
 ## Notes
 <!-- Anything else the agent should remember -->
 `;
+
+/**
+ * Resolve the default database path used by mastracode.
+ * Matches getDatabasePath() from mastracode internals.
+ */
+function getDatabasePath(): string {
+  if (process.env.MASTRA_DB_PATH) {
+    return process.env.MASTRA_DB_PATH;
+  }
+  const platform = process.platform;
+  let baseDir: string;
+  if (platform === "win32") {
+    baseDir = process.env.APPDATA || join(homedir(), "AppData", "Roaming");
+  } else if (platform === "darwin") {
+    baseDir = join(homedir(), "Library", "Application Support");
+  } else {
+    baseDir = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
+  }
+  return join(baseDir, "mastracode", "mastra.db");
+}
 
 /**
  * Resolve the default vector database path used by mastracode.
@@ -408,7 +429,14 @@ async function createFreshHarness(
           url: `file:${vectorDbPath}`,
         });
 
+        const dbPath = getDatabasePath();
+        const storage = new LibSQLStore({
+          id: "mastra-code-storage",
+          url: `file:${dbPath}`,
+        });
+
         cachedMemoryInstance = new Memory({
+          storage,
           vector,
           embedder: fastembed.small,
           options: {
@@ -720,8 +748,9 @@ export function getMastraOMStatus(): {
 // Session Tree operations (branching)
 // ---------------------------------------------------------------------------
 
-function getWorkspaceRoot(): string {
-  return process.cwd();
+async function getWorkspaceRoot(): Promise<string> {
+  const { readWorkspacePath } = await import("@codemap/core/lib/workspace-project.js");
+  return readWorkspacePath();
 }
 
 /**
@@ -732,7 +761,10 @@ export async function branchMastraThread(entryId: string): Promise<void> {
   if (!singleton) return;
   const threadId = singleton.harness.getCurrentThreadId?.();
   if (!threadId) throw new Error("No active thread to branch");
-  await branchThreadStore(singleton.harness, threadId, entryId, getWorkspaceRoot());
+  const cwd = await getWorkspaceRoot();
+  await branchThreadStore(singleton.harness, threadId, entryId, cwd);
+  // Delete off-path messages from harness storage (pi.dev behavior)
+  await deleteOffPathMessages(singleton.harness, threadId, cwd);
 }
 
 /**
@@ -746,12 +778,13 @@ export async function forkMastraThread(
   if (!singleton) throw new Error("No active harness");
   const threadId = singleton.harness.getCurrentThreadId?.();
   if (!threadId) throw new Error("No active thread to fork from");
+  const cwd = await getWorkspaceRoot();
   const newThreadId = await forkThreadStore(
     singleton.harness,
     threadId,
     fromEntryId,
     title,
-    getWorkspaceRoot(),
+    cwd,
   );
   // Switch to the new thread
   await singleton.harness.switchThread({ threadId: newThreadId });
@@ -769,7 +802,8 @@ export async function getMastraThreadTree(
   const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
   if (!tid) return null;
   try {
-    const tree = await loadThreadTree(singleton.harness, tid, getWorkspaceRoot());
+    const cwd = await getWorkspaceRoot();
+    const tree = await loadThreadTree(singleton.harness, tid, cwd);
     const { buildTree } = await import("../../chat/session-tree.js");
     return buildTree(tree);
   } catch {
@@ -787,7 +821,8 @@ export async function getMastraActiveLeafId(
   const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
   if (!tid) return null;
   try {
-    const tree = await loadThreadTree(singleton.harness, tid, getWorkspaceRoot());
+    const cwd = await getWorkspaceRoot();
+    const tree = await loadThreadTree(singleton.harness, tid, cwd);
     return tree.leafId;
   } catch {
     return null;

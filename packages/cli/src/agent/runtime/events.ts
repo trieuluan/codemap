@@ -396,6 +396,19 @@ export interface HarnessLike {
   getThreadTree?(threadId: string): Promise<TreeNode | null>;
   /** Get the current active leaf entry ID for a thread. */
   getActiveLeafId?(threadId: string): string | null;
+  /** Get the resolved Memory instance (for deleting off-path messages and cloning threads). */
+  getResolvedMemory?(): Promise<{
+    deleteMessages(ids: Array<{ id: string }>): Promise<void>;
+    cloneThread(
+      args: {
+        sourceThreadId: string;
+        newThreadId?: string;
+        title?: string;
+        options?: { messageFilter?: { messageIds?: string[] } };
+      },
+      memoryConfig?: { semanticRecall?: boolean | Record<string, unknown> },
+    ): Promise<{ thread: { id: string }; clonedMessages: Array<{ id: string }> }>;
+  } | null>;
 
   getCurrentModelId?(): string;
   getTokenUsage?():

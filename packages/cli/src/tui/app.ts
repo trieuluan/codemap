@@ -456,6 +456,7 @@ export async function startPiTuiApp(
   const closeTreePicker = () => {
     if (!treePickerActive) return;
     treePickerActive = false;
+    editor.setText("");
     chatTerminal.store.dispatch((prev: UIState) => ({
       treePicker: null,
     }));
@@ -891,13 +892,13 @@ export async function startPiTuiApp(
         const isForkMode = state.treePicker?.mode === "fork";
 
         if (isForkMode) {
-          // Fork mode: create new session from selected user message (includes the full turn)
+          // Fork mode: clone thread with active-path messages, then load from new thread
           forkMastraThread(entryId).then(async (newThreadId) => {
             closeTreePicker();
-            // Load messages from the new thread
             const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
             const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
-            const msgs = await listMastraThreadMessages(newThreadId, 100);
+            // Messages are already cloned into the new thread
+            const msgs = await listMastraThreadMessages(newThreadId, 200);
             chatTerminal.store.dispatch((prev: UIState) => ({
               messages: [
                 ...mapHarnessMessagesToUI(msgs),
@@ -905,11 +906,12 @@ export async function startPiTuiApp(
               ],
             }));
             tui.requestRender();
-          }).catch(() => {
+          }).catch((err: unknown) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
             chatTerminal.store.dispatch((prev: UIState) => ({
               messages: [
                 ...prev.messages,
-                { role: "system" as const, content: `${C_ERROR}Fork failed.${RESET}`, timestamp: Date.now() },
+                { role: "system" as const, content: `${C_ERROR}Fork failed:${RESET} ${errMsg}`, timestamp: Date.now() },
               ],
             }));
             closeTreePicker();
