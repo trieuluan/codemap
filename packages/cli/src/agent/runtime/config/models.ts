@@ -1,4 +1,5 @@
 import type { GatewayProviderId } from "../../types.js";
+import { GATEWAY_PROVIDER_IDS } from "../../types.js";
 
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
@@ -58,8 +59,8 @@ export function resolveHarnessModelId(
 export function stripProviderPrefix(id: string, provider: GatewayProviderId = "9router"): string {
   const prefix = `${provider}/`;
   if (id.startsWith(prefix)) return id.slice(prefix.length);
-  // Strip any known provider prefix
-  const slashIdx = id.indexOf("/");
-  if (slashIdx > 0) return id.slice(slashIdx + 1);
+  for (const p of GATEWAY_PROVIDER_IDS) {
+    if (id.startsWith(`${p}/`)) return id.slice(p.length + 1);
+  }
   return id;
 }

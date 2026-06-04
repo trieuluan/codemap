@@ -26,6 +26,20 @@ export type GatewayProviderId =
   | "ollama"
   | "mistral";
 
+export const GATEWAY_PROVIDER_IDS: readonly GatewayProviderId[] = [
+  "9router",
+  "openai",
+  "self-hosted",
+  "anthropic",
+  "google",
+  "azure",
+  "groq",
+  "openrouter",
+  "deepseek",
+  "ollama",
+  "mistral",
+] as const;
+
 export interface GatewayModeDefaults {
   build?: string;
   plan?: string;
