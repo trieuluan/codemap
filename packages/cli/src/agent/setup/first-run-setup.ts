@@ -136,7 +136,7 @@ async function selectModel(
       const custom = await p.text({
         message: "Enter custom model ID",
         placeholder: "e.g. gpt-4o, claude-sonnet-4",
-        validate: (value) => value.trim() ? undefined : "Model ID is required",
+        validate: (value) => value?.trim() ? undefined : "Model ID is required",
       });
       if (p.isCancel(custom)) return custom;
       return custom;
@@ -148,7 +148,7 @@ async function selectModel(
   const manual = await p.text({
     message: `${stepLabel}\nEnter model ID`,
     placeholder: "e.g. gpt-4o, claude-sonnet-4",
-    validate: (value) => value.trim() ? undefined : "Model ID is required",
+    validate: (value) => value?.trim() ? undefined : "Model ID is required",
   });
 
   if (p.isCancel(manual)) return manual;

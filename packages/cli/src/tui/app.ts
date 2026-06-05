@@ -20,12 +20,10 @@ import { initShiki } from "./renderer/shiki-highlight.js";
 import { imageFromPaste, type PastedImage } from "./input/image-paste.js";
 import {
   C_CYAN,
-  C_ERROR,
   C_GRAY,
   C_GREEN,
   C_PURPLE,
   C_RED,
-  C_SUCCESS,
   RESET,
   SPINNER,
 } from "./theme.js";

@@ -1,5 +1,4 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { UIState, TaskListItem } from "../../chat/state/store.js";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
@@ -31,24 +30,6 @@ function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   return !(local.startsWith(cloud) || cloud.startsWith(local));
 }
 
-function stripThinkTags(text: string): string {
-  return text
-    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
-    .replace(/<think\b[^>]*\/?>/gi, "")
-    .replace(/<\/think>/gi, "")
-    .trim();
-}
-
-function formatAge(ts: number): string {
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const d = Math.floor(hr / 24);
-  return `${d}d ago`;
-}
 
 export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
   return (
