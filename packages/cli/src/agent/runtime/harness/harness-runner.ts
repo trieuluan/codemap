@@ -39,6 +39,7 @@ export function runHarness(
     let currentStreamText = "";
     let currentThinking = "";
     let usedTools = false;
+    let toolsInCurrentTurn = false;
     let settled = false;
     let lastHarnessError: Error | null = null;
 
@@ -207,7 +208,11 @@ export function runHarness(
           fail(lastHarnessError);
         },
       });
+      if (event.type === "message_start") {
+        toolsInCurrentTurn = false;
+      }
       if (event.type === "tool_start") {
+        toolsInCurrentTurn = true;
         const argsKey = `${event.toolName}:${JSON.stringify(event.args ?? {})}`;
         toolCallMeta.set(event.toolCallId ?? event.toolName, {
           toolName: event.toolName,
@@ -233,7 +238,7 @@ export function runHarness(
           }
         }
       }
-      if (event.type === "message_end" && finalText.trim()) {
+      if (event.type === "message_end" && finalText.trim() && !toolsInCurrentTurn) {
         callbacks.onDebug?.({
           event: "mastra_finish_on_message_end",
           textLength: finalText.length,
@@ -273,19 +278,16 @@ async function sendHarnessInput(
   });
   if (harness.sendSignal) {
     const signalContent = imageFiles?.length
-      ? {
-          role: "user",
-          content: [
-            { type: "text", text: content },
-            ...imageFiles.map((f) => ({
-              type: "file",
-              data: f.data,
-              mediaType: f.mimeType,
-            })),
-          ],
-        }
+      ? ([
+          { type: "text" as const, text: content },
+          ...imageFiles.map((f) => ({
+            type: "file" as const,
+            data: f.data,
+            mediaType: f.mimeType,
+          })),
+        ] satisfies Array<{ type: "text"; text: string } | { type: "file"; data: string; mediaType: string }>)
       : content;
-    const signal = harness.sendSignal({ content: signalContent as string });
+    const signal = harness.sendSignal({ content: signalContent });
     onDebug?.({
       event: "mastra_send_signal_created",
       signalId: signal.id,

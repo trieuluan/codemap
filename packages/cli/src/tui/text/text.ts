@@ -412,20 +412,14 @@ function renderUnifiedDiff(
     preHighlighted = contentTexts;
   }
 
-  // Only show per-line numbers when there are no context lines (write_file create / pure-add).
-  const hasContextLines = parsed.hunks.some((h) =>
-    h.lines.slice(1).some((l) => l.type !== DiffLineType.Add && l.type !== DiffLineType.Delete),
-  );
   let maxLineNo = 0;
-  if (!hasContextLines) {
-    for (const hunk of parsed.hunks)
-      for (const line of hunk.lines.slice(1)) {
-        const n = (line.type === DiffLineType.Add ? line.newLineNumber : line.oldLineNumber) ?? 0;
-        if (n > maxLineNo) maxLineNo = n;
-      }
-  }
+  for (const hunk of parsed.hunks)
+    for (const line of hunk.lines.slice(1)) {
+      const n = (line.type === DiffLineType.Add ? line.newLineNumber : line.oldLineNumber) ?? 0;
+      if (n > maxLineNo) maxLineNo = n;
+    }
   const lineNoW = maxLineNo > 0 ? Math.max(2, String(maxLineNo).length) : 0;
-  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 3 : 2; // "± N │ " or "± "
+  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 4 : 2; // "± N │ " or "± "
   const codeWidth = Math.max(8, width - gutterWidth);
   const out: string[] = [];
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type {
   PermissionPolicy,
   PermissionRules,
@@ -108,7 +110,7 @@ export function buildToolPreview(
     if (oldText != null || newText != null) {
       return fenced(
         "diff",
-        buildUnifiedDiff(filePath, oldText ?? "", newText ?? ""),
+        buildFileEditDiff(filePath, oldText ?? "", newText ?? ""),
       );
     }
   }
@@ -239,6 +241,87 @@ function buildUnifiedDiff(
     ...oldLines.map((line) => `-${line}`),
     ...newLines.map((line) => `+${line}`),
   ].join("\n");
+}
+
+const CONTEXT_LINES = 3;
+
+/**
+ * Context-aware diff for file edits: reads the file, finds oldText's real line
+ * number, and generates a unified diff with surrounding context lines.
+ * Falls back to simple diff if the file can't be read or oldText isn't found.
+ */
+function buildFileEditDiff(
+  filePath: string | null,
+  oldText: string,
+  newText: string,
+): string {
+  if (!filePath || !oldText) {
+    return buildUnifiedDiff(filePath, oldText, newText);
+  }
+
+  let fileContent: string;
+  try {
+    fileContent = readFileSync(resolve(filePath), "utf-8");
+  } catch {
+    return buildUnifiedDiff(filePath, oldText, newText);
+  }
+
+  const fileLines = fileContent.split("\n");
+  const oldLines = splitPreviewLines(oldText);
+  const newLines = splitPreviewLines(newText);
+
+  // Find the first line of oldText in the file
+  let matchIdx = findBlockStart(fileLines, oldLines);
+
+  // oldText not found — edit may have already been applied (session restore).
+  // Try locating newText to recover the correct line position.
+  let useNewAsAnchor = false;
+  if (matchIdx < 0 && newLines.length > 0) {
+    matchIdx = findBlockStart(fileLines, newLines);
+    useNewAsAnchor = true;
+  }
+
+  if (matchIdx < 0) {
+    return buildUnifiedDiff(filePath, oldText, newText);
+  }
+
+  const path = filePath;
+  const anchorLength = useNewAsAnchor ? newLines.length : oldLines.length;
+  const ctxStart = Math.max(0, matchIdx - CONTEXT_LINES);
+  const ctxEnd = Math.min(fileLines.length, matchIdx + anchorLength + CONTEXT_LINES);
+
+  const contextBefore = fileLines.slice(ctxStart, matchIdx);
+  const contextAfter = fileLines.slice(matchIdx + anchorLength, ctxEnd);
+
+  // Hunk header counts include context lines
+  const hunkStartLine = ctxStart + 1; // 1-based line of first context line
+  const oldHunkCount = contextBefore.length + oldLines.length + contextAfter.length;
+  const newHunkCount = contextBefore.length + newLines.length + contextAfter.length;
+
+  return [
+    `diff --git a/${path} b/${path}`,
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -${hunkStartLine},${oldHunkCount} +${hunkStartLine},${newHunkCount} @@`,
+    ...contextBefore.map((line) => ` ${line}`),
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+    ...contextAfter.map((line) => ` ${line}`),
+  ].join("\n");
+}
+
+/** Find the 0-based index where `block` starts in `lines`. Matches full lines. */
+function findBlockStart(lines: string[], block: string[]): number {
+  if (block.length === 0) return -1;
+  const first = block[0];
+  outer: for (let i = 0; i <= lines.length - block.length; i++) {
+    if (lines[i] !== first) continue;
+    for (let j = 1; j < block.length; j++) {
+      if (lines[i + j] !== block[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
 }
 
 function splitPreviewLines(text: string): string[] {
