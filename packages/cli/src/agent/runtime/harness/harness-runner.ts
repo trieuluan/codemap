@@ -3,7 +3,7 @@ import {
   bridgeCommonEvent,
   type BridgeCallbacks,
   type HarnessEvent,
-  type HarnessLike,
+  type MastraHarness,
   summarizeHarnessEvent,
 } from "../events.js";
 import { getLastModelApiError } from "./fetch-interceptor.js";
@@ -28,7 +28,7 @@ type RunHarnessCallbacks = Omit<
 
 /** Drive the harness for a single-turn message and resolve when agent_end fires. */
 export function runHarness(
-  harness: HarnessLike,
+  harness: MastraHarness,
   userMessage: { role: string; content: string },
   signal: AbortSignal | undefined,
   callbacks: RunHarnessCallbacks,
@@ -261,7 +261,7 @@ export function runHarness(
 }
 
 async function sendHarnessInput(
-  harness: HarnessLike,
+  harness: MastraHarness,
   content: string,
   imageFiles: Array<{ data: string; mimeType: string }> | undefined,
   onDebug?: (info: Record<string, unknown>) => void,

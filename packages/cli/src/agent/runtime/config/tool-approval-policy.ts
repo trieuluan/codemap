@@ -1,4 +1,8 @@
-import type { PermissionPolicy, PermissionRules, ToolCategory } from "@mastra/core/harness";
+import type {
+  PermissionPolicy,
+  PermissionRules,
+  ToolCategory,
+} from "@mastra/core/harness";
 
 export type { PermissionPolicy, PermissionRules, ToolCategory };
 
@@ -63,7 +67,13 @@ export function buildToolPreview(
   }
 
   if (normalizedName.includes("write_file")) {
-    const filePath = getStringArg(args, ["path", "filePath", "file_path", "filename", "file"]);
+    const filePath = getStringArg(args, [
+      "path",
+      "filePath",
+      "file_path",
+      "filename",
+      "file",
+    ]);
     const content = getStringArg(args, ["content", "text", "data"]);
     if (content != null) {
       return fenced("diff", buildUnifiedDiff(filePath, "", content));
@@ -74,11 +84,32 @@ export function buildToolPreview(
     normalizedName.includes("edit_file") ||
     normalizedName.includes("string_replace")
   ) {
-    const filePath = getStringArg(args, ["path", "filePath", "file_path", "filename", "file"]);
-    const oldText = getStringArg(args, ["oldString", "old_string", "search", "find", "target"]);
-    const newText = getStringArg(args, ["newString", "new_string", "replace", "replacement", "insert"]);
+    const filePath = getStringArg(args, [
+      "path",
+      "filePath",
+      "file_path",
+      "filename",
+      "file",
+    ]);
+    const oldText = getStringArg(args, [
+      "oldString",
+      "old_string",
+      "search",
+      "find",
+      "target",
+    ]);
+    const newText = getStringArg(args, [
+      "newString",
+      "new_string",
+      "replace",
+      "replacement",
+      "insert",
+    ]);
     if (oldText != null || newText != null) {
-      return fenced("diff", buildUnifiedDiff(filePath, oldText ?? "", newText ?? ""));
+      return fenced(
+        "diff",
+        buildUnifiedDiff(filePath, oldText ?? "", newText ?? ""),
+      );
     }
   }
 
@@ -140,7 +171,8 @@ function buildTaskSummary(
   const parts: string[] = [];
   if (id) parts.push(`#${id}`);
   if (status) parts.push(`→ ${status}`);
-  if (content) parts.push(content.length > 80 ? `${content.slice(0, 77)}...` : content);
+  if (content)
+    parts.push(content.length > 80 ? `${content.slice(0, 77)}...` : content);
   return parts.join(" · ") || compactJson(args);
 }
 
@@ -165,10 +197,7 @@ function countTaskStatuses(
   return { completed, inProgress, pending };
 }
 
-function formatTaskCounts(
-  c: TaskStatusCounts,
-  total: number,
-): string {
+function formatTaskCounts(c: TaskStatusCounts, total: number): string {
   const parts: string[] = [];
   if (c.completed) parts.push(`✓ ${c.completed}`);
   if (c.inProgress) parts.push(`▸ ${c.inProgress}`);

@@ -1,10 +1,10 @@
-import type { HarnessEvent, HarnessLike } from "../events.js";
+import type { HarnessEvent, MastraHarness } from "../events.js";
 
 let drainResolve: (() => void) | null = null;
 let drainPromise: Promise<void> | null = null;
 let drainUnsubscribe: (() => void) | null = null;
 
-export function startDrainTracking(harness: HarnessLike): void {
+export function startDrainTracking(harness: MastraHarness): void {
   drainUnsubscribe?.();
   let resolve!: () => void;
   drainPromise = new Promise<void>((r) => {

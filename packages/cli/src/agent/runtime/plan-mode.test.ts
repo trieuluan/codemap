@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { HarnessEvent, HarnessLike } from "./events.js";
+import type { HarnessEvent, MastraHarness } from "./events.js";
 import type { AgentPhase } from "./types.js";
 
 /**
@@ -12,19 +12,19 @@ import type { AgentPhase } from "./types.js";
 
 type EventListener = (event: HarnessEvent) => void;
 
-interface MockHarness extends HarnessLike {
+type MockHarness = MastraHarness & {
   _listeners: EventListener[];
   _emit(event: HarnessEvent): void;
   _switchModeCalls: { modeId: string }[];
   _respondToPlanApprovalCalls: { planId: string; response: { action: string; feedback?: string } }[];
   _abortCalled: boolean;
-}
+};
 
 function createMockHarness(): MockHarness {
-  const mock: MockHarness = {
-    _listeners: [],
-    _switchModeCalls: [],
-    _respondToPlanApprovalCalls: [],
+  const mock = {
+    _listeners: [] as EventListener[],
+    _switchModeCalls: [] as { modeId: string }[],
+    _respondToPlanApprovalCalls: [] as { planId: string; response: { action: string; feedback?: string } }[],
     _abortCalled: false,
     _emit(event: HarnessEvent) {
       for (const listener of this._listeners) {
@@ -32,8 +32,8 @@ function createMockHarness(): MockHarness {
       }
     },
     init: async () => {},
-    selectOrCreateThread: async () => ({}),
-    createThread: async () => ({}),
+    selectOrCreateThread: async () => ({ id: "t1", resourceId: "r1", createdAt: new Date(), updatedAt: new Date() }) as any,
+    createThread: async () => ({ id: "t1", resourceId: "r1", createdAt: new Date(), updatedAt: new Date() }) as any,
     listMessages: async () => [],
     listMessagesForThread: async () => [],
     listThreads: async () => [],
@@ -46,10 +46,10 @@ function createMockHarness(): MockHarness {
         if (idx >= 0) mock._listeners.splice(idx, 1);
       };
     },
-    switchMode: async (input) => {
+    switchMode: async (input: { modeId: string }) => {
       mock._switchModeCalls.push({ modeId: input.modeId });
     },
-    respondToPlanApproval: async (input) => {
+    respondToPlanApproval: async (input: { planId: string; response: { action: string; feedback?: string } }) => {
       mock._respondToPlanApprovalCalls.push({
         planId: input.planId,
         response: input.response,
@@ -61,11 +61,11 @@ function createMockHarness(): MockHarness {
     sendSignal: () => ({
       id: "sig_1",
       type: "system-reminder",
-      accepted: Promise.resolve({ accepted: true }),
+      accepted: Promise.resolve({ accepted: true, runId: "run_1" }),
     }),
     getCurrentModelId: () => "test-model",
   };
-  return mock;
+  return mock as any as MockHarness;
 }
 
 test("mode_changed event triggers onPhaseStart with correct phase", () => {

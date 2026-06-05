@@ -10,9 +10,13 @@ import type {
   HarnessEvent,
   HarnessDisplayState,
 } from "@mastra/core/harness";
+import type { createMastraCode } from "mastracode";
 export type { HarnessThread, HarnessMessage, HarnessMessageContent };
 export type { HarnessQuestionOption as AskQuestionOption };
 export type { HarnessRequestContext, HarnessQuestionAnswer };
+
+/** Derived harness type from mastracode's createMastraCode return */
+export type MastraHarness = Awaited<ReturnType<typeof createMastraCode>>["harness"];
 export type { HarnessQuestionSelectionMode };
 export type { HarnessEvent };
 export type { HarnessDisplayState };
@@ -48,7 +52,7 @@ export interface BridgeCallbacks {
     respond: (answer: HarnessQuestionAnswer) => void,
     selectionMode?: "single_select" | "multi_select",
   ) => void;
-  harness: HarnessLike;
+  harness: MastraHarness;
   currentStreamTextRef: Ref<string>;
   currentThinkingRef: Ref<string>;
   finalTextRef: Ref<string>;
@@ -412,66 +416,6 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
-export interface HarnessLike {
-  init(): Promise<void>;
-  selectOrCreateThread(): Promise<unknown>;
-  createThread(opts?: { title?: string }): Promise<unknown>;
-  getCurrentThreadId?(): string | null;
-  getDisplayState?(): Readonly<HarnessDisplayState>;
-  listMessages(options?: { limit?: number }): Promise<HarnessMessage[]>;
-  listMessagesForThread(options: {
-    threadId: string;
-    limit?: number;
-  }): Promise<HarnessMessage[]>;
-  listThreads(options?: {
-    includeForkedSubagents?: boolean;
-  }): Promise<HarnessThread[]>;
-  switchThread(options: { threadId: string }): Promise<void>;
-  deleteThread?(options: { threadId: string }): Promise<void>;
 
-  getCurrentModelId?(): string;
-  getTokenUsage?():
-    | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
-    | undefined;
-  setState?(updates: Record<string, unknown>): Promise<void>;
-  subscribe(listener: (event: HarnessEvent) => void): () => void;
-  sendSignal?(input: {
-    content?:
-      | string
-      | {
-          role: string;
-          content: Array<{ type: string; [key: string]: unknown }>;
-        };
-    type?: string;
-    contents?: string;
-    [key: string]: unknown;
-  }): {
-    id: string;
-    type: string;
-    accepted: Promise<{ accepted?: boolean; runId?: string | null }>;
-  };
-  sendMessage(input: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string }>;
-  }): Promise<void>;
-  abort?(): void;
-  switchMode?(input: { modeId: string }): Promise<void>;
-  switchModel?(input: {
-    modelId: string;
-    scope?: "global" | "thread";
-  }): Promise<void>;
-  respondToPlanApproval?(input: {
-    planId: string;
-    response: { action: "approved" | "rejected"; feedback?: string };
-  }): Promise<void>;
-  respondToQuestion?(input: {
-    questionId: string;
-    answer: HarnessQuestionAnswer;
-  }): void;
-  respondToToolApproval?(input: {
-    decision: "approve" | "decline" | "always_allow_category";
-  }): void;
-  destroy?(): Promise<void>;
-}
 
 

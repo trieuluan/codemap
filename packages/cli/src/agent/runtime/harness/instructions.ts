@@ -1,5 +1,5 @@
 import type { RequestContext } from "@mastra/core/request-context";
-import type { HarnessLike } from "../events.js";
+import type { MastraHarness } from "../events.js";
 
 const ORIGINAL_AGENT_INSTRUCTIONS = new WeakMap<
   object,
@@ -33,8 +33,8 @@ async function resolveAgentInstructions(
   return instructions;
 }
 
-function getModeAgents(harness: HarnessLike): object[] {
-  const maybeHarness = harness as HarnessLike & {
+function getModeAgents(harness: MastraHarness): object[] {
+  const maybeHarness = harness as MastraHarness & {
     listModes?: () => Array<{ agent?: unknown }>;
     getState?: () => unknown;
   };
@@ -51,7 +51,7 @@ function getModeAgents(harness: HarnessLike): object[] {
 }
 
 export function applyAgentInstructions(
-  harness: HarnessLike,
+  harness: MastraHarness,
   instructions?: string,
 ): void {
   if (!instructions?.trim()) return;

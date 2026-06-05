@@ -1,7 +1,7 @@
 import type { AgentLoopResult } from "../core/agent-loop.js";
 import type { GatewayProviderId } from "../types.js";
 import type { SingleAgentRuntimeInput } from "./types.js";
-import type { HarnessLike } from "./events.js";
+import type { MastraHarness } from "./events.js";
 import {
   clearDrainTracking,
   drainHarness,
@@ -31,9 +31,9 @@ import { buildMastraPermissionRules } from "./config/tool-approval-policy.js";
 import { Memory } from "@mastra/memory";
 import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
+import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import { join } from "node:path";
 import { homedir } from "node:os";
-
 
 export type {
   MastraMcpConfigPaths,
@@ -42,6 +42,7 @@ export type {
   MastraMcpStatusSummary,
 } from "./mcp/index.js";
 
+export type { MastraHarness };
 export { MASTRA_DISABLED_TOOLS, drainHarness };
 
 /** Working memory template for CodeMap CLI context. */
@@ -108,8 +109,6 @@ const DYNAMIC_AGENTS_MD_INSTRUCTION =
 /** Cached memory instance — avoids recreating LibSQLVector + fastembed on every factory call. */
 let cachedMemoryInstance: InstanceType<typeof Memory> | null = null;
 
-type DynamicImport = (specifier: string) => Promise<Record<string, unknown>>;
-
 interface CreateHarnessOptions {
   toolClient: SingleAgentRuntimeInput["toolClient"];
   baseUrl: string;
@@ -129,7 +128,7 @@ interface CreateHarnessOptions {
 }
 
 interface HarnessSingleton {
-  harness: HarnessLike;
+  harness: MastraHarness;
   mcpManager: MastraMcpManagerLike | undefined;
   mcpInitPromise: Promise<MastraMcpInitResult> | undefined;
   hookManager: { reload: () => void } | undefined;
@@ -140,18 +139,13 @@ interface HarnessSingleton {
   modeDefaults?: { build?: string; plan?: string; fast?: string };
 }
 
-const dynamicImport = new Function(
-  "specifier",
-  "return import(specifier)",
-) as DynamicImport;
-
 let singleton: HarnessSingleton | null = null;
 let cachedCustomTools: ResolvedCustomTool[] = [];
 let pendingNewThread = false;
 let pendingThreadPromise: Promise<void> | null = null;
 
 async function forceHarnessModel(
-  harness: HarnessLike,
+  harness: MastraHarness,
   modelId: string,
 ): Promise<void> {
   await harness.switchModel?.({ modelId, scope: "thread" });
@@ -160,7 +154,7 @@ async function forceHarnessModel(
 
 async function getOrCreateHarness(
   opts: CreateHarnessOptions,
-): Promise<HarnessLike> {
+): Promise<MastraHarness> {
   const wanted = resolveHarnessModelId(
     opts.modelId,
     opts.availableModels,
@@ -308,11 +302,11 @@ export async function resetHarnessSingleton(): Promise<void> {
   // Clean up empty threads (threads with no user messages)
   try {
     const threadId = old.harness.getCurrentThreadId?.();
-    if (threadId && old.harness.deleteThread) {
+    if (threadId && (old.harness as any).deleteThread) {
       const messages = await old.harness.listMessagesForThread({ threadId });
-      const hasUserMessage = messages.some((m) => m.role === "user");
+      const hasUserMessage = messages.some((m: any) => m.role === "user");
       if (!hasUserMessage) {
-        await old.harness.deleteThread({ threadId });
+        await (old.harness as any).deleteThread({ threadId });
       }
     }
   } catch (err) {
@@ -335,21 +329,7 @@ export async function resetHarnessSingleton(): Promise<void> {
 async function createFreshHarness(
   opts: CreateHarnessOptions,
   harnessModelId: string,
-): Promise<HarnessLike> {
-  const mod = await dynamicImport("mastracode");
-  const createMastraCode = mod.createMastraCode as (
-    config?: Record<string, unknown>,
-  ) => Promise<{
-    harness: HarnessLike;
-    mcpManager?: MastraMcpManagerLike;
-    resolveModel: (
-      modelId: string,
-      options?: Record<string, unknown>,
-    ) => unknown;
-    effectiveDefaults: Record<string, string>;
-    hookManager?: { reload: () => void };
-  }>;
-
+): Promise<MastraHarness> {
   const serverConfig = opts.toolClient.getServerConfig();
 
   installTemperatureInterceptor(opts.baseUrl);
@@ -383,7 +363,8 @@ async function createFreshHarness(
   // Load custom tools from .codemap/tools/ (project + global)
   let mergedExtraTools: Record<string, unknown> | undefined;
   try {
-    const { readWorkspacePath } = await import("@codemap/core/lib/workspace-project.js");
+    const { readWorkspacePath } =
+      await import("@codemap/core/lib/workspace-project.js");
     const workspaceRoot = await readWorkspacePath();
     const { tools: customTools, mastraTools: customMastraTools } =
       await loadCustomTools(workspaceRoot);
@@ -408,122 +389,123 @@ async function createFreshHarness(
   }
 
   const mcpServerIds = new Set(["codemap", ...extraServerKeys]);
-  const { harness, mcpManager, resolveModel, effectiveDefaults, hookManager } =
-    await createMastraCode({
-      ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
-        ? { mcpServers: baseMcpServers }
-        : {}),
-      ...(mergedExtraTools ? { extraTools: mergedExtraTools } : {}),
-      disabledTools: MASTRA_DISABLED_TOOLS,
-      memory: () => {
-        if (cachedMemoryInstance) {
-          return cachedMemoryInstance;
-        }
+  const config = {
+    ...(baseMcpServers && Object.keys(baseMcpServers).length > 0
+      ? { mcpServers: baseMcpServers }
+      : {}),
+    ...(mergedExtraTools ? { extraTools: mergedExtraTools } : {}),
+    disabledTools: MASTRA_DISABLED_TOOLS,
+    memory: () => {
+      if (cachedMemoryInstance) {
+        return cachedMemoryInstance;
+      }
 
-        const vectorDbPath = getVectorDatabasePath();
-        const vector = new LibSQLVector({
-          id: "mastra-code-vectors",
-          url: `file:${vectorDbPath}`,
-        });
+      const vectorDbPath = getVectorDatabasePath();
+      const vector = new LibSQLVector({
+        id: "mastra-code-vectors",
+        url: `file:${vectorDbPath}`,
+      });
 
-        const dbPath = getDatabasePath();
-        const storage = new LibSQLStore({
-          id: "mastra-code-storage",
-          url: `file:${dbPath}`,
-        });
+      const dbPath = getDatabasePath();
+      const storage = new LibSQLStore({
+        id: "mastra-code-storage",
+        url: `file:${dbPath}`,
+      });
 
-        cachedMemoryInstance = new Memory({
-          storage,
-          vector,
-          embedder: fastembed.small,
-          options: {
-            semanticRecall: {
-              topK: 3,
-              messageRange: 2,
-            },
-            workingMemory: {
-              enabled: true,
-              template: CODEMAP_WORKING_MEMORY_TEMPLATE,
-            },
-            observationalMemory: {
-              enabled: true,
-              temporalMarkers: true,
-              retrieval: { vector: true },
-              scope: "thread",
-              activateAfterIdle: "5m",
-              activateOnProviderChange: true,
-              observation: {
-                bufferTokens: 1 / 5,
-                bufferActivation: 2_000,
-                model: ({ requestContext }: { requestContext: any }) => {
-                  opts.onDebug?.({
-                    event: "mastra_observation_model_request",
-                    requestContext: {
-                      harnessState: requestContext?.get?.("harness"),
-                    },
-                  });
-                  const state = requestContext?.get?.("harness") as
-                    | Record<string, unknown>
-                    | undefined;
-                  const modelId =
-                    (state?.observerModelId as string) ??
-                    (effectiveDefaults?.fast as string) ??
-                    harnessModelId;
-                  return resolveModel(modelId, {
-                    remapForCodexOAuth: true,
-                    requestContext,
-                  }) as any;
-                },
-                messageTokens: DEFAULT_OBS_THRESHOLD,
-                blockAfter: 2,
-                previousObserverTokens: 1_000,
-                threadTitle: true,
-                instruction: DYNAMIC_AGENTS_MD_INSTRUCTION,
+      cachedMemoryInstance = new Memory({
+        storage,
+        vector,
+        embedder: fastembed.small,
+        options: {
+          semanticRecall: {
+            topK: 3,
+            messageRange: 2,
+          },
+          workingMemory: {
+            enabled: true,
+            template: CODEMAP_WORKING_MEMORY_TEMPLATE,
+          },
+          observationalMemory: {
+            enabled: true,
+            temporalMarkers: true,
+            retrieval: { vector: true },
+            scope: "thread",
+            activateAfterIdle: "5m",
+            activateOnProviderChange: true,
+            observation: {
+              bufferTokens: 1 / 5,
+              bufferActivation: 2_000,
+              model: ({ requestContext }: { requestContext: any }) => {
+                opts.onDebug?.({
+                  event: "mastra_observation_model_request",
+                  requestContext: {
+                    harnessState: requestContext?.get?.("harness"),
+                  },
+                });
+                const state = requestContext?.get?.("harness") as
+                  | Record<string, unknown>
+                  | undefined;
+                const modelId =
+                  (state?.observerModelId as string) ??
+                  (effectiveDefaults?.fast as string) ??
+                  harnessModelId;
+                return resolveModel(modelId, {
+                  remapForCodexOAuth: true,
+                  requestContext,
+                }) as any;
               },
-              reflection: {
-                bufferActivation: 1 / 2,
-                blockAfter: 1.1,
-                model: ({ requestContext }: { requestContext: any }) => {
-                  opts.onDebug?.({
-                    event: "mastra_reflection_model_request",
-                    requestContext: {
-                      harnessState: requestContext?.get?.("harness"),
-                    },
-                  });
-                  const state = requestContext?.get?.("harness") as
-                    | Record<string, unknown>
-                    | undefined;
-                  const modelId =
-                    (state?.reflectorModelId as string) ?? harnessModelId;
-                  return resolveModel(modelId, {
-                    remapForCodexOAuth: true,
-                    requestContext,
-                  }) as any;
-                },
-                observationTokens: DEFAULT_REF_THRESHOLD,
+              messageTokens: DEFAULT_OBS_THRESHOLD,
+              blockAfter: 2,
+              previousObserverTokens: 1_000,
+              threadTitle: true,
+              instruction: DYNAMIC_AGENTS_MD_INSTRUCTION,
+            },
+            reflection: {
+              bufferActivation: 1 / 2,
+              blockAfter: 1.1,
+              model: ({ requestContext }: { requestContext: any }) => {
+                opts.onDebug?.({
+                  event: "mastra_reflection_model_request",
+                  requestContext: {
+                    harnessState: requestContext?.get?.("harness"),
+                  },
+                });
+                const state = requestContext?.get?.("harness") as
+                  | Record<string, unknown>
+                  | undefined;
+                const modelId =
+                  (state?.reflectorModelId as string) ?? harnessModelId;
+                return resolveModel(modelId, {
+                  remapForCodexOAuth: true,
+                  requestContext,
+                }) as any;
               },
+              observationTokens: DEFAULT_REF_THRESHOLD,
             },
           },
-        });
+        },
+      });
 
-        return cachedMemoryInstance;
-      },
-      initialState: {
-        currentModelId: harnessModelId,
-        permissionRules: buildMastraPermissionRules(mcpServerIds),
-        yolo: true,
-        observerModelId: harnessModelId,
-        reflectorModelId: harnessModelId,
-      },
-    });
+      return cachedMemoryInstance;
+    },
+    initialState: {
+      currentModelId: harnessModelId,
+      permissionRules: buildMastraPermissionRules(mcpServerIds) as any,
+      yolo: true,
+      observerModelId: harnessModelId,
+      reflectorModelId: harnessModelId,
+    },
+  };
+
+  const { harness, mcpManager, resolveModel, effectiveDefaults, hookManager } =
+    await createMastraCode(config as MastraCodeConfig);
 
   await harness.init();
 
   // Sync CodeMap built-in hooks + user hooks to .mastracode/hooks.json
   // and reload the Mastra HookManager so they take effect.
   try {
-    const workspaceRoot =
-      process.env.WORKSPACE_ROOT ?? process.cwd();
+    const workspaceRoot = process.env.WORKSPACE_ROOT ?? process.cwd();
     syncHooksToMastra(workspaceRoot);
     hookManager?.reload?.();
   } catch {
@@ -741,4 +723,3 @@ export function getMastraOMStatus(): {
     return null;
   }
 }
-

@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   bridgeCommonEvent,
   type BridgeCallbacks,
-  type HarnessLike,
+  type MastraHarness,
 } from "./events.js";
 
 function ref<T>(initial: T) {
@@ -19,7 +19,7 @@ function ref<T>(initial: T) {
 function callbacks(onToken: (token: string) => void): BridgeCallbacks {
   return {
     onToken,
-    harness: {} as HarnessLike,
+    harness: {} as MastraHarness,
     currentStreamTextRef: ref(""),
     currentThinkingRef: ref(""),
     finalTextRef: ref(""),
@@ -156,7 +156,7 @@ test("auto-approves Mastra tool approval requests", async () => {
     respondToToolApproval: (input) => {
       decision = input.decision;
     },
-  } as HarnessLike;
+  } as MastraHarness;
 
   bridgeCommonEvent(
     {
