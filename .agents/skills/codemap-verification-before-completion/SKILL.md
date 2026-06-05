@@ -1,3 +1,7 @@
+---
+name: codemap-verification-before-completion
+description: "CodeMap skill: codemap-verification-before-completion"
+---
 # Verification Before Completion
 
 Use this skill after any task that changed files.
@@ -10,3 +14,4 @@ Use this skill after any task that changed files.
 4. Decide whether cloud `trigger_reimport` and `wait_for_import` are needed.
 5. Final response must include changed behavior, verification results, skipped checks, and residual risk.
 
+"

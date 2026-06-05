@@ -1,3 +1,7 @@
+---
+name: codemap-test-driven-development
+description: "CodeMap skill: codemap-test-driven-development"
+---
 # Test-Driven Development
 
 Use this skill when implementing new functionality or fixing a bug where tests are expected. Follow the RED → GREEN → REFACTOR cycle strictly.
@@ -9,7 +13,7 @@ Use this skill when implementing new functionality or fixing a bug where tests a
 ## Cycle
 
 ### RED — Write a failing test first
-
+"
 1. `search_codebase("test <feature>")` — find existing test files and patterns for this area
 2. `get_file(test_file, include=["outline"])` — understand test structure and helpers
 3. Write the minimal test that describes the desired behavior

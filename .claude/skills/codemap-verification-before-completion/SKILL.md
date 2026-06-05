@@ -1,10 +1,14 @@
+---
+name: codemap-verification-before-completion
+description: "CodeMap skill: codemap-verification-before-completion"
+---
 # Verification Before Completion
 
 Use this skill after any task that changed files. It is the final gate before telling the user the work is done.
 
 ## Checklist
 
-1. **Inspect changes**
+1. **Inspect changes**"
    - Call `diff(mode="working")`.
    - Confirm only intended files changed.
    - Mention unrelated dirty files if present.

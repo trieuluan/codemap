@@ -1,3 +1,7 @@
+---
+name: codemap-symbol-level-debugging
+description: "CodeMap skill: codemap-symbol-level-debugging"
+---
 # Symbol-Level Debugging
 
 Use this skill when a bug or behavior centers on a specific function, class, component, method, or export.
@@ -14,3 +18,4 @@ Use this skill when a bug or behavior centers on a specific function, class, com
 
 Do not read an entire large file just to inspect one symbol when CodeMap can return symbol context.
 
+"

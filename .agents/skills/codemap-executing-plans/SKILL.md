@@ -1,3 +1,7 @@
+---
+name: codemap-executing-plans
+description: "CodeMap skill: codemap-executing-plans"
+---
 # Executing Plans
 
 Use this skill when implementing an approved plan.
@@ -14,3 +18,4 @@ Use this skill when implementing an approved plan.
 
 Do not declare completion until `verification-before-completion` is satisfied.
 
+"

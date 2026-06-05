@@ -1,5 +1,9 @@
+---
+name: codemap-mcp-first-exploration
+description: "CodeMap skill: codemap-mcp-first-exploration"
+---
 # MCP-First Exploration
-
+"
 Use this skill when the task starts with unclear files, a broad bug/feature request, or a question like "where should I look?"
 
 ## Process
