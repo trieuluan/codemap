@@ -2,10 +2,7 @@ import type { TaskPhase } from "../../events/event-bus.js";
 import type { GatewayModel } from "../../../agent/types.js";
 import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
-import {
-  buildCodeMapAgentInstructions,
-  buildCurrentTaskContent,
-} from "../config/agent-instructions.js";
+import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
 import { classifyTask } from "../../../agent/core/task-classifier.js";
 import {
@@ -123,6 +120,7 @@ export async function handleSubmitWithContent(
       ctx.getSessionResourceContext(taskAbort.signal),
       ctx.getSessionProjectContext(),
     ]);
+
     const resolvedAgentModel =
       getMastraCurrentModelId() ??
       resolveGatewayModel(

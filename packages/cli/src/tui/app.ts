@@ -14,7 +14,6 @@ import {
   MentionAutocompleteProvider,
   ModelPickerProvider,
   SessionPickerProvider,
-  flattenTreeForPicker,
 } from "./input/input.js";
 import { getCommandList } from "../chat/slash-commands/index.js";
 import { initShiki } from "./renderer/shiki-highlight.js";
@@ -32,8 +31,7 @@ import {
 } from "./theme.js";
 import { workspaceStateCardLines } from "./text/text.js";
 import { buildPanel, isActiveTaskPhase } from "./renderer/panel-builder.js";
-import { getMastraMessages, getMastraThreadId, listMastraThreads, switchMastraThread, getMastraThreadTree, getMastraActiveLeafId, branchMastraThread, forkMastraThread } from "../agent/runtime/harness-runtime.js";
-import { extractTaskContent } from "../chat/session-tree-store.js";
+import { getMastraMessages, getMastraThreadId, listMastraThreads, switchMastraThread } from "../agent/runtime/harness-runtime.js";
 import { sortThreads } from "../chat/slash-commands/sessions.js";
 import { formatTime } from "./renderer/ink-utils.js";
 
@@ -419,8 +417,9 @@ export async function startPiTuiApp(
           const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
           const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
           const msgs = await listMastraThreadMessages(threadId, 100);
+          const uiMsgs = mapHarnessMessagesToUI(msgs);
           chatTerminal.store.dispatch((prev: UIState) => ({
-            messages: mapHarnessMessagesToUI(msgs),
+            messages: uiMsgs,
             sessionTokens: 0,
           }));
           chatTerminal.bus.scheduleRefresh();
@@ -437,76 +436,6 @@ export async function startPiTuiApp(
     editor.handleInput("\t");
   };
 
-  // ── Tree picker (fullscreen pi.dev-style) ───────────────────────────────
-
-  let treePickerActive = false;
-
-  /** Collect harnessMessageIds on the active path (root → leaf) from TreeNode[]. */
-  function collectActivePathIds(nodes: import("../chat/session-tree.js").TreeNode[]): Set<string> {
-    const ids = new Set<string>();
-    const walk = (n: import("../chat/session-tree.js").TreeNode) => {
-      if (n.isActive) {
-        if (n.entry.harnessMessageId) ids.add(n.entry.harnessMessageId);
-        n.children.forEach(walk);
-      }
-    };
-    nodes.forEach(walk);
-    return ids;
-  }
-
-  const closeTreePicker = () => {
-    if (!treePickerActive) return;
-    treePickerActive = false;
-    editor.setText("");
-    chatTerminal.store.dispatch((prev: UIState) => ({
-      treePicker: null,
-    }));
-  };
-
-  const openTreePicker = async (mode: "branch" | "fork" = "branch") => {
-    const nodes = await getMastraThreadTree();
-    if (!nodes) {
-      chatTerminal.store.dispatch((prev: UIState) => ({
-        messages: [
-          ...prev.messages,
-          { role: "system" as const, content: "No tree data for current thread.", timestamp: Date.now() },
-        ],
-      }));
-      return;
-    }
-    const activeLeafId = await getMastraActiveLeafId();
-    // Both branch and fork modes: filter to user-only (filterMode=2)
-    // Branching at non-user entries (tool_call, assistant mid-turn) creates
-    // incomplete conversation states in CodeMap's data model.
-    const filterMode = 2;
-    const items = flattenTreeForPicker(nodes, filterMode, new Set());
-    if (items.length === 0) {
-      chatTerminal.store.dispatch((prev: UIState) => ({
-        messages: [
-          ...prev.messages,
-          { role: "system" as const, content: mode === "fork" ? "No user messages to fork from." : "Empty tree — nothing to navigate.", timestamp: Date.now() },
-        ],
-      }));
-      return;
-    }
-    // Find the active leaf index to pre-select it
-    let selIdx = items.findIndex((i) => i.isLeaf);
-    if (selIdx < 0) selIdx = 0;
-
-    treePickerActive = true;
-    chatTerminal.store.dispatch((prev: UIState) => ({
-      treePicker: {
-        active: true,
-        mode,
-        items,
-        selectedIndex: selIdx,
-        foldedIds: new Set<string>(),
-        filterMode,
-        activeLeafId: activeLeafId ?? null,
-      },
-    }));
-  };
-
   editor.setAutocompleteProvider(defaultAutocompleteProvider);
   editor.onChange = (text) => {
     // Selecting /models from slash autocomplete via Tab leaves a trailing
@@ -516,12 +445,6 @@ export async function startPiTuiApp(
     }
     if (!sessionPickerActive && /^\/sessions?\s$/i.test(text)) {
       void openSessionPicker();
-    }
-    if (!treePickerActive && /^\/tree\s$/i.test(text)) {
-      void openTreePicker();
-    }
-    if (!treePickerActive && /^\/fork\s$/i.test(text)) {
-      void openTreePicker("fork");
     }
   };
 
@@ -560,14 +483,6 @@ export async function startPiTuiApp(
     }
     if (/^\/sessions?$/i.test(trimmed)) {
       void openSessionPicker();
-      return;
-    }
-    if (/^\/tree$/i.test(trimmed)) {
-      void openTreePicker();
-      return;
-    }
-    if (/^\/fork$/i.test(trimmed)) {
-      void openTreePicker("fork");
       return;
     }
     const imageFiles = pendingImages.map((img) => ({
@@ -784,235 +699,6 @@ export async function startPiTuiApp(
       return { consume: true };
     }
 
-    // Tree picker — fullscreen interactive session tree selector.
-    if (state.treePicker?.active) {
-      const tp = state.treePicker;
-      const items = tp.items;
-      const sel = tp.selectedIndex;
-      const PAGE_SIZE = 10;
-
-      // ↑ — navigate up
-      if (matchesKey(data, Key.up)) {
-        const newSel = sel > 0 ? sel - 1 : items.length - 1;
-        chatTerminal.store.dispatch((prev: UIState) => ({
-          treePicker: prev.treePicker ? { ...prev.treePicker, selectedIndex: newSel } : null,
-        }));
-        tui.requestRender();
-        return { consume: true };
-      }
-      // ↓ — navigate down
-      if (matchesKey(data, Key.down)) {
-        const newSel = sel < items.length - 1 ? sel + 1 : 0;
-        chatTerminal.store.dispatch((prev: UIState) => ({
-          treePicker: prev.treePicker ? { ...prev.treePicker, selectedIndex: newSel } : null,
-        }));
-        tui.requestRender();
-        return { consume: true };
-      }
-      // ← — page up
-      if (matchesKey(data, Key.left)) {
-        const newSel = Math.max(0, sel - PAGE_SIZE);
-        chatTerminal.store.dispatch((prev: UIState) => ({
-          treePicker: prev.treePicker ? { ...prev.treePicker, selectedIndex: newSel } : null,
-        }));
-        tui.requestRender();
-        return { consume: true };
-      }
-      // → — page down
-      if (matchesKey(data, Key.right)) {
-        const newSel = Math.min(items.length - 1, sel + PAGE_SIZE);
-        chatTerminal.store.dispatch((prev: UIState) => ({
-          treePicker: prev.treePicker ? { ...prev.treePicker, selectedIndex: newSel } : null,
-        }));
-        tui.requestRender();
-        return { consume: true };
-      }
-      // Ctrl+← — fold/unfold branch point
-      if (matchesKey(data, Key.ctrl("left"))) {
-        const item = items[sel];
-        if (item && item.isBranchPoint) {
-          const newFolded = new Set(tp.foldedIds);
-          if (newFolded.has(item.entryId)) {
-            newFolded.delete(item.entryId);
-          } else {
-            newFolded.add(item.entryId);
-          }
-          // Rebuild items with new fold state (fire-and-forget)
-          void getMastraThreadTree().then((nodes) => {
-            if (nodes) {
-              const newItems = flattenTreeForPicker(nodes, tp.filterMode, newFolded);
-              let newSelIdx = newItems.findIndex((i) => i.entryId === item.entryId);
-              if (newSelIdx < 0) newSelIdx = 0;
-              chatTerminal.store.dispatch((prev: UIState) => ({
-                treePicker: prev.treePicker ? {
-                  ...prev.treePicker,
-                  items: newItems,
-                  selectedIndex: newSelIdx,
-                  foldedIds: newFolded,
-                } : null,
-              }));
-              tui.requestRender();
-            }
-          });
-        }
-        tui.requestRender();
-        return { consume: true };
-      }
-      // Ctrl+O — cycle filter mode
-      if (matchesKey(data, Key.ctrl("o"))) {
-        const newFilterMode = (tp.filterMode + 1) % 4;
-        void getMastraThreadTree().then((nodes) => {
-          if (nodes) {
-            const newItems = flattenTreeForPicker(nodes, newFilterMode, tp.foldedIds);
-            let newSelIdx = 0;
-            const currentItem = items[sel];
-            if (currentItem) {
-              newSelIdx = Math.max(0, newItems.findIndex((i) => i.entryId === currentItem.entryId));
-            }
-            chatTerminal.store.dispatch((prev: UIState) => ({
-              treePicker: prev.treePicker ? {
-                ...prev.treePicker,
-                items: newItems,
-                selectedIndex: newSelIdx,
-                filterMode: newFilterMode,
-              } : null,
-            }));
-            tui.requestRender();
-          }
-        });
-        tui.requestRender();
-        return { consume: true };
-      }
-      // Enter — select entry
-      if (matchesKey(data, Key.enter)) {
-        const item = items[sel];
-        if (!item) {
-          closeTreePicker();
-          return { consume: true };
-        }
-        const entryId = item.entryId;
-        const isForkMode = state.treePicker?.mode === "fork";
-
-        if (isForkMode) {
-          // Fork mode: clone thread with active-path messages, then load from new thread
-          forkMastraThread(entryId).then(async (newThreadId) => {
-            closeTreePicker();
-            const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
-            const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
-            // Messages are already cloned into the new thread
-            const msgs = await listMastraThreadMessages(newThreadId, 200);
-            chatTerminal.store.dispatch((prev: UIState) => ({
-              messages: [
-                ...mapHarnessMessagesToUI(msgs),
-                { role: "system" as const, content: `${C_SUCCESS}Forked!${RESET} New session: ${C_CYAN}${newThreadId.slice(0, 8)}${RESET}. Continue from here.`, timestamp: Date.now() },
-              ],
-            }));
-            tui.requestRender();
-          }).catch((err: unknown) => {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            chatTerminal.store.dispatch((prev: UIState) => ({
-              messages: [
-                ...prev.messages,
-                { role: "system" as const, content: `${C_ERROR}Fork failed:${RESET} ${errMsg}`, timestamp: Date.now() },
-              ],
-            }));
-            closeTreePicker();
-            tui.requestRender();
-          });
-        } else {
-          // Branch mode: close picker, fetch full user message, then prompt for branch name
-          const branchTarget = item.parentId ?? entryId;
-          closeTreePicker();
-          getMastraMessages(500).then((allMsgs) => {
-            const harnessMsg = allMsgs.find((m) => m.id === entryId);
-            let fullText = item.content ?? null;
-            if (harnessMsg) {
-              const textParts = harnessMsg.content
-                .filter((p: { type: string; text?: string }): p is { type: "text"; text: string } => p.type === "text" && typeof p.text === "string")
-                .map((p) => p.text)
-                .join("\n");
-              if (textParts) fullText = extractTaskContent(textParts);
-            }
-            chatTerminal.store.dispatch((prev: UIState) => ({
-              messages: [
-                ...prev.messages,
-                { role: "system" as const, content: `Branch name (or Enter for auto):`, timestamp: Date.now() },
-              ],
-              pendingBranchName: {
-                branchTarget,
-                turnEntryId: entryId,
-                turnContent: fullText,
-              },
-            }));
-            editor.setText("");
-            tui.requestRender();
-          });
-        }
-        return { consume: true }
-      }
-      // Esc/Ctrl+C — cancel tree picker
-      if (matchesKey(data, Key.escape)) {
-        closeTreePicker();
-        tui.requestRender();
-        return { consume: true };
-      }
-      // Block all other input while tree picker is active
-      return { consume: true };
-    }
-
-    // Pending branch name input: waiting for user to type a branch name after /tree selection
-    if (state.pendingBranchName) {
-      if (matchesKey(data, Key.escape)) {
-        chatTerminal.store.dispatch({ pendingBranchName: null });
-        editor.setText("");
-        tui.requestRender();
-        return { consume: true };
-      }
-      if (matchesKey(data, Key.enter)) {
-        const pb = state.pendingBranchName;
-        const customName = editor.getText().trim() || undefined;
-        editor.setText("");
-        chatTerminal.store.dispatch({ pendingBranchName: null });
-
-        branchMastraThread(pb.branchTarget, pb.turnEntryId, customName).then(async (branchName) => {
-          // Reload tree to get updated active path, then filter messages
-          const nodes = await getMastraThreadTree();
-          const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
-          const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
-          const threadId = getMastraThreadId?.();
-          let uiMessages: import("../chat/state/store.js").Message[] = [];
-
-          if (nodes && threadId) {
-            const activeIds = collectActivePathIds(nodes);
-            const msgs = await listMastraThreadMessages(threadId, 100);
-            const filtered = msgs.filter((m) => activeIds.has(m.id));
-            uiMessages = mapHarnessMessagesToUI(filtered);
-          }
-
-          // Restore full user message text into editor
-          if (pb.turnContent) {
-            editor.setText(pb.turnContent);
-          }
-          chatTerminal.store.dispatch((prev: UIState) => ({
-            messages: [
-              ...uiMessages,
-              { role: "system" as const, content: `${C_SUCCESS}Branched${RESET} to ${C_CYAN}${branchName}${RESET} — edit and press Enter to continue from here.`, timestamp: Date.now() },
-            ],
-          }));
-          tui.requestRender();
-        }).catch((err: unknown) => {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          chatTerminal.store.dispatch((prev: UIState) => ({
-            messages: [
-              ...prev.messages,
-              { role: "system" as const, content: `${C_ERROR}Failed to branch:${RESET} ${errMsg}`, timestamp: Date.now() },
-            ],
-          }));
-          tui.requestRender();
-        });
-        return { consume: true };
-      }
-    }
 
     // ask_user inline select (when options are provided, block typing like planReview).
     if (state.askQuestion?.active) {

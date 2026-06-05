@@ -37,21 +37,6 @@ export interface CommandContext {
   reinitHarness?: () => Promise<void>;
   /** Get the list of available commands (injected to break circular deps with index.ts). */
   getCommandList?: () => Command[];
-  // -- Session Tree operations --
-  /** Branch active conversation to a different entry. Next message goes there. Returns the new branch name. */
-  branchMastraThread?: (entryId: string, turnEntryId?: string, customName?: string) => Promise<string>;
-  /** Fork current thread from a branch point. Returns new thread ID and switches to it. */
-  forkMastraThread?: (fromEntryId?: string, title?: string) => Promise<string>;
-  /** Get the session tree (nested) for UI rendering. */
-  getMastraThreadTree?: (threadId?: string) => Promise<import("../session-tree.js").TreeNode[] | null>;
-  /** Get the current active leaf entry ID. */
-  getMastraActiveLeafId?: (threadId?: string) => Promise<string | null>;
-  /** Switch to a named branch in the current thread. Returns the branch leaf entry ID. */
-  switchMastraBranch?: (branchName: string, threadId?: string) => Promise<string | null>;
-  /** Delete a named branch from the current thread. */
-  deleteMastraBranch?: (branchName: string, threadId?: string) => Promise<boolean>;
-  /** Get all branches for the current thread. */
-  getMastraBranches?: (threadId?: string) => Promise<import("../session-tree.js").BranchMeta[]>;
 }
 
 export interface Command {
@@ -60,8 +45,4 @@ export interface Command {
   execute: (args: string, ctx: CommandContext) => void | Promise<void>;
   /** When true, pi-tui-app should intercept Enter on this command and open an inline picker instead. */
   triggerSessionPicker?: boolean;
-  /** When true, pi-tui-app should intercept Enter on this command and open fullscreen tree picker. */
-  triggerTreePicker?: boolean;
-  /** When true, pi-tui-app should intercept Enter on this command and open fullscreen fork picker. */
-  triggerForkPicker?: boolean;
 }

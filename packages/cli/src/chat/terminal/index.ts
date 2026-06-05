@@ -287,8 +287,9 @@ export class ChatTerminal {
 
   async loadMastraThreadMessages(threadId: string): Promise<void> {
     const messages = await listMastraThreadMessages(threadId, 100);
+    const uiMessages = mapHarnessMessagesToUI(messages);
     this.store.dispatch((prev) => ({
-      messages: mapHarnessMessagesToUI(messages),
+      messages: uiMessages,
       sessionTokens: 0,
       input: { ...prev.input, history: [] },
     }));

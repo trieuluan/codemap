@@ -5,13 +5,6 @@ import {
   resetHarnessSingleton,
   switchMastraThread,
   warmupHarness,
-  branchMastraThread,
-  forkMastraThread,
-  getMastraThreadTree,
-  getMastraActiveLeafId,
-  switchMastraBranch,
-  deleteMastraBranch,
-  getMastraBranches,
 } from "../../../agent/runtime/harness-runtime.js";
 import { getCommandList } from "../../slash-commands/index.js";
 import type { CommandContext } from "../../slash-commands/types.js";
@@ -149,12 +142,5 @@ export function buildChatCommandContext({
     },
     refreshWorkspaceCommits,
     getCommandList,
-    branchMastraThread: (entryId, turnEntryId?, customName?) => branchMastraThread(entryId, turnEntryId, customName),
-    forkMastraThread: (entryId, title) => forkMastraThread(entryId, title),
-    getMastraThreadTree: (threadId) => getMastraThreadTree(threadId),
-    getMastraActiveLeafId: (threadId) => getMastraActiveLeafId(threadId),
-    switchMastraBranch: (name, threadId) => switchMastraBranch(name, threadId),
-    deleteMastraBranch: (name, threadId) => deleteMastraBranch(name, threadId),
-    getMastraBranches: (threadId) => getMastraBranches(threadId),
   };
 }

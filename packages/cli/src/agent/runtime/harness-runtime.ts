@@ -33,22 +33,7 @@ import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import {
-  loadThreadTree,
-  branchThread as branchThreadStore,
-  forkThread as forkThreadStore,
-  invalidateTreeCache,
-  recordMessage,
-  switchBranch as switchBranchStore,
-  deleteBranchFromStore,
-  getBranchesFromStore,
-} from "../../chat/session-tree-store.js";
-import { getActivePathIds } from "../../chat/session-tree.js";
-import type { TreeNode, BranchMeta } from "../../chat/session-tree.js";
-import {
-  ActiveBranchProcessor,
-  activeBranchPaths,
-} from "../../chat/active-branch-processor.js";
+
 
 export type {
   MastraMcpConfigPaths,
@@ -152,6 +137,7 @@ interface HarnessSingleton {
   baseUrl: string;
   apiKey: string | undefined;
   mcpServerIds: Set<string>;
+  modeDefaults?: { build?: string; plan?: string; fast?: string };
 }
 
 const dynamicImport = new Function(
@@ -275,38 +261,6 @@ export async function runWithMastraHarness(
     );
   } finally {
     setCurrentEffort(null);
-  }
-
-  // Record new messages in the session tree for branching support.
-  // This ensures tree metadata is updated after each turn so that
-  // branch points are correctly tracked.
-  const activeThreadId = singleton?.harness.getCurrentThreadId?.();
-  if (activeThreadId) {
-    try {
-      const cwd = await getWorkspaceRoot();
-      const tree = await loadThreadTree(singleton!.harness, activeThreadId, cwd);
-      const msgs = await singleton!.harness.listMessagesForThread({
-        threadId: activeThreadId,
-      });
-      for (const msg of msgs) {
-        if (tree.entries.has(msg.id)) continue;
-        const entryType =
-          msg.role === "assistant"
-            ? "assistant"
-            : msg.role === "system"
-              ? "system"
-              : "user";
-        await recordMessage(
-          activeThreadId,
-          msg.id,
-          entryType,
-          undefined,
-          cwd,
-        );
-      }
-    } catch {
-      // non-fatal — tree tracking is best-effort
-    }
   }
 
   if (!result.text.trim() && !input.signal?.aborted) {
@@ -552,26 +506,6 @@ async function createFreshHarness(
           },
         });
 
-        // Soft-branch: inject ActiveBranchProcessor after built-in memory
-        // processors (WorkingMemory → MessageHistory → SemanticRecall).
-        // This filters LLM context to only active-path messages.
-        const originalGetInputProcessors =
-          cachedMemoryInstance.getInputProcessors.bind(cachedMemoryInstance);
-        cachedMemoryInstance.getInputProcessors = async (
-          configuredProcessors?: any[],
-          context?: any,
-        ) => {
-          const processors = await originalGetInputProcessors(
-            configuredProcessors,
-            context,
-          );
-          // Append our processor last — runs after MessageHistory loaded messages
-          if (!processors.some((p: any) => p.id === "active-branch-filter")) {
-            processors.push(new ActiveBranchProcessor());
-          }
-          return processors;
-        };
-
         return cachedMemoryInstance;
       },
       initialState: {
@@ -610,6 +544,7 @@ async function createFreshHarness(
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
     mcpServerIds,
+    modeDefaults: opts.modeDefaults,
   };
 
   process.once("exit", () => {
@@ -740,29 +675,7 @@ export async function listMastraThreadMessages(
 ): Promise<import("./events.js").HarnessMessage[]> {
   if (!singleton) return [];
   try {
-    // Resolve active branch path first so we know whether to skip the limit
-    let activeIds = activeBranchPaths.get(threadId);
-    if (!activeIds) {
-      try {
-        const { readWorkspacePath } = await import("@codemap/core/lib/workspace-project.js");
-        const root = await readWorkspacePath();
-        const { loadActivePathFromDisk } = await import("../../chat/active-branch-processor.js");
-        activeIds = (await loadActivePathFromDisk(root, threadId)) ?? undefined;
-        if (activeIds) activeBranchPaths.set(threadId, activeIds);
-      } catch {
-        // non-fatal
-      }
-    }
-
-    // When branch filtering is active, fetch ALL messages (ignore limit)
-    // so that old messages on the active branch path are not truncated.
-    const effectiveLimit = activeIds && activeIds.size > 0 ? undefined : limit;
-    const allMessages = await singleton.harness.listMessagesForThread({ threadId, limit: effectiveLimit });
-
-    if (activeIds && activeIds.size > 0) {
-      return allMessages.filter((m) => activeIds!.has(m.id));
-    }
-    return allMessages;
+    return await singleton.harness.listMessagesForThread({ threadId, limit });
   } catch {
     return [];
   }
@@ -829,158 +742,3 @@ export function getMastraOMStatus(): {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Session Tree operations (branching)
-// ---------------------------------------------------------------------------
-
-async function getWorkspaceRoot(): Promise<string> {
-  const { readWorkspacePath } = await import("@codemap/core/lib/workspace-project.js");
-  return readWorkspacePath();
-}
-
-/**
- * Branch the active conversation to a different entry in the current thread.
- * Next message will be appended as a child of `entryId`.
- */
-export async function branchMastraThread(entryId: string, turnEntryId?: string, customName?: string): Promise<string> {
-  if (!singleton) throw new Error("No active harness");
-  const threadId = singleton.harness.getCurrentThreadId?.();
-  if (!threadId) throw new Error("No active thread to branch");
-  const cwd = await getWorkspaceRoot();
-  const branchName = await branchThreadStore(singleton.harness, threadId, entryId, cwd, turnEntryId, customName);
-  // Soft-branch: keep all messages in storage, update active path cache
-  // so the LLM processor filters to only active-path messages.
-  try {
-    const tree = await loadThreadTree(singleton.harness, threadId, cwd);
-    const activeIds = getActivePathIds(tree);
-    if (activeIds.size > 0) {
-      activeBranchPaths.set(threadId, activeIds);
-    }
-  } catch {
-    // non-fatal: processor will fall back to reading from disk
-  }
-  // Invalidate cache so the tree picker re-fetches the updated tree
-  invalidateTreeCache(threadId);
-  return branchName;
-}
-
-/**
- * Fork: create a new thread from a branch point of the current thread.
- * Returns the new thread ID and switches to it.
- */
-export async function forkMastraThread(
-  fromEntryId?: string,
-  title?: string,
-): Promise<string> {
-  if (!singleton) throw new Error("No active harness");
-  const threadId = singleton.harness.getCurrentThreadId?.();
-  if (!threadId) throw new Error("No active thread to fork from");
-  const cwd = await getWorkspaceRoot();
-  const newThreadId = await forkThreadStore(
-    singleton.harness,
-    threadId,
-    fromEntryId,
-    title,
-    cwd,
-  );
-  // Switch to the new thread
-  await singleton.harness.switchThread({ threadId: newThreadId });
-  pendingNewThread = false;
-  return newThreadId;
-}
-
-/**
- * Get the session tree for the current thread (for UI rendering).
- */
-export async function getMastraThreadTree(
-  threadId?: string,
-): Promise<TreeNode[] | null> {
-  if (!singleton) return null;
-  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
-  if (!tid) return null;
-  try {
-    const cwd = await getWorkspaceRoot();
-    const tree = await loadThreadTree(singleton.harness, tid, cwd);
-    const { buildTree } = await import("../../chat/session-tree.js");
-    return buildTree(tree);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Get the current active leaf entry ID for a thread.
- */
-export async function getMastraActiveLeafId(
-  threadId?: string,
-): Promise<string | null> {
-  if (!singleton) return null;
-  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
-  if (!tid) return null;
-  try {
-    const cwd = await getWorkspaceRoot();
-    const tree = await loadThreadTree(singleton.harness, tid, cwd);
-    return tree.leafId;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Switch to a named branch in the current thread.
- * Updates active path cache and returns the branch leafId.
- */
-export async function switchMastraBranch(
-  branchName: string,
-  threadId?: string,
-): Promise<string | null> {
-  if (!singleton) return null;
-  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
-  if (!tid) return null;
-  const cwd = await getWorkspaceRoot();
-  const leafId = await switchBranchStore(singleton.harness, tid, branchName, cwd);
-  if (!leafId) return null;
-  // Update active path cache
-  try {
-    const tree = await loadThreadTree(singleton.harness, tid, cwd);
-    const activeIds = getActivePathIds(tree);
-    // Main branch = whole thread; clear cache so no filtering occurs.
-    // Non-main branches: cache active path for LLM context filtering.
-    if (branchName === "main" || activeIds.size === 0) {
-      activeBranchPaths.delete(tid);
-    } else {
-      activeBranchPaths.set(tid, activeIds);
-    }
-  } catch {
-    // non-fatal
-  }
-  invalidateTreeCache(tid);
-  return leafId;
-}
-
-/**
- * Delete a named branch from the current thread.
- */
-export async function deleteMastraBranch(
-  branchName: string,
-  threadId?: string,
-): Promise<boolean> {
-  if (!singleton) return false;
-  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
-  if (!tid) return false;
-  const cwd = await getWorkspaceRoot();
-  return deleteBranchFromStore(singleton.harness, tid, branchName, cwd);
-}
-
-/**
- * Get all branches for the current thread.
- */
-export async function getMastraBranches(
-  threadId?: string,
-): Promise<BranchMeta[]> {
-  if (!singleton) return [];
-  const tid = threadId ?? singleton.harness.getCurrentThreadId?.();
-  if (!tid) return [];
-  const cwd = await getWorkspaceRoot();
-  return getBranchesFromStore(singleton.harness, tid, cwd);
-}
