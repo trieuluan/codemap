@@ -24,6 +24,7 @@ export interface SingleAgentRuntimeInput {
   userMessage: ChatMessage;
   toolClient: CodeMapMcpToolClient;
   onToken?: (text: string) => void;
+  onThinking?: (text: string) => void;
   /** Called when an intermediate agent message completes (before more tool calls follow). */
   onStreamReset?: () => void;
   onModel?: (model: string) => void;

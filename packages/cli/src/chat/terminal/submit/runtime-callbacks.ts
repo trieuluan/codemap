@@ -33,6 +33,7 @@ export interface SubmitRuntimeCallbacks {
     onStreamReset(): void;
     onMessageStart(createdAt: number): void;
     onToken(token: string): void;
+    onThinking(text: string): void;
     onModel(model: string): void;
     onUsage(usage: TokenUsage): void;
     onToolStart(
@@ -94,6 +95,10 @@ export function createSubmitRuntimeCallbacks({
       if (!ctx.isActiveTask(taskId, taskAbort)) return;
       const s = store.getState();
       if (!s.task || s.task.phase === "idle") return;
+      // Thinking ended, text started — update phase
+      if (s.task.phase === "thinking") {
+        store.dispatch({ task: { ...s.task, phase: "streaming" } });
+      }
       streamingContent += token;
       if (!hasStreamingEntry) {
         hasStreamingEntry = true;
@@ -123,6 +128,13 @@ export function createSubmitRuntimeCallbacks({
         },
       });
       bus.scheduleRefresh();
+    },
+    onThinking: (_text: string) => {
+      if (!ctx.isActiveTask(taskId, taskAbort)) return;
+      const s = store.getState();
+      if (s.task && s.task.phase !== "thinking") {
+        store.dispatch({ task: { ...s.task, phase: "thinking" } });
+      }
     },
     onModel: (model: string) => {
       if (!ctx.isActiveTask(taskId, taskAbort)) return;

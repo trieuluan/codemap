@@ -21,6 +21,7 @@ function callbacks(onToken: (token: string) => void): BridgeCallbacks {
     onToken,
     harness: {} as HarnessLike,
     currentStreamTextRef: ref(""),
+    currentThinkingRef: ref(""),
     finalTextRef: ref(""),
     usedToolsRef: ref(false),
     onEnd: () => {},
@@ -196,4 +197,132 @@ test("routes plan_approval_required to onPlanApproval callback", () => {
 
   assert.equal(receivedPlanId, "plan_123");
   assert.equal(receivedPlan, "## Plan\n1. Do thing\n2. Do other thing");
+});
+
+// ── Thinking content tests ──────────────────────────────────────
+
+test("emits thinking content via onThinking callback", () => {
+  const thinkingChunks: string[] = [];
+  const cb = callbacks(() => {});
+  cb.onThinking = (t) => thinkingChunks.push(t);
+
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Let me analyze this..." }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.deepEqual(thinkingChunks, ["Let me analyze this..."]);
+});
+
+test("emits only delta for accumulated thinking", () => {
+  const thinkingChunks: string[] = [];
+  const cb = callbacks(() => {});
+  cb.onThinking = (t) => thinkingChunks.push(t);
+
+  // First chunk
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Step 1: " }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  // Second chunk — accumulated
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Step 1: analyzing code..." }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.deepEqual(thinkingChunks, ["Step 1: ", "analyzing code..."]);
+});
+
+test("text and thinking coexist independently", () => {
+  const tokens: string[] = [];
+  const thinkingChunks: string[] = [];
+  const cb = callbacks((t) => tokens.push(t));
+  cb.onThinking = (t) => thinkingChunks.push(t);
+
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Internal reasoning..." },
+          { type: "text", text: "Here is my answer." },
+        ],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.deepEqual(thinkingChunks, ["Internal reasoning..."]);
+  assert.deepEqual(tokens, ["Here is my answer."]);
+});
+
+test("message_end flushes remaining thinking", () => {
+  const thinkingChunks: string[] = [];
+  const cb = callbacks(() => {});
+  cb.onThinking = (t) => thinkingChunks.push(t);
+
+  // Simulate partial thinking via message_update
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "partial..." }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  // message_end with final thinking
+  bridgeCommonEvent(
+    {
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "partial... and final thought." }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.deepEqual(thinkingChunks, ["partial...", " and final thought."]);
+});
+
+test("ignores thinking in non-assistant messages", () => {
+  const thinkingChunks: string[] = [];
+  const cb = callbacks(() => {});
+  cb.onThinking = (t) => thinkingChunks.push(t);
+
+  bridgeCommonEvent(
+    {
+      type: "message_update",
+      message: {
+        role: "user",
+        content: [{ type: "thinking", thinking: "user has no thinking" }],
+      },
+    } as Parameters<typeof bridgeCommonEvent>[0],
+    cb,
+  );
+
+  assert.deepEqual(thinkingChunks, []);
 });

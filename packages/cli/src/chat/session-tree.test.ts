@@ -17,6 +17,7 @@ import {
   buildBranchSummary,
   serializeTreeMeta,
   deserializeTree,
+  createBranch,
   type TreeEntry,
 } from "./session-tree.js";
 
@@ -487,4 +488,70 @@ test("serialize and deserialize round-trips tree state", () => {
   assert.equal(path.length, 2);
   assert.equal(path[0].id, e1.id);
   assert.equal(path[1].id, e3.id);
+});
+
+// ---------------------------------------------------------------------------
+// BranchMeta.messageIds
+// ---------------------------------------------------------------------------
+
+test("createBranch computes messageIds from root to leaf", () => {
+  resetIdCounter();
+  const tree = createTree();
+  const a1 = mkEntry({ parentId: null, type: "user" });
+  const a2 = mkEntry({ parentId: a1.id, type: "assistant" });
+  const b1 = mkEntry({ parentId: a1.id, type: "user" });
+  appendEntry(tree, a1);
+  appendEntry(tree, a2);
+  appendEntry(tree, b1);
+
+  const branch = createBranch(tree, "test", b1.id);
+  assert.deepEqual(branch.messageIds, [a1.id, b1.id]);
+});
+
+test("recordMessage appends messageId to active branch messageIds", () => {
+  resetIdCounter();
+  const tree = createTree();
+  const a1 = mkEntry({ parentId: null, type: "user" });
+  const a2 = mkEntry({ parentId: a1.id, type: "assistant" });
+  appendEntry(tree, a1);
+  appendEntry(tree, a2);
+
+  // Create main branch
+  const main = createBranch(tree, "main", a2.id);
+  tree.activeBranch = "main";
+  assert.deepEqual(main.messageIds, [a1.id, a2.id]);
+
+  // Simulate recordMessage: append new entry and update branch
+  const a3 = mkEntry({ parentId: tree.leafId, type: "user" });
+  appendEntry(tree, a3);
+  main.leafId = a3.id;
+  main.messageIds.push(a3.id);
+
+  assert.deepEqual(main.messageIds, [a1.id, a2.id, a3.id]);
+  assert.equal(main.leafId, a3.id);
+});
+
+test("serialize/deserialize preserves branch messageIds", () => {
+  resetIdCounter();
+  const tree = createTree();
+  const a1 = mkEntry({ parentId: null, type: "user" });
+  const a2 = mkEntry({ parentId: a1.id, type: "assistant" });
+  const b1 = mkEntry({ parentId: a1.id, type: "user" });
+  appendEntry(tree, a1);
+  appendEntry(tree, a2);
+  appendEntry(tree, b1);
+
+  createBranch(tree, "main", a2.id);
+  createBranch(tree, "branch-1", b1.id);
+  tree.activeBranch = "branch-1";
+  tree.leafId = b1.id;
+
+  const meta = serializeTreeMeta(tree);
+  const entries = [a1, a2, b1];
+  const restored = deserializeTree(meta, entries);
+
+  const mainR = restored.branches.find((b) => b.name === "main")!;
+  const br1R = restored.branches.find((b) => b.name === "branch-1")!;
+  assert.deepEqual(mainR.messageIds, [a1.id, a2.id]);
+  assert.deepEqual(br1R.messageIds, [a1.id, b1.id]);
 });

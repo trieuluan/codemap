@@ -77,8 +77,17 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
   for (const msg of messages) {
     const ts = toTimestamp(msg.createdAt as Date | string);
     if (msg.role === "user") {
-      const raw = extractText(msg.content);
-      result.push({ role: "user", content: extractTaskContent(raw), timestamp: ts });
+      // Check for persisted thinking system-reminder messages
+      const thinkingPart = msg.content.find(
+        (p) => p.type === "system_reminder" && (p as { metadata?: { thinking?: boolean } }).metadata?.thinking,
+      );
+      if (thinkingPart) {
+        const p = thinkingPart as { type: "system_reminder"; message: string };
+        result.push({ role: "system", content: p.message || extractText(msg.content), timestamp: ts });
+      } else {
+        const raw = extractText(msg.content);
+        result.push({ role: "user", content: extractTaskContent(raw), timestamp: ts });
+      }
     } else if (msg.role === "assistant") {
       let textParts = "";
       for (const part of msg.content) {

@@ -26,6 +26,7 @@ interface Ref<T> {
 
 export interface BridgeCallbacks {
   onToken?: (t: string) => void;
+  onThinking?: (t: string) => void;
   onStreamReset?: () => void;
   onToolStart?: (
     name: string,
@@ -51,6 +52,7 @@ export interface BridgeCallbacks {
   ) => void;
   harness: HarnessLike;
   currentStreamTextRef: Ref<string>;
+  currentThinkingRef: Ref<string>;
   finalTextRef: Ref<string>;
   usedToolsRef: Ref<boolean>;
   onMessageStart?: (createdAt: number) => void;
@@ -156,6 +158,19 @@ export function bridgeCommonEvent(
       if (delta) cb.onToken?.(delta);
     }
 
+    // Extract thinking content
+    const lastThinking = extractLastThinking(message.content);
+    const prevThinking = cb.currentThinkingRef.get();
+    if (lastThinking.length < prevThinking.length) {
+      cb.currentThinkingRef.set("");
+    }
+    const trackedThinking = cb.currentThinkingRef.get();
+    if (lastThinking.length > trackedThinking.length) {
+      const delta = lastThinking.slice(trackedThinking.length);
+      cb.currentThinkingRef.set(lastThinking);
+      if (delta) cb.onThinking?.(delta);
+    }
+
     return;
   }
 
@@ -166,6 +181,14 @@ export function bridgeCommonEvent(
     cb.finalTextRef.set(lastText);
     cb.currentStreamTextRef.set("");
     cb.onStreamReset?.();
+
+    // Flush any remaining thinking
+    const lastThinking = extractLastThinking(message.content);
+    const trackedThinking = cb.currentThinkingRef.get();
+    if (lastThinking.length > trackedThinking.length) {
+      cb.onThinking?.(lastThinking.slice(trackedThinking.length));
+    }
+    cb.currentThinkingRef.set("");
     return;
   }
 
@@ -302,6 +325,19 @@ function extractLastText(
   return "";
 }
 
+function extractLastThinking(
+  content: HarnessMessageContent[] | string | undefined,
+): string {
+  if (!content) return "";
+  if (typeof content === "string") return "";
+  for (let i = content.length - 1; i >= 0; i--) {
+    if (content[i].type === "thinking") {
+      return (content[i] as { type: "thinking"; thinking: string }).thinking;
+    }
+  }
+  return "";
+}
+
 function normalizeToolArgs(args: unknown): Record<string, unknown> {
   if (args && typeof args === "object" && !Array.isArray(args)) {
     return args as Record<string, unknown>;
@@ -312,7 +348,19 @@ function normalizeToolArgs(args: unknown): Record<string, unknown> {
 function formatToolResult(result: unknown): string {
   const text = extractToolResultText(result);
   if (text.trim()) return text;
-  return safeJsonStringify(result).trim();
+
+  const str = safeJsonStringify(result).trim();
+
+  // Strip AbortError/MCP error details from tool result
+  if (
+    str.includes("AbortError") ||
+    str.includes("MCP error") ||
+    str.includes("This operation was aborted")
+  ) {
+    return "Tool aborted.";
+  }
+
+  return str;
 }
 
 function extractToolResultText(

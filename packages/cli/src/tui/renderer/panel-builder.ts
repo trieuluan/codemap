@@ -31,6 +31,14 @@ function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   return !(local.startsWith(cloud) || cloud.startsWith(local));
 }
 
+function stripThinkTags(text: string): string {
+  return text
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think\b[^>]*\/?>/gi, "")
+    .replace(/<\/think>/gi, "")
+    .trim();
+}
+
 function formatAge(ts: number): string {
   const sec = Math.floor((Date.now() - ts) / 1000);
   if (sec < 60) return `${sec}s ago`;
@@ -552,7 +560,7 @@ export function buildPanel(
       }
 
       // Content
-      const content = (item.content || item.entryId.slice(0, 8));
+      const content = stripThinkTags(item.content || item.entryId.slice(0, 8));
 
       // Selection prefix
       const prefix = isSel ? `${C_ACTION}>${RESET}` : " ";

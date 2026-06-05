@@ -35,7 +35,10 @@ import {
 
 export interface SessionTreeMeta {
   leafId: string | null;
+  threadLeafId?: string | null;
   parentMap: Record<string, string | null>;
+  branches?: import("./session-tree.js").BranchMeta[];
+  activeBranch?: string | null;
 }
 
 interface TreeCacheEntry {
@@ -78,10 +81,13 @@ async function loadTreeMeta(
     const parsed = JSON.parse(raw) as SessionTreeMeta;
     return {
       leafId: parsed.leafId ?? null,
+      threadLeafId: parsed.threadLeafId ?? null,
       parentMap: parsed.parentMap ?? {},
+      branches: parsed.branches ?? [],
+      activeBranch: parsed.activeBranch ?? null,
     };
   } catch {
-    return { leafId: null, parentMap: {} };
+    return { leafId: null, parentMap: {}, branches: [], activeBranch: null };
   }
 }
 
@@ -102,6 +108,19 @@ async function saveTreeMeta(
 // Message → TreeEntry conversion
 // ---------------------------------------------------------------------------
 
+function stripThinkTags(text: string): string {
+  return text
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think\b[^>]*\/?>/gi, "")
+    .replace(/<\/think>/gi, "")
+    .trim();
+}
+
+export function extractTaskContent(raw: string): string {
+  const match = raw.match(/<task>\n([\s\S]*?)\n<\/task>/);
+  return match?.[1]?.trim() ?? raw.trim();
+}
+
 function messageToEntry(
   msg: HarnessMessage,
   parentId: string | null,
@@ -114,12 +133,15 @@ function messageToEntry(
   const textParts = msg.content.filter(
     (c: HarnessMessage["content"][number]) => c.type === "text",
   );
-  const content =
+  const rawContent =
     textParts.length > 0
       ? textParts
           .map((c: HarnessMessage["content"][number]) => (c as { type: "text"; text: string }).text)
           .join("\n")
       : undefined;
+  const content = rawContent
+    ? stripThinkTags(extractTaskContent(rawContent)) || undefined
+    : undefined;
 
   return {
     id: msg.id,
@@ -149,10 +171,18 @@ export async function loadThreadTree(
   if (cached) return cached.tree;
 
   // Load metadata and messages
-  const [meta, messages] = await Promise.all([
+  const [meta, rawMessages] = await Promise.all([
     loadTreeMeta(cwd, threadId),
     harness.listMessagesForThread({ threadId }),
   ]);
+
+  // Filter orphan trailing user message: if the last message is a user message
+  // with no assistant response after it, it was likely from a Ctrl+C cancel.
+  // Remove it to prevent duplicate/stale messages on session restore.
+  const messages = [...rawMessages];
+  if (messages.length >= 1 && messages[messages.length - 1]?.role === "user") {
+    messages.pop();
+  }
 
   // If no stored parentMap, create one from linear message order
   const parentMap = meta.parentMap;
@@ -183,6 +213,9 @@ export async function loadThreadTree(
   // Active path is only computed once a real mutation (fork/branch/recordMessage)
   // has set a leafId — until then the picker shows all messages with no active
   // highlight, which is the correct UX before any branch has occurred.
+
+  // Main branch is symbolic (whole thread) — synthesized on-the-fly in getBranches(), not persisted.
+  // activeBranch defaults to "main" when no specific branch is selected.
 
   treeCache.set(threadId, { tree, loadedAt: Date.now() });
   return tree;
@@ -221,16 +254,102 @@ export function clearTreeCache(): void {
 /**
  * Branch the active conversation to a different point in the tree.
  * Next message appended will be a child of `entryId`.
+ * Auto-creates a new named branch.
+ * Returns the new branch name.
  */
 export async function branchThread(
   harness: HarnessLike,
   threadId: string,
   entryId: string,
   cwd: string,
-): Promise<void> {
+  turnEntryId?: string,
+  customName?: string,
+): Promise<string> {
+  const { createBranch, nextBranchName } = await import("./session-tree.js");
   const tree = await loadThreadTree(harness, threadId, cwd);
+
+  // entryId is the parent (branchTarget) — set as tree leaf for appending
   branch(tree, entryId);
+
+  // Compute full turn from turnEntryId (user message) if provided.
+  // This includes assistant responses, tool calls, and tool results
+  // so the branch has the complete conversation turn.
+  let branchLeafId = entryId;
+  if (turnEntryId && tree.entries.has(turnEntryId)) {
+    const turnIds: string[] = [];
+    const queue: string[] = [turnEntryId];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      turnIds.push(cur);
+      const children = Array.from(tree.entries.values())
+        .filter((e) => e.parentId === cur)
+        .sort((a, b) => a.timestamp - b.timestamp);
+      for (const child of children) {
+        if (child.type === "user") continue; // stop at next user turn
+        queue.push(child.id);
+      }
+    }
+    // Branch leaf = last entry of the turn (new messages append after turn)
+    if (turnIds.length > 0) {
+      branchLeafId = turnIds[turnIds.length - 1];
+    }
+  }
+
+  // Auto-create branch with leaf at turn end (includes full turn in messageIds)
+  const branchName = customName?.trim() || nextBranchName(tree);
+  createBranch(tree, branchName, branchLeafId);
+  tree.activeBranch = branchName;
+
   await persistTreeMeta(cwd, threadId, tree);
+  return branchName;
+}
+
+/**
+ * Switch to a named branch. Moves leafId to the branch's leafId.
+ * Returns the branch leafId if switched, null if branch not found.
+ */
+export async function switchBranch(
+  harness: HarnessLike,
+  threadId: string,
+  branchName: string,
+  cwd: string,
+): Promise<string | null> {
+  const { setActiveBranch } = await import("./session-tree.js");
+  const tree = await loadThreadTree(harness, threadId, cwd);
+  if (!setActiveBranch(tree, branchName)) return null;
+  await persistTreeMeta(cwd, threadId, tree);
+  return tree.leafId;
+}
+
+/**
+ * Delete a named branch. Cannot delete "main".
+ * If deleting the active branch, switches to "main" first.
+ * Returns true if deleted.
+ */
+export async function deleteBranchFromStore(
+  harness: HarnessLike,
+  threadId: string,
+  branchName: string,
+  cwd: string,
+): Promise<boolean> {
+  const { deleteBranch: deleteBranchCore } = await import("./session-tree.js");
+  const tree = await loadThreadTree(harness, threadId, cwd);
+  if (!deleteBranchCore(tree, branchName)) return false;
+  await persistTreeMeta(cwd, threadId, tree);
+  return true;
+}
+
+/**
+ * Get all branches for a thread.
+ */
+export async function getBranchesFromStore(
+  harness: HarnessLike,
+  threadId: string,
+  cwd: string,
+): Promise<import("./session-tree.js").BranchMeta[]> {
+  const { getBranches } = await import("./session-tree.js");
+  const tree = await loadThreadTree(harness, threadId, cwd);
+  return getBranches(tree);
 }
 
 /**
@@ -256,17 +375,24 @@ export async function forkThread(
   // Extract the path from root → fork point
   const pathEntries = extractPath(tree, forkPointId);
 
-  // If the fork point is a user message, also include the next assistant
-  // response (if any) so the fork preserves the full turn — tools, thinking,
-  // and all assistant content that was generated for that user message.
+  // If the fork point is a user message, include the ENTIRE turn:
+  // all descendants until the next user message (or end of tree).
+  // This captures assistant responses, tool calls, tool results, thinking, etc.
   const lastEntry = pathEntries[pathEntries.length - 1];
   if (lastEntry && lastEntry.type === "user") {
-    const nextEntries = Array.from(tree.entries.values())
-      .filter((e) => e.parentId === lastEntry.id)
-      .sort((a, b) => a.timestamp - b.timestamp);
-    for (const next of nextEntries) {
-      if (!pathEntries.some((p) => p.id === next.id)) {
-        pathEntries.push(next);
+    // BFS from user message, stop at next user message boundary
+    const queue: string[] = [lastEntry.id];
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      const children = Array.from(tree.entries.values())
+        .filter((e) => e.parentId === currentId)
+        .sort((a, b) => a.timestamp - b.timestamp);
+      for (const child of children) {
+        if (child.type === "user") continue; // stop at next user turn
+        if (!pathEntries.some((p) => p.id === child.id)) {
+          pathEntries.push(child);
+          queue.push(child.id);
+        }
       }
     }
   }
@@ -320,6 +446,9 @@ export async function forkThread(
     appendEntry(newTree, newEntry);
   }
 
+  // Main is symbolic — not persisted, synthesized on-the-fly in getBranches()
+  newTree.activeBranch = "main";
+
   // Persist new tree
   await persistTreeMeta(cwd, newThreadId, newTree);
 
@@ -357,7 +486,39 @@ export async function recordMessage(
     harnessMessageId: messageId,
   };
   appendEntry(tree, entry);
+
+  // Update active branch's leafId and messageIds (skip for main — it's the whole thread)
+  if (tree.activeBranch && tree.activeBranch !== "main") {
+    const activeBranch = tree.branches.find((b) => b.name === tree.activeBranch);
+    if (activeBranch) {
+      activeBranch.leafId = messageId;
+      activeBranch.messageIds.push(messageId);
+      activeBranch.updatedAt = Date.now();
+    }
+  }
+  // Update threadLeafId only when on main thread (messages go to main path)
+  if (!tree.activeBranch || tree.activeBranch === "main") {
+    tree.threadLeafId = messageId;
+  }
+
   await persistTreeMeta(cwd, threadId, tree);
+
+  // Update in-memory active path cache so ActiveBranchProcessor
+  // sees the new message on the next LLM call.
+  // Skip for main branch (whole thread, no filtering needed).
+  try {
+    const { activeBranchPaths } = await import("./active-branch-processor.js");
+    if (tree.activeBranch === "main") {
+      activeBranchPaths.delete(threadId);
+    } else {
+      const activeIds = getActivePathIds(tree);
+      if (activeIds.size > 0) {
+        activeBranchPaths.set(threadId, activeIds);
+      }
+    }
+  } catch {
+    // non-fatal
+  }
 }
 
 /**

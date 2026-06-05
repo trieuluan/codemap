@@ -197,6 +197,13 @@ export interface UIState {
     activeLeafId: string | null;
   } | null;
 
+  // Pending branch name input: waiting for user to type a branch name after selecting in /tree
+  pendingBranchName: {
+    branchTarget: string;       // parentId of selected user message (new leaf position)
+    turnEntryId: string;        // selected user message entry ID
+    turnContent: string | null; // full user message text for editor restore
+  } | null;
+
   // Debug
   debug: boolean;
   debugLogFile: string | null;
@@ -265,6 +272,7 @@ export function createInitialState(opts: {
     planReview: { active: false, selection: 0, reviseMode: false },
     askQuestion: null,
     treePicker: null,
+    pendingBranchName: null,
     debug: opts.debug ?? false,
     debugLogFile: null,
     previewDiffExpanded: false,
@@ -322,7 +330,10 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   for (const key of Object.keys(source) as Array<keyof T>) {
     const srcVal = (source as any)[key];
     const tgtVal = (target as any)[key];
-    if (
+    if (srcVal instanceof Set || srcVal instanceof Map) {
+      // Sets and Maps are opaque — replace entirely rather than merging
+      result[key] = srcVal;
+    } else if (
       srcVal !== null &&
       typeof srcVal === "object" &&
       !Array.isArray(srcVal) &&

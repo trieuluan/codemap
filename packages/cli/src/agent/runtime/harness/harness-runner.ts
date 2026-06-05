@@ -14,6 +14,7 @@ type RunHarnessCallbacks = Omit<
   BridgeCallbacks,
   | "harness"
   | "currentStreamTextRef"
+  | "currentThinkingRef"
   | "finalTextRef"
   | "usedToolsRef"
   | "onPlanApproval"
@@ -36,6 +37,7 @@ export function runHarness(
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
     let currentStreamText = "";
+    let currentThinking = "";
     let usedTools = false;
     let settled = false;
     let lastHarnessError: Error | null = null;
@@ -175,6 +177,12 @@ export function runHarness(
           get: () => currentStreamText,
           set: (v) => {
             currentStreamText = v;
+          },
+        },
+        currentThinkingRef: {
+          get: () => currentThinking,
+          set: (v) => {
+            currentThinking = v;
           },
         },
         finalTextRef: {
