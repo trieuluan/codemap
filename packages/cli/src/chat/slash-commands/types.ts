@@ -1,4 +1,4 @@
-import type { ChatEntry } from "../terminal/chat-terminal.js";
+import type { Message as ChatEntry } from "../state/store.js";
 import type { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
 import type { NineRouterProvider } from "../../agent/core/provider.js";
 
