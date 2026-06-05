@@ -281,7 +281,7 @@ export function buildPanel(
   }
 
   // ask_user prompt — AI is waiting for an inline answer.
-  if (state.askQuestion?.active) {
+  if (state.askQuestion != null) {
     const { question, options, selection, selectionMode, selected = [] } = state.askQuestion;
     const isMultiSelect = selectionMode === "multi_select";
     const questionLines = question.split("\n");
@@ -340,6 +340,59 @@ export function buildPanel(
         ),
       );
     }
+
+    // Bottom separator
+    out.push(fitLine(`  ${sep}`, w));
+  } else if (state.toolApproval != null) {
+    const ta = state.toolApproval;
+    const sel = ta.selection ?? 0;
+    const TOOL_OPTIONS = [
+      { label: "Approve", desc: "Allow this tool call once" },
+      { label: "Decline", desc: "Block this tool call" },
+      { label: "Always Allow", desc: "Allow this tool category for the session" },
+    ];
+
+    // Top separator
+    out.push(fitLine(`  ${sep}`, w));
+
+    // Tool name header
+    out.push(fitLine(`    ${C_ACTION}⚠${RESET} ${C_WHITE}${BOLD}Tool approval required${RESET}`, w));
+    out.push(fitLine(`    ${C_AI}${ta.toolName}${RESET}`, w));
+
+    // Args preview (truncate to 6 lines max)
+    if (ta.args) {
+      const argsStr = typeof ta.args === "string" ? ta.args : JSON.stringify(ta.args, null, 2);
+      const argLines = argsStr.split("\n").slice(0, 6);
+      if (argsStr.split("\n").length > 6) argLines.push("  ...");
+      out.push(fitLine(`    ${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+      const contentW = Math.max(w - 8, 20);
+      for (const line of argLines) {
+        const truncated = truncateVisible(line, contentW);
+        out.push(fitLine(`    ${C_GRAY}${truncated}${RESET}`, w));
+      }
+    }
+
+    // Sub-separator
+    out.push(fitLine(`    ${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
+
+    for (const [idx, opt] of TOOL_OPTIONS.entries()) {
+      const focused = idx === sel;
+      const num = `${C_MUTED}${idx + 1}.${RESET}`;
+      const prefix = focused ? `${C_ACTION}>${RESET}` : " ";
+      const label = focused
+        ? `${C_WHITE}${BOLD}${opt.label}${RESET}`
+        : `${C_WHITE}${opt.label}${RESET}`;
+      out.push(fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w));
+    }
+
+    // Help text
+    out.push(fitLine(``, w));
+    out.push(
+      fitLine(
+        `    ${C_ACTION}↑↓${RESET} ${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}decline${RESET}`,
+        w,
+      ),
+    );
 
     // Bottom separator
     out.push(fitLine(`  ${sep}`, w));

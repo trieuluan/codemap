@@ -6,6 +6,7 @@ import type {
   AskQuestionOption,
   HarnessQuestionAnswer,
 } from "../../../agent/runtime/events.js";
+import type { HarnessDisplayState } from "@mastra/core/harness";
 import {
   withToolCallSummary,
   markToolDone,
@@ -255,6 +256,21 @@ export function createSubmitRuntimeCallbacks({
           })
           .catch(() => {
             respond("(skipped)");
+          });
+      });
+    },
+    onToolApproval: (
+      pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>,
+      respond: (decision: "approve" | "decline" | "always_allow_category") => void,
+    ) => {
+      if (!ctx.isActiveTask(taskId, taskAbort)) return;
+      void import("../ui/plan-review.js").then(({ waitForToolApproval }) => {
+        waitForToolApproval(ctx, pendingApproval)
+          .then((decision) => {
+            respond(decision);
+          })
+          .catch(() => {
+            respond("decline");
           });
       });
     },

@@ -1,7 +1,7 @@
 import type { AgentLoopResult } from "../core/agent-loop.js";
 import type { GatewayProviderId } from "../types.js";
 import type { SingleAgentRuntimeInput } from "./types.js";
-import type { MastraHarness } from "./events.js";
+import type { MastraHarness, HarnessMessage, HarnessThread } from "./events.js";
 import {
   clearDrainTracking,
   drainHarness,
@@ -241,6 +241,7 @@ export async function runWithMastraHarness(
     onOMObservation: input.onOMObservation,
     onOMReflection: input.onOMReflection,
     onAskQuestion: input.onAskQuestion,
+    onToolApproval: input.onToolApproval,
     mcpServerIds: singleton?.mcpServerIds,
   };
 
@@ -491,7 +492,7 @@ async function createFreshHarness(
     initialState: {
       currentModelId: harnessModelId,
       permissionRules: buildMastraPermissionRules(mcpServerIds) as any,
-      yolo: true,
+      yolo: false,
       observerModelId: harnessModelId,
       reflectorModelId: harnessModelId,
     },
@@ -631,7 +632,7 @@ export async function getMastraThreadTokenUsage(): Promise<{
 
 export async function getMastraMessages(
   limit?: number,
-): Promise<import("./events.js").HarnessMessage[]> {
+): Promise<HarnessMessage[]> {
   if (!singleton) return [];
   try {
     return await singleton.harness.listMessages({ limit });
@@ -640,9 +641,7 @@ export async function getMastraMessages(
   }
 }
 
-export async function listMastraThreads(): Promise<
-  import("./events.js").HarnessThread[]
-> {
+export async function listMastraThreads(): Promise<HarnessThread[]> {
   if (!singleton) return [];
   try {
     return await singleton.harness.listThreads();
@@ -654,7 +653,7 @@ export async function listMastraThreads(): Promise<
 export async function listMastraThreadMessages(
   threadId: string,
   limit?: number,
-): Promise<import("./events.js").HarnessMessage[]> {
+): Promise<HarnessMessage[]> {
   if (!singleton) return [];
   try {
     return await singleton.harness.listMessagesForThread({ threadId, limit });

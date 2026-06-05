@@ -2,6 +2,7 @@ import type { ChatUiMode } from "../../../agent/runtime/cli-runtime.js";
 import type { CodeMapMcpToolClient } from "../../../agent/tools/mcp/mcp-tool-client.js";
 import type { NineRouterProvider } from "../../../agent/core/provider.js";
 import type { GatewayConfig, GatewayModel } from "../../../agent/types.js";
+import type { McpServerConfig } from "@codemap/core/config.js";
 
 export interface ChatTerminalOptions {
   provider: NineRouterProvider;
@@ -10,7 +11,7 @@ export interface ChatTerminalOptions {
   toolClient: CodeMapMcpToolClient;
   availableModels?: GatewayModel[];
   apiToken?: string;
-  mcpConfig?: import("@codemap/core/config.js").McpServerConfig;
+  mcpConfig?: McpServerConfig;
   uiMode?: ChatUiMode;
 }
 

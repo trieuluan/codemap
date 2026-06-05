@@ -4,6 +4,7 @@ import type {
   AskQuestionOption,
   HarnessQuestionAnswer,
 } from "../../../agent/runtime/events.js";
+import type { HarnessDisplayState } from "@mastra/core/harness";
 
 export interface PlanReviewContext {
   bus: EventBus;
@@ -56,7 +57,6 @@ export function waitForAskQuestion(
     askQuestionResolve = resolve;
     ctx.store.dispatch({
       askQuestion: {
-        active: true,
         questionId,
         question,
         options,
@@ -89,5 +89,43 @@ export function cancelPendingPrompts(): {
   planReviewResolve = null;
   askQuestionResolve?.("(skipped)");
   askQuestionResolve = null;
+  toolApprovalResolve?.("decline");
+  toolApprovalResolve = null;
   return { canceledPrompt: null };
+}
+
+// ─── Tool Approval ───────────────────────────────────────
+
+type ToolApprovalDecision = "approve" | "decline" | "always_allow_category";
+
+let toolApprovalResolve:
+  | ((decision: ToolApprovalDecision) => void)
+  | null = null;
+
+/** Called by the harness bridge: pause and wait for user to approve/decline a tool. */
+export function waitForToolApproval(
+  ctx: PlanReviewContext,
+  pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>,
+): Promise<ToolApprovalDecision> {
+  return new Promise((resolve) => {
+    toolApprovalResolve = resolve;
+    ctx.store.dispatch({
+      toolApproval: {
+        ...pendingApproval,
+        selection: 0,
+      },
+    });
+    ctx.bus.scheduleRefresh();
+  });
+}
+
+/** Called by the UI when user makes a tool approval decision. */
+export function resolveToolApproval(
+  ctx: PlanReviewContext,
+  decision: ToolApprovalDecision,
+): void {
+  toolApprovalResolve?.(decision);
+  toolApprovalResolve = null;
+  ctx.store.dispatch({ toolApproval: null });
+  ctx.bus.scheduleRefresh();
 }

@@ -1,5 +1,5 @@
 import type { EventBus, TaskPhase, UsageStats } from "../events/event-bus.js";
-import type { TaskItemSnapshot } from "@mastra/core/harness";
+import type { TaskItemSnapshot, HarnessDisplayState } from "@mastra/core/harness";
 import type { GatewayModel } from "../../agent/types.js";
 
 /** @deprecated Use TaskItemSnapshot from @mastra/core/harness directly */
@@ -155,14 +155,14 @@ export interface UIState {
   planReview: { active: boolean; selection: number; reviseMode?: boolean };
 
   // ask_user: AI is waiting for user to answer an inline question
-  askQuestion: {
-    active: boolean;
-    questionId: string;
-    question: string;
-    options?: { label: string; description?: string }[];
+  askQuestion: HarnessDisplayState["pendingQuestion"] & {
     selection: number;
-    selectionMode?: "single_select" | "multi_select";
     selected: number[]; // indices of toggled options in multi-select
+  } | null;
+
+  // Tool approval: harness is waiting for user to approve/decline a tool call
+  toolApproval: HarnessDisplayState["pendingApproval"] & {
+    selection: number; // 0=approve, 1=decline, 2=always_allow
   } | null;
 
   // Debug
@@ -231,6 +231,7 @@ export function createInitialState(opts: {
     planMode: false,
     planReview: { active: false, selection: 0, reviseMode: false },
     askQuestion: null,
+    toolApproval: null,
     debug: opts.debug ?? false,
     debugLogFile: null,
     previewDiffExpanded: false,

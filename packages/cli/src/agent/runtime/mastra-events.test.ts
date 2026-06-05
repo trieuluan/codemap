@@ -149,7 +149,7 @@ test("emits text from MCP-style content arrays", () => {
   assert.equal(result, "file content");
 });
 
-test("auto-approves Mastra tool approval requests", async () => {
+test("routes tool_approval_required to onToolApproval callback", async () => {
   let decision: unknown;
   const cb = callbacks(() => {});
   cb.harness = {
@@ -157,6 +157,9 @@ test("auto-approves Mastra tool approval requests", async () => {
       decision = input.decision;
     },
   } as MastraHarness;
+  cb.onToolApproval = (pendingApproval, respond) => {
+    respond("approve");
+  };
 
   bridgeCommonEvent(
     {

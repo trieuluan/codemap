@@ -59,6 +59,10 @@ export interface BridgeCallbacks {
   usedToolsRef: Ref<boolean>;
   onMessageStart?: (createdAt: number) => void;
   onPlanApproval?: (planId: string, plan: string) => void;
+  onToolApproval?: (
+    pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>,
+    respond: (decision: "approve" | "decline" | "always_allow_category") => void,
+  ) => void;
   onEnd: (
     usage:
       | { promptTokens: number; completionTokens: number; totalTokens: number }
@@ -223,7 +227,12 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "tool_approval_required") {
-    cb.harness.respondToToolApproval?.({ decision: "approve" });
+    cb.onToolApproval?.(
+      { toolCallId: event.toolCallId, toolName: event.toolName, args: event.args },
+      (decision) => {
+        cb.harness.respondToToolApproval?.({ decision });
+      },
+    );
     return;
   }
 

@@ -5,6 +5,7 @@ import type { NineRouterProvider } from "../core/provider.js";
 import type { ChatMessage, GatewayModeDefaults, GatewayProviderId, TokenUsage } from "../types.js";
 import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.js";
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode } from "./events.js";
+import type { HarnessDisplayState } from "@mastra/core/harness";
 
 export type ChatUiMode = "tui";
 
@@ -38,6 +39,7 @@ export interface SingleAgentRuntimeInput {
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
+  onToolApproval?: (pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>, respond: (decision: "approve" | "decline" | "always_allow_category") => void) => void;
   onPhaseStart?: (phase: AgentPhase, model: string) => void;
   /** When true, switch harness to "plan" mode before sending. */
   planMode?: boolean;

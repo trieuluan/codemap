@@ -1,4 +1,5 @@
 import type { Message } from "../state/store.js";
+import type { HarnessQuestionAnswer } from "../../agent/runtime/events.js";
 import {
   listMastraThreadMessages,
   resetHarnessSingleton,
@@ -14,6 +15,7 @@ import { EventBus } from "../events/event-bus.js";
 import { Store, createInitialState } from "../state/store.js";
 import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
 import { resolveAskQuestion as resolveAskQuestionHelper } from "./ui/plan-review.js";
+import { resolveToolApproval as resolveToolApprovalHelper } from "./ui/plan-review.js";
 
 import { buildChatCommandContext } from "./lifecycle/command-context.js";
 import { startChatTerminalRuntime } from "./lifecycle/startup.js";
@@ -210,9 +212,15 @@ export class ChatTerminal {
   }
 
   resolveAskQuestion(
-    answer: import("../../agent/runtime/events.js").HarnessQuestionAnswer,
+    answer: HarnessQuestionAnswer,
   ): void {
     resolveAskQuestionHelper({ bus: this.bus, store: this.store }, answer);
+  }
+
+  resolveToolApproval(
+    decision: "approve" | "decline" | "always_allow_category",
+  ): void {
+    resolveToolApprovalHelper({ bus: this.bus, store: this.store }, decision);
   }
 
   // ─── Workspace ───────────────────────────────────────────

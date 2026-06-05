@@ -9,6 +9,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { UIState } from "../chat/state/store.js";
 import type { ChatTerminalLike } from "../chat/terminal/ui/types.js";
+import type { HarnessThread } from "../agent/runtime/events.js";
 import { headerLines, messageLines } from "./renderer/message-renderer.js";
 import {
   MentionAutocompleteProvider,
@@ -374,7 +375,7 @@ export async function startPiTuiApp(
   // ── Session/thread picker ─────────────────────────────────────────────────
 
   let sessionPickerActive = false;
-  let sessionThreads: import("../agent/runtime/events.js").HarnessThread[] = [];
+  let sessionThreads: HarnessThread[] = [];
 
   const closeSessionPicker = () => {
     if (!sessionPickerActive) return;
@@ -463,7 +464,7 @@ export async function startPiTuiApp(
 
     // ask_user free-text answer (only when there are no selection options).
     if (
-      state.askQuestion?.active &&
+      state.askQuestion != null &&
       trimmed &&
       !state.askQuestion.options?.length
     ) {
@@ -699,7 +700,7 @@ export async function startPiTuiApp(
 
 
     // ask_user inline select (when options are provided, block typing like planReview).
-    if (state.askQuestion?.active) {
+    if (state.askQuestion != null) {
       const aq = state.askQuestion;
       const options = aq.options ?? [];
 
@@ -760,6 +761,46 @@ export async function startPiTuiApp(
         chatTerminal.resolveAskQuestion("(skipped)");
         return { consume: true };
       }
+    }
+
+    // Tool approval inline select.
+    if (state.toolApproval != null) {
+      const ta = state.toolApproval;
+      const sel = ta.selection ?? 0;
+      const options = ["approve", "decline", "always_allow"] as const;
+
+      if (matchesKey(data, Key.up)) {
+        chatTerminal.store.dispatch({
+          toolApproval: {
+            ...ta,
+            selection: (sel + options.length - 1) % options.length,
+          },
+        });
+        tui.requestRender();
+        return { consume: true };
+      }
+      if (matchesKey(data, Key.down)) {
+        chatTerminal.store.dispatch({
+          toolApproval: { ...ta, selection: (sel + 1) % options.length },
+        });
+        tui.requestRender();
+        return { consume: true };
+      }
+      if (matchesKey(data, Key.enter)) {
+        const map: Record<string, "approve" | "decline" | "always_allow_category"> = {
+          approve: "approve",
+          decline: "decline",
+          always_allow: "always_allow_category",
+        };
+        chatTerminal.resolveToolApproval(map[options[sel]] ?? "decline");
+        return { consume: true };
+      }
+      if (matchesKey(data, Key.escape)) {
+        chatTerminal.resolveToolApproval("decline");
+        return { consume: true };
+      }
+      // Block all other input.
+      return { consume: true };
     }
 
     // Plan review inline select (only when editor is empty).
