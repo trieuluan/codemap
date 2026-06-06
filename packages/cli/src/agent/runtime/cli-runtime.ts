@@ -1,4 +1,4 @@
-import type { AgentLoopResult } from "../core/agent-loop.js";
+import type { AgentLoopResult } from "../loop/agent-loop.js";
 import { runWithMastraHarness } from "./harness-runtime.js";
 import type { SingleAgentRuntimeInput } from "./types.js";
 

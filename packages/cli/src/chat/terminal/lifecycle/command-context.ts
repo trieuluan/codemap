@@ -1,5 +1,5 @@
-import type { DebugLogger } from "../../../agent/core/debug-logger.js";
-import { createDebugLogger } from "../../../agent/core/debug-logger.js";
+import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
+import { createDebugLogger } from "../../../agent/utils/debug-logger.js";
 import {
   getMastraThreadId,
   resetHarnessSingleton,

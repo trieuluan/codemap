@@ -1,7 +1,7 @@
 // Shared types for cli-runtime and mastra-harness-runtime.
 // Extracted here to break the circular dependency between the two files.
 
-import type { NineRouterProvider } from "../core/provider.js";
+import type { NineRouterProvider } from "../loop/provider.js";
 import type { ChatMessage, GatewayModeDefaults, GatewayProviderId, TokenUsage } from "../types.js";
 import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.js";
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode } from "./events.js";

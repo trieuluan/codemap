@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, stat, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { findMonorepoRoot } from "@codemap/core/lib/monorepo-root.js";
-import type { NineRouterProvider } from "./provider.js";
+import type { NineRouterProvider } from "../loop/provider.js";
 
 // ─── Source definitions ───────────────────────────────────
 

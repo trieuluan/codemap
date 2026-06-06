@@ -20,7 +20,7 @@ import {
   C_WHITE,
   RESET,
   SPINNER,
-} from "./theme.js";
+} from "../theme.js";
 
 function buildBannerLines(): string[] {
   try {

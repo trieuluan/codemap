@@ -19,7 +19,7 @@ import {
 } from "../theme.js";
 import { padToWidth, renderMarkdownish, stripAnsi, truncateVisible, wrapPlain } from "../text/text.js";
 import { highlightBlock } from "./shiki-highlight.js";
-import { normalizeHtml } from "../../agent/core/html-utils.js";
+import { normalizeHtml } from "../../agent/utils/html-utils.js";
 
 /**
  * Format expanded tool result content.

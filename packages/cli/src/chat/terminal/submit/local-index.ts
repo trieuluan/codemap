@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
 import {
   buildLocalIndex,
   refreshLocalFile,

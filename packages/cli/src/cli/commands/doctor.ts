@@ -1,5 +1,5 @@
 import type { GatewayCommandContext } from ".././command-context.js";
-import { NineRouterProvider } from "../../agent/core/provider.js";
+import { NineRouterProvider } from "../../agent/loop/provider.js";
 import { getGatewayConfigPath } from ".././config.js";
 import type { GatewayConfig } from "../../agent/types.js";
 import { getWorkspaceStatusLines } from "./status.js";

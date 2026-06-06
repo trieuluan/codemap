@@ -1,5 +1,5 @@
 import type { Command } from "./types.js";
-import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../agent/core/convention-synthesizer.js";
+import { loadOrSynthesizeAll, refreshAll, getCachedContext } from "../../agent/prompt/convention-synthesizer.js";
 
 export const conventionsCommand: Command = {
   name: "conventions",

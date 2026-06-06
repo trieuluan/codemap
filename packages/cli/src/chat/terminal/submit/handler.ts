@@ -4,13 +4,13 @@ import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
 import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
-import { classifyTask } from "../../../agent/core/task-classifier.js";
+import { classifyTask } from "../../../agent/loop/task-classifier.js";
 import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
 } from "../../../agent/runtime/harness-runtime.js";
 import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
-import { hydrateMentionContext } from "../../../agent/core/mention-context.js";
+import { hydrateMentionContext } from "../../../agent/prompt/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";

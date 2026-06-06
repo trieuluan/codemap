@@ -1,5 +1,5 @@
-import { loadOrSynthesizeAll } from "../../../agent/core/convention-synthesizer.js";
-import { warmupFileSearch } from "../../../agent/core/file-search.js";
+import { loadOrSynthesizeAll } from "../../../agent/prompt/convention-synthesizer.js";
+import { warmupFileSearch } from "../../../agent/utils/file-search.js";
 import { warmupHarness, autoResumeLatestThread, listMastraThreadMessages } from "../../../agent/runtime/harness-runtime.js";
 import { maybeCleanupMastraDb } from "../../../agent/runtime/mastra-db-cleanup.js";
 import type { EventBus } from "../../events/event-bus.js";
@@ -26,7 +26,7 @@ export async function startChatTerminalRuntime({
   await loadTerminalTheme();
 
   if (!options.apiToken && options.mcpConfig) {
-    const { showLoginScreen } = await import("../../../tui/login-screen.js");
+    const { showLoginScreen } = await import("../../../tui/renderer/login-screen.js");
     const result = await showLoginScreen(options.mcpConfig);
     if (result === "exit") return;
   }

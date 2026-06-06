@@ -18,7 +18,7 @@ import {
   SPINNER,
 } from "../theme.js";
 import { fitLine, padToWidth, truncateVisible, visibleTextWidth } from "../text/text.js";
-import { isGatewayOffline } from "../stderr-interceptor.js";
+import { isGatewayOffline } from "./stderr-interceptor.js";
 
 function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   if (!localCommit || !cloudCommit) return false;

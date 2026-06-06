@@ -1,6 +1,6 @@
 import type { EventBus } from "../../events/event-bus.js";
 import type { Message, Store } from "../../state/store.js";
-import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
 import type { ChatTerminalOptions } from "../config/types.js";
 
 export interface SubmitHandlerContext {

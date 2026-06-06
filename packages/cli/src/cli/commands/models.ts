@@ -1,5 +1,5 @@
 import type { GatewayCommandContext } from ".././command-context.js";
-import { NineRouterProvider } from "../../agent/core/provider.js";
+import { NineRouterProvider } from "../../agent/loop/provider.js";
 import type { GatewayConfig } from "../../agent/types.js";
 
 export async function runModels(ctx: GatewayCommandContext): Promise<void> {

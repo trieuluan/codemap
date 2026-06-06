@@ -1,6 +1,6 @@
 import type { ChatUiMode } from "../../../agent/runtime/cli-runtime.js";
 import type { CodeMapMcpToolClient } from "../../../agent/tools/mcp/mcp-tool-client.js";
-import type { NineRouterProvider } from "../../../agent/core/provider.js";
+import type { NineRouterProvider } from "../../../agent/loop/provider.js";
 import type { GatewayConfig, GatewayModel } from "../../../agent/types.js";
 import type { McpServerConfig } from "@codemap/core/config.js";
 

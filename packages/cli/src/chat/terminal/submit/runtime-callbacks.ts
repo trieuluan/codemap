@@ -1,6 +1,6 @@
 import type { EventBus } from "../../events/event-bus.js";
 import type { Store } from "../../state/store.js";
-import type { DebugLogger } from "../../../agent/core/debug-logger.js";
+import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
 import type { TokenUsage } from "../../../agent/types.js";
 import type {
   AskQuestionOption,

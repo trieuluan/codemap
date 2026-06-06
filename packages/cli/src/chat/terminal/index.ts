@@ -10,7 +10,7 @@ import { tryGetCurrentWorkspaceInfo } from "@codemap/core/lib/workspace-git.js";
 import {
   createDebugLogger,
   type DebugLogger,
-} from "../../agent/core/debug-logger.js";
+} from "../../agent/utils/debug-logger.js";
 import { EventBus } from "../events/event-bus.js";
 import { Store, createInitialState } from "../state/store.js";
 import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
