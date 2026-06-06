@@ -3,7 +3,7 @@ import type { HarnessMessage, HarnessThread } from "../../agent/runtime/events.j
 import { listMastraThreads } from "../../agent/runtime/harness-runtime.js";
 import type { Message } from "../state/store.js";
 import { normalizeToolDisplayName, summarizeToolArgs } from "../terminal/ui/tool-call-messages.js";
-import { buildToolPreview } from "../../agent/runtime/config/tool-approval-policy.js";
+import { buildToolPreview, rebuildEditPreviewWithLineRanges } from "../../agent/runtime/config/tool-approval-policy.js";
 import { C_SUCCESS, C_ERROR, RESET } from "../../tui/theme.js";
 
 function stringifyToolResult(result: unknown): string {
@@ -107,7 +107,15 @@ export function mapHarnessMessagesToUI(messages: HarnessMessage[]): Message[] {
           const parsedArgs = (p.args && typeof p.args === "object" && !Array.isArray(p.args))
             ? p.args as Record<string, unknown>
             : {};
-          const previewContent = buildToolPreview(p.name, parsedArgs);
+          // Find tool result in same message to rebuild preview with correct line ranges
+          const toolResult = (msg.content as Array<{ type: string; id?: string; result?: unknown }>)
+            .find((r) => r.type === "tool_result" && r.id === p.id);
+          const resultText = toolResult?.result != null
+            ? (typeof toolResult.result === "string" ? toolResult.result : JSON.stringify(toolResult.result))
+            : "";
+          const previewContent = resultText
+            ? (rebuildEditPreviewWithLineRanges(p.name, parsedArgs, resultText) ?? buildToolPreview(p.name, parsedArgs))
+            : buildToolPreview(p.name, parsedArgs);
           result.push({ role: "tool_call", name: p.name, toolCallId: p.id, content, previewContent, timestamp: ts });
         } else if (part.type === "tool_result") {
           attachToolResult(result, part as { type: "tool_result"; id: string; name: string; result: unknown; isError: boolean }, ts);

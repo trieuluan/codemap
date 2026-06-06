@@ -202,9 +202,11 @@ export function createSubmitRuntimeCallbacks({
         const newMsgs = markToolDone(prev.messages, name, resultText, id);
         return { messages: newMsgs };
       });
+
       const toolMeta = id ? toolArgsById.get(id) : undefined;
       const rawName = toolMeta?.name ?? name;
       const rawArgs = toolMeta?.args ?? "{}";
+
       if (id) toolArgsById.delete(id);
       syncTaskListFromTool(store, rawName, rawArgs, resultText);
       localIndexTracker.recordToolResult(rawName, rawArgs);

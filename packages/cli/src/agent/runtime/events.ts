@@ -211,11 +211,12 @@ export function bridgeCommonEvent(
     cb.usedToolsRef.set(true);
     const displayName = formatToolDisplayName(event.toolName, cb.mcpServerIds);
     const args = normalizeToolArgs(event.args);
+    const preview = buildToolPreview(event.toolName, args);
     cb.onToolStart?.(
       displayName,
       event.args != null ? JSON.stringify(event.args) : "{}",
       event.toolCallId ?? "",
-      buildToolPreview(event.toolName, args),
+      preview,
     );
     return;
   }

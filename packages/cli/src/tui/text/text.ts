@@ -1,5 +1,4 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { DiffLineType, DiffParser } from "@git-diff-view/core";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
 import type { ChatMode, ChatWorkspaceState } from "../../chat/state/store.js";
@@ -329,14 +328,6 @@ function reapplyBackground(line: string, bg: string): string {
   return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + RESET;
 }
 
-function parseDiffFilePath(header: string): string {
-  const plus = header.split("\n").find((line) => line.startsWith("+++ "));
-  const minus = header.split("\n").find((line) => line.startsWith("--- "));
-  const raw = (plus ?? minus ?? "").replace(/^[+-]{3}\s+/, "").trim();
-  if (!raw || raw === "/dev/null") return "";
-  return raw.replace(/^[ab]\//, "");
-}
-
 // edit_file preview puts the path in the hunk header: "@@ -1,4 +1,4 @@ /path/file.ts:1-10"
 function langFromHunkHeader(hunkText: string): string {
   const match = hunkText.match(/@@ .+? @@ (.+?)(?::\d+(?:-\d+)?)?$/);
@@ -348,63 +339,64 @@ function renderUnifiedDiff(
   width: number,
   noHighlight: boolean,
 ): string[] | null {
-  // Strip truncation notes ("... N more line(s)") — DiffParser treats them as invalid hunk headers.
+  // Strip truncation notes ("... N more line(s)") — parser treats them as invalid hunk headers.
   const cleanSource = source
     .split("\n")
     .filter((l) => !/^\.\.\. \d+ more line\(s\)/.test(l))
     .join("\n");
 
-  let parsed: ReturnType<DiffParser["parse"]> | null = null;
-  try {
-    parsed = new DiffParser().parse(cleanSource);
-  } catch {
-    parsed = null;
-  }
+  // Manual parsing — bypass parsePatch which throws on format mismatches
+  type DiffLine = { type: "add" | "del" | "ctx"; text: string; oldNo: number | null; newNo: number | null };
+  const allLines: DiffLine[] = [];
+  const hunkHeaders: { text: string; index: number }[] = [];
+  let filePath = "";
+  let oldNo = 1;
+  let newNo = 1;
 
-  if (!parsed || parsed.hunks.length === 0) {
-    // DiffParser rejects incorrect hunk ranges (e.g. @@ -0,N +0,M @@ from old write_file
-    // previews). Reconstruct the hunk by counting actual +/- lines in the body, then retry.
-    const srcLines = cleanSource.split("\n");
-    const hunkIdx = srcLines.findIndex((l) => l.startsWith("@@"));
-    if (hunkIdx !== -1) {
-      const body = srcLines.slice(hunkIdx + 1);
-      const adds = body.filter((l) => l.startsWith("+")).length;
-      const dels = body.filter((l) => l.startsWith("-")).length;
-      const oldRange = dels > 0 ? `1,${dels}` : "0,0";
-      const newRange = adds > 0 ? `1,${adds}` : "0,0";
-      const ctx = (srcLines[hunkIdx] ?? "").replace(/^@@ .+? @@/, "");
-      const fixedHunk = `@@ -${oldRange} +${newRange} @@${ctx}`;
-      const fixedSrc = [...srcLines.slice(0, hunkIdx), fixedHunk, ...body].join("\n");
-      try { parsed = new DiffParser().parse(fixedSrc); } catch { return null; }
+  const hunkRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
+  for (const raw of cleanSource.split("\n")) {
+    if (raw.startsWith("--- ")) {
+      const f = raw.slice(4).replace(/^[ab]\//, "").replace(/\t.*$/, "").trim();
+      if (f && f !== "/dev/null") filePath = f;
+      continue;
     }
-    if (!parsed || parsed.hunks.length === 0) return null;
+    if (raw.startsWith("+++ ")) {
+      const f = raw.slice(4).replace(/^[ab]\//, "").replace(/\t.*$/, "").trim();
+      if (f && f !== "/dev/null") filePath = f;
+      continue;
+    }
+    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("new file") || raw.startsWith("deleted file") || raw.startsWith("similarity") || raw.startsWith("rename ") || raw.startsWith("old mode") || raw.startsWith("new mode")) continue;
+    if (/^=+$/.test(raw)) continue; // separator line from createTwoFilesPatch
+    const hm = raw.match(hunkRe);
+    if (hm) {
+      oldNo = Number(hm[1]);
+      newNo = Number(hm[3]);
+      hunkHeaders.push({ text: raw, index: allLines.length });
+      continue;
+    }
+    if (raw.startsWith("\\")) continue; // "\ No newline at end of file"
+    if (raw.startsWith("+")) {
+      allLines.push({ type: "add", text: raw.slice(1), oldNo: null, newNo: newNo++ });
+    } else if (raw.startsWith("-")) {
+      allLines.push({ type: "del", text: raw.slice(1), oldNo: oldNo++, newNo: null });
+    } else {
+      // context line (starts with space or is empty)
+      const text = raw.startsWith(" ") ? raw.slice(1) : raw;
+      allLines.push({ type: "ctx", text, oldNo: oldNo++, newNo: newNo++ });
+    }
   }
+  if (allLines.length === 0) return null;
+  const language = langFromPath(filePath) || langFromHunkHeader(cleanSource);
 
-  const filePath = parseDiffFilePath(parsed.header);
-  // Fallback: edit_file preview embeds the path in the hunk @@ header line.
-  const language =
-    langFromPath(filePath) ||
-    langFromHunkHeader(parsed.hunks[0]?.lines[0]?.text ?? "");
-
-  // Collect every content line text (strips trailing newline only).
-  // We pass all lines as one block to Shiki so it has full context for
-  // accurate tokenization — per-line calls would break multi-line constructs.
-  // Expand tabs to 4 spaces so that visibleWidth/padToWidth matches terminal rendering.
+  // Collect content text for Shiki highlighting (one block for accurate tokenization)
   const expandTabs = (s: string) => s.replace(/\t/g, "    ");
-  const contentTexts: string[] = [];
-  for (const hunk of parsed.hunks) {
-    for (const line of hunk.lines.slice(1)) {
-      contentTexts.push(expandTabs(line.text.replace(/\n$/, "")));
-    }
-  }
+  const contentTexts = allLines.map((l) => expandTabs(l.text.replace(/\n$/, "")));
 
-  // Pre-highlight the whole block once.
+  // Pre-highlight the whole block once
   let preHighlighted: string[];
   if (!noHighlight && isShikiReady() && language) {
     preHighlighted = highlightBlock(contentTexts.join("\n"), language);
   } else if (!noHighlight) {
-    // if (!isShikiReady()) process.stderr.write(`[diff-render] shiki not ready lang=${language}\n`);
-    // else if (!language) process.stderr.write(`[diff-render] no language detected, path="${parseDiffFilePath(parsed.header)}"\n`);
     preHighlighted = contentTexts.map((t) =>
       highlightCodeLineFallback(t.length === 0 ? " " : t, language),
     );
@@ -412,47 +404,47 @@ function renderUnifiedDiff(
     preHighlighted = contentTexts;
   }
 
+  // Calculate gutter width from max line number
   let maxLineNo = 0;
-  for (const hunk of parsed.hunks)
-    for (const line of hunk.lines.slice(1)) {
-      const n = (line.type === DiffLineType.Add ? line.newLineNumber : line.oldLineNumber) ?? 0;
-      if (n > maxLineNo) maxLineNo = n;
-    }
+  for (const line of allLines) {
+    const n = line.type === "add" ? line.newNo : line.oldNo;
+    if (n && n > maxLineNo) maxLineNo = n;
+  }
   const lineNoW = maxLineNo > 0 ? Math.max(2, String(maxLineNo).length) : 0;
-  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 4 : 2; // "± N │ " or "± "
+  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 4 : 2;
   const codeWidth = Math.max(8, width - gutterWidth);
   const out: string[] = [];
 
   if (filePath) out.push(`${C_GRAY}${filePath}${RESET}`);
 
+  const hunkHeaderSet = new Map(hunkHeaders.map((h) => [h.index, h.text]));
   let lineIdx = 0;
-  for (const hunk of parsed.hunks) {
-    out.push(`${C_ACTION}${hunk.lines[0]?.text ?? ""}${RESET}`);
-    for (const line of hunk.lines.slice(1)) {
-      const isAdd = line.type === DiffLineType.Add;
-      const isDelete = line.type === DiffLineType.Delete;
-      const marker = isAdd ? "+" : isDelete ? "-" : " ";
-      const markerColor = isAdd ? C_SUCCESS : isDelete ? C_ERROR : C_MUTED;
-      const highlighted = preHighlighted[lineIdx++] ?? "";
-      const segment = fitLineSilent(highlighted, codeWidth).trimEnd();
-      const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
-      let gutter: string;
-      if (lineNoW > 0) {
-        const lineNo = (isAdd ? line.newLineNumber : line.oldLineNumber) ?? null;
-        const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
-        gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET} `;
-      } else {
-        gutter = `${markerColor}${marker}${RESET} `;
-      }
-      if (bg) {
-        // Pad code to codeWidth so background fills the full code column.
-        // Background applies only to the code portion — gutter keeps no background.
-        const paddedCode = padToWidth(segment, codeWidth);
-        const coloredCode = reapplyBackground(paddedCode, bg);
-        out.push(`${gutter}${coloredCode}${RESET}`);
-      } else {
-        out.push(`${gutter}${segment}${RESET}`);
-      }
+  for (let i = 0; i < allLines.length; i++) {
+    if (hunkHeaderSet.has(i)) {
+      out.push(`${C_ACTION}${hunkHeaderSet.get(i)}${RESET}`);
+    }
+    const line = allLines[i]!;
+    const isAdd = line.type === "add";
+    const isDelete = line.type === "del";
+    const marker = isAdd ? "+" : isDelete ? "-" : " ";
+    const markerColor = isAdd ? C_SUCCESS : isDelete ? C_ERROR : C_MUTED;
+    const highlighted = preHighlighted[lineIdx++] ?? "";
+    const segment = fitLineSilent(highlighted, codeWidth).trimEnd();
+    const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
+    let gutter: string;
+    if (lineNoW > 0) {
+      const lineNo = isAdd ? line.newNo : line.oldNo;
+      const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
+      gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET} `;
+    } else {
+      gutter = `${markerColor}${marker}${RESET} `;
+    }
+    if (bg) {
+      const paddedCode = padToWidth(segment, codeWidth);
+      const coloredCode = reapplyBackground(paddedCode, bg);
+      out.push(`${gutter}${coloredCode}${RESET}`);
+    } else {
+      out.push(`${gutter}${segment}${RESET}`);
     }
   }
 

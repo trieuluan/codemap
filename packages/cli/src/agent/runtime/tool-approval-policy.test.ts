@@ -3,7 +3,11 @@ import test from "node:test";
 import {
   buildMastraPermissionRules,
   buildToolPreview,
+  clearVirtualBuffers,
   isMutatingApprovalTool,
+  parseLineRangesFromResult,
+  previewEditWithVirtualBuffer,
+  rebuildEditPreviewWithLineRanges,
 } from "./config/tool-approval-policy.js";
 
 test("buildMastraPermissionRules asks for mutating tools without asking for all MCP tools", () => {
@@ -39,29 +43,58 @@ test("buildToolPreview renders apply_patch as diff", () => {
   assert.match(preview, /\+new/);
 });
 
-test("buildToolPreview renders write_file content as unified diff", () => {
+test("buildToolPreview renders write_file content as unified diff when file exists in buffer", () => {
+  // Pre-populate buffer with current file content
+  clearVirtualBuffers();
+  previewEditWithVirtualBuffer("write_file", {
+    path: "src/buffer-test.ts",
+    content: "old content",
+  });
+
+  // Now write new content — buffer has old content, so diff works
   const preview = buildToolPreview("write_file", {
-    path: "src/app.ts",
+    path: "src/buffer-test.ts",
     content: "export const ok = true;\n",
   });
 
   assert.match(preview, /^~~~diff\n/);
-  assert.match(preview, /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
-  assert.match(preview, /@@ -0,0 \+1,1 @@ src\/app\.ts/);
+  assert.match(preview, /--- a\/src\/buffer-test\.ts/);
+  assert.match(preview, /\+\+\+ b\/src\/buffer-test\.ts/);
   assert.match(preview, /\+export const ok = true;/);
+  clearVirtualBuffers();
 });
 
-test("buildToolPreview renders edit old and new text as unified diff", () => {
+test("buildToolPreview falls back to JSON for write_file when file not on disk", () => {
+  clearVirtualBuffers();
+  const preview = buildToolPreview("write_file", {
+    path: "nonexistent.ts",
+    content: "const x = 1;",
+  });
+
+  // File not on disk + empty buffer → virtual buffer shows all-additions diff
+  assert.match(preview, /^~~~diff\n/);
+  assert.match(preview, /\+const x = 1;/);
+});
+
+test("buildToolPreview renders edit as unified diff when file exists in buffer", () => {
+  // Pre-populate buffer
+  clearVirtualBuffers();
+  previewEditWithVirtualBuffer("write_file", {
+    path: "src/edit-test.ts",
+    content: "const ok = false;\n",
+  });
+
   const preview = buildToolPreview("string_replace_lsp", {
-    filePath: "src/app.ts",
+    path: "src/edit-test.ts",
     oldString: "const ok = false;",
     newString: "const ok = true;",
   });
 
-  assert.match(preview, /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
-  assert.match(preview, /@@ -1,1 \+1,1 @@ src\/app\.ts/);
+  assert.match(preview, /--- a\/src\/edit-test\.ts/);
+  assert.match(preview, /\+\+\+ b\/src\/edit-test\.ts/);
   assert.match(preview, /-const ok = false;/);
   assert.match(preview, /\+const ok = true;/);
+  clearVirtualBuffers();
 });
 
 test("buildToolPreview falls back to compact JSON", () => {
@@ -137,4 +170,50 @@ test("buildToolPreview shows subagent type and truncated task", () => {
   });
 
   assert.match(preview, /^explore · A{117}\.\.\.$/);
+});
+
+test("parseLineRangesFromResult parses single line", () => {
+  const result = parseLineRangesFromResult(
+    "Replaced 1 occurrence in src/foo.ts (lines 47)",
+  );
+  assert.deepEqual(result, [47, 47]);
+});
+
+test("parseLineRangesFromResult parses line range", () => {
+  const result = parseLineRangesFromResult(
+    "Replaced 1 occurrence in src/foo.ts (lines 47-49)",
+  );
+  assert.deepEqual(result, [47, 49]);
+});
+
+test("parseLineRangesFromResult parses multiple ranges", () => {
+  const result = parseLineRangesFromResult(
+    "Replaced 2 occurrences in src/foo.ts (lines 10, 47-49)",
+  );
+  assert.deepEqual(result, [10, 10]);
+});
+
+test("parseLineRangesFromResult returns null for no line info", () => {
+  const result = parseLineRangesFromResult(
+    "Cannot edit binary files. Use the write file tool instead.",
+  );
+  assert.equal(result, null);
+});
+
+test("rebuildEditPreviewWithLineRanges returns null for non-edit tools", () => {
+  const result = rebuildEditPreviewWithLineRanges(
+    "execute_command",
+    { command: "ls" },
+    "output",
+  );
+  assert.equal(result, null);
+});
+
+test("rebuildEditPreviewWithLineRanges returns null when no line ranges in result", () => {
+  const result = rebuildEditPreviewWithLineRanges(
+    "string_replace_lsp",
+    { path: "src/foo.ts", old_string: "a", new_string: "b" },
+    "Error: string not found",
+  );
+  assert.equal(result, null);
 });

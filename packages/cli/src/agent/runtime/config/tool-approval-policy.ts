@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { structuredPatch, formatPatch } from "diff";
 import type {
   PermissionPolicy,
   PermissionRules,
@@ -7,6 +8,9 @@ import type {
 } from "@mastra/core/harness";
 
 export type { PermissionPolicy, PermissionRules, ToolCategory };
+
+/** Number of context lines shown above/below edits in preview diffs. */
+export const PREVIEW_CONTEXT_LINES = 5;
 
 const MUTATING_TOOL_NAMES = [
   "apply_patch",
@@ -56,6 +60,242 @@ export function buildMastraPermissionRules(
   };
 }
 
+// ── Virtual Document Buffer ────────────────────────────────────────────
+// In-memory file state for edit tools. Tracks cumulative edits to the same
+// file within a session so that sequential edits produce accurate diffs.
+const virtualBuffers = new Map<string, string>();
+
+const MAX_VIRTUAL_BUFFERS = 50;
+
+function getOrCreateBuffer(filePath: string): string | null {
+  if (virtualBuffers.has(filePath)) return virtualBuffers.get(filePath)!;
+  try {
+    const content = readFileSync(resolve(filePath), "utf-8");
+    if (virtualBuffers.size >= MAX_VIRTUAL_BUFFERS) {
+      const oldest = virtualBuffers.keys().next().value;
+      if (oldest) virtualBuffers.delete(oldest);
+    }
+    virtualBuffers.set(filePath, content);
+    return content;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("EACCES")) {
+      console.error(`[virtualBuffer] permission denied: ${filePath}`);
+    }
+    return null;
+  }
+}
+
+export function clearVirtualBuffers(): void {
+  virtualBuffers.clear();
+}
+
+/**
+ * Apply an edit to the virtual document buffer and return a diff preview
+ * with correct line numbers. Returns null if the edit can't be applied
+ * (file not found or old text not matched).
+ */
+export function previewEditWithVirtualBuffer(
+  toolName: string,
+  args: Record<string, unknown>,
+): string | null {
+  const normalizedName = toolName.toLowerCase();
+  const filePath = getStringArg(args, [
+    "path",
+    "filePath",
+    "file_path",
+    "filename",
+    "file",
+  ]);
+  if (!filePath) return null;
+
+  const isWriteFile = normalizedName.includes("write_file");
+  const isEdit =
+    normalizedName.includes("edit_file") ||
+    normalizedName.includes("string_replace");
+
+  if (isWriteFile) {
+    const content = getStringArg(args, ["content", "text", "data"]);
+    if (content == null) return null;
+    const current = getOrCreateBuffer(filePath) ?? "";
+    virtualBuffers.set(filePath, content);
+    return buildFocusedDiff(filePath, current, content);
+  }
+
+  if (isEdit) {
+    const oldText = getStringArg(args, [
+      "oldString",
+      "old_string",
+      "old_str",
+      "search",
+      "find",
+      "target",
+    ]);
+    const newText = getStringArg(args, [
+      "newString",
+      "new_string",
+      "new_str",
+      "replace",
+      "replacement",
+      "insert",
+    ]);
+    if (oldText == null && newText == null) return null;
+
+    const current = getOrCreateBuffer(filePath);
+    if (current == null) return null;
+
+    const old = oldText ?? "";
+    if (!old) {
+      // No old text — treat as full replace
+      virtualBuffers.set(filePath, newText ?? "");
+      return buildFocusedDiff(filePath, current, newText ?? "");
+    }
+
+    const match = findOldTextInFile(current, old);
+    if (!match) return null; // Can't locate — caller falls back
+
+    const [start, end] = match;
+    const newContent =
+      current.slice(0, start) + (newText ?? "") + current.slice(end);
+    virtualBuffers.set(filePath, newContent);
+    return buildFocusedDiff(filePath, current, newContent);
+  }
+
+  return null;
+}
+
+/**
+ * Like previewEditWithVirtualBuffer but also returns the 1-based line range
+ * of the edit in the pre-edit file. Used by tool_end to store line info
+ * before the buffer is updated.
+ */
+export function previewEditWithLineInfo(
+  toolName: string,
+  args: Record<string, unknown>,
+): { preview: string | null; lineRange: [number, number] | null } {
+  const normalizedName = toolName.toLowerCase();
+  const filePath = getStringArg(args, [
+    "path",
+    "filePath",
+    "file_path",
+    "filename",
+    "file",
+  ]);
+  if (!filePath) return { preview: null, lineRange: null };
+
+  const isEdit =
+    normalizedName.includes("edit_file") ||
+    normalizedName.includes("string_replace");
+
+  if (!isEdit) {
+    return { preview: previewEditWithVirtualBuffer(toolName, args), lineRange: null };
+  }
+
+  const oldText = getStringArg(args, [
+    "oldString",
+    "old_string",
+    "old_str",
+    "search",
+    "find",
+    "target",
+  ]);
+  const newText = getStringArg(args, [
+    "newString",
+    "new_string",
+    "new_str",
+    "replace",
+    "replacement",
+    "insert",
+  ]);
+  if (oldText == null && newText == null) return { preview: null, lineRange: null };
+
+  const current = getOrCreateBuffer(filePath);
+  if (current == null) return { preview: null, lineRange: null };
+
+  const old = oldText ?? "";
+  let lineRange: [number, number] | null = null;
+
+  if (old) {
+    const match = findOldTextInFile(current, old);
+    if (match) {
+      const [start, end] = match;
+      const startLine = current.slice(0, start).split("\n").length;
+      const endLine = current.slice(0, end).split("\n").length;
+      lineRange = [startLine, endLine];
+    }
+  }
+
+  const preview = previewEditWithVirtualBuffer(toolName, args);
+  return { preview, lineRange };
+}
+
+/**
+ * Generate a focused ±3 context-line diff between old and new full-file
+ * content. Hunk line numbers reflect the real file position.
+ */
+function buildFocusedDiff(
+  filePath: string,
+  oldFull: string,
+  newFull: string,
+): string {
+  const name = `a/${filePath}`;
+  const bName = `b/${filePath}`;
+
+  if (oldFull === newFull) return "(no changes)";
+
+  const oldLines = oldFull.split("\n");
+  const newLines = newFull.split("\n");
+
+  // Find first differing line
+  let firstDiff = 0;
+  const minLen = Math.min(oldLines.length, newLines.length);
+  while (firstDiff < minLen && oldLines[firstDiff] === newLines[firstDiff]) {
+    firstDiff++;
+  }
+
+  // Find last differing line
+  let oldEnd = oldLines.length - 1;
+  let newEnd = newLines.length - 1;
+  while (
+    oldEnd > firstDiff &&
+    newEnd > firstDiff &&
+    oldLines[oldEnd] === newLines[newEnd]
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+
+  const oldSliceStart = Math.max(0, firstDiff - PREVIEW_CONTEXT_LINES);
+  const oldSliceEnd = Math.min(
+    oldLines.length,
+    oldEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
+  const newSliceStart = Math.max(0, firstDiff - PREVIEW_CONTEXT_LINES);
+  const newSliceEnd = Math.min(
+    newLines.length,
+    newEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
+
+  const oldSlice = oldLines.slice(oldSliceStart, oldSliceEnd).join("\n");
+  const newSlice = newLines.slice(newSliceStart, newSliceEnd).join("\n");
+
+  const patch = structuredPatch(
+    name,
+    bName,
+    oldSlice,
+    newSlice,
+    undefined,
+    undefined,
+    { context: PREVIEW_CONTEXT_LINES },
+  );
+  for (const hunk of patch.hunks) {
+    hunk.oldStart += oldSliceStart;
+    hunk.newStart += newSliceStart;
+  }
+
+  return formatPatch(patch);
+}
+
 export function buildToolPreview(
   toolName: string,
   args: Record<string, unknown>,
@@ -68,51 +308,13 @@ export function buildToolPreview(
     if (patch) return fenced("diff", patch);
   }
 
-  if (normalizedName.includes("write_file")) {
-    const filePath = getStringArg(args, [
-      "path",
-      "filePath",
-      "file_path",
-      "filename",
-      "file",
-    ]);
-    const content = getStringArg(args, ["content", "text", "data"]);
-    if (content != null) {
-      return fenced("diff", buildUnifiedDiff(filePath, "", content));
-    }
-  }
-
   if (
+    normalizedName.includes("write_file") ||
     normalizedName.includes("edit_file") ||
     normalizedName.includes("string_replace")
   ) {
-    const filePath = getStringArg(args, [
-      "path",
-      "filePath",
-      "file_path",
-      "filename",
-      "file",
-    ]);
-    const oldText = getStringArg(args, [
-      "oldString",
-      "old_string",
-      "search",
-      "find",
-      "target",
-    ]);
-    const newText = getStringArg(args, [
-      "newString",
-      "new_string",
-      "replace",
-      "replacement",
-      "insert",
-    ]);
-    if (oldText != null || newText != null) {
-      return fenced(
-        "diff",
-        buildFileEditDiff(filePath, oldText ?? "", newText ?? ""),
-      );
-    }
+    const vdbPreview = previewEditWithVirtualBuffer(toolName, args);
+    if (vdbPreview) return fenced("diff", vdbPreview);
   }
 
   // ── Plan preview — full markdown ────────────────────────────────────
@@ -222,120 +424,160 @@ function fenced(language: string, content: string): string {
   return `~~~${language}\n${content.trimEnd()}\n~~~`;
 }
 
-function buildUnifiedDiff(
-  filePath: string | null,
+/**
+ * Find oldText in fileContent using line-based matching that tolerates
+ * trailing-whitespace differences. Returns the character range [start, end)
+ * in the original fileContent, or null if not found.
+ */
+function findOldTextInFile(
+  fileContent: string,
   oldText: string,
-  newText: string,
-): string {
-  const path = filePath || "(unknown)";
-  const oldLines = splitPreviewLines(oldText);
-  const newLines = splitPreviewLines(newText);
-  const oldRange = oldLines.length > 0 ? `1,${oldLines.length}` : "0,0";
-  const newRange = newLines.length > 0 ? `1,${newLines.length}` : "0,0";
+): [number, number] | null {
+  const fileLines = fileContent.split("\n");
+  const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
 
-  return [
-    `diff --git a/${path} b/${path}`,
-    `--- a/${path}`,
-    `+++ b/${path}`,
-    `@@ -${oldRange} +${newRange} @@ ${path}`,
-    ...oldLines.map((line) => `-${line}`),
-    ...newLines.map((line) => `+${line}`),
-  ].join("\n");
+  // Strip trailing empty line from oldText (common when old_string ends with \n)
+  if (oldLines.length > 0 && oldLines[oldLines.length - 1] === "") {
+    oldLines.pop();
+  }
+  if (oldLines.length === 0) return null;
+
+  const strip = (l: string) => l.replace(/[ \t]+$/, "");
+  const normFileLines = fileLines.map(strip);
+  const normOldLines = oldLines.map(strip);
+
+  // Find the matching block of lines in the file
+  for (let i = 0; i <= fileLines.length - oldLines.length; i++) {
+    let match = true;
+    for (let j = 0; j < oldLines.length; j++) {
+      if (normFileLines[i + j] !== normOldLines[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      // Calculate character positions from line indices
+      let charStart = 0;
+      for (let k = 0; k < i; k++) {
+        charStart += fileLines[k].length + 1; // +1 for \n
+      }
+      let charEnd = charStart;
+      for (let k = 0; k < oldLines.length; k++) {
+        charEnd += fileLines[i + k].length + 1; // +1 for \n
+      }
+      // Remove the last +1 if oldText doesn't end with \n
+      if (!oldText.endsWith("\n")) {
+        charEnd -= 1;
+      }
+      return [charStart, charEnd];
+    }
+  }
+  return null;
 }
-
-const CONTEXT_LINES = 3;
 
 /**
- * Context-aware diff for file edits: reads the file, finds oldText's real line
- * number, and generates a unified diff with surrounding context lines.
- * Falls back to simple diff if the file can't be read or oldText isn't found.
+ * Parse line ranges from edit_file / string_replace_lsp tool result.
+ * Matches patterns like "(lines 47)", "(lines 47-49)", "(lines 10, 47-49)".
+ * Returns the first line range [start, end] (1-based inclusive) or null.
  */
-function buildFileEditDiff(
-  filePath: string | null,
-  oldText: string,
-  newText: string,
-): string {
-  if (!filePath || !oldText) {
-    return buildUnifiedDiff(filePath, oldText, newText);
-  }
-
-  let fileContent: string;
-  try {
-    fileContent = readFileSync(resolve(filePath), "utf-8");
-  } catch {
-    return buildUnifiedDiff(filePath, oldText, newText);
-  }
-
-  const fileLines = fileContent.split("\n");
-  const oldLines = splitPreviewLines(oldText);
-  const newLines = splitPreviewLines(newText);
-
-  // Find the first line of oldText in the file
-  let matchIdx = findBlockStart(fileLines, oldLines);
-
-  // oldText not found — edit may have already been applied (session restore).
-  // Try locating newText to recover the correct line position.
-  let useNewAsAnchor = false;
-  if (matchIdx < 0 && newLines.length > 0) {
-    matchIdx = findBlockStart(fileLines, newLines);
-    useNewAsAnchor = true;
-  }
-
-  if (matchIdx < 0) {
-    return buildUnifiedDiff(filePath, oldText, newText);
-  }
-
-  // If we had to fall back to newText as the anchor, the edit target no longer
-  // exists in the file — the change is likely already applied. Signal this so
-  // the model can avoid retrying an already-completed edit.
-  if (useNewAsAnchor) {
-    return `# ⚠ Target text not found — this edit may already be applied\n\n${buildUnifiedDiff(filePath, oldText, newText)}`;
-  }
-
-  const path = filePath;
-  const anchorLength = useNewAsAnchor ? newLines.length : oldLines.length;
-  const ctxStart = Math.max(0, matchIdx - CONTEXT_LINES);
-  const ctxEnd = Math.min(fileLines.length, matchIdx + anchorLength + CONTEXT_LINES);
-
-  const contextBefore = fileLines.slice(ctxStart, matchIdx);
-  const contextAfter = fileLines.slice(matchIdx + anchorLength, ctxEnd);
-
-  // Hunk header counts include context lines
-  const hunkStartLine = ctxStart + 1; // 1-based line of first context line
-  const oldHunkCount = contextBefore.length + oldLines.length + contextAfter.length;
-  const newHunkCount = contextBefore.length + newLines.length + contextAfter.length;
-
-  return [
-    `diff --git a/${path} b/${path}`,
-    `--- a/${path}`,
-    `+++ b/${path}`,
-    `@@ -${hunkStartLine},${oldHunkCount} +${hunkStartLine},${newHunkCount} @@`,
-    ...contextBefore.map((line) => ` ${line}`),
-    ...oldLines.map((line) => `-${line}`),
-    ...newLines.map((line) => `+${line}`),
-    ...contextAfter.map((line) => ` ${line}`),
-  ].join("\n");
+export function parseLineRangesFromResult(
+  result: string,
+): [number, number] | null {
+  const match = result.match(
+    /\(lines?\s+(\d+)(?:-(\d+))?(?:,\s*\d+(?:-\d+)?)*\)/,
+  );
+  if (!match) return null;
+  const start = parseInt(match[1]!, 10);
+  const end = match[2] ? parseInt(match[2]!, 10) : start;
+  return [start, end];
 }
 
-/** Find the 0-based index where `block` starts in `lines`. Matches full lines. */
-function findBlockStart(lines: string[], block: string[]): number {
-  if (block.length === 0) return -1;
-  const first = block[0];
-  outer: for (let i = 0; i <= lines.length - block.length; i++) {
-    if (lines[i] !== first) continue;
-    for (let j = 1; j < block.length; j++) {
-      if (lines[i + j] !== block[j]) continue outer;
-    }
-    return i;
-  }
-  return -1;
-}
+/**
+ * Rebuild an edit diff preview with correct line numbers from tool result.
+ * Used at tool_end to correct the hunk header when the tool_start preview
+ * fell back to @@ -1.
+ */
+export function rebuildEditPreviewWithLineRanges(
+  toolName: string,
+  args: Record<string, unknown>,
+  result: string,
+  storedLineRange?: [number, number] | null,
+): string | null {
+  const ranges = parseLineRangesFromResult(result) ?? storedLineRange ?? null;
+  if (!ranges) return null;
 
-function splitPreviewLines(text: string): string[] {
-  if (!text) return [];
-  const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines;
+  const normalizedName = toolName.toLowerCase();
+  if (
+    !normalizedName.includes("edit_file") &&
+    !normalizedName.includes("string_replace")
+  ) {
+    return null;
+  }
+
+  const filePath = getStringArg(args, [
+    "path",
+    "filePath",
+    "file_path",
+    "filename",
+    "file",
+  ]);
+  const oldText = getStringArg(args, [
+    "oldString",
+    "old_string",
+    "old_str",
+    "search",
+    "find",
+    "target",
+  ]);
+  const newText = getStringArg(args, [
+    "newString",
+    "new_string",
+    "new_str",
+    "replace",
+    "replacement",
+    "insert",
+  ]);
+  if (!filePath || (oldText == null && newText == null)) return null;
+
+  const old = oldText ?? "";
+  const new_ = newText ?? "";
+  const name = filePath;
+  const aName = `a/${name}`;
+  const bName = `b/${name}`;
+
+  // Snippet diff offset to the line from tool result (file already edited at this point)
+  // Find the actual changed region and add context around it
+  const oldLines = old.split("\n");
+  const newLines = new_.split("\n");
+  let firstDiff = 0;
+  const minLen = Math.min(oldLines.length, newLines.length);
+  while (firstDiff < minLen && oldLines[firstDiff] === newLines[firstDiff]) firstDiff++;
+  let oldEnd = oldLines.length - 1;
+  let newEnd = newLines.length - 1;
+  while (oldEnd > firstDiff && newEnd > firstDiff && oldLines[oldEnd] === newLines[newEnd]) { oldEnd--; newEnd--; }
+
+  const ctxStart = Math.max(0, firstDiff - PREVIEW_CONTEXT_LINES);
+  const oldCtxEnd = Math.min(oldLines.length, oldEnd + PREVIEW_CONTEXT_LINES + 1);
+  const newCtxEnd = Math.min(newLines.length, newEnd + PREVIEW_CONTEXT_LINES + 1);
+
+  const oldSlice = oldLines.slice(ctxStart, oldCtxEnd).join("\n");
+  const newSlice = newLines.slice(ctxStart, newCtxEnd).join("\n");
+
+  const snippetPatch = structuredPatch(
+    aName,
+    bName,
+    oldSlice,
+    newSlice,
+    undefined,
+    undefined,
+    { context: PREVIEW_CONTEXT_LINES },
+  );
+  const offset = (ranges[0] - (snippetPatch.hunks[0]?.newStart ?? 1)) + ctxStart;
+  for (const hunk of snippetPatch.hunks) {
+    hunk.oldStart += offset;
+    hunk.newStart += offset;
+  }
+  return fenced("diff", formatPatch(snippetPatch));
 }
 
 function compactJson(value: unknown): string {

@@ -191,6 +191,27 @@ export function setToolCallPreview(messages: Message[], preview: string): Messag
   return next;
 }
 
+/**
+ * Update the preview content of a specific tool call by its toolCallId.
+ * Used at tool_end to correct line numbers in the preview diff.
+ */
+export function setToolCallPreviewById(
+  messages: Message[],
+  toolCallId: string,
+  preview: string,
+): Message[] {
+  const next = [...messages];
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const msg = next[i];
+    if (!msg) continue;
+    if (msg.role === "tool_call" && msg.toolCallId === toolCallId) {
+      next[i] = { ...msg, previewContent: preview };
+      return next;
+    }
+  }
+  return next;
+}
+
 export function appendToLastToolCallSummary(
   messages: Message[],
   content: string,
