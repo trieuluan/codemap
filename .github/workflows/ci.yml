@@ -13,27 +13,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Build shared packages
-        run: npm run build:shared
+        run: pnpm run build:shared
 
       - name: Build CLI
-        run: npm run build --workspace=@codemap-ai/cli
+        run: pnpm run build --filter @codemap-ai/cli
 
       - name: Build MCP
-        run: npm run build --workspace=@codemap-ai/mcp
+        run: pnpm run build --filter @codemap-ai/mcp
 
       - name: Build core
-        run: npm run build --workspace=@codemap-ai/core
+        run: pnpm run build --filter @codemap-ai/core
 
       - name: Run CLI tests
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts
 
       - name: Type check
-        run: npm run build:ts --workspace=@codemap-ai/api
+        run: pnpm run build:ts --filter @codemap-ai/api
