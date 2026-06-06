@@ -28,13 +28,6 @@ const MUTATING_TOOL_NAMES = [
   "reimport",
 ];
 
-const MUTATING_TOOL_PATTERN =
-  /(^|_)(apply_patch|ast_smart_edit|delete_file|edit_file|mkdir|move_file|move_symbols|rename_file|rename_symbol|string_replace|string_replace_lsp|reimport|write_file)$/i;
-
-export function isMutatingApprovalTool(name: string): boolean {
-  return MUTATING_TOOL_PATTERN.test(name);
-}
-
 export function buildMastraPermissionRules(
   mcpServerIds: Iterable<string> = ["codemap"],
 ): PermissionRules {
@@ -84,10 +77,6 @@ function getOrCreateBuffer(filePath: string): string | null {
     }
     return null;
   }
-}
-
-export function clearVirtualBuffers(): void {
-  virtualBuffers.clear();
 }
 
 /**
@@ -141,7 +130,7 @@ export function previewEditWithVirtualBuffer(
     ]);
     if (oldText == null && newText == null) return null;
 
-    const current = getOrCreateBuffer(filePath);
+    let current = getOrCreateBuffer(filePath);
     if (current == null) return null;
 
     const old = oldText ?? "";
@@ -151,7 +140,19 @@ export function previewEditWithVirtualBuffer(
       return buildFocusedDiff(filePath, current, newText ?? "");
     }
 
-    const match = findOldTextInFile(current, old);
+    let match = findOldTextInFile(current, old);
+
+    // Buffer miss — disk may have changed (another process, hook, etc.)
+    // Force re-read from disk and retry.
+    if (!match && virtualBuffers.has(filePath)) {
+      virtualBuffers.delete(filePath);
+      const fresh = getOrCreateBuffer(filePath);
+      if (fresh) {
+        current = fresh;
+        match = findOldTextInFile(current, old);
+      }
+    }
+
     if (!match) return null; // Can't locate — caller falls back
 
     const [start, end] = match;
@@ -162,71 +163,6 @@ export function previewEditWithVirtualBuffer(
   }
 
   return null;
-}
-
-/**
- * Like previewEditWithVirtualBuffer but also returns the 1-based line range
- * of the edit in the pre-edit file. Used by tool_end to store line info
- * before the buffer is updated.
- */
-export function previewEditWithLineInfo(
-  toolName: string,
-  args: Record<string, unknown>,
-): { preview: string | null; lineRange: [number, number] | null } {
-  const normalizedName = toolName.toLowerCase();
-  const filePath = getStringArg(args, [
-    "path",
-    "filePath",
-    "file_path",
-    "filename",
-    "file",
-  ]);
-  if (!filePath) return { preview: null, lineRange: null };
-
-  const isEdit =
-    normalizedName.includes("edit_file") ||
-    normalizedName.includes("string_replace");
-
-  if (!isEdit) {
-    return { preview: previewEditWithVirtualBuffer(toolName, args), lineRange: null };
-  }
-
-  const oldText = getStringArg(args, [
-    "oldString",
-    "old_string",
-    "old_str",
-    "search",
-    "find",
-    "target",
-  ]);
-  const newText = getStringArg(args, [
-    "newString",
-    "new_string",
-    "new_str",
-    "replace",
-    "replacement",
-    "insert",
-  ]);
-  if (oldText == null && newText == null) return { preview: null, lineRange: null };
-
-  const current = getOrCreateBuffer(filePath);
-  if (current == null) return { preview: null, lineRange: null };
-
-  const old = oldText ?? "";
-  let lineRange: [number, number] | null = null;
-
-  if (old) {
-    const match = findOldTextInFile(current, old);
-    if (match) {
-      const [start, end] = match;
-      const startLine = current.slice(0, start).split("\n").length;
-      const endLine = current.slice(0, end).split("\n").length;
-      lineRange = [startLine, endLine];
-    }
-  }
-
-  const preview = previewEditWithVirtualBuffer(toolName, args);
-  return { preview, lineRange };
 }
 
 /**
@@ -296,6 +232,118 @@ function buildFocusedDiff(
   return formatPatch(patch);
 }
 
+/**
+ * Fallback snippet diff for edit tools when Virtual Document Buffer can't
+ * locate old_string (stale buffer or file unreadable). Generates a diff
+ * from old/new text args alone — no file content needed.
+ */
+function buildSnippetEditPreview(
+  toolName: string,
+  args: Record<string, unknown>,
+): string | null {
+  const normalizedName = toolName.toLowerCase();
+  const isWriteFile = normalizedName.includes("write_file");
+  const isEdit =
+    normalizedName.includes("edit_file") ||
+    normalizedName.includes("string_replace");
+
+  if (!isWriteFile && !isEdit) return null;
+
+  const filePath = getStringArg(args, [
+    "path",
+    "filePath",
+    "file_path",
+    "filename",
+    "file",
+  ]);
+  if (!filePath) return null;
+
+  const name = `a/${filePath}`;
+  const bName = `b/${filePath}`;
+
+  if (isWriteFile) {
+    const content = getStringArg(args, ["content", "text", "data"]);
+    if (content == null) return null;
+    // write_file with no existing buffer → all-additions diff
+    const patch = structuredPatch(
+      name,
+      bName,
+      "",
+      content,
+      undefined,
+      undefined,
+      {
+        context: PREVIEW_CONTEXT_LINES,
+      },
+    );
+    return fenced("diff", formatPatch(patch));
+  }
+
+  // edit_file / string_replace
+  const oldText = getStringArg(args, [
+    "oldString",
+    "old_string",
+    "old_str",
+    "search",
+    "find",
+    "target",
+  ]);
+  const newText = getStringArg(args, [
+    "newString",
+    "new_string",
+    "new_str",
+    "replace",
+    "replacement",
+    "insert",
+  ]);
+  if (oldText == null && newText == null) return null;
+
+  const old = oldText ?? "";
+  const new_ = newText ?? "";
+
+  // Find changed region and add context around it
+  const oldLines = old.split("\n");
+  const newLines = new_.split("\n");
+  let firstDiff = 0;
+  const minLen = Math.min(oldLines.length, newLines.length);
+  while (firstDiff < minLen && oldLines[firstDiff] === newLines[firstDiff])
+    firstDiff++;
+  let oldEnd = oldLines.length - 1;
+  let newEnd = newLines.length - 1;
+  while (
+    oldEnd > firstDiff &&
+    newEnd > firstDiff &&
+    oldLines[oldEnd] === newLines[newEnd]
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+
+  const ctxStart = Math.max(0, firstDiff - PREVIEW_CONTEXT_LINES);
+  const oldCtxEnd = Math.min(
+    oldLines.length,
+    oldEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
+  const newCtxEnd = Math.min(
+    newLines.length,
+    newEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
+
+  const oldSlice = oldLines.slice(ctxStart, oldCtxEnd).join("\n");
+  const newSlice = newLines.slice(ctxStart, newCtxEnd).join("\n");
+
+  const patch = structuredPatch(
+    name,
+    bName,
+    oldSlice,
+    newSlice,
+    undefined,
+    undefined,
+    { context: PREVIEW_CONTEXT_LINES },
+  );
+  return fenced("diff", formatPatch(patch));
+}
+
 export function buildToolPreview(
   toolName: string,
   args: Record<string, unknown>,
@@ -315,6 +363,11 @@ export function buildToolPreview(
   ) {
     const vdbPreview = previewEditWithVirtualBuffer(toolName, args);
     if (vdbPreview) return fenced("diff", vdbPreview);
+
+    // VDB match failed (buffer stale or file unreadable) — show snippet diff
+    // so the preview still has Shiki formatting instead of raw JSON.
+    const snippetPreview = buildSnippetEditPreview(toolName, args);
+    if (snippetPreview) return snippetPreview;
   }
 
   // ── Plan preview — full markdown ────────────────────────────────────
@@ -433,6 +486,20 @@ function findOldTextInFile(
   fileContent: string,
   oldText: string,
 ): [number, number] | null {
+  // Try exact match first (fast path)
+  const exact = findOldTextExact(fileContent, oldText);
+  if (exact) return exact;
+
+  // Fallback: normalize aggressively (leading/trailing whitespace per line,
+  // collapse blank lines, strip leading blank lines) then match.
+  return findOldTextNormalized(fileContent, oldText);
+}
+
+/** Fast path — trailing-whitespace + CRLF tolerant line-block match. */
+function findOldTextExact(
+  fileContent: string,
+  oldText: string,
+): [number, number] | null {
   const fileLines = fileContent.split("\n");
   const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
 
@@ -446,7 +513,44 @@ function findOldTextInFile(
   const normFileLines = fileLines.map(strip);
   const normOldLines = oldLines.map(strip);
 
-  // Find the matching block of lines in the file
+  return matchLineBlock(fileLines, oldLines, normFileLines, normOldLines);
+}
+
+/** Aggressive normalization fallback — handles leading/trailing whitespace,
+ *  leading blank lines, and collapsed blank lines. */
+function findOldTextNormalized(
+  fileContent: string,
+  oldText: string,
+): [number, number] | null {
+  const fileLines = fileContent.split("\n");
+  const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
+
+  // Strip leading blank lines from oldText
+  while (oldLines.length > 0 && oldLines[0]!.trim() === "") oldLines.shift();
+  // Strip trailing blank lines from oldText
+  while (oldLines.length > 0 && oldLines[oldLines.length - 1]!.trim() === "") {
+    oldLines.pop();
+  }
+  if (oldLines.length === 0) return null;
+
+  // Normalize: collapse all whitespace to single space, trimmed
+  const collapse = (l: string) => l.replace(/\s+/g, " ").trim();
+  const normFileLines = fileLines.map(collapse);
+  const normOldLines = oldLines.map(collapse);
+
+  return matchLineBlock(fileLines, oldLines, normFileLines, normOldLines);
+}
+
+/**
+ * Shared line-block matcher. Searches for normOldLines inside normFileLines
+ * and returns the original character [start, end) range.
+ */
+function matchLineBlock(
+  fileLines: string[],
+  oldLines: string[],
+  normFileLines: string[],
+  normOldLines: string[],
+): [number, number] | null {
   for (let i = 0; i <= fileLines.length - oldLines.length; i++) {
     let match = true;
     for (let j = 0; j < oldLines.length; j++) {
@@ -459,14 +563,15 @@ function findOldTextInFile(
       // Calculate character positions from line indices
       let charStart = 0;
       for (let k = 0; k < i; k++) {
-        charStart += fileLines[k].length + 1; // +1 for \n
+        charStart += fileLines[k]!.length + 1; // +1 for \n
       }
       let charEnd = charStart;
       for (let k = 0; k < oldLines.length; k++) {
-        charEnd += fileLines[i + k].length + 1; // +1 for \n
+        charEnd += fileLines[i + k]!.length + 1; // +1 for \n
       }
       // Remove the last +1 if oldText doesn't end with \n
-      if (!oldText.endsWith("\n")) {
+      const originalOldText = oldLines.join("\n");
+      if (!originalOldText.endsWith("\n")) {
         charEnd -= 1;
       }
       return [charStart, charEnd];
@@ -551,14 +656,28 @@ export function rebuildEditPreviewWithLineRanges(
   const newLines = new_.split("\n");
   let firstDiff = 0;
   const minLen = Math.min(oldLines.length, newLines.length);
-  while (firstDiff < minLen && oldLines[firstDiff] === newLines[firstDiff]) firstDiff++;
+  while (firstDiff < minLen && oldLines[firstDiff] === newLines[firstDiff])
+    firstDiff++;
   let oldEnd = oldLines.length - 1;
   let newEnd = newLines.length - 1;
-  while (oldEnd > firstDiff && newEnd > firstDiff && oldLines[oldEnd] === newLines[newEnd]) { oldEnd--; newEnd--; }
+  while (
+    oldEnd > firstDiff &&
+    newEnd > firstDiff &&
+    oldLines[oldEnd] === newLines[newEnd]
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
 
   const ctxStart = Math.max(0, firstDiff - PREVIEW_CONTEXT_LINES);
-  const oldCtxEnd = Math.min(oldLines.length, oldEnd + PREVIEW_CONTEXT_LINES + 1);
-  const newCtxEnd = Math.min(newLines.length, newEnd + PREVIEW_CONTEXT_LINES + 1);
+  const oldCtxEnd = Math.min(
+    oldLines.length,
+    oldEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
+  const newCtxEnd = Math.min(
+    newLines.length,
+    newEnd + PREVIEW_CONTEXT_LINES + 1,
+  );
 
   const oldSlice = oldLines.slice(ctxStart, oldCtxEnd).join("\n");
   const newSlice = newLines.slice(ctxStart, newCtxEnd).join("\n");
@@ -572,7 +691,7 @@ export function rebuildEditPreviewWithLineRanges(
     undefined,
     { context: PREVIEW_CONTEXT_LINES },
   );
-  const offset = (ranges[0] - (snippetPatch.hunks[0]?.newStart ?? 1)) + ctxStart;
+  const offset = ranges[0] - (snippetPatch.hunks[0]?.newStart ?? 1) + ctxStart;
   for (const hunk of snippetPatch.hunks) {
     hunk.oldStart += offset;
     hunk.newStart += offset;

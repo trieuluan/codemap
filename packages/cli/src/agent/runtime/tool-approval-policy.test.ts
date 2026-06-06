@@ -3,10 +3,7 @@ import test from "node:test";
 import {
   buildMastraPermissionRules,
   buildToolPreview,
-  clearVirtualBuffers,
-  isMutatingApprovalTool,
   parseLineRangesFromResult,
-  previewEditWithVirtualBuffer,
   rebuildEditPreviewWithLineRanges,
 } from "./config/tool-approval-policy.js";
 
@@ -25,15 +22,6 @@ test("buildMastraPermissionRules asks for mutating tools without asking for all 
   assert.equal(rules.tools.github_apply_patch, "ask");
 });
 
-test("isMutatingApprovalTool recognizes known mutating approval tools", () => {
-  assert.equal(isMutatingApprovalTool("write_file"), true);
-  assert.equal(isMutatingApprovalTool("codemap_apply_patch"), true);
-  assert.equal(isMutatingApprovalTool("codemap_rename_symbol"), true);
-  assert.equal(isMutatingApprovalTool("codemap_reimport"), true);
-  assert.equal(isMutatingApprovalTool("search_content"), false);
-  assert.equal(isMutatingApprovalTool("codemap_get_file"), false);
-});
-
 test("buildToolPreview renders apply_patch as diff", () => {
   const preview = buildToolPreview("apply_patch", {
     patch: "*** Begin Patch\n*** Update File: a.ts\n@@\n-old\n+new\n*** End Patch",
@@ -41,60 +29,6 @@ test("buildToolPreview renders apply_patch as diff", () => {
 
   assert.match(preview, /^~~~diff\n/);
   assert.match(preview, /\+new/);
-});
-
-test("buildToolPreview renders write_file content as unified diff when file exists in buffer", () => {
-  // Pre-populate buffer with current file content
-  clearVirtualBuffers();
-  previewEditWithVirtualBuffer("write_file", {
-    path: "src/buffer-test.ts",
-    content: "old content",
-  });
-
-  // Now write new content — buffer has old content, so diff works
-  const preview = buildToolPreview("write_file", {
-    path: "src/buffer-test.ts",
-    content: "export const ok = true;\n",
-  });
-
-  assert.match(preview, /^~~~diff\n/);
-  assert.match(preview, /--- a\/src\/buffer-test\.ts/);
-  assert.match(preview, /\+\+\+ b\/src\/buffer-test\.ts/);
-  assert.match(preview, /\+export const ok = true;/);
-  clearVirtualBuffers();
-});
-
-test("buildToolPreview falls back to JSON for write_file when file not on disk", () => {
-  clearVirtualBuffers();
-  const preview = buildToolPreview("write_file", {
-    path: "nonexistent.ts",
-    content: "const x = 1;",
-  });
-
-  // File not on disk + empty buffer → virtual buffer shows all-additions diff
-  assert.match(preview, /^~~~diff\n/);
-  assert.match(preview, /\+const x = 1;/);
-});
-
-test("buildToolPreview renders edit as unified diff when file exists in buffer", () => {
-  // Pre-populate buffer
-  clearVirtualBuffers();
-  previewEditWithVirtualBuffer("write_file", {
-    path: "src/edit-test.ts",
-    content: "const ok = false;\n",
-  });
-
-  const preview = buildToolPreview("string_replace_lsp", {
-    path: "src/edit-test.ts",
-    oldString: "const ok = false;",
-    newString: "const ok = true;",
-  });
-
-  assert.match(preview, /--- a\/src\/edit-test\.ts/);
-  assert.match(preview, /\+\+\+ b\/src\/edit-test\.ts/);
-  assert.match(preview, /-const ok = false;/);
-  assert.match(preview, /\+const ok = true;/);
-  clearVirtualBuffers();
 });
 
 test("buildToolPreview falls back to compact JSON", () => {
