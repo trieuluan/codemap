@@ -21,9 +21,6 @@ const RULE_SOURCES: Array<{ label: string; paths: string[] }> = [
   { label: "Claude Code rules", paths: [".claude/rules/*.md"] },
 ];
 
-// Skills: .claude/skills takes priority over .codex/skills for same name
-const SKILL_DIRS = [".claude/skills", ".codex/skills"];
-
 // ─── Types ────────────────────────────────────────────────
 
 interface ScannedFile { label: string; filePath: string; content: string }
@@ -50,7 +47,6 @@ async function cachePaths() {
   return {
     conventions: { md: path.join(dir, "synthesized-conventions.md"), meta: path.join(dir, "conventions-meta.json") },
     rules:       { md: path.join(dir, "synthesized-rules.md"),       meta: path.join(dir, "rules-meta.json") },
-    skills:      { md: path.join(dir, "synthesized-skills.md"),      meta: path.join(dir, "skills-meta.json") },
   };
 }
 
@@ -106,24 +102,6 @@ async function scanSources(root: string, sources: Array<{ label: string; paths: 
     }
   }
   return results;
-}
-
-async function scanSkills(root: string): Promise<ScannedFile[]> {
-  // Dedup by skill name — .claude/skills wins over .codex/skills
-  const seen = new Map<string, ScannedFile>();
-  for (const dir of SKILL_DIRS) {
-    let entries: string[];
-    try { entries = await readdir(path.join(root, dir)); } catch { continue; }
-    for (const skillName of entries) {
-      const rel = `${dir}/${skillName}/SKILL.md`;
-      if (seen.has(skillName)) continue; // already have this skill from higher-priority dir
-      try {
-        const content = await readFile(path.join(root, rel), "utf8");
-        if (content.trim()) seen.set(skillName, { label: `Skill: ${skillName}`, filePath: rel, content });
-      } catch {}
-    }
-  }
-  return [...seen.values()];
 }
 
 // ─── Hashing & tokens ─────────────────────────────────────
@@ -199,21 +177,9 @@ Instructions:
 
 Output ONLY the unified rules. No preamble.`;
 
-const SKILLS_PROMPT = `You are synthesizing project workflow skill files into a unified skills guide.
-
-Instructions:
-- Each skill has a name and step-by-step process
-- If multiple files describe the same skill, keep the most complete version
-- Keep ALL step-by-step processes fully intact — do NOT compress or summarize
-- Organize skills with ## headers (one per skill)
-- Output clean markdown
-
-Output ONLY the unified skills guide. No preamble.`;
-
 // ─── Per-type pipeline ────────────────────────────────────
 
 async function runPipeline(
-  root: string,
   files: ScannedFile[],
   paths: { md: string; meta: string },
   prompt: string,
@@ -248,7 +214,6 @@ async function runPipeline(
 export interface SynthesisResult {
   conventions: string | null;
   rules: string | null;
-  skills: string | null;
   fromCache: boolean;
 }
 
@@ -257,27 +222,24 @@ export async function loadOrSynthesizeAll(
   model: string,
   forceRefresh = false,
 ): Promise<SynthesisResult | null> {
-  const root = await getWorkspaceRoot();
-  const config = await readConfig(root);
+  const config = await readConfig(await getWorkspaceRoot());
   const maxTokens = config.conventionMaxTokens ?? null;
   const cp = await cachePaths();
 
-  const [conventionFiles, ruleFiles, skillFiles] = await Promise.all([
-    scanSources(root, CONVENTION_SOURCES),
-    scanSources(root, RULE_SOURCES),
-    scanSkills(root),
+  const [conventionFiles, ruleFiles] = await Promise.all([
+    scanSources(await getWorkspaceRoot(), CONVENTION_SOURCES),
+    scanSources(await getWorkspaceRoot(), RULE_SOURCES),
   ]);
 
-  if (conventionFiles.length === 0 && ruleFiles.length === 0 && skillFiles.length === 0) return null;
+  if (conventionFiles.length === 0 && ruleFiles.length === 0) return null;
 
-  const [conventions, rules, skills] = await Promise.all([
-    runPipeline(root, conventionFiles, cp.conventions, CONVENTIONS_PROMPT, provider, model, maxTokens, forceRefresh),
-    runPipeline(root, ruleFiles, cp.rules, RULES_PROMPT, provider, model, null, forceRefresh),
-    runPipeline(root, skillFiles, cp.skills, SKILLS_PROMPT, provider, model, null, forceRefresh),
+  const [conventions, rules] = await Promise.all([
+    runPipeline(conventionFiles, cp.conventions, CONVENTIONS_PROMPT, provider, model, maxTokens, forceRefresh),
+    runPipeline(ruleFiles, cp.rules, RULES_PROMPT, provider, model, null, forceRefresh),
   ]);
 
   const fromCache = !forceRefresh;
-  return { conventions, rules, skills, fromCache };
+  return { conventions, rules, fromCache };
 }
 
 export async function refreshAll(
@@ -287,12 +249,11 @@ export async function refreshAll(
   return loadOrSynthesizeAll(provider, model, true);
 }
 
-export async function getCachedContext(): Promise<{ conventions: string | null; rules: string | null; skills: string | null }> {
+export async function getCachedContext(): Promise<{ conventions: string | null; rules: string | null }> {
   const cp = await cachePaths();
-  const [conventions, rules, skills] = await Promise.all([
+  const [conventions, rules] = await Promise.all([
     readFile(cp.conventions.md, "utf8").then((s) => s.trim() || null).catch(() => null),
     readFile(cp.rules.md, "utf8").then((s) => s.trim() || null).catch(() => null),
-    readFile(cp.skills.md, "utf8").then((s) => s.trim() || null).catch(() => null),
   ]);
-  return { conventions, rules, skills };
+  return { conventions, rules };
 }

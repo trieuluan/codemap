@@ -5,7 +5,6 @@ import { getCachedContext } from "../../../agent/core/convention-synthesizer.js"
 export interface ProjectContext {
   conventions: string | null;
   rules: string | null;
-  skills: string | null;
 }
 
 export interface SessionContextCache {
@@ -37,7 +36,6 @@ export async function getSessionResourceContext(
 const EMPTY_PROJECT_CONTEXT: ProjectContext = {
   conventions: null,
   rules: null,
-  skills: null,
 };
 
 export async function getSessionProjectContext(

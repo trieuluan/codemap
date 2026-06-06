@@ -4,39 +4,7 @@ import { createProjectService } from "./service";
 import { createProjectFromUploadQuerySchema } from "./schema.upload";
 import { extractAndPrepareUploadSource } from "./import/source/upload-source";
 import { createRepositoryWorkspaceService } from "./import/repository-workspace";
-
-function getAuthenticatedUserId(
-  fastify: FastifyInstance,
-  request: FastifyRequest,
-) {
-  const userId = request.session?.user?.id;
-  if (!userId) throw fastify.httpErrors.unauthorized("Unauthorized");
-  return userId;
-}
-
-function throwWorkspaceHttpError(
-  fastify: FastifyInstance,
-  error: unknown,
-): never {
-  if (error instanceof Error) {
-    if (error.message === "WORKSPACE_ACCESS_DENIED") {
-      throw fastify.httpErrors.forbidden("Workspace access denied");
-    }
-    if (error.message === "WORKSPACE_PROJECT_LIMIT_EXCEEDED") {
-      throw fastify.httpErrors.forbidden("Workspace project limit exceeded");
-    }
-    if (error.message === "WORKSPACE_IMPORT_LIMIT_EXCEEDED") {
-      throw fastify.httpErrors.forbidden("Workspace import limit exceeded");
-    }
-    if (error.message === "WORKSPACE_CLOUD_IMPORT_NOT_AVAILABLE") {
-      throw fastify.httpErrors.forbidden(
-        "Cloud import is not available on the basic plan",
-      );
-    }
-  }
-
-  throw error;
-}
+import { getAuthenticatedUserId, throwWorkspaceHttpError } from "./controller.helpers";
 
 export function createProjectUploadController(fastify: FastifyInstance) {
   const service = createProjectService(fastify.db);

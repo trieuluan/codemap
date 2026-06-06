@@ -274,7 +274,7 @@ export function buildPanel(
   if (state.synthRunning) {
     out.push(
       fitLine(
-        ` ${C_AI}${SPINNER[frame]}${RESET} ${C_GRAY}synthesizing context ${C_MUTED}(conventions · rules · skills)…${RESET}`,
+        ` ${C_AI}${SPINNER[frame]}${RESET} ${C_GRAY}synthesizing context ${C_MUTED}(conventions · rules)…${RESET}`,
         w,
       ),
     );

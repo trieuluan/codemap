@@ -25,7 +25,6 @@ test("buildCodeMapAgentInstructions keeps stable context before resource context
     {
       rules: "## Rules\nrule text",
       conventions: "## Conventions\nconvention text",
-      skills: "## Skills\nskill text",
     },
     "coder",
   );
@@ -34,15 +33,13 @@ test("buildCodeMapAgentInstructions keeps stable context before resource context
   const sessionIndex = instructions.indexOf("## Session Info");
   const rulesIndex = instructions.indexOf("## Rules");
   const conventionsIndex = instructions.indexOf("## Conventions");
-  const skillsIndex = instructions.indexOf("## Skills");
   const resourceIndex = instructions.indexOf("## Resource Context");
 
   assert.ok(identityIndex >= 0);
   assert.ok(identityIndex < sessionIndex);
   assert.ok(sessionIndex < rulesIndex);
   assert.ok(rulesIndex < conventionsIndex);
-  assert.ok(conventionsIndex < skillsIndex);
-  assert.ok(skillsIndex < resourceIndex);
+  assert.ok(conventionsIndex < resourceIndex);
   assert.equal(instructions.includes("## Current Task"), false);
 });
 

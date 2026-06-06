@@ -39,7 +39,6 @@ export function buildCodeMapAgentInstructions(
   projectContext: {
     conventions: string | null;
     rules: string | null;
-    skills: string | null;
   } | null,
   modelId?: string,
 ): string {
@@ -48,7 +47,6 @@ export function buildCodeMapAgentInstructions(
   if (sessionContext) parts.push(sessionContext);
   if (projectContext?.rules) parts.push(projectContext.rules);
   if (projectContext?.conventions) parts.push(projectContext.conventions);
-  if (projectContext?.skills) parts.push(projectContext.skills);
   if (resourceContext) parts.push(resourceContext);
   return parts.join("\n\n---\n\n");
 }

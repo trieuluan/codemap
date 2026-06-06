@@ -21,6 +21,5 @@ export interface SubmitHandlerContext {
   getSessionProjectContext(): Promise<{
     conventions: string | null;
     rules: string | null;
-    skills: string | null;
   }>;
 }
