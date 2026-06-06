@@ -26,16 +26,16 @@ async function getGatewayDoctorLines(ctx: GatewayCommandContext): Promise<string
 
   if (config.configSource === "built-in defaults") {
     lines.push(`No settings.json found.`);
-    lines.push(`Project config path: ${getGatewayConfigPath("project")}`);
-    lines.push(`Global config path: ${getGatewayConfigPath("global")}`);
+    lines.push(`Project config path: ${await getGatewayConfigPath("project")}`);
+    lines.push(`Global config path: ${await getGatewayConfigPath("global")}`);
   }
 
   return lines;
 }
 
-export function printGatewayHint(config: GatewayConfig): void {
+export async function printGatewayHint(config: GatewayConfig): Promise<void> {
   if (config.configSource !== "built-in defaults") return;
   console.error(`No settings.json found and no gateway was reachable at ${config.baseUrl}.`);
-  console.error(`Project config path: ${getGatewayConfigPath("project")}`);
-  console.error(`Global config path: ${getGatewayConfigPath("global")}`);
+  console.error(`Project config path: ${await getGatewayConfigPath("project")}`);
+  console.error(`Global config path: ${await getGatewayConfigPath("global")}`);
 }

@@ -285,6 +285,13 @@ function buildFileEditDiff(
     return buildUnifiedDiff(filePath, oldText, newText);
   }
 
+  // If we had to fall back to newText as the anchor, the edit target no longer
+  // exists in the file — the change is likely already applied. Signal this so
+  // the model can avoid retrying an already-completed edit.
+  if (useNewAsAnchor) {
+    return `# ⚠ Target text not found — this edit may already be applied\n\n${buildUnifiedDiff(filePath, oldText, newText)}`;
+  }
+
   const path = filePath;
   const anchorLength = useNewAsAnchor ? newLines.length : oldLines.length;
   const ctxStart = Math.max(0, matchIdx - CONTEXT_LINES);

@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
 import type { GatewayProviderId } from "../agent/types.js";
 
 // ─── Schema ───────────────────────────────────────────────────────
@@ -67,15 +68,16 @@ export function getGlobalSettingsPath(): string {
   return path.join(homedir(), ".codemap", "settings.json");
 }
 
-export function getProjectSettingsPath(cwd = process.cwd()): string {
-  return path.join(cwd, ".codemap", "settings.json");
+export async function getProjectSettingsPath(cwd?: string): Promise<string> {
+  const root = await readWorkspacePath(cwd);
+  return path.join(root, ".codemap", "settings.json");
 }
 
 // ─── Layered Load ─────────────────────────────────────────────────
 
 export async function loadSettings(cwd = process.cwd()): Promise<SettingsFile> {
   const globalPath = getGlobalSettingsPath();
-  const projectPath = getProjectSettingsPath(cwd);
+  const projectPath = await getProjectSettingsPath(cwd);
 
   const globalSettings = (await readJsonFile<SettingsFile>(globalPath)) ?? {};
   const projectSettings = (await readJsonFile<SettingsFile>(projectPath)) ?? {};
@@ -183,7 +185,7 @@ export async function writeSettings(
   cwd = process.cwd(),
 ): Promise<string> {
   const filePath = scope === "project"
-    ? getProjectSettingsPath(cwd)
+    ? await getProjectSettingsPath(cwd)
     : getGlobalSettingsPath();
 
   const existing = await readJsonFile<SettingsFile>(filePath) ?? {};
@@ -208,7 +210,7 @@ export async function writeGatewayToSettings(
 // ─── Has config check ─────────────────────────────────────────────
 
 export async function hasSettingsOrLegacy(cwd = process.cwd()): Promise<boolean> {
-  if (await fileExists(getProjectSettingsPath(cwd))) return true;
+  if (await fileExists(await getProjectSettingsPath(cwd))) return true;
   if (await fileExists(getGlobalSettingsPath())) return true;
   return hasGatewayEnv();
 }

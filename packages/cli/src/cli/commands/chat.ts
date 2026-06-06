@@ -77,7 +77,7 @@ async function loadGatewayModels(
   try {
     return await provider.listModelDetails();
   } catch (error) {
-    printGatewayHint(config);
+    await printGatewayHint(config);
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Gateway model list unavailable: ${message}`);
     console.error("Using configured default model instead.");

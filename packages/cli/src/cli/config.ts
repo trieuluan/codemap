@@ -52,7 +52,7 @@ export async function writeGatewayConfig(config: {
   modeDefaults?: { build?: string; plan?: string; fast?: string };
   provider?: GatewayConfig["provider"];
 }): Promise<{ path: string; scope: SettingsScope; created: boolean }> {
-  const targetPath = getGatewayConfigPath(config.scope);
+  const targetPath = await getGatewayConfigPath(config.scope);
   const existed = await fileExists(targetPath);
 
   if (existed && !config.force) {
@@ -77,9 +77,9 @@ export async function hasConfigOrEnvSetup(): Promise<boolean> {
 }
 
 /** Return the settings.json file path for the given scope. */
-export function getGatewayConfigPath(scope: SettingsScope): string {
+export async function getGatewayConfigPath(scope: SettingsScope): Promise<string> {
   return scope === "project"
-    ? getProjectSettingsPath()
+    ? await getProjectSettingsPath()
     : getGlobalSettingsPath();
 }
 

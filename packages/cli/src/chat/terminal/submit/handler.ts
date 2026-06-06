@@ -8,7 +8,6 @@ import { classifyTask } from "../../../agent/core/task-classifier.js";
 import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
-  maybeRotateHarnessThread,
 } from "../../../agent/runtime/harness-runtime.js";
 import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
 import { hydrateMentionContext } from "../../../agent/core/mention-context.js";
@@ -243,17 +242,6 @@ export async function handleSubmitWithContent(
 
     runtimeCallbacks.resetStreaming();
     bus.scheduleRefresh();
-
-    if (ctx.isActiveTask(taskId, taskAbort)) {
-      const rotation = await maybeRotateHarnessThread().catch(() => null);
-      if (rotation) {
-        ctx.appendMessage({
-          role: "system",
-          content: `Context auto-compacted after ${rotation.messageCount} messages. Observational memory preserved — the agent retains key context from this session.`,
-        });
-        bus.scheduleRefresh();
-      }
-    }
 
     const mastraUsage = await getMastraThreadTokenUsage().catch(() => null);
     store.dispatch({

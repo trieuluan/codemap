@@ -236,13 +236,26 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "tool_approval_required") {
+    const approvalToolName = event.toolName;
     cb.onToolApproval?.(
       {
         toolCallId: event.toolCallId,
-        toolName: event.toolName,
+        toolName: approvalToolName,
         args: event.args,
       },
       (decision) => {
+        if (decision === "always_allow_category") {
+          // resolveToolApproval returns the explicit per-tool policy BEFORE
+          // checking session grants (order: deny → yolo → toolPolicy → grants).
+          // Tools listed with an explicit "ask" policy (e.g. string_replace_lsp)
+          // are never reached by session grants. Promote the policy to "allow"
+          // directly so the next resolveToolApproval call returns "allow" at
+          // the toolPolicy check.
+          cb.harness.setPermissionForTool?.({
+            toolName: approvalToolName,
+            policy: "allow",
+          });
+        }
         cb.harness.respondToToolApproval?.({ decision });
       },
     );
