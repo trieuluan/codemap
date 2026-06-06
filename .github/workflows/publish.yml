@@ -27,7 +27,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build all packages (dependency order: shared → code-index → core → mcp/cli)
+      - name: Build all packages
         run: |
           pnpm --filter @codemap-ai/shared run build
           pnpm --filter @codemap-ai/code-index run build
@@ -40,7 +40,7 @@ jobs:
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts
 
       # pnpm publish automatically replaces workspace:* with actual
-      # version ranges in the published tarball — no prepare script needed.
+      # version ranges in the published tarball.
       - name: Publish packages
         run: |
           pnpm --filter @codemap-ai/shared publish --access public --no-git-checks
