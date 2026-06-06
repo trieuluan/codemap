@@ -3,14 +3,14 @@ packages:
 allowBuilds:
   '@google/genai': true
   agent-browser: true
-  argon2: true
+  argon2: set this to true or false
   bufferutil: true
-  edgedriver: true
+  edgedriver: set this to true or false
   esbuild: true
-  geckodriver: true
+  geckodriver: set this to true or false
   koffi: true
   msgpackr-extract: true
   onnxruntime-node: true
   protobufjs: true
-  sharp: true
+  sharp: set this to true or false
   tree-sitter-python: true

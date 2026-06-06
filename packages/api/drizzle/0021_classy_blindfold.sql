@@ -1,1 +1,0 @@
-ALTER TABLE "project" ADD COLUMN "visibility_checked_at" timestamp;

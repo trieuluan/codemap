@@ -1,1 +1,0 @@
-ALTER TABLE "code_embeddings" ALTER COLUMN "embedding" SET DATA TYPE vector;

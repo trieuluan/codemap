@@ -1,1 +1,0 @@
-ALTER TABLE "workspace" ALTER COLUMN "plan" SET DEFAULT 'basic';
