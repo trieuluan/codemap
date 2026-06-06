@@ -25,16 +25,7 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
-      # setup-node creates .npmrc at $NPM_CONFIG_USERCONFIG.
-      # Append verify-deps-before-run=false there so pnpm skips
-      # lockfile-vs-manifest checks after prepare-publish.sh.
-      - name: Disable pnpm deps verification
-        run: echo "verify-deps-before-run=false" >> "$NPM_CONFIG_USERCONFIG"
-
       - run: pnpm install --frozen-lockfile
-
-      - name: Replace workspace:* with version ranges
-        run: bash scripts/prepare-publish.sh
 
       - name: Build all packages
         run: |
@@ -48,38 +39,15 @@ jobs:
       - name: Run tests
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts
 
-      - name: Publish @codemap-ai/shared
-        working-directory: packages/shared
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @codemap-ai/code-index
-        working-directory: packages/code-index
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @codemap-ai/core
-        working-directory: packages/core
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @codemap-ai/tool-types
-        working-directory: packages/tool-types
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @codemap-ai/mcp
-        working-directory: packages/mcp
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @codemap-ai/cli
-        working-directory: packages/cli
-        run: npm publish --provenance --access public
+      # pnpm publish automatically replaces workspace:* with actual
+      # version ranges in the published tarball — no prepare script needed.
+      - name: Publish packages
+        run: |
+          pnpm --filter @codemap-ai/shared publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/code-index publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/core publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/tool-types publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/mcp publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/cli publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
