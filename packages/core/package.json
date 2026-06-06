@@ -2,7 +2,6 @@
   "name": "@codemap-ai/core",
   "version": "0.2.0",
   "type": "module",
-  "private": true,
   "description": "CodeMap shared internal library",
   "main": "dist/index.js",
   "exports": {
