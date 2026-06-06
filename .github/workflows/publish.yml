@@ -12,6 +12,11 @@ jobs:
       contents: read
       id-token: write
 
+    env:
+      # prepare-publish.sh rewrites workspace:* → version ranges for npm.
+      # This makes lockfile stale; disable pnpm's auto-deps-verification.
+      PNPM_verify_deps_before_run: "false"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,12 +34,6 @@ jobs:
 
       - name: Replace workspace:* with version ranges
         run: bash scripts/prepare-publish.sh
-
-      # After prepare-publish.sh rewrites workspace:* to version ranges,
-      # pnpm's auto-deps-verification detects a lockfile mismatch.
-      # Disable it so subsequent pnpm commands skip the check.
-      - name: Disable pnpm deps verification
-        run: echo "verify-deps-before-run=false" >> .npmrc
 
       - name: Build all packages
         run: |
