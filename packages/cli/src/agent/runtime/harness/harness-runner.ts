@@ -39,7 +39,6 @@ export function runHarness(
     let currentStreamText = "";
     let currentThinking = "";
     let usedTools = false;
-    let toolsInCurrentTurn = false;
     let settled = false;
     let lastHarnessError: Error | null = null;
 
@@ -125,6 +124,12 @@ export function runHarness(
       { toolName: string; argsKey: string }
     >();
     const failedToolCounts = new Map<string, number>();
+    let pendingToolCalls = 0;
+    let staleDisplayCount = 0;
+    let lastDisplayStreamLength = -1;
+    let lastMsgUpdateTextLength = -1;
+    // ~60 s at 30 display_state_changed/sec — abort frozen stream
+    const STALE_DISPLAY_THRESHOLD = 1800;
 
     const finishWithCurrentText = () => {
       const raw = harness.getTokenUsage?.();
@@ -146,23 +151,49 @@ export function runHarness(
     };
 
     const unsubscribe = harness.subscribe((event: HarnessEvent) => {
-      callbacks.onDebug?.(
-        summarizeHarnessEvent(event, currentStreamText, finalText),
-      );
-      if (
-        (event.type === "usage_update" || event.type === "om_status") &&
-        currentStreamText.trim() &&
-        !usedTools
-      ) {
-        callbacks.onDebug?.({
-          event: "mastra_finish_on_quiet_usage",
-          trigger: event.type,
-          textLength: currentStreamText.length,
-        });
-        harness.abort?.();
-        finishWithCurrentText();
-        return;
+      // Deduplicate noisy events before logging
+      if (event.type === "message_update") {
+        const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
+        const newLen =
+          typeof (summary as Record<string, unknown> | null)?.textLength === "number"
+            ? (summary as Record<string, unknown>).textLength as number
+            : -1;
+        if (newLen !== lastMsgUpdateTextLength) {
+          lastMsgUpdateTextLength = newLen;
+          if (summary) callbacks.onDebug?.(summary);
+        }
+      } else {
+        const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
+        if (summary) callbacks.onDebug?.(summary);
       }
+
+      // Track pending tool calls for stale detection
+      if (event.type === "tool_start") pendingToolCalls++;
+      if (event.type === "tool_end") pendingToolCalls = Math.max(0, pendingToolCalls - 1);
+
+      // Stale stream detection: display_state_changed fires at ~30Hz from the UI
+      // poller. If it keeps arriving with no new content and no pending tool calls,
+      // the model stream is frozen — abort and finish with whatever text we have.
+      if (event.type === "display_state_changed") {
+        const curLen = currentStreamText.length;
+        if (curLen > 0 && curLen === lastDisplayStreamLength && pendingToolCalls === 0) {
+          staleDisplayCount++;
+          if (staleDisplayCount >= STALE_DISPLAY_THRESHOLD && !settled) {
+            callbacks.onDebug?.({
+              event: "mastra_finish_on_stale_stream",
+              staleEventCount: staleDisplayCount,
+              textLength: curLen,
+            });
+            harness.abort?.();
+            finishWithCurrentText();
+          }
+        } else {
+          staleDisplayCount = 0;
+          lastDisplayStreamLength = curLen;
+        }
+        return; // display_state_changed needs no further processing
+      }
+
       if (event.type === "mode_changed") {
         const ev = event as HarnessEvent & { modeId?: string };
         const modelId = harness.getCurrentModelId?.() ?? "";
@@ -178,6 +209,12 @@ export function runHarness(
           get: () => currentStreamText,
           set: (v) => {
             currentStreamText = v;
+            // New tokens arrived — reset stale counter to avoid false-positive
+            // finish while the model is actively streaming.
+            if (v.length !== lastDisplayStreamLength) {
+              staleDisplayCount = 0;
+              lastDisplayStreamLength = v.length;
+            }
           },
         },
         currentThinkingRef: {
@@ -208,11 +245,7 @@ export function runHarness(
           fail(lastHarnessError);
         },
       });
-      if (event.type === "message_start") {
-        toolsInCurrentTurn = false;
-      }
       if (event.type === "tool_start") {
-        toolsInCurrentTurn = true;
         const argsKey = `${event.toolName}:${JSON.stringify(event.args ?? {})}`;
         toolCallMeta.set(event.toolCallId ?? event.toolName, {
           toolName: event.toolName,
@@ -238,7 +271,7 @@ export function runHarness(
           }
         }
       }
-      if (event.type === "message_end" && finalText.trim() && !toolsInCurrentTurn) {
+      if (event.type === "message_end" && finalText.trim()) {
         callbacks.onDebug?.({
           event: "mastra_finish_on_message_end",
           textLength: finalText.length,
@@ -276,6 +309,19 @@ async function sendHarnessInput(
     contentLength: content.length,
     imageCount: imageFiles?.length ?? 0,
   });
+  // Prefer sendMessage: it awaits until stream idle and emits agent_end fallback,
+  // which guarantees the run resolves even when the server omits agent_end.
+  if (harness.sendMessage) {
+    const files = imageFiles?.map((f) => ({
+      data: f.data,
+      mediaType: f.mimeType,
+    }));
+    await harness.sendMessage({ content, files });
+    onDebug?.({ event: "mastra_send_message_done" });
+    return;
+  }
+  // Fallback: sendSignal — accepted promise resolves quickly but provides no
+  // agent_end guarantee; stale detection covers the stuck-stream case.
   if (harness.sendSignal) {
     const signalContent = imageFiles?.length
       ? ([
@@ -285,7 +331,10 @@ async function sendHarnessInput(
             data: f.data,
             mediaType: f.mimeType,
           })),
-        ] satisfies Array<{ type: "text"; text: string } | { type: "file"; data: string; mediaType: string }>)
+        ] satisfies Array<
+          | { type: "text"; text: string }
+          | { type: "file"; data: string; mediaType: string }
+        >)
       : content;
     const signal = harness.sendSignal({ content: signalContent });
     onDebug?.({
@@ -297,12 +346,6 @@ async function sendHarnessInput(
     onDebug?.({ event: "mastra_send_signal_accepted", signalId: signal.id });
     return;
   }
-  const files = imageFiles?.map((f) => ({
-    data: f.data,
-    mediaType: f.mimeType,
-  }));
-  await harness.sendMessage({ content, files });
-  onDebug?.({ event: "mastra_send_message_done" });
 }
 
 function createAbortError(): Error {

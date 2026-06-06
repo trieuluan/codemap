@@ -16,7 +16,9 @@ export type { HarnessQuestionOption as AskQuestionOption };
 export type { HarnessRequestContext, HarnessQuestionAnswer };
 
 /** Derived harness type from mastracode's createMastraCode return */
-export type MastraHarness = Awaited<ReturnType<typeof createMastraCode>>["harness"];
+export type MastraHarness = Awaited<
+  ReturnType<typeof createMastraCode>
+>["harness"];
 export type { HarnessQuestionSelectionMode };
 export type { HarnessEvent };
 export type { HarnessDisplayState };
@@ -61,7 +63,9 @@ export interface BridgeCallbacks {
   onPlanApproval?: (planId: string, plan: string) => void;
   onToolApproval?: (
     pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>,
-    respond: (decision: "approve" | "decline" | "always_allow_category") => void,
+    respond: (
+      decision: "approve" | "decline" | "always_allow_category",
+    ) => void,
   ) => void;
   onEnd: (
     usage:
@@ -124,7 +128,11 @@ export function summarizeHarnessEvent(
   }
 
   if (event.type === "mode_changed") {
-    return { ...base, modeId: event.modeId, previousModeId: event.previousModeId };
+    return {
+      ...base,
+      modeId: event.modeId,
+      previousModeId: event.previousModeId,
+    };
   }
 
   return base;
@@ -137,9 +145,10 @@ export function bridgeCommonEvent(
   if (event.type === "message_start") {
     const message = event.message;
     if (message?.role === "assistant" && message.createdAt) {
-      const ts = message.createdAt instanceof Date
-        ? message.createdAt.getTime()
-        : new Date(message.createdAt).getTime();
+      const ts =
+        message.createdAt instanceof Date
+          ? message.createdAt.getTime()
+          : new Date(message.createdAt).getTime();
       cb.onMessageStart?.(ts);
     }
     return;
@@ -228,7 +237,11 @@ export function bridgeCommonEvent(
 
   if (event.type === "tool_approval_required") {
     cb.onToolApproval?.(
-      { toolCallId: event.toolCallId, toolName: event.toolName, args: event.args },
+      {
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        args: event.args,
+      },
       (decision) => {
         cb.harness.respondToToolApproval?.({ decision });
       },
@@ -255,7 +268,10 @@ export function bridgeCommonEvent(
   }
 
   if (event.type === "om_observation_end") {
-    cb.onOMObservation?.(event.tokensObserved ?? 0, event.observationTokens ?? 0);
+    cb.onOMObservation?.(
+      event.tokensObserved ?? 0,
+      event.observationTokens ?? 0,
+    );
     return;
   }
 
@@ -424,7 +440,3 @@ function safeJsonStringify(value: unknown): string {
     return String(value);
   }
 }
-
-
-
-

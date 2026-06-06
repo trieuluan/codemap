@@ -84,6 +84,10 @@ export function createSubmitRuntimeCallbacks({
       if (!ctx.isActiveTask(taskId, taskAbort)) return;
       streamingContent = "";
       currentMessageCreatedAt = undefined;
+      // Only clear the streaming indicator — do NOT set task.phase to "done" here.
+      // onStreamReset fires between agent turns (not just at the end), so marking
+      // "done" prematurely leaves input.busy=true while the UI shows ✓ done.
+      // handler.ts sets phase="done" after runSingleAgentRuntime fully resolves.
       store.dispatch({
         streaming: { active: false, content: "", entryIndex: -1 },
       });

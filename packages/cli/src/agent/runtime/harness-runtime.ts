@@ -326,6 +326,49 @@ export async function resetHarnessSingleton(): Promise<void> {
   }
 }
 
+/** After N messages in a thread, rotate to a fresh thread.
+ *  With OM scope="resource", compressed observations carry over automatically.
+ *  Returns message count if rotation happened, null otherwise. */
+export async function maybeRotateHarnessThread(): Promise<{ messageCount: number } | null> {
+  if (!singleton) return null;
+  const { harness } = singleton;
+
+  const threadId = harness.getCurrentThreadId?.();
+  if (!threadId) return null;
+
+  let messages: HarnessMessage[];
+  try {
+    messages = await harness.listMessagesForThread({ threadId });
+  } catch {
+    return null;
+  }
+
+  const THREAD_ROTATION_THRESHOLD = 40;
+  if (messages.length < THREAD_ROTATION_THRESHOLD) return null;
+
+  const messageCount = messages.length;
+
+  try {
+    // Create new thread and switch to it before deleting old one
+    const newThread = await harness.createThread?.();
+    if (newThread?.id) {
+      await (harness as any).switchThread?.({ threadId: newThread.id });
+    }
+    pendingNewThread = false;
+
+    // Delete old thread — Memory.deleteThread also removes associated vectors
+    const memory = await (harness as any).getResolvedMemory?.();
+    if (memory) {
+      await memory.deleteThread(threadId);
+    }
+  } catch (err) {
+    console.debug("[harness] thread rotation failed:", err);
+    return null;
+  }
+
+  return { messageCount };
+}
+
 /** Create a brand-new harness and store it as the singleton. */
 async function createFreshHarness(
   opts: CreateHarnessOptions,
@@ -418,6 +461,9 @@ async function createFreshHarness(
         vector,
         embedder: fastembed.small,
         options: {
+          // Cap sliding-window to avoid unbounded JSON growth (OOM) on long sessions.
+          // Older messages are still reachable via semanticRecall + observationalMemory.
+          lastMessages: 10,
           semanticRecall: {
             topK: 3,
             messageRange: 2,
@@ -430,7 +476,8 @@ async function createFreshHarness(
             enabled: true,
             temporalMarkers: true,
             retrieval: { vector: true },
-            scope: "thread",
+            // resource scope: observations accumulate across threads, surviving rotation
+            scope: "resource",
             activateAfterIdle: "5m",
             activateOnProviderChange: true,
             observation: {
