@@ -27,5 +27,5 @@ export default defineConfig({
     "better-sqlite3",
   ],
   onSuccess:
-    "chmod +x dist/index.js && sed -i '' 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",
+    "chmod +x dist/index.js && perl -pi -e 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",
 });
