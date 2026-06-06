@@ -12,11 +12,6 @@ jobs:
       contents: read
       id-token: write
 
-    env:
-      # prepare-publish.sh rewrites workspace:* → version ranges for npm.
-      # This makes lockfile stale; disable pnpm's auto-deps-verification.
-      PNPM_verify_deps_before_run: "false"
-
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +24,12 @@ jobs:
           node-version: 24
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
+
+      # setup-node creates .npmrc at $NPM_CONFIG_USERCONFIG.
+      # Append verify-deps-before-run=false there so pnpm skips
+      # lockfile-vs-manifest checks after prepare-publish.sh.
+      - name: Disable pnpm deps verification
+        run: echo "verify-deps-before-run=false" >> "$NPM_CONFIG_USERCONFIG"
 
       - run: pnpm install --frozen-lockfile
 
