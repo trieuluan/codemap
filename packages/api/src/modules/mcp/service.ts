@@ -4,7 +4,7 @@ import type {
   CodeMapUser,
   McpAuthClaimResponse,
   McpAuthStatusResponse,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import { db } from "../../db";
 import { auth } from "../../lib/auth";
 import { createWorkspaceService } from "../workspace/service";

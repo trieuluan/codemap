@@ -13,7 +13,7 @@ import type {
   WorkspacePlan,
   WorkspaceRole,
   WorkspaceUsageSummary,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import type { CreateWorkspaceBody, UpdateWorkspaceBody } from "./schema";
 
 type Database = typeof dbType;

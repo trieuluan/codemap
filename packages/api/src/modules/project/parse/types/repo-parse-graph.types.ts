@@ -16,7 +16,7 @@ export type {
   ProjectImportFileDiffEntry,
   ProjectImportMetricDelta,
   ProjectImportSymbolDiffEntry,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 
 export const REPO_SYMBOL_KIND_VALUES = [
   "module",

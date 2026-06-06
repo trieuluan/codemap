@@ -5,7 +5,7 @@ import {
   workspaceSubscription,
   workspacePayment,
 } from "../../db/schema";
-import type { WorkspacePlan } from "@codemap/shared";
+import type { WorkspacePlan } from "@codemap-ai/shared";
 
 type Database = typeof dbType;
 

@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
 
 interface SearchResult {
   title: string;

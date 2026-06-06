@@ -22,7 +22,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
-import type { WorkspaceEntitlements, WorkspaceUsageSummary } from "@codemap/shared";
+import type { WorkspaceEntitlements, WorkspaceUsageSummary } from "@codemap-ai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";

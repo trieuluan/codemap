@@ -1,5 +1,5 @@
 {
-  "name": "@codemap/shared",
+  "name": "@codemap-ai/shared",
   "version": "1.0.2",
   "private": true,
   "main": "dist/index.js",
@@ -12,5 +12,14 @@
   },
   "dependencies": {
     "zod": "^4.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
   }
 }

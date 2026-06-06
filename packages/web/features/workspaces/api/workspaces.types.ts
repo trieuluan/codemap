@@ -11,4 +11,4 @@ export type {
   WorkspaceType,
   WorkspaceUsageSummary,
   SubscriptionStatus,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";

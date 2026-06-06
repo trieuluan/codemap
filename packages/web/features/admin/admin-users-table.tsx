@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { FormEvent } from "react";
-import type { WorkspacePlan } from "@codemap/shared";
+import type { WorkspacePlan } from "@codemap-ai/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

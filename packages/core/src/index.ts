@@ -1,5 +1,5 @@
-// @codemap/core — shared internal library
-// Consumers can import from subpaths: @codemap/core/lib/foo or from this barrel
+// @codemap-ai/core — shared internal library
+// Consumers can import from subpaths: @codemap-ai/core/lib/foo or from this barrel
 
 export * from "./config.js";
 export * from "./lib/api-types.js";

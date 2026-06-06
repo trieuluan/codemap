@@ -1,10 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
 import { z } from "zod";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { openUrlInBrowser } from "@codemap/core/lib/open-url.js";
-import { errorContent, success, withToolError } from "@codemap/core/lib/tool-response.js";
-import type { GithubStatus } from "@codemap/core/lib/api-types.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { openUrlInBrowser } from "@codemap-ai/core/lib/open-url.js";
+import { errorContent, success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import type { GithubStatus } from "@codemap-ai/core/lib/api-types.js";
 
 type GitlabStatus =
   | { connected: false }

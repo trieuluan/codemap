@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 import { test } from "node:test";
-import { parseWorkspaceFileSemantics } from "@codemap/code-index";
+import { parseWorkspaceFileSemantics } from "@codemap-ai/code-index";
 
 test("parseWorkspaceFileSemantics extracts basic TypeScript imports, symbols, and exports", async () => {
   const semantics = await parseWorkspaceFileSemantics({

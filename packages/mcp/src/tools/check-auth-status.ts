@@ -1,9 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { getMcpWhoAmI } from "@codemap/core/lib/mcp-auth.js";
-import { success, errorContent } from "@codemap/core/lib/tool-response.js";
-import type { GithubStatus } from "@codemap/core/lib/api-types.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { getMcpWhoAmI } from "@codemap-ai/core/lib/mcp-auth.js";
+import { success, errorContent } from "@codemap-ai/core/lib/tool-response.js";
+import type { GithubStatus } from "@codemap-ai/core/lib/api-types.js";
 
 type GitlabStatus =
   | { connected: false }

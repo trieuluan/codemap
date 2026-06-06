@@ -20,7 +20,7 @@ import {
   type Project,
   updateProject,
 } from "@/features/projects/api";
-import { updateProjectInputSchema } from "@codemap/shared";
+import { updateProjectInputSchema } from "@codemap-ai/shared";
 
 type FieldErrors = Partial<
   Record<

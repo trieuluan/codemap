@@ -21,7 +21,7 @@ import {
   type ProjectSymbolUsagesQuery,
   type TriggerProjectImportInput,
   type UpdateProjectInput,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import { project, projectImport, projectMapSnapshot } from "../../db/schema";
 
 export const projectSelectSchema = createSelectSchema(project);
@@ -80,7 +80,7 @@ export {
   projectSemanticSearchQuerySchema,
   projectSymbolGraphQuerySchema,
   projectSymbolUsagesQuerySchema,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 
 export type CreateProjectBody = CreateProjectInput;
 export type UpdateProjectBody = UpdateProjectInput;

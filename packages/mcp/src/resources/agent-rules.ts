@@ -11,7 +11,7 @@ import {
   WORKFLOW_GATES_RULE_MARKDOWN,
   WORKFLOW_GATES_RULE_URI,
   buildAgentWorkflowMarkdown,
-} from "@codemap/core/lib/agent-workflow.js";
+} from "@codemap-ai/core/lib/agent-workflow.js";
 
 export function registerAgentRuleResources(server: McpServer) {
   server.registerResource(

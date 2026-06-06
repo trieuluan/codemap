@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { browserSettingsApi, type CreateUserApiKeyResponse } from "@/features/settings/api";
 import { useToast } from "@/components/ui/use-toast";
-import { createApiKeyBodySchema } from "@codemap/shared";
+import { createApiKeyBodySchema } from "@codemap-ai/shared";
 
 const api = browserSettingsApi();
 

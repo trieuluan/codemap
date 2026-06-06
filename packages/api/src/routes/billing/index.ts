@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createPayPalClientFromEnv } from "../../modules/billing/paypal";
 import { createBillingService } from "../../modules/billing/service";
 import { createWorkspaceService } from "../../modules/workspace/service";
-import type { WorkspacePlan } from "@codemap/shared";
+import type { WorkspacePlan } from "@codemap-ai/shared";
 
 const PAYPAL_PLAN_MAP: Record<string, WorkspacePlan> = {};
 

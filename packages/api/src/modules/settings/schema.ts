@@ -3,4 +3,4 @@ export {
   revokeApiKeyParamsSchema,
   type CreateApiKeyBody,
   type RevokeApiKeyParams,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";

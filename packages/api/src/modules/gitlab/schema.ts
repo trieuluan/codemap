@@ -5,4 +5,4 @@ export {
   type IntegrationConnectQuery as GitlabConnectQuery,
   type IntegrationRepositoriesQuery as GitlabRepositoriesQuery,
   type OAuthCallbackQuery as GitlabCallbackQuery,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";

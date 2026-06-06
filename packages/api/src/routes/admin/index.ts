@@ -5,7 +5,7 @@ import {
   adminListUsersQuerySchema,
   adminListProjectImportsQuerySchema,
   type AdminProjectImportSummary,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import {
   project,
   projectImport,

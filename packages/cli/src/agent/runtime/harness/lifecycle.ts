@@ -387,7 +387,7 @@ async function createFreshHarness(
   let mergedExtraTools: Record<string, unknown> | undefined;
   try {
     const { readWorkspacePath } =
-      await import("@codemap/core/lib/workspace-project.js");
+      await import("@codemap-ai/core/lib/workspace-project.js");
     const workspaceRoot = await readWorkspacePath();
     const { resolvedTools, extraTools: customMastraTools } =
       await loadCustomTools(workspaceRoot);

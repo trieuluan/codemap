@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { getPackageRoot } from "@codemap/core/lib/bundled-runtime.js";
-import { findMonorepoRoot } from "@codemap/core/lib/monorepo-root.js";
+import { getPackageRoot } from "@codemap-ai/core/lib/bundled-runtime.js";
+import { findMonorepoRoot } from "@codemap-ai/core/lib/monorepo-root.js";
 
 const packageRoot = getPackageRoot(import.meta.url);
 

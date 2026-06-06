@@ -79,7 +79,8 @@ test("emits passive tool preview on tool_start", () => {
   );
 
   assert.match(preview ?? "", /~~~diff/);
-  assert.match(preview ?? "", /diff --git a\/src\/app\.ts b\/src\/app\.ts/);
+  assert.match(preview ?? "", /--- a\/src\/app\.ts/);
+  assert.match(preview ?? "", /\+\+\+ b\/src\/app\.ts/);
 });
 
 test("emits tool_end error message from structured result", () => {

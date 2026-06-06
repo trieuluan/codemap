@@ -1,18 +1,18 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { readWorkspaceProjectConfig } from "@codemap/core/lib/workspace-project.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
 import type {
   ProjectDetail,
   ProjectImportDetail,
   WorkspaceDetail,
-} from "@codemap/core/lib/api-types.js";
+} from "@codemap-ai/core/lib/api-types.js";
 import {
   buildImportHealth,
   describeImportHealth,
   type ImportHealth,
-} from "@codemap/core/lib/import-health.js";
-import { resolveWorkspace } from "@codemap/core/lib/workspace-resolver.js";
+} from "@codemap-ai/core/lib/import-health.js";
+import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
 
 const RESOURCE_URI = "codemap://project/context";
 

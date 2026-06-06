@@ -6,7 +6,7 @@ import type {
   ParsedImportDraft,
   ParsedSymbolDraft,
   WorkspaceFileCandidate,
-} from "@codemap/code-index";
+} from "@codemap-ai/code-index";
 import type {
   CodebaseSearchResponse,
   FileContent,

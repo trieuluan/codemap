@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/cli",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "type": "module",
   "description": "CodeMap — AI-powered coding agent CLI",
   "license": "MIT",
@@ -32,7 +32,7 @@
     "@ai-sdk/openai": "^3.0.63",
     "@clack/prompts": "^1.5.0",
     "@codemap-ai/mcp": "workspace:*",
-    "@codemap/core": "workspace:*",
+    "@codemap-ai/core": "workspace:*",
     "@earendil-works/pi-tui": "^0.74.0",
     "@mastra/fastembed": "1.1.2",
     "@mastra/libsql": "1.12.1",
@@ -51,7 +51,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@codemap/code-index": "workspace:*",
+    "@codemap-ai/code-index": "workspace:*",
     "@mastra/core": "^1.41.0",
     "@types/diff": "^8.0.0",
     "@types/node": "^24.12.2",
@@ -61,5 +61,14 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
   }
 }

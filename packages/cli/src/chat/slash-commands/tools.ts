@@ -1,7 +1,7 @@
 import type { Command } from "./types.js";
 import { TOOL_CATEGORIES, type ToolCategory } from "./tool-categories.js";
 import { getMastraMcpStatusSummary, MASTRA_DISABLED_TOOLS, getLoadedCustomTools } from "../../agent/runtime/harness-runtime.js";
-import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
+import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 

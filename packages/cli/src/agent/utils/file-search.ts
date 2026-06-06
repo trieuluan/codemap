@@ -1,9 +1,9 @@
 import path from "node:path";
 
-import { collectWorkspaceFiles } from "@codemap/code-index";
+import { collectWorkspaceFiles } from "@codemap-ai/code-index";
 
-import { ensureLocalIndexWithSummary } from "@codemap/core/lib/local-index.js";
-import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
+import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
+import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 export interface IndexedFileOption {
   path: string;

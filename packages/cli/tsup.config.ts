@@ -19,7 +19,7 @@ export default defineConfig({
       `var __dirname=__dn(__filename);`,
     ].join(""),
   },
-  noExternal: [/@codemap\//],
+  noExternal: [/@codemap-ai\//],
   external: [
     "web-tree-sitter",
     "tree-sitter-wasms",

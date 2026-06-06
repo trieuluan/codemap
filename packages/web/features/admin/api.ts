@@ -11,7 +11,7 @@ import type {
   AdminListProjectImportsQuery,
   AdminProjectImportsResponse,
   WorkspacePlan,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import type { ProjectImport } from "@/features/projects/api";
 
 export type {

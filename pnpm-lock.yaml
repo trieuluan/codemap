@@ -60,10 +60,10 @@ importers:
       '@bull-board/ui':
         specifier: ^7.1.5
         version: 7.1.5
-      '@codemap/code-index':
+      '@codemap-ai/code-index':
         specifier: file:../code-index
         version: link:../code-index
-      '@codemap/shared':
+      '@codemap-ai/shared':
         specifier: file:../shared
         version: link:../shared
       '@fastify/autoload':
@@ -169,12 +169,12 @@ importers:
       '@clack/prompts':
         specifier: ^1.5.0
         version: 1.5.0
+      '@codemap-ai/core':
+        specifier: workspace:*
+        version: link:../core
       '@codemap-ai/mcp':
         specifier: workspace:*
         version: link:../mcp
-      '@codemap/core':
-        specifier: workspace:*
-        version: link:../core
       '@earendil-works/pi-tui':
         specifier: ^0.74.0
         version: 0.74.2
@@ -224,7 +224,7 @@ importers:
         specifier: ^4.3.6
         version: 4.4.3
     devDependencies:
-      '@codemap/code-index':
+      '@codemap-ai/code-index':
         specifier: workspace:*
         version: link:../code-index
       '@mastra/core':
@@ -267,10 +267,10 @@ importers:
 
   packages/core:
     dependencies:
-      '@codemap/code-index':
+      '@codemap-ai/code-index':
         specifier: workspace:*
         version: link:../code-index
-      '@codemap/shared':
+      '@codemap-ai/shared':
         specifier: workspace:*
         version: link:../shared
       '@manypkg/get-packages':
@@ -305,7 +305,7 @@ importers:
         specifier: ^4.3.6
         version: 4.4.3
     devDependencies:
-      '@codemap/core':
+      '@codemap-ai/core':
         specifier: workspace:*
         version: link:../core
       '@types/node':
@@ -327,9 +327,19 @@ importers:
         specifier: ^4.3.6
         version: 4.4.3
 
+  packages/tool-types:
+    dependencies:
+      zod:
+        specifier: '>=3.0.0'
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ~5.9.2
+        version: 5.9.3
+
   packages/web:
     dependencies:
-      '@codemap/shared':
+      '@codemap-ai/shared':
         specifier: file:../shared
         version: link:../shared
       '@hookform/resolvers':

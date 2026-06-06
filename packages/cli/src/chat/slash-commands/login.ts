@@ -1,10 +1,10 @@
-import { loadConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
+import { loadConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import {
   startMcpLogin,
   tryOpenLoginBrowser,
   waitForLoginAuthorization,
-} from "@codemap/core/lib/mcp-auth.js";
+} from "@codemap-ai/core/lib/mcp-auth.js";
 import type { Command } from "./types.js";
 
 export const loginCommand: Command = {

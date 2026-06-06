@@ -8,7 +8,7 @@ import { MCPClient } from "@mastra/mcp";
 import {
   readMcpServerConfigs,
   readPriorityResources,
-} from "@codemap/core/lib/workspace-project.js";
+} from "@codemap-ai/core/lib/workspace-project.js";
 import type { ChatToolDefinition } from "../../types.js";
 import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
 

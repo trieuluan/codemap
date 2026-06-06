@@ -7,29 +7,29 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "build:shared": "npm --workspace=@codemap/shared run build",
-    "build:code-index": "npm --workspace=@codemap/code-index run build",
-    "dev:api": "npm --workspace=@codemap/api run dev",
-    "dev:worker": "npm --workspace=@codemap/api run dev:workers",
-    "dev:workers": "npm --workspace=@codemap/api run dev:workers",
-    "dev:worker:parses": "npm --workspace=@codemap/api run dev:worker:parses",
-    "build:api": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/api run build:ts",
-    "start:api": "npm --workspace=@codemap/api run start",
-    "start:worker": "npm --workspace=@codemap/api run workers",
-    "start:workers": "npm --workspace=@codemap/api run workers",
-    "start:worker:parses": "npm --workspace=@codemap/api run worker:parses",
-    "test:api": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/api run test",
-    "dev:web": "npm --workspace=@codemap/web run dev",
-    "build:web": "npm run build:shared && npm --workspace=@codemap/web run build",
-    "preview:web": "npm --workspace=@codemap/web run start",
+    "build:shared": "npm --workspace=@codemap-ai/shared run build",
+    "build:code-index": "npm --workspace=@codemap-ai/code-index run build",
+    "dev:api": "npm --workspace=@codemap-ai/api run dev",
+    "dev:worker": "npm --workspace=@codemap-ai/api run dev:workers",
+    "dev:workers": "npm --workspace=@codemap-ai/api run dev:workers",
+    "dev:worker:parses": "npm --workspace=@codemap-ai/api run dev:worker:parses",
+    "build:api": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap-ai/api run build:ts",
+    "start:api": "npm --workspace=@codemap-ai/api run start",
+    "start:worker": "npm --workspace=@codemap-ai/api run workers",
+    "start:workers": "npm --workspace=@codemap-ai/api run workers",
+    "start:worker:parses": "npm --workspace=@codemap-ai/api run worker:parses",
+    "test:api": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap-ai/api run test",
+    "dev:web": "npm --workspace=@codemap-ai/web run dev",
+    "build:web": "npm run build:shared && npm --workspace=@codemap-ai/web run build",
+    "preview:web": "npm --workspace=@codemap-ai/web run start",
     "dev:mcp": "npm --workspace=@codemap-ai/mcp run dev",
     "build:mcp": "npm run build:core && npm --workspace=@codemap-ai/mcp run build",
     "start:mcp": "npm --workspace=@codemap-ai/mcp run start",
     "dev:cli": "pnpm --filter @codemap-ai/cli run dev",
     "build:cli": "npm run build:core && npm --workspace=@codemap-ai/cli run build",
     "start:cli": "npm --workspace=@codemap-ai/cli run start",
-    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap/api --filter @codemap/web --filter @codemap/shared --no-git-tag-version",
-    "build:core": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap/core run build"
+    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap-ai/api --filter @codemap-ai/web --filter @codemap-ai/shared --no-git-tag-version",
+    "build:core": "npm run build:shared && npm run build:code-index && npm --workspace=@codemap-ai/core run build"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
@@ -46,5 +46,13 @@
   },
   "dependencies": {
     "@manypkg/get-packages": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
   }
 }

@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createProject, ProjectsApiError } from "@/features/projects/api";
 import { useToast } from "@/components/ui/use-toast";
-import { createProjectInputSchema } from "@codemap/shared";
+import { createProjectInputSchema } from "@codemap-ai/shared";
 
 type FieldErrors = Partial<
   Record<"name" | "description" | "repositoryUrl" | "defaultBranch", string>

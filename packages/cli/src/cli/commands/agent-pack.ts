@@ -2,15 +2,15 @@ import {
   installAgentPack,
   parseAgentPackInstallArgs,
   cleanAgentPackBackups,
-} from "@codemap/core/lib/agent-pack-installer.js";
-import { getPluginRoot } from "@codemap/core/lib/agent-pack.js";
+} from "@codemap-ai/core/lib/agent-pack-installer.js";
+import { getPluginRoot } from "@codemap-ai/core/lib/agent-pack.js";
 import {
   buildAgentPackDoctorMarkdown,
   doctorAgentPack,
   parseAgentPackDoctorArgs,
-} from "@codemap/core/lib/agent-pack-doctor.js";
-import { buildOnboardingGuide, isOnboardingTarget } from "@codemap/core/lib/onboarding.js";
-import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
+} from "@codemap-ai/core/lib/agent-pack-doctor.js";
+import { buildOnboardingGuide, isOnboardingTarget } from "@codemap-ai/core/lib/onboarding.js";
+import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 export async function runInitAgentPackCommand(args: string[]): Promise<void> {
   const options = parseAgentPackInstallArgs(args);

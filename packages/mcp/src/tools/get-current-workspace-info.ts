@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { errorContent, success } from "@codemap/core/lib/tool-response.js";
-import { resolveWorkspace } from "@codemap/core/lib/workspace-resolver.js";
+import { errorContent, success } from "@codemap-ai/core/lib/tool-response.js";
+import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
 
 export function registerGetCurrentWorkspaceInfoTool(server: McpServer) {
   server.registerTool(

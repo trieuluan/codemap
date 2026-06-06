@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
 
 const MAX_CHARS = 30_000;
 const TIMEOUT_MS = 15_000;

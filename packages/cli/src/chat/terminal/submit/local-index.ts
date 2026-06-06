@@ -5,7 +5,7 @@ import {
   buildLocalIndex,
   refreshLocalFile,
   removeLocalFile,
-} from "@codemap/core/lib/local-index.js";
+} from "@codemap-ai/core/lib/local-index.js";
 
 function extractEditedPath(
   toolName: string,

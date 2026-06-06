@@ -65,4 +65,4 @@ export type {
   ProjectVisibility,
   TriggerProjectImportInput,
   UpdateProjectInput,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";

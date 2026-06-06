@@ -1,10 +1,10 @@
-import { loadConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { getProjectImportHealth } from "@codemap/core/lib/import-health.js";
-import type { ProjectDetail } from "@codemap/core/lib/api-types.js";
-import { readLocalIndex } from "@codemap/core/lib/local-index.js";
-import { tryGetCurrentWorkspaceInfo } from "@codemap/core/lib/workspace-git.js";
-import { readWorkspaceProjectConfig } from "@codemap/core/lib/workspace-project.js";
+import { loadConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { getProjectImportHealth } from "@codemap-ai/core/lib/import-health.js";
+import type { ProjectDetail } from "@codemap-ai/core/lib/api-types.js";
+import { readLocalIndex } from "@codemap-ai/core/lib/local-index.js";
+import { tryGetCurrentWorkspaceInfo } from "@codemap-ai/core/lib/workspace-git.js";
+import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
 
 function formatAge(date: Date): string {
   const mins = Math.floor((Date.now() - date.getTime()) / 60_000);

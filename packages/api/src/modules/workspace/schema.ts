@@ -6,7 +6,7 @@ import {
   type CreateWorkspaceInput,
   type UpdateWorkspaceInput,
   type WorkspaceParams,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 
 export const createWorkspaceBodySchema = createWorkspaceInputSchema;
 export const updateWorkspaceBodySchema = updateWorkspaceInputSchema;

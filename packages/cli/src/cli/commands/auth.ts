@@ -1,11 +1,11 @@
-import { clearGlobalAuthConfig, loadConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
+import { clearGlobalAuthConfig, loadConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import {
   getMcpWhoAmI,
   startMcpLogin,
   tryOpenLoginBrowser,
   waitForLoginAuthorization,
-} from "@codemap/core/lib/mcp-auth.js";
+} from "@codemap-ai/core/lib/mcp-auth.js";
 
 export async function runLoginCommand(): Promise<void> {
   const config = await loadConfig();

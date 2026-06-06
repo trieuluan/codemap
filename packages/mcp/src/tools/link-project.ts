@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap/core/lib/uuid-schema.js";
+import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import { resolveWorkspace } from "@codemap/core/lib/workspace-resolver.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
 import {
   readWorkspaceProjectId,
   saveWorkspaceProjectId,
-} from "@codemap/core/lib/workspace-project.js";
-import type { Project } from "@codemap/core/lib/api-types.js";
+} from "@codemap-ai/core/lib/workspace-project.js";
+import type { Project } from "@codemap-ai/core/lib/api-types.js";
 
 function sshToHttpsUrl(url: string): string {
   // git@github.com:user/repo.git → https://github.com/user/repo

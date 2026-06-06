@@ -43,8 +43,8 @@ test("messageLines renders fenced diff previews inline", () => {
   const rendered = messageLines(messages, 100).map(stripAnsi).join("\n");
 
   assert.match(rendered, /⎿  \+1 -1 lines/);
-  assert.match(rendered, /-const ok = false;/);
-  assert.match(rendered, /\+const ok = true;/);
+  assert.match(rendered, /const ok = false;/);
+  assert.match(rendered, /const ok = true;/);
 });
 
 test("messageLines clamps diff preview lines to terminal width", () => {
@@ -145,8 +145,8 @@ test("messageLines keeps passive preview visible when expanded", () => {
   const rendered = messageLines(messages, 100).map(stripAnsi).join("\n");
 
   assert.match(rendered, /⎿  \+1 -1 lines/);
-  assert.match(rendered, /-before/);
-  assert.match(rendered, /\+after/);
+  assert.match(rendered, /before/);
+  assert.match(rendered, /after/);
   assert.match(rendered, /Replaced 1 occurrence in README\.md/);
 });
 

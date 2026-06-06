@@ -3,13 +3,13 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { uuidSchema } from "@codemap/core/lib/uuid-schema.js";
+import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import { readWorkspaceProjectId, readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
-import { escapeRegex } from "@codemap/core/lib/regex-utils.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import { readWorkspaceProjectId, readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
+import { escapeRegex } from "@codemap-ai/core/lib/regex-utils.js";
 
 const execFileAsync = promisify(execFile);
 

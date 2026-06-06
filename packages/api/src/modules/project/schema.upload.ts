@@ -1,4 +1,4 @@
 export {
   createProjectFromUploadQuerySchema,
   type CreateProjectFromUploadQuery,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";

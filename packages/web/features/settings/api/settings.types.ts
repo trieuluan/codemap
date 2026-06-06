@@ -1,4 +1,4 @@
-export type { CreateApiKeyBody as CreateUserApiKeyInput } from "@codemap/shared";
+export type { CreateApiKeyBody as CreateUserApiKeyInput } from "@codemap-ai/shared";
 
 export type UserApiKeyMetadata = {
   client?: string;

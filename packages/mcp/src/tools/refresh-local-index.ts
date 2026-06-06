@@ -1,8 +1,8 @@
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { buildLocalIndex, ensureLocalIndex, getLocalIndexSummary } from "@codemap/core/lib/local-index.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
+import { buildLocalIndex, ensureLocalIndex, getLocalIndexSummary } from "@codemap-ai/core/lib/local-index.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
 
 export function registerRefreshLocalIndexTool(server: McpServer) {
   server.registerTool(

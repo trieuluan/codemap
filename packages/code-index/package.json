@@ -1,5 +1,5 @@
 {
-  "name": "@codemap/code-index",
+  "name": "@codemap-ai/code-index",
   "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
@@ -18,5 +18,14 @@
   },
   "devDependencies": {
     "@types/node": "^24.12.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git",
+    "directory": "packages/code-index"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
   }
 }

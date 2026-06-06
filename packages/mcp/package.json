@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "CodeMap MCP server for IDE integrations",
   "license": "MIT",
@@ -24,7 +24,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@codemap/core": "workspace:*",
+    "@codemap-ai/core": "workspace:*",
     "@types/node": "^24.12.2",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
@@ -32,5 +32,15 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
+  },
+  "types": "dist/index.d.ts"
 }

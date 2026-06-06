@@ -6,7 +6,7 @@ import {
 } from "../../agent/runtime/harness-runtime.js";
 import { executeCommand } from "../slash-commands/index.js";
 import { mapHarnessMessagesToUI } from "../slash-commands/sessions.js";
-import { tryGetCurrentWorkspaceInfo } from "@codemap/core/lib/workspace-git.js";
+import { tryGetCurrentWorkspaceInfo } from "@codemap-ai/core/lib/workspace-git.js";
 import {
   createDebugLogger,
   type DebugLogger,

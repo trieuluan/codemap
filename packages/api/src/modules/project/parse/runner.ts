@@ -13,13 +13,13 @@ import {
   PARSE_TOOL_NAME,
   PARSE_TOOL_VERSION,
   parseWorkspaceFileSemantics,
-} from "@codemap/code-index";
+} from "@codemap-ai/code-index";
 import { createRepositoryWorkspaceService } from "../import/repository-workspace";
 import { createProjectService } from "../service";
 import { indexProjectEmbeddings } from "../embeddings/indexer";
 import { createRepoParseGraphService } from "./repo-parse-graph";
 
-export type { WorkspaceFileCandidate } from "@codemap/code-index";
+export type { WorkspaceFileCandidate } from "@codemap-ai/code-index";
 
 interface RunProjectParseContext {
   job?: Job;

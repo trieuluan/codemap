@@ -1,14 +1,14 @@
 import { readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { uuidSchema } from "@codemap/core/lib/uuid-schema.js";
+import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import { readWorkspaceProjectId, readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
-import { escapeRegex } from "@codemap/core/lib/regex-utils.js";
-import type { SemanticSearchResult } from "@codemap/core/lib/api-types.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import { readWorkspaceProjectId, readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
+import { escapeRegex } from "@codemap-ai/core/lib/regex-utils.js";
+import type { SemanticSearchResult } from "@codemap-ai/core/lib/api-types.js";
 
 // ─── types (subset of get-file parse response) ───────────────────────────────
 

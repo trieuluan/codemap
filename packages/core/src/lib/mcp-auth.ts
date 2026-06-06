@@ -4,7 +4,7 @@ import type {
   McpAuthMeResponse,
   McpAuthStatusResponse,
   McpStartAuthResponse,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import {
   type McpConfigAuth,
   type McpConfigUser,

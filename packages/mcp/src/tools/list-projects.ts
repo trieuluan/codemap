@@ -1,17 +1,17 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
 import type {
   Project,
   ProjectImportDetail,
-} from "@codemap/core/lib/api-types.js";
+} from "@codemap-ai/core/lib/api-types.js";
 import {
   buildImportHealth,
   formatShortCommit,
-} from "@codemap/core/lib/import-health.js";
-import { resolveWorkspace } from "@codemap/core/lib/workspace-resolver.js";
+} from "@codemap-ai/core/lib/import-health.js";
+import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
 
 interface ProjectListItem extends Project {
   latestImport?: ProjectImportDetail | null;

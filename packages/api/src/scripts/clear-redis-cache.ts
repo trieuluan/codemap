@@ -23,7 +23,7 @@ const NAMESPACE_ALIASES: Record<string, AppCacheNamespace> = {
 
 function printHelp() {
   console.log(`Usage:
-  npm --workspace=@codemap/api run redis:cache:clear -- [options]
+  npm --workspace=@codemap-ai/api run redis:cache:clear -- [options]
 
 Options:
   --import-id <id>              Clear app cache for one project import.

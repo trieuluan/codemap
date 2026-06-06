@@ -1,14 +1,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import { readWorkspaceProjectConfig } from "@codemap/core/lib/workspace-project.js";
-import type { ProjectDetail, WorkspaceDetail } from "@codemap/core/lib/api-types.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
+import type { ProjectDetail, WorkspaceDetail } from "@codemap-ai/core/lib/api-types.js";
 import {
   describeImportHealth,
   getProjectImportHealth,
-} from "@codemap/core/lib/import-health.js";
+} from "@codemap-ai/core/lib/import-health.js";
 
 function formatProject(
   p: ProjectDetail,

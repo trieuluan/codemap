@@ -15,7 +15,7 @@ import type {
   ProjectMapSearchFileResult,
   ProjectMapSearchResponse,
   ProjectMapSearchSymbolResult,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 
 export type {
   EditLocationConfidence,
@@ -42,7 +42,7 @@ export type {
   SymbolUsageTarget,
   SymbolUsagesResponse,
   WorkspaceDetail,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 
 export type ImportStatus = ProjectImportStatus;
 export type ParseStatus = ProjectImportParseStatus;

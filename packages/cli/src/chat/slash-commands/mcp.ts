@@ -3,7 +3,7 @@ import {
   readWorkspacePath,
   saveMcpServerEntry,
   removeMcpServerEntry,
-} from "@codemap/core/lib/workspace-project.js";
+} from "@codemap-ai/core/lib/workspace-project.js";
 import { getMastraMcpStatusSummary } from "../../agent/runtime/harness-runtime.js";
 
 export const mcpCommand: Command = {

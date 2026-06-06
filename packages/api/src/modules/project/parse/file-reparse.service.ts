@@ -10,7 +10,7 @@ import {
   PARSE_TOOL_VERSION,
   parseWorkspaceFileSemantics,
   type WorkspaceFileCandidate,
-} from "@codemap/code-index";
+} from "@codemap-ai/code-index";
 import type { db } from "../../../db";
 import type { ProjectFileRecord, projectImport } from "../../../db/schema";
 import { createRepoParseGraphService } from "./repo-parse-graph";

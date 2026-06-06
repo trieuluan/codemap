@@ -7,10 +7,10 @@ const require = createRequire(import.meta.url);
 const { version: SERVER_VERSION } = require("../package.json") as { version: string };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { loadConfig } from "@codemap/core/config.js";
-import { buildServerInstructions } from "@codemap/core/lib/server-instructions.js";
-import { buildSessionContext } from "@codemap/core/lib/session-context.js";
-import { autoInjectRules } from "@codemap/core/lib/auto-inject.js";
+import { loadConfig } from "@codemap-ai/core/config.js";
+import { buildServerInstructions } from "@codemap-ai/core/lib/server-instructions.js";
+import { buildSessionContext } from "@codemap-ai/core/lib/session-context.js";
+import { autoInjectRules } from "@codemap-ai/core/lib/auto-inject.js";
 
 import { registerManageGitConnectionTool } from "./tools/manage-git-connection.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";

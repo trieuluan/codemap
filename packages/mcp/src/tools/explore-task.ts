@@ -1,21 +1,21 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap/core/lib/uuid-schema.js";
+import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import {
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
-} from "@codemap/core/lib/local-index.js";
-import { success, withToolError } from "@codemap/core/lib/tool-response.js";
-import { readWorkspaceProjectId } from "@codemap/core/lib/workspace-project.js";
-import { sessionTracker } from "@codemap/core/lib/session-tracker.js";
+} from "@codemap-ai/core/lib/local-index.js";
+import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
+import { readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
+import { sessionTracker } from "@codemap-ai/core/lib/session-tracker.js";
 import type {
   CodebaseSearchResponse,
   EditLocationsResponse,
   EditLocationReadPlan,
   SemanticSearchResult,
-} from "@codemap/core/lib/api-types.js";
+} from "@codemap-ai/core/lib/api-types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

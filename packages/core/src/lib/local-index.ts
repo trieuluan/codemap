@@ -6,7 +6,7 @@ import {
   parseWorkspaceFileSemantics,
   PARSE_TOOL_NAME,
   PARSE_TOOL_VERSION,
-} from "@codemap/code-index";
+} from "@codemap-ai/code-index";
 import { resolveWorkspace } from "./workspace-resolver.js";
 import type { CodeMapClient } from "./codemap-api.js";
 import { fetchLatestProjectImport } from "./import-health.js";

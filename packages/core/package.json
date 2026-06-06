@@ -1,10 +1,10 @@
 {
-  "name": "@codemap/core",
-  "version": "0.1.0",
+  "name": "@codemap-ai/core",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "description": "CodeMap shared internal library",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "exports": {
     ".": "./src/index.ts",
     "./config.js": "./src/config.ts",
@@ -15,8 +15,8 @@
     "dev": "tsc -p tsconfig.build.json --watch"
   },
   "dependencies": {
-    "@codemap/code-index": "workspace:*",
-    "@codemap/shared": "workspace:*",
+    "@codemap-ai/code-index": "workspace:*",
+    "@codemap-ai/shared": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
     "@modelcontextprotocol/sdk": "^1.21.0",
     "jszip": "^3.10.1",
@@ -26,5 +26,20 @@
     "@types/node": "^24.12.2",
     "tsx": "^4.21.0",
     "typescript": "~5.9.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trieuluan/codemap.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/trieuluan/codemap#readme",
+  "bugs": {
+    "url": "https://github.com/trieuluan/codemap/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "types": "dist/index.d.ts"
 }

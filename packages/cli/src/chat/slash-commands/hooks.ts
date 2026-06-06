@@ -9,7 +9,7 @@ import {
   type HookDefinition,
 } from "../../agent/tools/hooks/index.js";
 import { reloadHooks } from "../../agent/runtime/harness-runtime.js";
-import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
+import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";

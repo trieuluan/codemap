@@ -6,7 +6,7 @@ import {
   repoSymbolOccurrence,
   repoSymbolRelationship,
 } from "../../../../db/schema";
-import type { ProjectSymbolGraphResponse } from "@codemap/shared";
+import type { ProjectSymbolGraphResponse } from "@codemap-ai/shared";
 
 type Database = typeof import("../../../../db/index.ts").db;
 type SymbolRecord = typeof repoSymbol.$inferSelect & {

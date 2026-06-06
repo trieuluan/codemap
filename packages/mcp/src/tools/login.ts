@@ -1,8 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { startMcpLogin, tryOpenLoginBrowser, pollMcpAuthUntilDone } from "@codemap/core/lib/mcp-auth.js";
-import { errorContent, success } from "@codemap/core/lib/tool-response.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { startMcpLogin, tryOpenLoginBrowser, pollMcpAuthUntilDone } from "@codemap-ai/core/lib/mcp-auth.js";
+import { errorContent, success } from "@codemap-ai/core/lib/tool-response.js";
 
 const LOGIN_WAIT_TIMEOUT_MS = 45_000;
 

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { clearGlobalAuthConfig, type McpServerConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
-import { errorContent, success } from "@codemap/core/lib/tool-response.js";
+import { clearGlobalAuthConfig, type McpServerConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { errorContent, success } from "@codemap-ai/core/lib/tool-response.js";
 
 export function registerLogoutTool(
   server: McpServer,

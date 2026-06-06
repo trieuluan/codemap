@@ -1,5 +1,5 @@
-import { loadConfig, clearGlobalAuthConfig } from "@codemap/core/config.js";
-import { createCodeMapClient } from "@codemap/core/lib/codemap-api.js";
+import { loadConfig, clearGlobalAuthConfig } from "@codemap-ai/core/config.js";
+import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import type { Command } from "./types.js";
 
 export const logoutCommand: Command = {

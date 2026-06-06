@@ -9,8 +9,8 @@ import {
   TUI,
 } from "@earendil-works/pi-tui";
 import cfonts from "cfonts";
-import type { McpServerConfig } from "@codemap/core/config.js";
-import { runLoginFlow } from "@codemap/core/lib/mcp-auth.js";
+import type { McpServerConfig } from "@codemap-ai/core/config.js";
+import { runLoginFlow } from "@codemap-ai/core/lib/mcp-auth.js";
 import {
   BOLD,
   C_ACTION,

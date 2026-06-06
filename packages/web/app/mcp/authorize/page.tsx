@@ -5,7 +5,7 @@ import type {
   CodeMapUser,
   GithubStatus,
   McpAuthStatusResponse,
-} from "@codemap/shared";
+} from "@codemap-ai/shared";
 import {
   AlertCircle,
   CheckCircle2,
