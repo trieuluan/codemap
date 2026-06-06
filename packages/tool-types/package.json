@@ -1,0 +1,38 @@
+{
+  "name": "@codemap-ai/tool-types",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TypeScript types for CodeMap custom tools (.tool.ts)",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "peerDependencies": {
+    "zod": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  },
+  "keywords": [
+    "codemap",
+    "custom-tools",
+    "ai",
+    "coding-agent"
+  ]
+}

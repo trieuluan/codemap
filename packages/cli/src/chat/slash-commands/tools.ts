@@ -4,7 +4,6 @@ import { getMastraMcpStatusSummary, MASTRA_DISABLED_TOOLS, getLoadedCustomTools 
 import { readWorkspacePath } from "@codemap/core/lib/workspace-project.js";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
-import type { CustomToolDescriptor, CustomToolKind } from "../../agent/tools/custom/custom-tools-types.js";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
@@ -78,26 +77,23 @@ async function initTools(ctx: Parameters<Command["execute"]>[1]) {
 
     await mkdir(toolsDir, { recursive: true });
 
-    // Create example tool
-    const exampleTool: CustomToolDescriptor = {
-      name: "hello",
-      description: "Say hello to someone",
-      kind: "command",
-      command: 'echo "Hello, {{name}}!"',
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "Name to greet" },
-        },
-        required: ["name"],
-      },
-    };
+    const exampleContent = `export default {
+  name: "hello",
+  description: "Say hello to someone",
+  parameters: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Name to greet" },
+    },
+    required: ["name"],
+  },
+  async execute(input: { name: string }) {
+    return \`Hello, \${input.name}!\`;
+  },
+};
+`;
 
-    await writeFile(
-      join(toolsDir, "hello.tool.json"),
-      JSON.stringify(exampleTool, null, 2) + "\n",
-      "utf8",
-    );
+    await writeFile(join(toolsDir, "hello.tool.ts"), exampleContent, "utf8");
 
     ctx.setMessages((prev) => [
       ...prev,
@@ -108,13 +104,13 @@ async function initTools(ctx: Parameters<Command["execute"]>[1]) {
           "",
           `Location: ${toolsDir}`,
           "",
-          `${BOLD}Example tool:${RESET} hello.tool.json`,
-          `${C_GRAY}  Try: /tools add my-tool --kind command --cmd "echo {{input}}"${RESET}`,
+          `${BOLD}Example tool:${RESET} hello.tool.ts`,
+          `${C_GRAY}  Try: /tools add my-tool --desc "My tool description"${RESET}`,
           "",
-          `${BOLD}Tool types:${RESET}`,
-          `  ${C_CYAN}command${RESET} — run shell commands`,
-          `  ${C_CYAN}http${RESET}    — call HTTP APIs`,
-          `  ${C_CYAN}script${RESET}  — run JS/TS modules`,
+          `${BOLD}Tool format:${RESET}`,
+          `  Each tool is a ${C_CYAN}.tool.ts${RESET} file exporting { name, description, execute }`,
+          `  Optional: export a ${C_CYAN}parameters${RESET} object (JSON Schema) for typed inputs`,
+          `  The ${C_CYAN}execute${RESET} function receives (input, ctx) and returns a string`,
           "",
           `${C_GRAY}Run /tools reload to load the new tool.${RESET}`,
         ].join("\n"),
@@ -137,19 +133,15 @@ async function addTool(args: string[], ctx: Parameters<Command["execute"]>[1]) {
         role: "system",
         content: [
           `${BOLD}Usage:${RESET}`,
-          "/tools add <name> --kind <command|http|script> [options]",
+          "/tools add <name> [options]",
           "",
           `${BOLD}Options:${RESET}`,
-          "  --desc \"description\"   Tool description (required)",
-          "  --cmd \"command\"        Shell command for kind=command",
-          "  --url \"url\"            URL template for kind=http",
-          "  --method GET|POST      HTTP method (default: GET)",
-          "  --script \"path\"        Script path for kind=script",
+          "  --desc \"description\"   Tool description",
           "",
-          `${BOLD}Examples:${RESET}`,
-          '  /tools add deploy --kind command --desc "Deploy app" --cmd "npm run deploy --env={{env}}"',
-          '  /tools add check-api --kind http --desc "Check API status" --url "https://api.example.com/status"',
-          '  /tools add analyze --kind script --desc "Analyze deps" --script "scripts/analyze.ts"',
+          `${BOLD}Example:${RESET}`,
+          '  /tools add deploy --desc "Deploy app to staging"',
+          "",
+          `${C_GRAY}Creates a .tool.ts file in .codemap/tools/ with a starter template.${RESET}`,
         ].join("\n"),
       },
     ]);
@@ -174,69 +166,17 @@ async function addTool(args: string[], ctx: Parameters<Command["execute"]>[1]) {
     }
   }
 
-  const kind = flags.kind as CustomToolKind | undefined;
-  if (!kind || !["command", "http", "script"].includes(kind)) {
-    ctx.setMessages((prev) => [
-      ...prev,
-      { role: "system", content: `${C_RED}Missing or invalid --kind${RESET}. Use: command, http, or script` },
-    ]);
-    return;
-  }
-
-  const description = flags.desc ?? `Custom ${kind} tool: ${name}`;
-
-  const descriptor: CustomToolDescriptor = {
-    name,
-    description,
-    kind,
-  };
-
-  // Kind-specific fields
-  if (kind === "command") {
-    if (!flags.cmd) {
-      ctx.setMessages((prev) => [
-        ...prev,
-        { role: "system", content: `${C_RED}Missing --cmd${RESET} for kind=command` },
-      ]);
-      return;
-    }
-    descriptor.command = flags.cmd;
-  } else if (kind === "http") {
-    if (!flags.url) {
-      ctx.setMessages((prev) => [
-        ...prev,
-        { role: "system", content: `${C_RED}Missing --url${RESET} for kind=http` },
-      ]);
-      return;
-    }
-    descriptor.url = flags.url;
-    descriptor.method = flags.method ?? "GET";
-  } else if (kind === "script") {
-    if (!flags.script) {
-      ctx.setMessages((prev) => [
-        ...prev,
-        { role: "system", content: `${C_RED}Missing --script${RESET} for kind=script` },
-      ]);
-      return;
-    }
-    descriptor.script = flags.script;
-  }
-
-  // Add timeout if provided
-  if (flags.timeout) {
-    descriptor.timeoutSeconds = parseInt(flags.timeout, 10);
-  }
+  const description = flags.desc ?? `Custom tool: ${name}`;
 
   try {
     const workspaceRoot = await readWorkspacePath();
     const toolsDir = join(workspaceRoot, TOOLS_DIR);
 
-    // Create directory if it doesn't exist
     if (!(await pathExists(toolsDir))) {
       await mkdir(toolsDir, { recursive: true });
     }
 
-    const filePath = join(toolsDir, `${name}.tool.json`);
+    const filePath = join(toolsDir, `${name}.tool.ts`);
 
     if (await pathExists(filePath)) {
       ctx.setMessages((prev) => [
@@ -246,7 +186,23 @@ async function addTool(args: string[], ctx: Parameters<Command["execute"]>[1]) {
       return;
     }
 
-    await writeFile(filePath, JSON.stringify(descriptor, null, 2) + "\n", "utf8");
+    const content = `export default {
+  name: "${name}",
+  description: "${description}",
+  parameters: {
+    type: "object",
+    properties: {
+      input: { type: "string", description: "Tool input" },
+    },
+  },
+  async execute(input: Record<string, unknown>) {
+    // TODO: implement tool logic
+    return \`Tool ${name} executed with: \${JSON.stringify(input)}\`;
+  },
+};
+`;
+
+    await writeFile(filePath, content, "utf8");
 
     ctx.setMessages((prev) => [
       ...prev,
@@ -256,7 +212,6 @@ async function addTool(args: string[], ctx: Parameters<Command["execute"]>[1]) {
           `${C_GREEN}Tool added!${RESET}`,
           "",
           `Name: ${C_CYAN}${name}${RESET}`,
-          `Kind: ${kind}`,
           `File: ${filePath}`,
           "",
           `${C_GRAY}Run /tools reload to load the new tool.${RESET}`,

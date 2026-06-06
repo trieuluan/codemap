@@ -3,7 +3,7 @@
  *
  * Extracted from harness-runtime.ts to keep each module focused on one domain.
  */
-import type { AgentLoopResult } from "../../core/agent-loop.js";
+import type { AgentLoopResult } from "../../loop/agent-loop.js";
 import type { GatewayProviderId } from "../../types.js";
 import type { SingleAgentRuntimeInput } from "../types.js";
 import type { MastraHarness } from "../events.js";
@@ -389,9 +389,9 @@ async function createFreshHarness(
     const { readWorkspacePath } =
       await import("@codemap/core/lib/workspace-project.js");
     const workspaceRoot = await readWorkspacePath();
-    const { tools: customTools, mastraTools: customMastraTools } =
+    const { resolvedTools, extraTools: customMastraTools } =
       await loadCustomTools(workspaceRoot);
-    cachedCustomTools = customTools;
+    cachedCustomTools = resolvedTools;
 
     if (Object.keys(customMastraTools).length > 0) {
       mergedExtraTools = {
