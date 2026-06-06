@@ -1,9 +1,8 @@
 {
-  "extends": "fastify-tsconfig",
   "compilerOptions": {
     "target": "es2022",
     "sourceMap": true,
     "strict": true,
-    "types": ["node", "fastify", "drizzle-orm"]
+    "types": ["node"]
   }
 }

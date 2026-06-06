@@ -33,11 +33,11 @@ jobs:
       - name: Build all packages
         run: |
           pnpm run build:shared
-          pnpm run build --filter @codemap-ai/core
-          pnpm run build --filter @codemap-ai/code-index
-          pnpm run build --filter @codemap-ai/mcp
-          pnpm run build --filter @codemap-ai/cli
-          pnpm run build --filter @codemap-ai/tool-types
+          pnpm --filter @codemap-ai/core run build
+          pnpm --filter @codemap-ai/code-index run build
+          pnpm --filter @codemap-ai/mcp run build
+          pnpm --filter @codemap-ai/cli run build
+          pnpm --filter @codemap-ai/tool-types run build
 
       - name: Run tests
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts

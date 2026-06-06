@@ -13,35 +13,21 @@
     "url": "https://github.com/trieuluan/codemap/issues"
   },
   "scripts": {
-    "dev": "concurrently \"pnpm run dev:api\" \"pnpm run dev:web\"",
     "build:shared": "pnpm --filter @codemap-ai/shared run build",
     "build:code-index": "pnpm --filter @codemap-ai/code-index run build",
-    "dev:api": "pnpm --filter @codemap-ai/api run dev",
-    "dev:worker": "pnpm --filter @codemap-ai/api run dev:workers",
-    "dev:workers": "pnpm --filter @codemap-ai/api run dev:workers",
-    "dev:worker:parses": "pnpm --filter @codemap-ai/api run dev:worker:parses",
-    "build:api": "pnpm run build:shared && pnpm run build:code-index && pnpm --filter @codemap-ai/api run build:ts",
-    "start:api": "pnpm --filter @codemap-ai/api run start",
-    "start:worker": "pnpm --filter @codemap-ai/api run workers",
-    "start:workers": "pnpm --filter @codemap-ai/api run workers",
-    "start:worker:parses": "pnpm --filter @codemap-ai/api run worker:parses",
-    "test:api": "pnpm run build:shared && pnpm run build:code-index && pnpm --filter @codemap-ai/api run test",
-    "dev:web": "pnpm --filter @codemap-ai/web run dev",
-    "build:web": "pnpm run build:shared && pnpm --filter @codemap-ai/web run build",
-    "preview:web": "pnpm --filter @codemap-ai/web run start",
-    "dev:mcp": "pnpm --filter @codemap-ai/mcp run dev",
+    "build:core": "pnpm run build:shared && pnpm run build:code-index && pnpm --filter @codemap-ai/core run build",
     "build:mcp": "pnpm run build:core && pnpm --filter @codemap-ai/mcp run build",
-    "start:mcp": "pnpm --filter @codemap-ai/mcp run start",
-    "dev:cli": "pnpm --filter @codemap-ai/cli run dev",
     "build:cli": "pnpm run build:core && pnpm --filter @codemap-ai/cli run build",
+    "dev:cli": "pnpm --filter @codemap-ai/cli run dev",
     "start:cli": "pnpm --filter @codemap-ai/cli run start",
-    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap-ai/api --filter @codemap-ai/web --filter @codemap-ai/shared --no-git-tag-version",
-    "build:core": "pnpm run build:shared && pnpm run build:code-index && pnpm --filter @codemap-ai/core run build"
+    "dev:mcp": "pnpm --filter @codemap-ai/mcp run dev",
+    "start:mcp": "pnpm --filter @codemap-ai/mcp run start",
+    "test": "pnpm --filter @codemap-ai/cli run test",
+    "version:patch": "npm version patch && pnpm version patch --filter @codemap-ai/cli --filter @codemap-ai/mcp --filter @codemap-ai/shared --no-git-tag-version"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
     "c8": "^10.1.2",
-    "concurrently": "^9.0.0",
     "tsx": "^4.20.3",
     "typescript": "~5.9.2"
   }
