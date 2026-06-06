@@ -30,6 +30,12 @@ jobs:
       - name: Replace workspace:* with version ranges
         run: bash scripts/prepare-publish.sh
 
+      # After prepare-publish.sh rewrites workspace:* to version ranges,
+      # pnpm's auto-deps-verification detects a lockfile mismatch.
+      # Disable it so subsequent pnpm commands skip the check.
+      - name: Disable pnpm deps verification
+        run: echo "verify-deps-before-run=false" >> .npmrc
+
       - name: Build all packages
         run: |
           pnpm run build:shared
