@@ -22,6 +22,8 @@ import { importCommand } from "./import.js";
 import { sessionsCommand } from "./sessions.js";
 import { hooksCommand } from "./hooks.js";
 import { configCommand } from "./config.js";
+import { memoryCommand } from "./memory.js";
+import { resetHarnessSingleton } from "../../agent/runtime/harness/lifecycle.js";
 import type { CommandContext, Command } from "./types.js";
 
 const commands: Command[] = [
@@ -48,6 +50,7 @@ const commands: Command[] = [
   mcpCommand,
   hooksCommand,
   configCommand,
+  memoryCommand,
   exitCommand,
 ];
 

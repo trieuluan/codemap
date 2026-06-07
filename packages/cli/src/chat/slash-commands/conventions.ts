@@ -17,7 +17,11 @@ export const conventionsCommand: Command = {
       try {
         const result = await refreshAll(ctx.provider, model);
         if (!result) {
-          append("No convention/rule files found in workspace.");
+          append(
+            "No convention or rule files found in this workspace.\n\n" +
+            "Run `codemap init-agent-pack --target <claude|codex|cursor|gemini|opencode|copilot>` " +
+            "to install CodeMap workflow guidance for your agent."
+          );
         } else {
           const parts: string[] = [];
           if (result.conventions) parts.push(`### Conventions\n${result.conventions}`);
@@ -41,7 +45,11 @@ export const conventionsCommand: Command = {
         append("No cache found. Synthesizing now (running 2 streams in parallel)…");
         const result = await loadOrSynthesizeAll(ctx.provider, model);
         if (!result) {
-          append("No convention/rule files found in workspace.");
+          append(
+            "No convention or rule files found in this workspace.\n\n" +
+            "Run `codemap init-agent-pack --target <claude|codex|cursor|gemini|opencode|copilot>` " +
+            "to install CodeMap workflow guidance for your agent, then run `/conventions refresh`."
+          );
           ctx.setBusy(false);
           return;
         }

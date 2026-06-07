@@ -37,12 +37,18 @@ export interface SettingsMaintenance {
   lastSpanCleanupAt?: number;
 }
 
+export interface SettingsAgent {
+  /** Enable or disable working memory across sessions. Default: true. */
+  workingMemory?: boolean;
+}
+
 export interface SettingsFile {
   gateway?: SettingsGateway;
   codemap?: SettingsCodemap;
   mcpServers?: Record<string, SettingsMcpServer>;
   theme?: string;
   maintenance?: SettingsMaintenance;
+  agent?: SettingsAgent;
 }
 
 export type SettingsScope = "global" | "project";
@@ -111,6 +117,9 @@ function mergeSettings(base: SettingsFile, override: SettingsFile): SettingsFile
   if (override.maintenance) {
     result.maintenance = { ...base.maintenance, ...override.maintenance };
   }
+  if (override.agent) {
+    result.agent = { ...base.agent, ...override.agent };
+  }
 
   return result;
 }
@@ -175,6 +184,10 @@ export function getMcpServerSettings(settings: SettingsFile): Record<string, Set
 
 export function getThemeSetting(settings: SettingsFile): string | undefined {
   return settings.theme;
+}
+
+export function getAgentSettings(settings: SettingsFile): SettingsAgent {
+  return settings.agent ?? {};
 }
 
 // ─── Writer (merge into existing file) ────────────────────────────

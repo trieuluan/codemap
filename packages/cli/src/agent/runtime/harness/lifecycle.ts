@@ -30,6 +30,7 @@ import type { ResolvedCustomTool } from "../../tools/custom/index.js";
 import { runHarness } from "./harness-runner.js";
 import { upsertGlobalMastraProvider } from "../config/settings.js";
 import { buildMastraPermissionRules } from "../config/tool-approval-policy.js";
+import { loadSettings } from "../../../cli/settings.js";
 import { Memory } from "@mastra/memory";
 import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
@@ -375,6 +376,9 @@ async function createFreshHarness(
     harnessModelId,
   );
 
+  const settings = await loadSettings();
+  const workingMemoryEnabled = settings.agent?.workingMemory ?? true;
+
   const extraServerKeys = Object.keys(opts.extraServerConfigs ?? {});
   const baseMcpServers = opts.mastraTools
     ? extraServerKeys.length > 0
@@ -450,7 +454,7 @@ async function createFreshHarness(
             messageRange: 2,
           },
           workingMemory: {
-            enabled: true,
+            enabled: workingMemoryEnabled,
             template: CODEMAP_WORKING_MEMORY_TEMPLATE,
           },
           observationalMemory: {
