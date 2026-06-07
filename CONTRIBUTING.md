@@ -93,12 +93,44 @@ export default defineTool({
 
 See `@codemap-ai/tool-types` for the full type definition.
 
+## Agent Pack
+
+CodeMap ships workflow guidance for AI coding agents (skills, rules, templates) via the `agent-pack` bundled in `packages/cli/agent-pack/`.
+
+When editing agent-pack content, keep the installed copies in sync:
+
+- `.claude/skills/codemap-*` and `.codex/skills/codemap-*` — installed skill directories
+- `.cursor/rules/*` — Cursor rule files
+- `AGENTS.md` and `CLAUDE.md` — root agent instructions
+
+Smoke-test the installer after any agent-pack or installer code changes:
+
+```bash
+pnpm run dev:cli -- init-agent-pack --target all --root /tmp/codemap-smoke --dry-run
+```
+
 ## Pull Requests
 
 1. Fork the repo and create a branch from `master`.
 2. Make your changes.
-3. Run the relevant build/test commands.
-4. Submit a PR with a clear summary and verification notes.
+3. Run the relevant build/test commands:
+   ```bash
+   pnpm run build:cli   # for CLI changes
+   pnpm run build:mcp   # for MCP changes
+   pnpm test            # full test suite
+   ```
+4. Submit a PR with a clear summary of what changed and how you verified it.
+
+## Commit Messages
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add explore_task semantic search fallback
+fix: prevent double-fence wrapping in diff preview renderer
+chore: bump packages to v1.1.3
+docs: update README install section
+```
 
 ## License
 

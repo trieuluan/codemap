@@ -1,10 +1,11 @@
 {
   "mcpServers": {
     "codemap-mcp-dev": {
-      "command": "npx",
+      "command": "npm",
       "args": [
-        "tsx",
-        "/Users/louis/Development/codemap/packages/mcp/src/index.ts"
+        "install",
+        "-g",
+        "@codemap-ai/mcp"
       ]
     }
   }

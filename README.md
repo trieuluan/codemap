@@ -116,13 +116,14 @@ If you prefer to keep using your existing editor (Claude Code, Cursor, Codex, et
 npm install -g @codemap-ai/mcp
 ```
 
-Then add `codemap-mcp` to your editor's MCP server config:
+Then add CodeMap to your editor's MCP server config:
 
 ```json
 {
   "mcpServers": {
     "codemap": {
-      "command": "codemap-mcp"
+      "command": "npx",
+      "args": ["-y", "@codemap-ai/mcp"]
     }
   }
 }
@@ -133,6 +134,10 @@ Install the agent workflow files:
 ```bash
 npx @codemap-ai/cli init-agent-pack --target claude   # or codex, cursor, gemini, opencode, copilot
 ```
+
+---
+
+> **Tip — unlimited free AI with 9router:** Pair CodeMap with [9router](https://github.com/decolua/9router) to route agent calls through 40+ free AI providers (Claude, GPT, Gemini) with auto-fallback and ~40% token reduction. No API key limits.
 
 ---
 

@@ -1,0 +1,14 @@
+CodeMap
+Copyright (c) 2025 CodeMap
+
+This product includes software developed by third parties:
+
+- Mastra (https://mastra.ai) — Apache License 2.0
+  Packages: mastracode, @mastra/core, @mastra/mcp, @mastra/memory,
+  @mastra/fastembed, @mastra/libsql
+  Copyright (c) Mastra AI
+
+- pi-tui (https://github.com/badlogic/pi-mono) — MIT License
+  Copyright (c) Mario Zechner
+
+Full license texts are available in the respective packages under node_modules/.
