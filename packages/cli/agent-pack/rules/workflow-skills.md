@@ -83,7 +83,7 @@ After any CodeMap tool returns ranked files, symbols, or related files:
 4. Use ranking signals to filter: exact path/symbol match = strong; fuzzy keyword = weak.
 5. Stop expanding context once the edit or answer is grounded enough.
 
-When results look weak or noisy, refine the query, anchor to a known file or symbol, or switch tool.
+When results look weak or noisy, refine the query, anchor to a known file or symbol, or switch tool — including switching to direct `Read`/grep. Don't loop on MCP calls that aren't converging; two non-converging calls is the signal to drop to raw reads.
 
 ## Token-Efficient Code Review
 

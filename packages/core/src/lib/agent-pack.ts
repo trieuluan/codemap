@@ -57,7 +57,7 @@ export function skillResourceUri(skillName: AgentPackSkillName) {
 }
 
 export function getAgentPackRoot() {
-  return path.join(getPackageRoot(import.meta.url), "agent-pack");
+  return path.join(getPackageRoot(import.meta.url), "..", "cli", "agent-pack");
 }
 
 export function getPluginRoot() {

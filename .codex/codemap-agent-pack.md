@@ -6,6 +6,8 @@ It includes skills, rules, agent roles, plugin metadata, and installer templates
 
 For broad tasks, agents should choose the narrowest CodeMap context tool first: `explore_task` when files are unclear, `search_codebase` for known names, `find_related_files` for related-file questions, or `get_file` for known paths.
 
+After edits, agents should run the smallest relevant build or test, inspect the working diff, refresh the local index when needed, and report verification results before finishing.
+
 Install locally with:
 
 ```bash

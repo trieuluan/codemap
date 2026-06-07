@@ -17,6 +17,12 @@ export function getPackageRoot(callerImportMetaUrl: string): string {
     return path.resolve(callerDir.slice(0, srcIdx));
   }
 
-  // Bundled (tsup): caller is at <pkg>/dist/ → go up one level.
+  // Built package (tsc): caller is under <pkg>/dist/… → go up to dist/ then one more.
+  const distIdx = callerDir.lastIndexOf(`${path.sep}dist${path.sep}`);
+  if (distIdx !== -1) {
+    return path.resolve(callerDir.slice(0, distIdx));
+  }
+
+  // Bundled single-file CLI (tsup): caller is at <pkg>/dist/ → go up one level.
   return path.resolve(callerDir, "..");
 }
