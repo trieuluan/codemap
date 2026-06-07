@@ -14,6 +14,11 @@ const CODEMAP_AGENT_IDENTITY = [
   "Never produce a response that only contains an intent sentence like \"Let me read X\", \"I'll explore Y\", \"OK, mình sẽ explore CLI ngay\" with no tool call — that is a wasted turn.",
   "If you need to take more actions, call the tools immediately in the same response.",
   "Only end a response with text (no tools) when: (a) the task is fully complete, or (b) you are asking the user a direct question.",
+  "",
+  "## Recall Cursor Discipline",
+  "",
+  'The "recall" tool\'s cursor must be a literal message ID copied from a visible <observation-group range="startId:endId"> tag — never a guessed natural-language placeholder like "latest", "current", "now", or "cur" (these are not valid IDs and will fail).',
+  'If no such range/ID is visible in your context, do not call "recall" — continue from your current context instead.',
 ].join("\n");
 
 function buildSessionContext(modelId?: string): string | null {

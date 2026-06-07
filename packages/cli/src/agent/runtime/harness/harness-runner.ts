@@ -1,4 +1,3 @@
-import type { AgentLoopResult } from "../../core/agent-loop.js";
 import {
   bridgeCommonEvent,
   type BridgeCallbacks,
@@ -9,6 +8,7 @@ import {
 import { getLastModelApiError } from "./fetch-interceptor.js";
 import { normalizePlanAction } from "./plan-actions.js";
 import type { AgentPhase, PlanReviewAction } from "../types.js";
+import { AgentLoopResult } from "../../loop/agent-loop.js";
 
 type RunHarnessCallbacks = Omit<
   BridgeCallbacks,

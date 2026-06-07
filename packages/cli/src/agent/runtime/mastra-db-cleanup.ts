@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { access } from "node:fs/promises";
 import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +9,15 @@ const execFileAsync = promisify(execFile);
 
 const SPAN_RETENTION_DAYS = 30;
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function getMastraAppDataDir(): string {
   if (process.platform === "darwin") {
@@ -38,6 +48,8 @@ export function maybeCleanupMastraDb(): void {
     if (Date.now() - lastCleanup < CLEANUP_INTERVAL_MS) return;
 
     const dbPath = getMastraDbPath();
+    if (!(await fileExists(dbPath))) return;
+
     const cutoff = new Date(Date.now() - SPAN_RETENTION_DAYS * 86400_000).toISOString();
 
     try {
@@ -65,6 +77,8 @@ export function maybeCleanupMastraDb(): void {
       await writeSettings("global", { maintenance: { lastSpanCleanupAt: Date.now() } });
       console.debug(`[cleanup] done, removed ${deleteCount} spans`);
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("no such table: mastra_ai_spans")) return;
       console.debug("[cleanup] mastra span cleanup failed:", err);
     }
   })();
