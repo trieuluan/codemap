@@ -157,6 +157,42 @@ Once set up, the agent uses CodeMap tools before reading raw files:
 
 ---
 
+## CLI Slash Commands
+
+Inside the interactive `codemap` chat, type `/help` to see all available slash commands. These commands live under `packages/cli/src/chat/slash-commands` and help you manage the session, CodeMap projects, MCP servers, custom tools, and Git workflow without leaving the CLI.
+
+| Command | Usage | Purpose |
+|---|---|---|
+| `/help` | `/help` | Show available slash commands |
+| `/status` | `/status` | Show model, session, and workspace status |
+| `/models` | `/models` | Switch the active model |
+| `/clear` | `/clear` | Clear the screen and start a new session |
+| `/history` | `/history` | Show conversation stats |
+| `/sessions` | `/sessions` | List saved chat threads and switch sessions with a picker |
+| `/copy` | `/copy` | Copy the last assistant response to the clipboard |
+| `/debug` | `/debug` | Toggle stream debug logging to a JSONL file |
+| `/memory` | `/memory` | Toggle working memory on or off |
+| `/login` | `/login` | Log in to CodeMap through browser authorization |
+| `/logout` | `/logout` | Log out of CodeMap and clear stored credentials |
+| `/projects` | `/projects [--status <status>]` | List CodeMap cloud projects |
+| `/link` | `/link [<project-id>] [--confirm] [--update-repo]` | Link the current workspace to a CodeMap project |
+| `/create` | `/create [--upload] [github <url>] [gitlab <url> [--token <tok>]]` | Create a CodeMap project from the current workspace |
+| `/import` | `/import [<project-id>]` | Trigger a CodeMap reimport and wait for completion |
+| `/mcp` | `/mcp list \| add \| remove` | Manage MCP servers |
+| `/tools` | `/tools list \| init \| add \| reload` | Manage project-specific custom tools |
+| `/hooks` | `/hooks list \| add \| remove \| reload` | Manage lifecycle hooks |
+| `/config` | `/config` | Show, get, or set configuration values |
+| `/conventions` | `/conventions [refresh]` | Show or refresh synthesized conventions and rules |
+| `/diff` | `/diff` | Show the current working diff |
+| `/commit` | `/commit [--review] [--confirm]` | Generate a commit message and commit current changes |
+| `/push` | `/push` | Push the current branch to remote, setting upstream if needed |
+| `/pr` | `/pr` | Create a pull request with an AI-generated title and description |
+| `/exit` | `/exit` | Exit the interactive chat |
+
+You can also type `@` in chat to autocomplete file paths and mention files in your prompt.
+
+---
+
 ## MCP Tools
 
 | Tool | Purpose |
