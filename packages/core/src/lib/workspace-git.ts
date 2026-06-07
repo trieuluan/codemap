@@ -4,6 +4,26 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Convert SSH git remote URLs to HTTPS for API compatibility.
+ * Handles: git@github.com:user/repo.git, ssh://git@github.com/user/repo.git
+ */
+function normalizeRemoteUrl(url: string): string {
+  // git@host:user/repo.git → https://host/user/repo
+  const sshMatch = /^git@([^:]+):(.+?)(?:\.git)?$/i.exec(url);
+  if (sshMatch) {
+    return `https://${sshMatch[1]}/${sshMatch[2].replace(/\.git$/i, "")}`;
+  }
+
+  // ssh://git@host/user/repo.git → https://host/user/repo
+  const sshProtoMatch = /^ssh:\/\/git@([^/]+)\/(.+?)(?:\.git)?$/i.exec(url);
+  if (sshProtoMatch) {
+    return `https://${sshProtoMatch[1]}/${sshProtoMatch[2].replace(/\.git$/i, "")}`;
+  }
+
+  return url;
+}
+
 export interface CurrentWorkspaceInfo {
   workspacePath: string;
   repoRootPath: string;
@@ -75,6 +95,6 @@ export async function getCurrentWorkspaceInfo(
     repoName: path.basename(repoRootPath),
     branch,
     commitSha,
-    remoteUrl: remoteUrl || null,
+    remoteUrl: remoteUrl ? normalizeRemoteUrl(remoteUrl) : null,
   };
 }

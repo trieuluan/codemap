@@ -59,7 +59,6 @@ async function createProjectFromGithub(
         defaultBranch: default_branch,
         branch,
         workspaceId: workspace_id,
-        isPrivate: is_private,
       },
       authRequired: true,
     },
