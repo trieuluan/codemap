@@ -11,12 +11,9 @@ Use this skill when making code changes in a CodeMap-indexed repository.
 
 1. Narrow the affected files with CodeMap before editing.
 2. Keep edits scoped to the user request and existing local patterns.
-3. Run the smallest sufficient build/test:
-   - shared package changes before API/web consumers.
-   - API build/tests for backend behavior.
-   - web build/tests for frontend behavior.
+3. Run the smallest sufficient build/test for the changed package or feature area. If the repository has dependency ordering rules, build dependencies before consumers.
 4. Call `diff(mode="working")` or use git diff to review scope.
-5. Call `refresh_local_index` after local code/index/rule changes. Call `reimport` and `reimport(wait=true)` only when cloud/web graph and insights should refresh or when asked.
+5. Call `refresh_local_index` after local code/index/rule changes. Call `reimport` and `reimport(wait=true)` only when cloud graph/insights or cloud indexing should refresh, or when asked.
 
 ## Rule
 

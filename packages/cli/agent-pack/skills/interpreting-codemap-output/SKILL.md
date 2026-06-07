@@ -23,8 +23,8 @@ Use this skill after a CodeMap MCP tool returns ranked files, symbol context, re
 
 ## Ranking Signals
 
-- Strong signals: exact file path, exact symbol name, direct export, direct import, caller/callee, route/API handler match.
-- Medium signals: feature-area summary rank, related-file edge, same directory, shared service/component.
+- Strong signals: exact file path, exact symbol name, direct export, direct import, caller/callee, entrypoint/handler match.
+- Medium signals: feature-area summary rank, related-file edge, same directory, shared module/component.
 - Weak signals: fuzzy name match, generic loading/error files, broad utility files, low-score keyword-only hits.
 
 When results look weak or noisy, refine the query, anchor it to a file or symbol, or switch from feature search to symbol/file search.
