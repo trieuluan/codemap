@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/mcp",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "CodeMap MCP server for IDE integrations",
   "license": "MIT",
