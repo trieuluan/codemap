@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "CodeMap — AI-powered coding agent CLI",
   "license": "MIT",
@@ -31,8 +31,8 @@
     "@ai-sdk/groq": "^3.0.39",
     "@ai-sdk/openai": "^3.0.63",
     "@clack/prompts": "^1.5.0",
-    "@codemap-ai/mcp": "workspace:*",
     "@codemap-ai/core": "workspace:*",
+    "@codemap-ai/mcp": "workspace:*",
     "@earendil-works/pi-tui": "^0.74.0",
     "@mastra/fastembed": "1.1.2",
     "@mastra/libsql": "1.12.1",
