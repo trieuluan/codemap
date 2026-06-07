@@ -100,9 +100,12 @@ export function truncateVisible(line: string, width: number, silent = false): st
     if (line.length <= max) return line;
     return silent ? line.slice(0, max) : line.slice(0, Math.max(0, max - 1)) + "…";
   }
+  if (visibleTextWidth(line) <= max) return line;
+  // Reserve one column for the ellipsis so content + "…" still fits within max.
+  const limit = silent ? max : Math.max(0, max - 1);
   let vis = 0;
   let i = 0;
-  while (i < line.length && vis < max) {
+  while (i < line.length && vis < limit) {
     const nextAnsiIndex = ansiSequenceEnd(line, i);
     if (nextAnsiIndex !== null) {
       i = nextAnsiIndex;
@@ -111,19 +114,6 @@ export function truncateVisible(line: string, width: number, silent = false): st
     vis += visibleWidth(line[i] ?? "");
     i++;
   }
-  if (i >= line.length) return line;
-  // Consume any trailing ANSI sequences — if only zero-width escapes remain,
-  // the content fits exactly and no truncation marker is needed.
-  let j = i;
-  while (j < line.length) {
-    const nextAnsiIndex = ansiSequenceEnd(line, j);
-    if (nextAnsiIndex !== null) {
-      j = nextAnsiIndex;
-      continue;
-    }
-    break;
-  }
-  if (j >= line.length) return line;
   return silent ? line.slice(0, i) : line.slice(0, i) + "…";
 }
 
@@ -334,7 +324,7 @@ function langFromHunkHeader(hunkText: string): string {
   return match?.[1] ? langFromPath(match[1].trim()) : "";
 }
 
-function renderUnifiedDiff(
+export function renderUnifiedDiff(
   source: string,
   width: number,
   noHighlight: boolean,
@@ -386,7 +376,10 @@ function renderUnifiedDiff(
     }
   }
   if (allLines.length === 0) return null;
-  const language = langFromPath(filePath) || langFromHunkHeader(cleanSource);
+  const rawLanguage = langFromPath(filePath) || langFromHunkHeader(cleanSource);
+  // Markdown/text highlight inside diff produces misleading colors (e.g. list items "- Codex"
+  // rendered red). Plain text languages don't benefit from syntax highlight in diff context.
+  const language = rawLanguage === "markdown" ? "" : rawLanguage;
 
   // Collect content text for Shiki highlighting (one block for accurate tokenization)
   const expandTabs = (s: string) => s.replace(/\t/g, "    ");

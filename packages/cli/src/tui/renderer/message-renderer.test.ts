@@ -150,6 +150,98 @@ test("messageLines keeps passive preview visible when expanded", () => {
   assert.match(rendered, /Replaced 1 occurrence in README\.md/);
 });
 
+test("messageLines keeps diff formatting when context contains markdown fences", () => {
+  const messages: Message[] = [
+    {
+      role: "tool_call",
+      name: "string_replace_lsp",
+      content: "README.md",
+      previewContent: [
+        "~~~diff",
+        "@@ -1,5 +1,5 @@ README.md",
+        " ```md",
+        " unchanged",
+        " ```",
+        "-old",
+        "+new",
+        "~~~",
+      ].join("\n"),
+      timestamp: 0,
+    },
+  ];
+
+  const rendered = messageLines(messages, 100).map(stripAnsi).join("\n");
+
+  assert.doesNotMatch(rendered, /```diff/);
+  assert.match(rendered, /@@ -1,5 \+1,5 @@ README\.md/);
+  assert.match(rendered, /\s+1 │ ```md/);
+  assert.match(rendered, /\s+2 │ unchanged/);
+  assert.match(rendered, /\s+3 │ ```/);
+  assert.match(rendered, /\-\s+4 │ old/);
+  assert.match(rendered, /\+\s+4 │ new/);
+});
+
+test("messageLines keeps non-diff previews rendered as markdown", () => {
+  const messages: Message[] = [
+    {
+      role: "tool_call",
+      name: "codemap_diff",
+      content: "Call codemap_diff",
+      previewContent: [
+        "```json",
+        "{",
+        '  "mode": "working"',
+        "}",
+        "```",
+      ].join("\n"),
+      timestamp: 0,
+    },
+  ];
+
+  const rendered = messageLines(messages, 100).map(stripAnsi).join("\n");
+
+  assert.match(rendered, /----------------------------------------/);
+  assert.match(rendered, /\{/);
+  assert.match(rendered, /"mode": "working"/);
+  assert.doesNotMatch(rendered, /```diff/);
+});
+
+test("messageLines renders markdown list items as context lines in unified diff format", () => {
+  // Unified diff format: context lines have a leading space, add lines start with +, remove lines start with -
+  // buildToolPreview/formatPatch always produces correct unified diff with space-prefixed context lines.
+  // This test verifies the renderer preserves that — " - Codex" (context) vs "- Codex" (removal).
+  const messages: Message[] = [
+    {
+      role: "tool_call",
+      name: "string_replace_lsp",
+      content: "README.md",
+      previewContent: [
+        "~~~diff",
+        "@@ -10,8 +10,8 @@ README.md",
+        " ## Targets",
+        " - Codex",
+        " - Claude",
+        " - Cursor",
+        "+- Gemini",
+        " OpenCode",
+        " Copilot",
+        "~~~",
+      ].join("\n"),
+      timestamp: 0,
+    },
+  ];
+
+  const rendered = messageLines(messages, 120).map(stripAnsi).join("\n");
+
+  assert.match(rendered, /\d+ │ ## Targets/);
+  assert.match(rendered, /\d+ │ - Codex/);
+  assert.match(rendered, /\d+ │ - Claude/);
+  assert.match(rendered, /\d+ │ - Cursor/);
+  assert.match(rendered, /\+\s+\d+ │\s+- Gemini/);
+  assert.match(rendered, /\d+ │\s+OpenCode/);
+  assert.match(rendered, /\d+ │\s+Copilot/);
+});
+
 test("expanded CodeMap tool results show summary without raw data by default", () => {
   const expandedContent = JSON.stringify({
     content: [{ type: "text", text: "Project ready" }],

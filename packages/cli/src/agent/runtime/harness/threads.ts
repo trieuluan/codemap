@@ -9,6 +9,13 @@ import {
   setPendingNewThread,
 } from "./lifecycle.js";
 
+export function isMastraThreadAlreadyActive(
+  currentThreadId: string | null | undefined,
+  targetThreadId: string,
+): boolean {
+  return currentThreadId === targetThreadId;
+}
+
 // ── Thread operations ──────────────────────────────────────────────────
 
 export async function getMastraMessages(
@@ -46,15 +53,34 @@ export async function listMastraThreadMessages(
   }
 }
 
-export async function switchMastraThread(threadId: string): Promise<boolean> {
+export type SwitchMastraThreadResult =
+  | { ok: true }
+  | { ok: false; message?: string };
+
+export async function switchMastraThread(
+  threadId: string,
+): Promise<SwitchMastraThreadResult> {
   const singleton = getSingleton();
-  if (!singleton) return false;
+  if (!singleton) return { ok: false, message: "Mastra harness chưa sẵn sàng." };
+
+  const currentThreadId = singleton.harness.getCurrentThreadId?.();
+  if (isMastraThreadAlreadyActive(currentThreadId, threadId)) {
+    setPendingNewThread(false);
+    return { ok: true };
+  }
+
   try {
     await singleton.harness.switchThread({ threadId });
     setPendingNewThread(false);
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : undefined,
+    };
   }
 }
 
@@ -82,6 +108,12 @@ export async function autoResumeLatestThread(): Promise<string | null> {
 
     if (Date.now() - updatedAt > maxAge) {
       return null;
+    }
+
+    const currentThreadId = singleton.harness.getCurrentThreadId?.();
+    if (isMastraThreadAlreadyActive(currentThreadId, latest.id)) {
+      setPendingNewThread(false);
+      return latest.id;
     }
 
     await singleton.harness.switchThread({ threadId: latest.id });

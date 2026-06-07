@@ -17,7 +17,7 @@ import {
   RESET,
   SPINNER,
 } from "../theme.js";
-import { padToWidth, renderMarkdownish, stripAnsi, truncateVisible, wrapPlain } from "../text/text.js";
+import { padToWidth, renderMarkdownish, renderUnifiedDiff, stripAnsi, truncateVisible, wrapPlain } from "../text/text.js";
 import { highlightBlock } from "./shiki-highlight.js";
 import { normalizeHtml } from "../../agent/utils/html-utils.js";
 
@@ -129,7 +129,18 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number, exp
 
   const previewIndentW = 3;
   const renderW = Math.max(20, bodyW - previewIndentW);
-  let rendered = renderMarkdownish(normalized, renderW);
+  const fenceStart = body.findIndex((line) => line.trim() === "```diff" || line.trim() === "~~~diff");
+  // Match closing fence only when it's exactly "```" or "~~~" at the start of the line (not a context line with space prefix)
+  const fenceEnd = fenceStart >= 0 ? body.findIndex((line, i) => i > fenceStart && (line === "```" || line === "~~~")) : -1;
+  const diffContent = fenceStart >= 0
+    ? body.slice(fenceStart + 1, fenceEnd >= 0 ? fenceEnd : undefined).join("\n")
+    : null;
+  const renderedDiff = diffContent !== null
+    ? renderUnifiedDiff(diffContent, renderW, false) ?? null
+    : null;
+  let rendered = renderedDiff && renderedDiff.length > 0
+    ? renderedDiff
+    : renderMarkdownish(normalized, renderW);
 
   // Truncate long previews after Shiki highlight (unless expanded via Ctrl+E)
   const totalRendered = rendered.length;

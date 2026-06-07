@@ -23,7 +23,9 @@ export interface CommandContext {
   exit: () => void;
   newSession?: () => void;
   getMastraThreadId?: () => string | null;
-  switchMastraThread?: (threadId: string) => Promise<boolean>;
+  switchMastraThread?: (
+    threadId: string,
+  ) => Promise<{ ok: true } | { ok: false; message?: string }>;
   loadMastraThreadMessages?: (threadId: string) => Promise<void>;
   /** Show a running indicator in the panel while a shell command is in progress. */
   startSubprocess: (command: string) => void;

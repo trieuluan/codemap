@@ -403,12 +403,20 @@ export async function startPiTuiApp(
         () => sessionThreads,
         () => getMastraThreadId(),
         async (threadId: string) => {
-          const ok = await switchMastraThread(threadId);
-          if (!ok) {
+          const result = await switchMastraThread(threadId);
+          if (!result.ok) {
+            const detail = result.message
+              ? `Lý do: ${result.message}`
+              : "Có thể thread đang bị khóa, không tồn tại, hoặc runtime chưa đồng bộ.";
             chatTerminal.store.dispatch((prev: UIState) => ({
               messages: [
                 ...prev.messages,
-                { role: "system" as const, content: `Failed to switch to thread \`${threadId.slice(0, 8)}\`.`, timestamp: Date.now() },
+                {
+                  role: "system" as const,
+                  content:
+                    `Không thể chuyển sang thread \`${threadId.slice(0, 8)}\`. ${detail}`,
+                  timestamp: Date.now(),
+                },
               ],
             }));
             return;

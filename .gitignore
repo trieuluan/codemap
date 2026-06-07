@@ -86,7 +86,7 @@ packages/web/next-env.d.ts
 .codemap-storage/*
 .codemap/
 
-docs/*
+# docs/ is tracked (contains README assets like GIFs and VHS tape scripts)
 
 .pnpm-store
 .pnpm-store/*
