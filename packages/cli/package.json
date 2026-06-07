@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/cli",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "CodeMap — AI-powered coding agent CLI",
   "license": "MIT",
