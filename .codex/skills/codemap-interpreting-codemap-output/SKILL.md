@@ -1,3 +1,8 @@
+---
+name: codemap-interpreting-codemap-output
+description: "CodeMap skill: codemap-interpreting-codemap-output"
+---
+
 # Interpreting CodeMap Output
 
 Use this skill after a CodeMap MCP tool returns ranked files, symbol context, related files, usages, callers, workflow guidance, or diff output.

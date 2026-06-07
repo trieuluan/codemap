@@ -1,3 +1,8 @@
+---
+name: codemap-executing-plans
+description: "CodeMap skill: codemap-executing-plans"
+---
+
 # Executing Plans
 
 Use this skill when implementing an approved plan. Follow the plan in order and keep the edit surface narrow.

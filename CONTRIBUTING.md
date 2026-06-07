@@ -1,6 +1,6 @@
 # Contributing to CodeMap
 
-Thanks for your interest in contributing! This guide will help you get started.
+Thanks for your interest in contributing! This guide covers the open-source CodeMap CLI/MCP monorepo.
 
 ## Development Setup
 
@@ -10,59 +10,68 @@ git clone https://github.com/trieuluan/codemap.git
 cd codemap
 
 # Install dependencies
-npm install
+pnpm install
 
-# Build shared packages first (required)
-npm run build:shared
+# Run the CLI in development
+pnpm run dev:cli
 
-# Start development
-npm run dev        # API + Web
-npm run dev:api    # API only
-npm run dev:web    # Web only
+# Run the MCP server in development
+pnpm run dev:mcp
 ```
 
 ## Project Structure
 
-```
+```text
 packages/
-├── cli/          # @codemap-ai/cli — CLI agent (main product)
-├── core/         # @codemap-ai/core — shared library, index store, config
-├── mcp/          # @codemap-ai/mcp — MCP server for code intelligence
-├── code-index/   # @codemap-ai/code-index — SQLite-based code indexing
-├── tool-types/   # @codemap-ai/tool-types — types for custom .tool.ts tools
-├── shared/       # @codemap-ai/shared — shared TypeScript types
-├── api/          # Fastify backend (private)
-└── web/          # Next.js frontend (private)
+├── cli/          # @codemap-ai/cli — interactive coding agent CLI
+├── mcp/          # @codemap-ai/mcp — MCP server for code intelligence tools
+├── core/         # @codemap-ai/core — shared runtime, config, and tool logic
+├── code-index/   # @codemap-ai/code-index — local code parser/indexer
+├── shared/       # @codemap-ai/shared — shared TypeScript types/contracts
+└── tool-types/   # @codemap-ai/tool-types — types for custom .tool.ts tools
 ```
 
 ## Building
 
-```bash
-npm run build:shared  # Must run first
-npm run build:api     # Build API package
-npm run build:web     # Build Web package
+Build shared foundations before packages that depend on them:
 
-# CLI build
-cd packages/cli && npm run build
+```bash
+pnpm run build:shared
+pnpm run build:code-index
+pnpm run build:core
+pnpm run build:mcp
+pnpm run build:cli
+```
+
+The higher-level build scripts chain their dependencies, so these are common shortcuts:
+
+```bash
+pnpm run build:mcp
+pnpm run build:cli
 ```
 
 ## Testing
 
-```bash
-# CLI tests
-cd packages/cli && node --import tsx --test src/**/*.test.ts
+Run the root test command:
 
-# API tests
-npm run test:api
+```bash
+pnpm test
+```
+
+This currently runs the CLI test suite. For focused package checks, use package scripts directly, for example:
+
+```bash
+pnpm --filter @codemap-ai/cli run build
+pnpm --filter @codemap-ai/mcp run build
 ```
 
 ## Code Style
 
-- TypeScript strict mode
-- Follow existing patterns in the codebase
-- Keep route handlers thin — business logic in services
-- Default to Server Components in web; add `"use client"` only when needed
-- Use `cn()` for Tailwind class merging
+- Use TypeScript and keep types explicit at package boundaries.
+- Follow existing patterns in the package you are changing.
+- Keep changes scoped; avoid broad refactors unless they are part of the task.
+- Prefer simple, readable code over premature abstractions.
+- Do not add compatibility shims or dead code.
 
 ## Custom Tools
 
@@ -76,7 +85,7 @@ export default defineTool({
   name: "my-tool",
   description: "Does something useful",
   parameters: z.object({ query: z.string() }),
-  execute: async (input, ctx) => {
+  execute: async (input) => {
     return `Result: ${input.query}`;
   },
 });
@@ -86,10 +95,10 @@ See `@codemap-ai/tool-types` for the full type definition.
 
 ## Pull Requests
 
-1. Fork the repo and create a branch from `master`
-2. Make your changes
-3. Run tests to verify
-4. Submit a PR with a clear description
+1. Fork the repo and create a branch from `master`.
+2. Make your changes.
+3. Run the relevant build/test commands.
+4. Submit a PR with a clear summary and verification notes.
 
 ## License
 

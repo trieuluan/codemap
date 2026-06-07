@@ -1,6 +1,7 @@
 
 export type Command =
   | "help"
+  | "version"
   | "doctor"
   | "ask"
   | "chat"
@@ -32,6 +33,7 @@ function parseCommand(argv: string[]): Command {
   const first = argv.find((arg) => !arg.startsWith("-"));
   if (!first) return "chat";
   if (first === "help") return "help";
+  if (first === "--version" || first === "-v") return "version";
   if (isCommand(first)) return first;
   throw new Error(`Unknown command "${first}". Run "codemap --help".`);
 }
@@ -62,6 +64,7 @@ function readPositional(argv: string[]): string {
 function isCommand(value: string): value is Command {
   return (
     value === "help" ||
+    value === "version" ||
     value === "doctor" ||
     value === "ask" ||
     value === "chat" ||

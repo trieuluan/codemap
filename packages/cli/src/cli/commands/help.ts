@@ -6,6 +6,8 @@ export function runHelp(ctx: BaseCommandContext): void {
 Usage:
   codemap                     Enter interactive chat (default)
   codemap help                Show this help
+  codemap version             Show CodeMap CLI version
+  codemap --version           Show CodeMap CLI version
 
 Chat:
   codemap chat                Enter interactive chat (explicit)

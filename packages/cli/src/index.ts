@@ -42,12 +42,19 @@ async function main() {
     return;
   }
 
+  // --version / -v flags
+  if (command === "--version" || command === "-v") {
+    console.log(`CodeMap ${CLI_VERSION}`);
+    return;
+  }
+
   // Gateway commands: need LLM gateway config (model routing)
   const GATEWAY_COMMANDS = new Set([
     "chat",
     "models",
     "doctor",
     "help",
+    "version",
   ]);
   if (!command || GATEWAY_COMMANDS.has(command)) {
     const parsed = parseArgs(argv);
@@ -55,6 +62,10 @@ async function main() {
 
     if (parsed.command === "help") {
       runHelp(baseCtx);
+      return;
+    }
+    if (parsed.command === "version") {
+      console.log(`CodeMap ${CLI_VERSION}`);
       return;
     }
     // If no command specified (user just runs `codemap`) and no config exists, run interactive setup

@@ -1,3 +1,8 @@
+---
+name: codemap-feature-area-investigation
+description: "CodeMap skill: codemap-feature-area-investigation"
+---
+
 # Feature Area Investigation
 
 Use this skill for feature questions like billing, auth redirect, admin project detail, import history, or graph canvas.

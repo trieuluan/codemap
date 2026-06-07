@@ -2,6 +2,7 @@
 name: codemap-executing-plans
 description: "CodeMap skill: codemap-executing-plans"
 ---
+
 # Executing Plans
 
 Use this skill when implementing an approved plan. Follow the plan in order and keep the edit surface narrow.
@@ -9,7 +10,7 @@ Use this skill when implementing an approved plan. Follow the plan in order and 
 ## Process
 
 1. **Before edits**
-   - Read the approved plan."
+   - Read the approved plan.
    - Call `diff(mode="working")` and note unrelated dirty files.
    - Read only the CodeMap context needed for the next step.
 

@@ -1,3 +1,8 @@
+---
+name: codemap-token-efficient-code-review
+description: "CodeMap skill: codemap-token-efficient-code-review"
+---
+
 # Token-Efficient Code Review
 
 Use this skill when reviewing changes in a CodeMap-indexed repository.

@@ -1,3 +1,8 @@
+---
+name: codemap-writing-plans
+description: "CodeMap skill: codemap-writing-plans"
+---
+
 # Writing Plans
 
 Use this skill after a design is approved and before implementation begins. The goal is a decision-complete plan that another agent can execute without guessing.

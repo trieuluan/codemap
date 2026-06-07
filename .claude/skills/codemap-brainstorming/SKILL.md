@@ -2,8 +2,9 @@
 name: codemap-brainstorming
 description: "CodeMap skill: codemap-brainstorming"
 ---
+
 # Brainstorming
-"
+
 Use this skill when the user describes a new feature, a vague requirement, or says "design X", "plan X", or "how should we approach X". Do not write any code until the design is approved.
 
 ## Hard Gate

@@ -1,3 +1,8 @@
+---
+name: codemap-test-driven-development
+description: "CodeMap skill: codemap-test-driven-development"
+---
+
 # Test-Driven Development
 
 Use this skill when implementing new functionality or fixing a bug where tests are expected. Follow the RED → GREEN → REFACTOR cycle strictly.

@@ -1,211 +1,149 @@
-# CodeMap Monorepo DIFF TEST
+# CodeMap
 
-CodeMap is a monorepo for mapping, analyzing, and understanding codebases.
+CodeMap is an AI-powered coding agent CLI and MCP code-intelligence toolkit. It helps agents and developers explore repositories, understand symbols and dependencies, edit code safely, and verify changes with local indexing support.
 
-The project currently includes:
-
-- `packages/api`: Fastify backend API
-- `packages/web`: Next.js frontend
-- `packages/shared`: shared TypeScript contracts and utilities
-
-## Tech Stack
-
-### Backend
-
-- Fastify
-- TypeScript
-- Drizzle ORM
-- PostgreSQL
-- Better Auth
-- Zod
-
-### Frontend
-
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Radix UI
-
-### Shared
-
-- shared TypeScript types
-- shared auth-related schemas
-
-## Repository Structure
+## Packages
 
 ```text
 packages/
-├── api/
-│   └── src/
-│       ├── config/
-│       ├── db/
-│       ├── lib/
-│       ├── plugins/
-│       ├── routes/
-│       └── server.ts
-├── web/
-│   ├── app/
-│   ├── components/
-│   ├── features/
-│   ├── hooks/
-│   └── lib/
-└── shared/
-    └── src/
+├── cli/          # @codemap-ai/cli — interactive coding agent CLI
+├── mcp/          # @codemap-ai/mcp — MCP server for CodeMap tools
+├── core/         # @codemap-ai/core — shared runtime, config, and tool logic
+├── code-index/   # @codemap-ai/code-index — local code parser/indexer
+├── shared/       # @codemap-ai/shared — shared TypeScript types/contracts
+└── tool-types/   # @codemap-ai/tool-types — custom .tool.ts type helpers
 ```
 
-## Workspace Scripts
+## What CodeMap Provides
 
-Run these commands from the repository root:
+- CLI coding-agent experience via the `codemap` binary
+- MCP server integration via the `codemap-mcp` binary
+- local repository indexing for file, symbol, import, and relationship lookup
+- CodeMap Agent Pack installation for supported coding agents
+- custom tool support through `.codemap/tools/*.tool.ts`
+
+## Requirements
+
+- Node.js 24+
+- pnpm
+
+Install dependencies from the repository root:
 
 ```bash
-npm install
+pnpm install
 ```
 
-### Development
+## Development
 
-Run both apps:
+Run the CLI in development mode:
 
 ```bash
-npm run dev
+pnpm run dev:cli
 ```
 
-Run backend only:
+Run the MCP server in development mode:
 
 ```bash
-npm run dev:api
+pnpm run dev:mcp
 ```
 
-Run frontend only:
+Run built packages:
 
 ```bash
-npm run dev:web
+pnpm run start:cli
+pnpm run start:mcp
 ```
 
-### Build
+## Build
 
-Build shared package:
+Build shared foundations first, then dependents:
 
 ```bash
-npm run build:shared
+pnpm run build:shared
+pnpm run build:code-index
+pnpm run build:core
+pnpm run build:mcp
+pnpm run build:cli
 ```
 
-Build backend:
+`build:core`, `build:mcp`, and `build:cli` already chain their required dependencies, so this is usually enough for a full product build:
 
 ```bash
-npm run build:api
+pnpm run build:mcp
+pnpm run build:cli
 ```
 
-Build frontend:
+## Test
+
+Run the root test command:
 
 ```bash
-npm run build:web
+pnpm test
 ```
 
-### Run Production
+This currently runs the CLI test suite.
 
-Start backend:
+## Using the CLI
+
+After building, run:
 
 ```bash
-npm run start:api
+pnpm run start:cli -- --help
 ```
 
-Preview frontend:
+The published CLI exposes the `codemap` binary:
 
 ```bash
-npm run preview:web
+codemap --help
 ```
 
-### Tests
+## MCP Server
 
-Run API tests:
+After building, run:
 
 ```bash
-npm run test:api
+pnpm run start:mcp
 ```
 
-## Backend Notes
+The published MCP package exposes the `codemap-mcp` binary.
 
-- Fastify plugins are autoloaded from `packages/api/src/plugins`
-- API routes are autoloaded from `packages/api/src/routes`
-- Better Auth is mounted under `/api/auth/*`
-- Session data is attached to incoming requests by the auth session plugin
-- Drizzle schema currently contains the Better Auth tables for users, sessions, accounts, and verification tokens
+## Agent Pack
 
-## Frontend Notes
-
-- The frontend uses Next.js App Router
-- Route files live under `packages/web/app`
-- Reusable UI components live under `packages/web/components`
-- Feature-oriented UI and flows live under `packages/web/features`
-- The auth client is configured in `packages/web/lib/auth-client.ts`
-
-## Environment Variables
-
-The backend validates environment variables with Zod. Current required values include:
-
-```env
-API_PORT=3001
-WEB_PORT=3000
-HOST=0.0.0.0
-NODE_ENV=development
-CORS_ORIGIN=http://localhost:3000
-DATABASE_URL=postgres://...
-BETTER_AUTH_SECRET=your-secret-with-at-least-32-characters
-BETTER_AUTH_URL=http://localhost:3001
-```
-
-Notes:
-
-- the repository may use a root `.env`
-- backend env loading is handled explicitly from the monorepo root
-- if running inside Docker or a devcontainer, service hostnames should be used instead of assuming `localhost`
-
-## Architecture Guidelines
-
-- keep backend business logic out of route handlers
-- keep frontend components focused and reusable
-- put shared contracts in `packages/shared`
-- avoid circular dependencies between packages
-- prefer explicit, type-safe code over clever abstractions
-
-## Current Status
-
-The repository already includes:
-
-- landing page and dashboard UI
-- authentication UI flows
-- Better Auth backend integration
-- shared auth request schemas
-
-Likely next areas of growth:
-
-- protected dashboard flows with real session checks
-- project/codebase analysis features
-- richer API and dashboard functionality
-
-## Admin Bootstrap
-
-The API package supports a manual admin seed flow with Drizzle and Better Auth.
-
-Configure these root env values:
-
-```env
-ADMIN_EMAIL=admin@codemap.local
-ADMIN_PASSWORD=admin12345
-ADMIN_NAME=CodeMap Admin
-```
-
-Then run:
+CodeMap can install agent instructions, skills, and rules for supported coding agents:
 
 ```bash
-npm --workspace=@codemap/api run db:migrate
-npm --workspace=@codemap/api run db:seed
+codemap init-agent-pack --target all
 ```
 
-Notes:
+Install for a specific agent:
 
-- `db:seed` is idempotent and safe to rerun
-- the admin user is created through Better Auth's email/password flow
-- the script ensures the seeded admin has the `admin` role
+```bash
+codemap init-agent-pack --target codex
+codemap init-agent-pack --target claude
+codemap init-agent-pack --target cursor
+codemap init-agent-pack --target gemini
+codemap init-agent-pack --target opencode
+codemap init-agent-pack --target copilot
+```
+
+## Custom Tools
+
+Add custom tools by creating `.tool.ts` files under `.codemap/tools/`:
+
+```typescript
+import { defineTool } from "@codemap-ai/tool-types";
+import { z } from "zod";
+
+export default defineTool({
+  name: "my-tool",
+  description: "Does something useful",
+  parameters: z.object({ query: z.string() }),
+  execute: async (input) => {
+    return `Result: ${input.query}`;
+  },
+});
+```
+
+## License
+
+MIT
