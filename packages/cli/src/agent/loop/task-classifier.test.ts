@@ -73,5 +73,56 @@ test("treats short confirmation replies as continuation without model call", asy
     taskType: "general",
     effort: "medium",
     reason: "confirmation — continuing coding task",
+    executionMode: "single",
   });
+});
+
+test("classifies plan_only tasks as multi with plan_only executionMode", async () => {
+  const result = await classifyTask(
+    "make a plan for implementing user authentication",
+    providerReturning({
+      phase: "multi",
+      taskType: "feature",
+      reason: "user requests planning first",
+      executionMode: "plan_only",
+    }),
+    "planner",
+  );
+
+  assert.equal(result.phase, "multi");
+  assert.equal(result.taskType, "feature");
+  assert.equal(result.executionMode, "plan_only");
+});
+
+test("classifies multi_execute tasks with tool calls", async () => {
+  const result = await classifyTask(
+    "implement full OAuth2 system across auth/web/api modules",
+    providerReturning({
+      phase: "multi",
+      taskType: "feature",
+      reason: "large feature requiring implementation",
+      executionMode: "multi_execute",
+    }),
+    "planner",
+  );
+
+  assert.equal(result.phase, "multi");
+  assert.equal(result.taskType, "feature");
+  assert.equal(result.executionMode, "multi_execute");
+});
+
+test("defaults to single executionMode when missing in classifier response", async () => {
+  const result = await classifyTask(
+    "fix the bug in auth.ts",
+    providerReturning({
+      phase: "single",
+      taskType: "bugfix",
+      reason: "simple fix",
+      // executionMode omitted
+    }),
+    "planner",
+  );
+
+  assert.equal(result.phase, "single");
+  assert.equal(result.executionMode, "single");
 });

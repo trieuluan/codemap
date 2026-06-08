@@ -69,6 +69,7 @@ export async function handleSubmitWithContent(
       taskType: "general",
       reason: "",
       effort: "medium",
+      executionMode: "single",
     };
 
     const planMode = store.getState().planMode;
@@ -102,6 +103,12 @@ export async function handleSubmitWithContent(
 
     const useMultiPhase =
       forceMultiPhase || planMode || classification.phase === "multi";
+
+    const runtimeMode = forceMultiPhase
+      ? "multi_execute"
+      : planMode
+      ? "plan_only"
+      : classification.executionMode;
 
     if (useMultiPhase) {
       store.dispatch({
@@ -222,7 +229,7 @@ export async function handleSubmitWithContent(
       });
     }
 
-    if (useMultiPhase && !result.usedTools && !result.unsupportedToolCalling) {
+    if (runtimeMode === "multi_execute" && !result.usedTools && !result.unsupportedToolCalling) {
       ctx.appendMessage({
         role: "system",
         content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nCheck your coder profile configuration or start a new session with /new.`,

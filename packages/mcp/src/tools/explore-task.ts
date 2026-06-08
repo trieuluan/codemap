@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerConfig } from "@codemap-ai/core/config.js";
 import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import {
+  ensureLocalIndexWithSummary,
   shouldFallbackToLocal,
   shouldUseLocalIndexBeforeRemote,
 } from "@codemap-ai/core/lib/local-index.js";
@@ -63,6 +64,13 @@ interface ContextPack {
 interface FileRelationship {
   imports: Array<{ targetPath: string | null }>;
   importedBy: Array<{ sourcePath: string }>;
+}
+
+interface LocalExploreData {
+  likelyFiles: ContextFile[];
+  entrypoints: ContextFile[];
+  symbols: ContextSymbol[];
+  importerCounts: Map<string, number>;
 }
 
 // ── Entrypoint detection ──────────────────────────────────────────────────────
@@ -133,6 +141,188 @@ function formatReadCall(path: string, plan: EditLocationReadPlan): string {
 }
 
 const OUTLINE_PLAN: EditLocationReadPlan = { include: ["outline"] };
+
+function buildLocalReadPlan(symbol: ContextSymbol | null): EditLocationReadPlan {
+  if (!symbol?.name) return OUTLINE_PLAN;
+  return { include: ["symbols"], symbolNames: [symbol.name] };
+}
+
+function tokenizeLocalQuery(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/[\s\-_/.,:]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 1);
+}
+
+function buildLocalReason(path: string, query: string, symbol?: ContextSymbol | null): string {
+  const parts: string[] = [];
+  if (symbol?.name) parts.push(`symbol match: ${symbol.name}`);
+
+  const terms = tokenizeLocalQuery(query);
+  const lowerPath = path.toLowerCase();
+  const matchedTerms = terms.filter((term) => lowerPath.includes(term));
+  if (matchedTerms.length > 0) {
+    parts.push(`path matches: ${matchedTerms.slice(0, 3).join(", ")}`);
+  }
+
+  return parts[0] ?? "local index match";
+}
+
+function buildLocalExploreData(
+  task: string,
+  results: CodebaseSearchResponse,
+  importerCountsByPath: Map<string, number>,
+): LocalExploreData {
+  const likelyFiles: ContextFile[] = [];
+  const likelyFilePaths = new Set<string>();
+  const importerCounts = new Map<string, number>();
+  const symbolByPath = new Map<string, ContextSymbol[]>();
+
+  const symbols: ContextSymbol[] = results.symbols.slice(0, 8).map((s) => ({
+    name: s.displayName,
+    kind: s.symbolKind,
+    filePath: s.filePath,
+    startLine: s.startLine ?? null,
+    signature: s.signature ?? null,
+  }));
+
+  for (const symbol of symbols) {
+    const existing = symbolByPath.get(symbol.filePath) ?? [];
+    existing.push(symbol);
+    symbolByPath.set(symbol.filePath, existing);
+  }
+
+  const pushLikelyFile = (
+    path: string,
+    language: string | null,
+    confidence: ContextFile["confidence"],
+    baseReason?: string,
+    blastRadius?: number,
+  ) => {
+    if (likelyFilePaths.has(path)) return;
+    const topSymbol = symbolByPath.get(path)?.[0] ?? null;
+    likelyFiles.push({
+      path,
+      language,
+      confidence,
+      reason: baseReason ?? buildLocalReason(path, task, topSymbol),
+      readPlan: buildLocalReadPlan(topSymbol),
+      ...(blastRadius !== undefined ? { blastRadius } : {}),
+    });
+    likelyFilePaths.add(path);
+  };
+
+  for (const symbol of results.symbols.slice(0, 8)) {
+    const importerCount = importerCountsByPath.get(symbol.filePath);
+    if (typeof importerCount === "number") importerCounts.set(symbol.filePath, importerCount);
+    pushLikelyFile(
+      symbol.filePath,
+      null,
+      "high",
+      `symbol match: ${symbol.displayName}`,
+      importerCount,
+    );
+  }
+
+  for (const file of results.files.slice(0, 8)) {
+    const importerCount = importerCountsByPath.get(file.path);
+    if (typeof importerCount === "number") importerCounts.set(file.path, importerCount);
+    pushLikelyFile(
+      file.path,
+      file.language ?? null,
+      likelyFilePaths.size < 4 ? "high" : "medium",
+      undefined,
+      importerCount,
+    );
+  }
+
+  const entrypointMap = new Map<string, string>();
+  for (const path of likelyFiles.map((f) => f.path)) {
+    const label = detectEntrypoint(path);
+    if (label && !entrypointMap.has(path)) entrypointMap.set(path, label);
+  }
+
+  const entrypoints: ContextFile[] = [...entrypointMap.entries()].map(([path, label]) => ({
+    path,
+    language: null,
+    confidence: "medium",
+    reason: label,
+    readPlan: OUTLINE_PLAN,
+    ...(importerCounts.has(path) ? { blastRadius: importerCounts.get(path) } : {}),
+  }));
+
+  return { likelyFiles, entrypoints, symbols, importerCounts };
+}
+
+async function buildLocalFallbackResponse(
+  projectId: string,
+  task: string,
+  fallbackReason: string,
+) {
+  const { store } = await ensureLocalIndexWithSummary();
+  const localSearch = store.search(task, null);
+  const importerCountsByPath = new Map<string, number>();
+
+  for (const file of localSearch.files.slice(0, 8)) {
+    const parse = store.getFileParse(file.path);
+    importerCountsByPath.set(file.path, parse?.importedBy.length ?? 0);
+  }
+
+  for (const symbol of localSearch.symbols.slice(0, 8)) {
+    if (importerCountsByPath.has(symbol.filePath)) continue;
+    const parse = store.getFileParse(symbol.filePath);
+    importerCountsByPath.set(symbol.filePath, parse?.importedBy.length ?? 0);
+  }
+
+  const localData = buildLocalExploreData(task, localSearch, importerCountsByPath);
+  const risks: ContextRisk[] = [];
+  const risksSeen = new Set<string>();
+  for (const path of [
+    ...localData.likelyFiles.map((f) => f.path),
+    ...localData.entrypoints.map((f) => f.path),
+  ]) {
+    if (risksSeen.has(path)) continue;
+    const risk = detectPathRisk(path);
+    if (risk) {
+      risks.push(risk);
+      risksSeen.add(path);
+    }
+  }
+
+  const recommendedReads: RecommendedRead[] = [];
+  let priority = 1;
+  for (const f of [...localData.entrypoints, ...localData.likelyFiles]) {
+    recommendedReads.push({
+      path: f.path,
+      priority: priority++,
+      readPlan: f.readPlan,
+      why: f.reason,
+    });
+  }
+
+  const packBase = {
+    task,
+    likelyFiles: localData.likelyFiles,
+    entrypoints: localData.entrypoints,
+    symbols: localData.symbols,
+    risks,
+    recommendedReads,
+  };
+  const summary = [
+    buildSummary(packBase),
+    `Source: local SQLite index (${fallbackReason})`,
+  ].join("\n");
+  const suggestedNextTools = buildNextTools(packBase);
+  const pack: ContextPack = { ...packBase, summary, suggestedNextTools };
+
+  return success(buildTextOutput(pack), {
+    projectId,
+    available: true,
+    source: "local",
+    ...pack,
+  });
+}
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 
@@ -329,17 +519,10 @@ export function registerExploreTaskTool(
 
       // ── Early exit if cloud index not ready ───────────────────────────────
       if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-        const hint = `search_codebase("${task.slice(0, 60)}")`;
-        return success(
-          `Cloud index not ready for task: "${task}"\n\n` +
-          `Use search_codebase with the local index instead:\n→ ${hint}`,
-          {
-            projectId: resolvedProjectId,
-            task,
-            available: false,
-            source: "local",
-            suggestedNextTools: [hint, "get_project_map()  // browse project structure"],
-          },
+        return buildLocalFallbackResponse(
+          resolvedProjectId,
+          task,
+          "cloud index not ready",
         );
       }
 
@@ -375,7 +558,7 @@ export function registerExploreTaskTool(
           ? semanticResult.value
           : [];
 
-      // If both cloud calls failed, hint at local fallback
+      // If both cloud calls failed, switch to local SQLite fallback
       const bothFailed =
         searchResult.status === "rejected" && editLocsResult.status === "rejected";
       const cloudFailed =
@@ -383,6 +566,14 @@ export function registerExploreTaskTool(
         shouldFallbackToLocal(
           searchResult.status === "rejected" ? searchResult.reason : null,
         );
+
+      if (cloudFailed) {
+        return buildLocalFallbackResponse(
+          resolvedProjectId,
+          task,
+          "cloud API unavailable",
+        );
+      }
 
       // ── Phase 2: classify into likelyFiles, entrypoints, symbols ─────────
 
@@ -548,12 +739,6 @@ export function registerExploreTaskTool(
       const packBase = { task, likelyFiles, entrypoints, symbols, risks, recommendedReads };
       const summary = buildSummary(packBase);
       const suggestedNextTools = buildNextTools(packBase);
-
-      if (cloudFailed) {
-        suggestedNextTools.unshift(
-          `search_codebase("${task.slice(0, 60)}")  // cloud unavailable — use local index`,
-        );
-      }
 
       const pack: ContextPack = { ...packBase, summary, suggestedNextTools };
 
