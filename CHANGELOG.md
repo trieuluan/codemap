@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-06-08
+
+### Changed
+- Refreshed package README docs for `@codemap-ai/cli`, `@codemap-ai/mcp`, and the bundled agent-pack to match current install flows, supported commands, and Node.js 24+ requirements
+- Removed stale agent-pack docs that referenced unsupported `marketplace` install targets, old `packages/mcp-server` paths, and token-based MCP auth examples
+
 ## [1.1.4] - 2026-06-07
 
 ### Added
