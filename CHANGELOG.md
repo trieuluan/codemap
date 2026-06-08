@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.5] - 2026-06-08
 
 ### Changed
-- Refreshed package README docs for `@codemap-ai/cli`, `@codemap-ai/mcp`, and the bundled agent-pack to match current install flows, supported commands, and Node.js 24+ requirements
-- Removed stale agent-pack docs that referenced unsupported `marketplace` install targets, old `packages/mcp-server` paths, and token-based MCP auth examples
+- Refreshed package README docs for `@codemap-ai/cli`, `@codemap-ai/mcp`, and the bundled agent-pack to match current install flows, supported commands, JSON-based `settings.json` gateway config, and Node.js 24+ requirements
+- Removed stale agent-pack docs that referenced old `packages/mcp-server` paths, legacy `llm-gateway.json` config paths, invalid CLI commands, and token-based MCP auth examples
 
 ## [1.1.4] - 2026-06-07
 

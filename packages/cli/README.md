@@ -23,49 +23,77 @@ codemap logout     # Clear credentials
 
 ## CLI Commands
 
-### Chat & Gateway
+The currently supported top-level commands are:
 
 ```bash
-codemap                    # Interactive chat (default)
-codemap chat               # Interactive chat (explicit)
-codemap ask "explain X"    # Single prompt, exit
-codemap models             # List available models
-codemap doctor             # Diagnose workspace, project, gateway, and model config
+codemap                     # Interactive chat (default)
+codemap chat                # Interactive chat (explicit)
+codemap help                # Show CLI help
+codemap version             # Show CLI version
+codemap --version           # Show CLI version
+codemap models              # Show default model and list models from the gateway
+codemap doctor              # Diagnose workspace and gateway configuration
+codemap init-agent-pack     # Install CodeMap agent-pack files into a workspace
+codemap doctor-agent-pack   # Check agent-pack installation health
+codemap agent-pack-path     # Print the packaged agent-pack plugin root
+codemap clean-agent-pack-backups  # Remove backup files left by agent-pack upgrades
 ```
 
-### Agent Pack (Editor Integration)
+### Agent Pack flags
 
 ```bash
-codemap init-agent-pack      # Install CodeMap agent rules into an editor
-  --target <editor>          # claude | cursor | codex | gemini | opencode | copilot | all
-  --root <dir>               # Workspace root (default: cwd)
-  --dry-run                  # Preview without writing
+codemap init-agent-pack --target <editor> [--root <dir>] [--dry-run]
+# targets: claude | cursor | codex | gemini | opencode | copilot | marketplace | all
 
-codemap doctor-agent-pack    # Check agent pack installation health
-  --target <editor>          # Editor to check (default: auto-detect)
-  --root <dir>               # Workspace root
+codemap doctor-agent-pack [--target <editor>] [--root <dir>]
 
-codemap agent-pack-path      # Print the agent pack plugin root path
-
-codemap clean-agent-pack-backups  # Remove backup files left by upgrades
-  --root <dir>               # Workspace root
-  --dry-run                  # Preview without deleting
+codemap clean-agent-pack-backups [--root <dir>] [--dry-run]
 ```
+
+## Interactive slash commands
+
+Inside `codemap` chat, you can run slash commands like:
+
+```text
+/help           Show available slash commands
+/status         Show model, session, and workspace status
+/models         Switch the active model
+/diff           Show working diff
+/sessions       List saved chat threads
+/memory         Show working memory status
+/memory on      Enable working memory for this project
+/memory off     Disable working memory for this project
+/login          Log in to CodeMap
+/logout         Log out and clear stored credentials
+/mcp            Manage MCP servers
+/tools          List, init, add, or reload custom tools
+/hooks          Manage lifecycle hooks
+/exit           Exit chat
+```
+
+You can also type `@` in chat to autocomplete file paths for context.
 
 ## Gateway Configuration
 
-CodeMap uses an LLM gateway for chat and agent features. Configure via environment variables or config files:
+CodeMap reads gateway settings from `.codemap/settings.json` (project) or `~/.codemap/settings.json` (user). Environment variables can override those values when needed.
 
-```bash
-CODEMAP_LLM_GATEWAY_BASE_URL=http://localhost:4000/v1
-CODEMAP_LLM_GATEWAY_API_KEY=your-key
-CODEMAP_LLM_GATEWAY_DEFAULT_PROFILE=coder
-CODEMAP_LLM_GATEWAY_CODER_MODEL=model-name
-CODEMAP_LLM_GATEWAY_PLANNER_MODEL=model-name
-CODEMAP_LLM_GATEWAY_REVIEWER_MODEL=model-name
+Example `settings.json`:
+
+```json
+{
+  "gateway": {
+    "provider": "9router",
+    "baseUrl": "http://localhost:4000/v1",
+    "defaultModel": "coder",
+    "modeDefaults": {
+      "build": "coder",
+      "plan": "gpt-5",
+      "fast": "gpt-5-mini"
+    }
+  }
+}
 ```
 
-Or create a config file at `.codemap/llm-gateway.json` (project) or `~/.codemap/llm-gateway.json` (user).
 
 ## Requirements
 
