@@ -98,12 +98,12 @@ Use after every file-changing task.
 1. Call `diff(mode="working")`.
 2. Run the smallest relevant build/test command.
 3. Call `refresh_local_index` after local edits.
-4. Decide whether `reimport` and `reimport(wait=true)` are needed for cloud graph/insights.
+4. Decide whether `reimport` and `reimport(wait=true)` are needed for cloud graph/insights or cloud indexing.
 5. Report changed behavior, verification results, skipped checks, and residual risk.
 
 ## Feature Area Investigation
 
-Use when the task involves a named feature (billing, auth, admin, graph, etc.).
+Use when the task involves a named product area (billing, auth, import history, graph, CLI commands, integrations, etc.).
 
 1. Call `explore_task(query)` — review likely files, entrypoints, and recommended reads.
 2. Call `get_file(path=[...])` on the top results to survey outlines without loading full files.

@@ -16,12 +16,12 @@ Use this skill after any task that changed files. It is the final gate before te
 
 2. **Run checks**
    - Run the smallest sufficient build or test command.
-   - For shared package changes, build shared before dependents.
+   - If the repository has dependency ordering rules, build dependencies before consumers.
    - If a check cannot run, explain why and what risk remains.
 
 3. **Refresh indexes**
    - Call `refresh_local_index` after local code edits.
-   - Use `reimport` and `reimport(wait=true)` only when cloud graph, web insights, or paid workspace cloud indexing should update.
+   - Use `reimport` and `reimport(wait=true)` only when cloud graph/insights or paid workspace cloud indexing should update.
 
 4. **Final response**
    - Summarize changed behavior.

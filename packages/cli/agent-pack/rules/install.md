@@ -12,10 +12,9 @@ codemap init-agent-pack --target gemini
 codemap init-agent-pack --target opencode
 codemap init-agent-pack --target copilot
 codemap init-agent-pack --target all
-codemap init-agent-pack --target marketplace --plugin-path ./packages/mcp-server
 ```
 
-Add `--dry-run` to preview writes. Add `--force` to overwrite existing files.
+Add `--dry-run` to preview writes.
 Add `--root <path>` to install into a specific project directory for testing or scripted setup.
 
 After install, verify the harness files and skills:

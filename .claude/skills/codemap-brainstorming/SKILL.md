@@ -30,7 +30,7 @@ Use this skill when the user describes a new feature, a vague requirement, or sa
    - Goal and non-goals
    - Chosen approach and why
    - Files to create/modify (with paths from CodeMap)
-   - Data flow or API contract
+   - Data flow, command flow, or integration contract
    - Open questions
 
 5. **Self-review the spec** — check for missing edge cases, unclear interfaces, or scope creep

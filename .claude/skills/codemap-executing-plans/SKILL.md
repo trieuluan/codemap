@@ -23,7 +23,7 @@ Use this skill when implementing an approved plan. Follow the plan in order and 
    - Run the planned checks.
    - Call `diff(mode="working")` to inspect the actual changed files.
    - Use `refresh_local_index` after local edits.
-   - Use `reimport` only when cloud graph, web insights, or paid cloud indexing should refresh.
+   - Use `reimport` only when cloud graph/insights or paid cloud indexing should refresh.
 
 ## Rule
 

@@ -21,96 +21,46 @@
 
 ## Install
 
+Choose the package that matches how you want to use CodeMap:
+
 ```bash
+# Full interactive CLI with built-in MCP server
 npm install -g @codemap-ai/cli
+
+# Standalone MCP server for editor integration
+npm install -g @codemap-ai/mcp
 ```
 
-The CLI includes a built-in MCP server — no separate install needed to get started.
-
-Then bootstrap your project:
-
-```bash
-codemap init-agent-pack --target all
-```
-
-This installs skills, rules, and workflow guidance for Codex, Claude Code, Cursor, Gemini, OpenCode, and Copilot.
-
-> **Need the MCP server standalone?** If you want to expose CodeMap tools to an editor like Claude Code or Cursor *without* running the CLI, install the MCP package separately:
-> ```bash
-> npm install -g @codemap-ai/mcp
-> ```
-
----
-
-## The problem CodeMap solves
-
-Most AI coding tools are strong at **chat + code generation**. The hard part starts when they enter a real codebase:
-
-| Without CodeMap | With CodeMap |
-|---|---|
-| Agent scans files linearly | MCP ranks the most relevant files and symbols first |
-| Reads 10 unrelated files | `explore_task` returns a prioritized reading list |
-| Grepping for keywords | Symbol-aware search with caller and import context |
-| Edits one location, breaks three others | Blast-radius inspection before touching shared code |
-| Inconsistent rules across Claude, Codex, Cursor | One Agent Pack workflow across all hosts |
-| Claims done without verifying | Built-in verify gate: diff → build → index refresh |
-
-**CodeMap is not just "a few extra MCP tools."** It combines `CLI + MCP + local code index + agent-pack workflow` into one operating model.
-
----
-
-## How it works
-
-```
-┌──────────────────────────────────────────────────┐
-│                    Your editor                   │
-│   (Claude Code / Codex / Cursor / Gemini / …)    │
-└───────────────────┬──────────────────────────────┘
-                    │ MCP protocol
-┌───────────────────▼──────────────────────────────┐
-│               codemap-mcp server                 │
-│  explore_task · search_codebase · find_related   │
-│  get_file · symbol context · callers · diff      │
-└───────────────────┬──────────────────────────────┘
-                    │
-┌───────────────────▼──────────────────────────────┐
-│         Local SQLite index (no cloud needed)     │
-│   files · symbols · imports · relationships      │
-└──────────────────────────────────────────────────┘
-```
-
-The **Agent Pack** (installed via `codemap init-agent-pack`) teaches the agent to follow a consistent workflow:
-
-1. **Orient** — which files and symbols are relevant?
-2. **Read deliberately** — outlines first, then symbol bodies
-3. **Edit safely** — inspect callers and blast radius before touching shared code
-4. **Verify** — diff → build/test → refresh index before declaring done
+If you are not sure, start with `@codemap-ai/cli`.
 
 ---
 
 ## Quickstart
 
+| Use case | Recommended setup |
+|---|---|
+| Want a full terminal coding agent | Install `@codemap-ai/cli` and run `codemap` |
+| Want to keep using Claude Code, Cursor, Codex, Gemini, or Copilot | Install `@codemap-ai/mcp` and add it to your editor MCP config |
+| Want both CLI and editor integration | Install `@codemap-ai/cli`, run `codemap`, then `codemap init-agent-pack --target <editor>` |
+
 ### Option A — Use the CodeMap CLI (recommended)
 
-The CLI is a full interactive coding agent with the MCP server built in. Just install and run:
+The CLI is a full interactive coding agent with the MCP server built in.
 
 ```bash
 npm install -g @codemap-ai/cli
 codemap
 ```
 
-CodeMap starts, spins up its MCP server automatically, and you get an interactive AI coding session with full code-intelligence tools.
+Then bootstrap workflow files for your editor of choice:
 
 ```bash
-# Bootstrap agent workflow files for your editor of choice
 codemap init-agent-pack --target claude   # or codex, cursor, gemini, opencode, copilot
 ```
 
----
-
 ### Option B — Use the standalone MCP server (editor integration)
 
-If you prefer to keep using your existing editor (Claude Code, Cursor, Codex, etc.) and just add CodeMap as an MCP context provider:
+If you want to keep using your existing editor and add CodeMap as an MCP context provider:
 
 ```bash
 npm install -g @codemap-ai/mcp
@@ -157,37 +107,68 @@ Once set up, the agent uses CodeMap tools before reading raw files:
 
 ---
 
-## CLI Slash Commands
+## The problem CodeMap solves
 
-Inside the interactive `codemap` chat, type `/help` to see all available slash commands. These commands live under `packages/cli/src/chat/slash-commands` and help you manage the session, CodeMap projects, MCP servers, custom tools, and Git workflow without leaving the CLI.
+Most AI coding tools are strong at **chat + code generation**. The hard part starts when they enter a real codebase:
+
+| Without CodeMap | With CodeMap |
+|---|---|
+| Agent scans files linearly | MCP ranks the most relevant files and symbols first |
+| Reads 10 unrelated files | `explore_task` returns a prioritized reading list |
+| Grepping for keywords | Symbol-aware search with caller and import context |
+| Edits one location, breaks three others | Blast-radius inspection before touching shared code |
+| Inconsistent rules across Claude, Codex, Cursor | One Agent Pack workflow across all hosts |
+| Claims done without verifying | Built-in verify gate: diff → build → index refresh |
+
+CodeMap combines a `CLI`, `MCP` server, local code index, and agent-pack workflow into one developer workflow.
+
+---
+
+## How it works
+
+```
+┌──────────────────────────────────────────────────┐
+│                    Your editor                   │
+│   (Claude Code / Codex / Cursor / Gemini / …)    │
+└───────────────────┬──────────────────────────────┘
+                    │ MCP protocol
+┌───────────────────▼──────────────────────────────┐
+│               codemap-mcp server                 │
+│  explore_task · search_codebase · find_related   │
+│  get_file · symbol context · callers · diff      │
+└───────────────────┬──────────────────────────────┘
+                    │
+┌───────────────────▼──────────────────────────────┐
+│         Local SQLite index (no cloud needed)     │
+│   files · symbols · imports · relationships      │
+└──────────────────────────────────────────────────┘
+```
+
+The **Agent Pack** (installed via `codemap init-agent-pack`) teaches the agent to follow a consistent workflow:
+
+1. **Orient** — which files and symbols are relevant?
+2. **Read deliberately** — outlines first, then symbol bodies
+3. **Edit safely** — inspect callers and blast radius before touching shared code
+4. **Verify** — diff → build/test → refresh index before declaring done
+
+---
+
+## Common CLI Slash Commands
+
+Inside the interactive `codemap` chat, type `/help` to see the full command list. The most common commands are:
 
 | Command | Usage | Purpose |
 |---|---|---|
 | `/help` | `/help` | Show available slash commands |
 | `/status` | `/status` | Show model, session, and workspace status |
 | `/models` | `/models` | Switch the active model |
-| `/clear` | `/clear` | Clear the screen and start a new session |
-| `/history` | `/history` | Show conversation stats |
 | `/sessions` | `/sessions` | List saved chat threads and switch sessions with a picker |
-| `/copy` | `/copy` | Copy the last assistant response to the clipboard |
-| `/debug` | `/debug` | Toggle stream debug logging to a JSONL file |
-| `/memory` | `/memory` | Toggle working memory on or off |
-| `/login` | `/login` | Log in to CodeMap through browser authorization |
-| `/logout` | `/logout` | Log out of CodeMap and clear stored credentials |
 | `/projects` | `/projects [--status <status>]` | List CodeMap cloud projects |
 | `/link` | `/link [<project-id>] [--confirm] [--update-repo]` | Link the current workspace to a CodeMap project |
-| `/create` | `/create [--upload] [github <url>] [gitlab <url> [--token <tok>]]` | Create a CodeMap project from the current workspace |
 | `/import` | `/import [<project-id>]` | Trigger a CodeMap reimport and wait for completion |
-| `/mcp` | `/mcp list \| add \| remove` | Manage MCP servers |
-| `/tools` | `/tools list \| init \| add \| reload` | Manage project-specific custom tools |
-| `/hooks` | `/hooks list \| add \| remove \| reload` | Manage lifecycle hooks |
-| `/config` | `/config` | Show, get, or set configuration values |
-| `/conventions` | `/conventions [refresh]` | Show or refresh synthesized conventions and rules |
 | `/diff` | `/diff` | Show the current working diff |
 | `/commit` | `/commit [--review] [--confirm]` | Generate a commit message and commit current changes |
-| `/push` | `/push` | Push the current branch to remote, setting upstream if needed |
 | `/pr` | `/pr` | Create a pull request with an AI-generated title and description |
-| `/exit` | `/exit` | Exit the interactive chat |
 
 You can also type `@` in chat to autocomplete file paths and mention files in your prompt.
 

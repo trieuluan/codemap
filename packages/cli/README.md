@@ -29,7 +29,6 @@ codemap logout     # Clear credentials
 codemap                    # Interactive chat (default)
 codemap chat               # Interactive chat (explicit)
 codemap ask "explain X"    # Single prompt, exit
-codemap route "task"       # Show which model handles a task
 codemap models             # List available models
 codemap doctor             # Diagnose workspace, project, gateway, and model config
 ```
@@ -70,7 +69,7 @@ Or create a config file at `.codemap/llm-gateway.json` (project) or `~/.codemap/
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 24+
 - Git (for repository features)
 
 ## License

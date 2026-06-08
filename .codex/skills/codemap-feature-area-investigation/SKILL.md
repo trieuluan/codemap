@@ -5,7 +5,7 @@ description: "CodeMap skill: codemap-feature-area-investigation"
 
 # Feature Area Investigation
 
-Use this skill for feature questions like billing, auth redirect, admin project detail, import history, or graph canvas.
+Use this skill for feature-area questions like authentication, billing, import history, graph canvas, CLI commands, integrations, or other named product areas.
 
 ## Process
 
@@ -17,5 +17,5 @@ Use this skill for feature questions like billing, auth redirect, admin project 
 
 ## Output Expectation
 
-Identify primary entrypoints, backend services/routes, frontend components/API clients, shared schema/types, and any secondary matches.
+Identify primary entrypoints, domain modules, UI or CLI surfaces, data contracts/configuration, verification targets, and any secondary matches.
 

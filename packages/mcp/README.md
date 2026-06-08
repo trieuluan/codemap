@@ -1,24 +1,37 @@
 # @codemap-ai/mcp
 
-CodeMap MCP server for IDE integrations (Claude, Cursor, Codex, Copilot, Gemini, OpenCode).
+Standalone CodeMap MCP server for editor and agent integrations such as Claude Code, Cursor, Codex, Gemini, OpenCode, and GitHub Copilot.
+
+## Install
+
+```bash
+npm install -g @codemap-ai/mcp
+```
+
+This package installs the `codemap-mcp` binary.
 
 ## Usage
 
-Add to your MCP client config:
+Add CodeMap to your MCP client config:
 
 ```json
 {
   "mcpServers": {
     "codemap": {
       "command": "npx",
-      "args": ["-y", "@codemap-ai/mcp"],
-      "env": {
-        "CODEMAP_API_TOKEN": "<your-token>"
-      }
+      "args": ["-y", "@codemap-ai/mcp"]
     }
   }
 }
 ```
+
+Then authenticate with the CodeMap CLI:
+
+```bash
+codemap login
+```
+
+If you want the full interactive terminal agent plus editor integration helpers, install `@codemap-ai/cli` instead.
 
 ## Links
 
