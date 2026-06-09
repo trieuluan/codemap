@@ -143,20 +143,6 @@ function terms(query: string): string[] {
     .filter((term) => term.length > 1);
 }
 
-function includesAll(input: string, queryTerms: string[]) {
-  const lower = input.toLowerCase();
-  return queryTerms.every((term) => lower.includes(term));
-}
-
-function scoreText(input: string, queryTerms: string[], baseRank: number) {
-  const lower = input.toLowerCase();
-  let score = 100 - baseRank;
-  for (const term of queryTerms) {
-    if (lower === term) score += 30;
-    else if (lower.includes(term)) score += 12;
-  }
-  return score;
-}
 
 function resolveContentStatus(
   isBinary: boolean,
@@ -266,6 +252,62 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_exports_exportName ON exports(lower(exportName));
 `;
 
+const FTS_SCHEMA_SQL = `
+  CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(
+    path,
+    content='files',
+    tokenize='unicode61 separators ''/._-'''
+  );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
+    displayName, filePath, signature,
+    content='symbols',
+    tokenize='unicode61 separators ''/._-'''
+  );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS exports_fts USING fts5(
+    exportName, filePath,
+    content='exports',
+    tokenize='unicode61 separators ''/._-'''
+  );
+
+  -- files_fts triggers
+  CREATE TRIGGER IF NOT EXISTS files_fts_insert AFTER INSERT ON files BEGIN
+    INSERT INTO files_fts(rowid, path) VALUES (new.rowid, new.path);
+  END;
+  CREATE TRIGGER IF NOT EXISTS files_fts_delete AFTER DELETE ON files BEGIN
+    INSERT INTO files_fts(files_fts, rowid, path) VALUES('delete', old.rowid, old.path);
+  END;
+  CREATE TRIGGER IF NOT EXISTS files_fts_update AFTER UPDATE ON files BEGIN
+    INSERT INTO files_fts(files_fts, rowid, path) VALUES('delete', old.rowid, old.path);
+    INSERT INTO files_fts(rowid, path) VALUES (new.rowid, new.path);
+  END;
+
+  -- symbols_fts triggers
+  CREATE TRIGGER IF NOT EXISTS symbols_fts_insert AFTER INSERT ON symbols BEGIN
+    INSERT INTO symbols_fts(rowid, displayName, filePath, signature) VALUES (new.id, new.displayName, new.filePath, new.signature);
+  END;
+  CREATE TRIGGER IF NOT EXISTS symbols_fts_delete AFTER DELETE ON symbols BEGIN
+    INSERT INTO symbols_fts(symbols_fts, rowid, displayName, filePath, signature) VALUES('delete', old.id, old.displayName, old.filePath, old.signature);
+  END;
+  CREATE TRIGGER IF NOT EXISTS symbols_fts_update AFTER UPDATE ON symbols BEGIN
+    INSERT INTO symbols_fts(symbols_fts, rowid, displayName, filePath, signature) VALUES('delete', old.id, old.displayName, old.filePath, old.signature);
+    INSERT INTO symbols_fts(rowid, displayName, filePath, signature) VALUES (new.id, new.displayName, new.filePath, new.signature);
+  END;
+
+  -- exports_fts triggers
+  CREATE TRIGGER IF NOT EXISTS exports_fts_insert AFTER INSERT ON exports BEGIN
+    INSERT INTO exports_fts(rowid, exportName, filePath) VALUES (new.id, new.exportName, new.filePath);
+  END;
+  CREATE TRIGGER IF NOT EXISTS exports_fts_delete AFTER DELETE ON exports BEGIN
+    INSERT INTO exports_fts(exports_fts, rowid, exportName, filePath) VALUES('delete', old.id, old.exportName, old.filePath);
+  END;
+  CREATE TRIGGER IF NOT EXISTS exports_fts_update AFTER UPDATE ON exports BEGIN
+    INSERT INTO exports_fts(exports_fts, rowid, exportName, filePath) VALUES('delete', old.id, old.exportName, old.filePath);
+    INSERT INTO exports_fts(rowid, exportName, filePath) VALUES (new.id, new.exportName, new.filePath);
+  END;
+`;
+
 export class SQLiteIndexStore {
   private db: DatabaseSync;
   readonly dbPath: string;
@@ -275,6 +317,22 @@ export class SQLiteIndexStore {
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
     this.db.exec(SCHEMA_SQL);
+    this.db.exec(FTS_SCHEMA_SQL);
+    this.migrateFts();
+  }
+
+  private migrateFts(): void {
+    // Populate FTS tables from existing data if they are empty (first-time migration)
+    const { n } = this.db.prepare("SELECT count(*) as n FROM files_fts").get() as { n: number };
+    if (n === 0) {
+      this.db.exec(`
+        INSERT INTO files_fts(rowid, path) SELECT rowid, path FROM files;
+        INSERT INTO symbols_fts(rowid, displayName, filePath, signature)
+          SELECT id, displayName, filePath, signature FROM symbols;
+        INSERT INTO exports_fts(rowid, exportName, filePath)
+          SELECT id, exportName, filePath FROM exports;
+      `);
+    }
   }
 
   static open(dbPath: string): SQLiteIndexStore {
@@ -701,40 +759,47 @@ export class SQLiteIndexStore {
     const queryTerms = terms(query);
     if (queryTerms.length === 0) return { files: [], symbols: [], exports: [] };
 
-    const likeConds = (col: string) => queryTerms.map(() => `LOWER(${col}) LIKE ?`).join(" AND ");
-    const likeArgs = (col: string = "") => queryTerms.map((t) => `%${col}${t}%`);
+    // Build FTS5 MATCH expression — escape special chars to avoid parse errors
+    const ftsQuery = queryTerms.map((t) => `"${t.replace(/"/g, '""')}"`).join(" ");
 
-    // Files
+    // Files — FTS5 + BM25 (lower score = better match in SQLite BM25)
     const fileRows = this.db
-      .prepare(`SELECT path, language FROM files WHERE ${likeConds("path")} LIMIT 50`)
-      .all(...likeArgs()) as Array<{ path: string; language: string | null }>;
+      .prepare(
+        `SELECT f.path, f.language
+         FROM files_fts
+         JOIN files f ON files_fts.rowid = f.rowid
+         WHERE files_fts MATCH ?
+         ORDER BY bm25(files_fts)
+         LIMIT 25`,
+      )
+      .all(ftsQuery) as Array<{ path: string; language: string | null }>;
 
-    const files: SearchFileResult[] = fileRows
-      .filter((r) => includesAll(r.path, queryTerms))
-      .sort((a, b) => scoreText(b.path, queryTerms, 0) - scoreText(a.path, queryTerms, 0))
-      .slice(0, 25)
-      .map((r) => ({ kind: "file" as const, path: r.path, language: r.language }));
+    const files: SearchFileResult[] = fileRows.map((r) => ({
+      kind: "file" as const,
+      path: r.path,
+      language: r.language,
+    }));
 
-    // Symbols
-    const symTermCond = `(${likeConds("s.displayName")} OR ${likeConds("s.filePath")})`;
-    const symArgs: (string | null)[] = [...likeArgs(), ...likeArgs()];
-    let symSql = `
-      SELECT s.filePath, s.localKey, s.stableKey, s.displayName, s.kind, s.signature,
-             s.parentSymbolLocalKey, s.line, s.col, s.endLine, s.endCol
-      FROM symbols s
-      WHERE ${symTermCond}
-    `;
-    if (symbolKinds && symbolKinds.length > 0) {
-      symSql += ` AND s.kind IN (${symbolKinds.map(() => "?").join(",")})`;
-      symArgs.push(...symbolKinds);
-    }
-    symSql += " LIMIT 50";
-
+    // Symbols — FTS5 + BM25, optional kind filter applied after join
     type SymRow = {
       filePath: string; localKey: string; stableKey: string; displayName: string; kind: string;
       signature: string | null; parentSymbolLocalKey: string | null;
       line: number | null; col: number | null; endLine: number | null; endCol: number | null;
     };
+    let symSql = `
+      SELECT s.filePath, s.localKey, s.stableKey, s.displayName, s.kind, s.signature,
+             s.parentSymbolLocalKey, s.line, s.col, s.endLine, s.endCol
+      FROM symbols_fts
+      JOIN symbols s ON symbols_fts.rowid = s.id
+      WHERE symbols_fts MATCH ?
+    `;
+    const symArgs: string[] = [ftsQuery];
+    if (symbolKinds && symbolKinds.length > 0) {
+      symSql += ` AND s.kind IN (${symbolKinds.map(() => "?").join(",")})`;
+      symArgs.push(...symbolKinds);
+    }
+    symSql += " ORDER BY bm25(symbols_fts) LIMIT 25";
+
     const symRows = this.db.prepare(symSql).all(...symArgs) as SymRow[];
 
     // Resolve parent display names in one batch
@@ -747,29 +812,21 @@ export class SQLiteIndexStore {
       for (const pr of parentRows) parentNameMap.set(pr.localKey, pr.displayName);
     }
 
-    const symbols: SearchSymbolResult[] = symRows
-      .filter((r) => includesAll(`${r.displayName} ${r.signature ?? ""} ${r.filePath}`, queryTerms))
-      .sort(
-        (a, b) =>
-          scoreText(`${b.displayName} ${b.filePath}`, queryTerms, 0) -
-          scoreText(`${a.displayName} ${a.filePath}`, queryTerms, 0),
-      )
-      .slice(0, 25)
-      .map((r) => ({
-        kind: "symbol" as const,
-        id: stableId(r.filePath, r.stableKey),
-        displayName: r.displayName,
-        symbolKind: r.kind,
-        signature: r.signature,
-        filePath: r.filePath,
-        parentSymbolName: r.parentSymbolLocalKey ? (parentNameMap.get(r.parentSymbolLocalKey) ?? null) : null,
-        startLine: r.line,
-        startCol: r.col,
-        endLine: r.endLine,
-        endCol: r.endCol,
-      }));
+    const symbols: SearchSymbolResult[] = symRows.map((r) => ({
+      kind: "symbol" as const,
+      id: stableId(r.filePath, r.stableKey),
+      displayName: r.displayName,
+      symbolKind: r.kind,
+      signature: r.signature,
+      filePath: r.filePath,
+      parentSymbolName: r.parentSymbolLocalKey ? (parentNameMap.get(r.parentSymbolLocalKey) ?? null) : null,
+      startLine: r.line,
+      startCol: r.col,
+      endLine: r.endLine,
+      endCol: r.endCol,
+    }));
 
-    // Exports
+    // Exports — FTS5 + BM25
     type ExpRow = {
       filePath: string; exportName: string; exportKind: string;
       symbolLocalKey: string | null; line: number; col: number; endLine: number; endCol: number;
@@ -777,11 +834,13 @@ export class SQLiteIndexStore {
     const expRows = this.db
       .prepare(
         `SELECT e.filePath, e.exportName, e.exportKind, e.symbolLocalKey, e.line, e.col, e.endLine, e.endCol
-         FROM exports e
-         WHERE (${likeConds("e.exportName")} OR ${likeConds("e.filePath")})
-         LIMIT 50`,
+         FROM exports_fts
+         JOIN exports e ON exports_fts.rowid = e.id
+         WHERE exports_fts MATCH ?
+         ORDER BY bm25(exports_fts)
+         LIMIT 25`,
       )
-      .all(...likeArgs(), ...likeArgs()) as ExpRow[];
+      .all(ftsQuery) as ExpRow[];
 
     const expSymKeys = [...new Set(expRows.map((r) => r.symbolLocalKey).filter(Boolean) as string[])];
     const expSymMap = new Map<string, { stableKey: string; displayName: string; line: number; col: number; endLine: number; endCol: number }>();
@@ -794,32 +853,24 @@ export class SQLiteIndexStore {
       for (const sr of symInfoRows) expSymMap.set(sr.localKey, sr);
     }
 
-    const exports: SearchExportResult[] = expRows
-      .filter((r) => includesAll(`${r.exportName} ${r.filePath}`, queryTerms))
-      .sort(
-        (a, b) =>
-          scoreText(`${b.exportName} ${b.filePath}`, queryTerms, 0) -
-          scoreText(`${a.exportName} ${a.filePath}`, queryTerms, 0),
-      )
-      .slice(0, 25)
-      .map((r) => {
-        const sym = r.symbolLocalKey ? (expSymMap.get(r.symbolLocalKey) ?? null) : null;
-        return {
-          kind: "export" as const,
-          id: stableId(r.filePath, "export", r.exportName, r.line, r.col),
-          exportName: r.exportName,
-          filePath: r.filePath,
-          symbolId: sym ? stableId(r.filePath, sym.stableKey) : null,
-          symbolStartLine: sym?.line ?? null,
-          symbolStartCol: sym?.col ?? null,
-          symbolEndLine: sym?.endLine ?? null,
-          symbolEndCol: sym?.endCol ?? null,
-          startLine: r.line,
-          startCol: r.col,
-          endLine: r.endLine,
-          endCol: r.endCol,
-        };
-      });
+    const exports: SearchExportResult[] = expRows.map((r) => {
+      const sym = r.symbolLocalKey ? (expSymMap.get(r.symbolLocalKey) ?? null) : null;
+      return {
+        kind: "export" as const,
+        id: stableId(r.filePath, "export", r.exportName, r.line, r.col),
+        exportName: r.exportName,
+        filePath: r.filePath,
+        symbolId: sym ? stableId(r.filePath, sym.stableKey) : null,
+        symbolStartLine: sym?.line ?? null,
+        symbolStartCol: sym?.col ?? null,
+        symbolEndLine: sym?.endLine ?? null,
+        symbolEndCol: sym?.endCol ?? null,
+        startLine: r.line,
+        startCol: r.col,
+        endLine: r.endLine,
+        endCol: r.endCol,
+      };
+    });
 
     return { files, symbols, exports };
   }

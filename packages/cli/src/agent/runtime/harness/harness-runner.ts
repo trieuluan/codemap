@@ -124,6 +124,7 @@ export function runHarness(
       { toolName: string; argsKey: string }
     >();
     const failedToolCounts = new Map<string, number>();
+    let awaitingBuildPhase = false;
     let pendingToolCalls = 0;
     let staleDisplayCount = 0;
     let lastDisplayStreamLength = -1;
@@ -198,8 +199,13 @@ export function runHarness(
         const ev = event as HarnessEvent & { modeId?: string };
         const modelId = harness.getCurrentModelId?.() ?? "";
         if (ev.modeId === "plan") callbacks.onPhaseStart?.("planning", modelId);
-        else if (ev.modeId === "build")
+        else if (ev.modeId === "build") {
           callbacks.onPhaseStart?.("executing", modelId);
+          // Plan phase is ending. The harness emits message_end immediately
+          // after this mode_changed — flag it so that message_end handler skips
+          // the premature resolve and waits for the build phase instead.
+          awaitingBuildPhase = true;
+        }
         return;
       }
       bridgeCommonEvent(event, {
@@ -238,7 +244,13 @@ export function runHarness(
         onPlanApproval: (planId, plan) => {
           handlePlanApproval(planId, plan).catch(fail);
         },
-        onEnd: finishWithCurrentText,
+        onEnd: () => {
+          // Block agent_end while waiting for the build phase to start; a
+          // synthetic agent_end from sendMessage can fire between the plan
+          // phase ending and the system-reminder triggering the build phase.
+          if (awaitingBuildPhase) return;
+          finishWithCurrentText();
+        },
         onError: (err) => {
           lastHarnessError =
             err instanceof Error ? err : new Error(String(err));
@@ -271,7 +283,18 @@ export function runHarness(
           }
         }
       }
+      if (event.type === "message_start" && awaitingBuildPhase) {
+        // Build phase has actually started — safe to accept the next message_end.
+        awaitingBuildPhase = false;
+      }
       if (event.type === "message_end" && finalText.trim()) {
+        if (awaitingBuildPhase) {
+          // This message_end belongs to the plan phase; the build phase hasn't
+          // started yet (no message_start received). Discard plan-phase text
+          // and keep waiting. awaitingBuildPhase is cleared on message_start.
+          finalText = "";
+          return;
+        }
         callbacks.onDebug?.({
           event: "mastra_finish_on_message_end",
           textLength: finalText.length,

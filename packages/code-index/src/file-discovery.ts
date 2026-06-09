@@ -21,13 +21,37 @@ export const IGNORED_NAMES = new Set([
   ".git",
   ".codemap",
   "node_modules",
-  "dist",
+  ".pnpm",
+  ".pnpm-store",
+  ".dist",
   "build",
   ".next",
   "coverage",
   ".turbo",
   ".cache",
+  ".agents",
+  ".claude",
+  ".codex",
+  ".vercel",
+  "tmp",
+  "temp",
+  "lib",
+  ".continue",
+  ".github",
+  ".vscode",
+  ".cursor",
+  ".opencode",
+  ".windsurf",
+  ".zed",
+  ".gemini",
+  ".ideamrc",
 ]);
+
+/** Helper to check if a path should be ignored */
+export function isPathIgnored(path: string): boolean {
+  const parts = path.split("/");
+  return parts.some((part) => IGNORED_NAMES.has(part));
+}
 
 export const MAX_PARSE_BYTES = 2 * 1024 * 1024;
 export const MAX_PARSE_BYTES_BY_LANGUAGE: Partial<Record<string, number>> = {
@@ -83,6 +107,8 @@ export async function collectSingleFile(
 
   try {
     const entryStats = await lstat(absolutePath);
+    
+    // Skip symlinks
     if (entryStats.isSymbolicLink() || !entryStats.isFile()) return null;
 
     // Check if any parent directory is in IGNORED_NAMES
@@ -167,6 +193,7 @@ export async function collectWorkspaceFiles(
   async function visit(absolutePath: string) {
     const entryStats = await lstat(absolutePath);
 
+    // Skip symlinks
     if (entryStats.isSymbolicLink()) return;
 
     const name = path.basename(absolutePath);
