@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-10
+
+### Changed
+- **Upgraded TypeScript to 6.0.3** across all 7 packages (`cli`, `code-index`, `core`, `mcp`, `shared`, `tool-types`, root)
+  - Enables new TS 6.x language features (decorator metadata, `import.meta.resolve`, etc.)
+  - `moduleResolution: "NodeNext"` now required (TS 6.x drops `"Node"` support)
+- **Migrated `code-index` and `shared` packages to `module: "NodeNext"`** — last two holdouts from the CommonJS/Node era
+  - Added explicit `.js` extensions to ~25 relative imports in `shared/src/` for Node16/NodeNext compliance
+- Expanded `IGNORED_NAMES` in `code-index/file-discovery.ts`:
+  - Added: `__pycache__`, `.mypy_cache`, `.pytest_cache` (Python cache directories)
+  - Total ignore patterns now at 30
+- Added `release:minor` and `release:major` scripts to root `package.json` — matches existing `release:patch` pattern
+- Updated `release:patch` script to use `--no-git-checks` flag for pnpm workspace versioning
+
 ## [1.1.10] - 2026-06-10
 
 ### Added
