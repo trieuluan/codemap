@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-10
+
+### Added
+- **Expanded language detection** in `code-index/language-utils.ts`:
+  - `SOURCE_LANGUAGE_BY_EXTENSION`: 11 → 64 entries — now covers C, C++, C#, Go, Rust, Ruby, Swift, Lua, R, Scala, Groovy, Elixir, Erlang, Haskell, Clojure, F# + data/config/markup (JSON, YAML, TOML, XML, HTML, CSS, SCSS, Markdown, MDX, reStructuredText, SVG, CSV, TSV, SQL, GraphQL, Protocol Buffers) + shell/infra (Shell, Bash, Zsh, Fish, PowerShell, Batch, Dockerfile, Makefile, CMake) + other text (dotenv, INI, Config, Log, Diff, Patch)
+  - `MIME_TYPE_BY_EXTENSION`: 9 → 54 entries — matching all 64 language extensions with appropriate MIME types including image types (PNG, JPEG, GIF, WebP, SVG)
+- New `extensionFromFilename(fileName)` utility — extracts and normalizes extension from a full filename path
+- New `normalizeExtension(input)` — accepts both filenames (`"file.ts"`) and extension strings (`"ts"`, `".TS"`), unifying two previous implementations
+- Exported parser extension constants from `@codemap-ai/code-index`: `JS_TS_EXTENSIONS`, `DART_EXTENSIONS`, `PHP_EXTENSIONS`, `PYTHON_EXTENSIONS`, `JAVA_EXTENSIONS`, `KOTLIN_EXTENSIONS`
+- Exported additional utilities: `isPathIgnored`, `normalizeRepositoryFilePath`
+
+### Changed
+- `file-discovery.ts` now uses `extensionFromFilename()` instead of `normalizeExtension()` for extracting extensions from filenames — clearer API boundary
+
 ## [1.2.0] - 2026-06-10
 
 ### Changed
