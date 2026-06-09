@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Auto-indexing now starts automatically when `codemap-mcp` server starts — local index is loaded and file watcher is enabled without requiring an explicit tool call
+- Applies to all agent integrations that spawn `codemap-mcp` (Cursor, Copilot, Codex, CLI internal spawn)
+
+### Fixed
+- Fixed misleading "Execute phase completed without any tool calls" warning that appeared when users requested planning-only tasks (e.g., "lên plan", "make a plan")
+- Added `executionMode` field to task classification to distinguish between `single`, `plan_only`, and `multi_execute` modes — warning now only appears for `multi_execute` tasks that don't use tools
+
+### Performance
+- `WatchEventHandler` no longer reindexes the changed file twice when it has dependents
+- Dependent files are only reindexed when exported symbols actually change (not on every file save)
+- File deletion no longer rebuilds the entire `SymbolDependencyGraph` from the store — uses incremental `removeFile()` instead
+
 ## [1.1.6] - 2026-06-08
 
 ### Changed

@@ -14,7 +14,6 @@ import {
 } from "../ui/tool-call-messages.js";
 import { syncTaskListFromTool } from "../ui/tool-call-messages.js";
 import type { SubmitHandlerContext } from "./context.js";
-import type { SubmitLocalIndexTracker } from "./local-index.js";
 
 interface SubmitRuntimeCallbacksOptions {
   ctx: SubmitHandlerContext;
@@ -23,7 +22,6 @@ interface SubmitRuntimeCallbacksOptions {
   logger: DebugLogger | null;
   taskId: number;
   taskAbort: AbortController;
-  localIndexTracker: SubmitLocalIndexTracker;
 }
 
 export interface SubmitRuntimeCallbacks {
@@ -64,7 +62,6 @@ export function createSubmitRuntimeCallbacks({
   logger,
   taskId,
   taskAbort,
-  localIndexTracker,
 }: SubmitRuntimeCallbacksOptions): SubmitRuntimeCallbacks {
   let streamingContent = "";
   let hasStreamingEntry = false;
@@ -209,7 +206,6 @@ export function createSubmitRuntimeCallbacks({
 
       if (id) toolArgsById.delete(id);
       syncTaskListFromTool(store, rawName, rawArgs, resultText);
-      localIndexTracker.recordToolResult(rawName, rawArgs);
 
       bus.scheduleRefresh();
     },

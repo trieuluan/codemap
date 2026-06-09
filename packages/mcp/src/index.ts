@@ -11,6 +11,8 @@ import { loadConfig } from "@codemap-ai/core/config.js";
 import { buildServerInstructions } from "@codemap-ai/core/lib/server-instructions.js";
 import { buildSessionContext } from "@codemap-ai/core/lib/session-context.js";
 import { autoInjectRules } from "@codemap-ai/core/lib/auto-inject.js";
+import { ensureLocalIndex } from "@codemap-ai/core/lib/local-index.js";
+import { enableAutoIndexing } from "@codemap-ai/core/lib/auto-indexing.js";
 
 import { registerManageGitConnectionTool } from "./tools/manage-git-connection.js";
 import { registerGetCurrentWorkspaceInfoTool } from "./tools/get-current-workspace-info.js";
@@ -24,6 +26,7 @@ import { registerSymbolTool } from "./tools/symbol.js";
 import { registerWebFetchTool } from "./tools/web-fetch.js";
 import { registerFindRelatedFilesTool } from "./tools/find-related-files.js";
 import { registerRefreshLocalIndexTool } from "./tools/refresh-local-index.js";
+import { registerEnableAutoIndexingTool, registerDisableAutoIndexingTool, registerCheckAutoIndexStatusTool } from "./tools/auto-index-control.js";
 import { registerGetFileTool } from "./tools/get-file.js";
 import { registerMoveSymbolsTool } from "./tools/move-symbols.js";
 import { registerRenameSymbolTool } from "./tools/rename-symbol.js";
@@ -62,6 +65,12 @@ async function runMcpServer() {
   registerGetProjectMapTool(server, config);
   registerDiffTool(server, config);
   registerRefreshLocalIndexTool(server);
+  
+  // Auto-indexing control tools (available in all tiers)
+  registerEnableAutoIndexingTool(server);
+  registerDisableAutoIndexingTool(server);
+  registerCheckAutoIndexStatusTool(server);
+  
   registerWebSearchTool(server);
   registerReimportTool(server, config);
 
@@ -89,6 +98,14 @@ async function runMcpServer() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Auto-start local index and file watcher — fire-and-forget, does not block startup
+  ensureLocalIndex({ force: false })
+    .then((store) => {
+      const workspaceRootPath = store.getMeta()?.workspaceRootPath;
+      if (workspaceRootPath) return enableAutoIndexing(store, workspaceRootPath);
+    })
+    .catch(() => {});
 
   // Auto-inject after connect — clientInfo is available now from MCP initialize handshake
   await autoInjectRules(server, process.cwd());

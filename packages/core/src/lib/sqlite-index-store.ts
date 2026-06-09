@@ -593,6 +593,110 @@ export class SQLiteIndexStore {
     }
   }
 
+  /**
+   * Batch update multiple files' data. More efficient than calling upsertFile repeatedly
+   * when reindexing dependent files after a source file change.
+   */
+  batchUpsertFiles(
+    files: Array<{ file: LocalIndexedFile; skipImportedByRebuild?: boolean }>,
+  ): void {
+    this.db.exec("BEGIN");
+    try {
+      const statements = new Map<string, any>();
+      
+      // Cache prepared statements for reuse
+      const createStmt = (sql: string) => {
+        if (!statements.has(sql)) {
+          statements.set(sql, this.db.prepare(sql));
+        }
+        return statements.get(sql)!;
+      };
+
+      for (const { file, skipImportedByRebuild } of files) {
+        // Delete all data for this file from file-owned tables
+        createStmt("DELETE FROM manifest WHERE path = ?").run(file.path);
+        createStmt("DELETE FROM files WHERE path = ?").run(file.path);
+        createStmt("DELETE FROM symbols WHERE filePath = ?").run(file.path);
+        createStmt("DELETE FROM imports WHERE filePath = ?").run(file.path);
+        createStmt("DELETE FROM exports WHERE filePath = ?").run(file.path);
+
+        // Delete imported_by entries where this file is involved
+        if (!skipImportedByRebuild) {
+          createStmt("DELETE FROM imported_by WHERE targetFilePath = ? OR sourceFilePath = ?")
+            .run(file.path, file.path);
+        }
+
+        // Re-insert manifest + files
+        createStmt(
+          "INSERT INTO manifest(path, sizeBytes, contentSha256, parseStatus) VALUES(?, ?, ?, ?)",
+        ).run(file.path, file.sizeBytes, file.contentSha256 ?? null, file.parseStatus);
+
+        createStmt(
+          "INSERT INTO files(path, dirPath, baseName, extension, language, mimeType, sizeBytes, lineCount, parseStatus, isBinary, isText, contentSha256, content) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ).run(
+          file.path, file.dirPath, file.baseName,
+          file.extension ?? null, file.language ?? null, file.mimeType ?? null,
+          file.sizeBytes, file.lineCount ?? null, file.parseStatus,
+          file.isBinary ? 1 : 0, file.isText ? 1 : 0,
+          file.contentSha256 ?? null, file.content ?? null,
+        );
+
+        // Re-insert symbols
+        const insertSymbol = createStmt(
+          "INSERT INTO symbols(filePath, localKey, stableKey, displayName, kind, signature, returnType, doc, isExported, parentSymbolLocalKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        );
+        for (const sym of file.symbols) {
+          insertSymbol.run(
+            file.path, sym.localKey, sym.stableKey, sym.displayName, sym.kind,
+            sym.signature ?? null, sym.returnType ?? null, sym.doc ?? null,
+            sym.isExported ? 1 : 0, sym.parentSymbolLocalKey ?? null,
+            sym.line, sym.col, sym.endLine, sym.endCol,
+          );
+        }
+
+        // Re-insert imports
+        const insertImport = createStmt(
+          "INSERT INTO imports(filePath, localKey, moduleSpecifier, importKind, resolutionKind, targetPathText, targetExternalSymbolKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        );
+        for (const imp of file.imports) {
+          insertImport.run(
+            file.path, imp.localKey, imp.moduleSpecifier, imp.importKind, imp.resolutionKind,
+            imp.targetPathText ?? null, imp.targetExternalSymbolKey ?? null,
+            imp.line, imp.col, imp.endLine, imp.endCol,
+          );
+        }
+
+        // Re-insert imported_by entries for imports owned by this file
+        const insertIB = createStmt(
+          "INSERT INTO imported_by(targetFilePath, sourceFilePath, moduleSpecifier, importKind, resolutionKind, startLine, startCol, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        );
+        for (const imp of file.imports) {
+          if (!imp.targetPathText) continue;
+          insertIB.run(
+            imp.targetPathText, file.path, imp.moduleSpecifier, imp.importKind, imp.resolutionKind,
+            imp.line, imp.col, imp.endLine, imp.endCol,
+          );
+        }
+
+        // Re-insert exports
+        const insertExport = createStmt(
+          "INSERT INTO exports(filePath, exportName, exportKind, symbolLocalKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+        );
+        for (const exp of file.exports) {
+          insertExport.run(
+            file.path, exp.exportName, exp.exportKind, exp.symbolLocalKey ?? null,
+            exp.line, exp.col, exp.endLine, exp.endCol,
+          );
+        }
+      }
+
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   search(query: string, symbolKinds: string[] | null): CodebaseSearchResponse {
     const queryTerms = terms(query);
     if (queryTerms.length === 0) return { files: [], symbols: [], exports: [] };

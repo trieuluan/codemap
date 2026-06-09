@@ -325,3 +325,24 @@ export function toRepoRelativePath(filePath: string, workspaceRootPath: string):
   }
   return filePath;
 }
+
+/**
+ * Batch refresh multiple files' indexes.
+ * This is more efficient than calling refreshLocalFile repeatedly.
+ */
+export async function refreshLocalFiles(
+  filePaths: string[],
+  workspaceRootPath?: string,
+): Promise<void> {
+  const store = _cachedStore ?? await readLocalIndex(workspaceRootPath);
+  if (!store) {
+    throw new Error("Could not access local index store");
+  }
+
+  for (const filePath of filePaths) {
+    // Reuse existing refreshLocalFile logic
+    await refreshLocalFile(filePath, workspaceRootPath);
+  }
+  
+  _cachedStore = null;
+}

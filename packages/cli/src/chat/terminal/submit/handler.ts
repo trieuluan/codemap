@@ -14,7 +14,6 @@ import { hydrateMentionContext } from "../../../agent/prompt/mention-context.js"
 import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";
-import { createSubmitLocalIndexTracker } from "./local-index.js";
 import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
 
 export async function handleSubmitWithContent(
@@ -45,7 +44,6 @@ export async function handleSubmitWithContent(
   });
   bus.scheduleRefresh();
 
-  const localIndexTracker = createSubmitLocalIndexTracker(logger);
   const runtimeCallbacks = createSubmitRuntimeCallbacks({
     ctx,
     store,
@@ -53,7 +51,6 @@ export async function handleSubmitWithContent(
     logger,
     taskId,
     taskAbort,
-    localIndexTracker,
   });
 
   try {

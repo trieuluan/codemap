@@ -2,6 +2,7 @@ packages:
   - "packages/*"
 allowBuilds:
   '@google/genai': true
+  '@parcel/watcher': true
   agent-browser: true
   argon2: false
   bufferutil: true

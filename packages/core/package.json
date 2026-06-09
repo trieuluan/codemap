@@ -18,6 +18,7 @@
     "@codemap-ai/shared": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
     "@modelcontextprotocol/sdk": "^1.21.0",
+    "@parcel/watcher": "^2.5.0",
     "jszip": "^3.10.1",
     "zod": "^4.3.6"
   },
