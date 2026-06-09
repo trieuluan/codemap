@@ -27,6 +27,14 @@ export default defineConfig({
     "better-sqlite3",
     "@parcel/watcher",
   ],
+  esbuildPlugins: [
+    {
+      name: "external-native-modules",
+      setup(build) {
+        build.onResolve({ filter: /\.node$/ }, () => ({ external: true }));
+      },
+    },
+  ],
   onSuccess:
     "chmod +x dist/index.js && perl -pi -e 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",
 });
