@@ -25,6 +25,7 @@ export default defineConfig({
     "tree-sitter-wasms",
     "tree-sitter-python",
     "better-sqlite3",
+    "@parcel/watcher",
   ],
   onSuccess:
     "chmod +x dist/index.js && perl -pi -e 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",
