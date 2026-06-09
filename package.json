@@ -24,7 +24,11 @@
     "start:mcp": "pnpm --filter @codemap-ai/mcp run start",
     "test": "pnpm --filter @codemap-ai/cli run test",
     "version:patch": "npm version patch --no-git-tag-version && pnpm --filter @codemap-ai/shared --filter @codemap-ai/code-index --filter @codemap-ai/core --filter @codemap-ai/tool-types --filter @codemap-ai/mcp --filter @codemap-ai/cli version patch --no-git-tag-version --no-git-checks",
-    "release:patch": "pnpm run version:patch && git add package.json packages/*/package.json pnpm-lock.yaml && node scripts/release.mjs"
+    "release:patch": "pnpm run version:patch && git add package.json packages/*/package.json pnpm-lock.yaml && node scripts/release.mjs",
+    "version:minor": "npm version minor --no-git-tag-version && pnpm --filter @codemap-ai/shared --filter @codemap-ai/code-index --filter @codemap-ai/core --filter @codemap-ai/tool-types --filter @codemap-ai/mcp --filter @codemap-ai/cli version minor --no-git-tag-version --no-git-checks",
+    "release:minor": "pnpm run version:minor && git add package.json packages/*/package.json pnpm-lock.yaml && node scripts/release.mjs",
+    "version:major": "npm version major --no-git-tag-version && pnpm --filter @codemap-ai/shared --filter @codemap-ai/code-index --filter @codemap-ai/core --filter @codemap-ai/tool-types --filter @codemap-ai/mcp --filter @codemap-ai/cli version major --no-git-tag-version --no-git-checks",
+    "release:major": "pnpm run version:major && git add package.json packages/*/package.json pnpm-lock.yaml && node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
