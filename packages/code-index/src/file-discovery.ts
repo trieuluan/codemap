@@ -5,7 +5,7 @@ import {
   isBinaryBuffer,
   inferLanguage,
   inferMimeType,
-  normalizeExtension,
+  extensionFromFilename,
   readSampleBuffer,
 } from "./language-utils.js";
 
@@ -121,7 +121,7 @@ export async function collectSingleFile(
     }
 
     const name = path.basename(absolutePath);
-    const extension = normalizeExtension(name);
+    const extension = extensionFromFilename(name);
     const language = inferLanguage(extension);
     const mimeType = inferMimeType(extension);
     const sample = await readSampleBuffer(absolutePath, entryStats.size);
@@ -216,7 +216,7 @@ export async function collectWorkspaceFiles(
     const relativePath = normalizeRepositoryFilePath(
       path.relative(workspacePath, absolutePath).split(path.sep).join("/"),
     );
-    const extension = normalizeExtension(name);
+    const extension = extensionFromFilename(name);
     const language = inferLanguage(extension);
     const mimeType = inferMimeType(extension);
     const sample = await readSampleBuffer(absolutePath, entryStats.size);
