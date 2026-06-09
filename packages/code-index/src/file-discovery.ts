@@ -45,6 +45,9 @@ export const IGNORED_NAMES = new Set([
   ".zed",
   ".gemini",
   ".ideamrc",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
 ]);
 
 /** Helper to check if a path should be ignored */
