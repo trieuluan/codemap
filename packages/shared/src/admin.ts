@@ -5,8 +5,8 @@ import type {
   ProjectProvider,
   ProjectStatus,
   ProjectVisibility,
-} from "./project-entities";
-import type { WorkspacePlan, WorkspaceRole, WorkspaceType } from "./workspace";
+} from "./project-entities.js";
+import type { WorkspacePlan, WorkspaceRole, WorkspaceType } from "./workspace.js";
 
 export const adminListUsersQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),

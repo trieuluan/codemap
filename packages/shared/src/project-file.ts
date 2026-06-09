@@ -1,4 +1,4 @@
-import type { ProjectImportParseStatus, ProjectParsedFileStatus } from "./project-entities";
+import type { ProjectImportParseStatus, ProjectParsedFileStatus } from "./project-entities.js";
 
 export type ProjectFileContentStatus =
   | "ready"

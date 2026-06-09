@@ -1,5 +1,5 @@
-import type { ProjectParsedFileStatus } from "./project-entities";
-import type { ProjectInsightCycleCandidate } from "./project-file";
+import type { ProjectParsedFileStatus } from "./project-entities.js";
+import type { ProjectInsightCycleCandidate } from "./project-file.js";
 
 export type ProjectImportCompareChange = "added" | "removed" | "modified";
 
