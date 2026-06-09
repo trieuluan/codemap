@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/tool-types",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "type": "module",
   "description": "TypeScript types for CodeMap custom tools (.tool.ts)",
   "license": "MIT",
