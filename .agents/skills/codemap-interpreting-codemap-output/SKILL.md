@@ -2,6 +2,7 @@
 name: codemap-interpreting-codemap-output
 description: "CodeMap skill: codemap-interpreting-codemap-output"
 ---
+
 # Interpreting CodeMap Output
 
 Use this skill after a CodeMap MCP tool returns ranked files, symbol context, related files, usages, callers, workflow guidance, or diff output.
@@ -15,15 +16,15 @@ Use this skill after a CodeMap MCP tool returns ranked files, symbol context, re
 
 ## Token Discipline
 
-- Use `get_files` for several candidate files instead of opening each file.
-- Use `get_symbol_context` for a known function, component, class, or method body.
+- Use `get_file` for several candidate files instead of opening each file.
+- Use `symbol` for a known function, component, class, or method body.
 - Use `get_file` with line ranges when the tool output points to a precise span.
 - Stop expanding context once the edit or answer is grounded enough.
 
 ## Ranking Signals
 
-- Strong signals: exact file path, exact symbol name, direct export, direct import, caller/callee, route/API handler match.
-- Medium signals: feature-area summary rank, related-file edge, same directory, shared service/component.
+- Strong signals: exact file path, exact symbol name, direct export, direct import, caller/callee, entrypoint/handler match.
+- Medium signals: feature-area summary rank, related-file edge, same directory, shared module/component.
 - Weak signals: fuzzy name match, generic loading/error files, broad utility files, low-score keyword-only hits.
 
 When results look weak or noisy, refine the query, anchor it to a file or symbol, or switch from feature search to symbol/file search.
@@ -32,4 +33,3 @@ When results look weak or noisy, refine the query, anchor it to a file or symbol
 
 Mention only the CodeMap result details that changed the decision: selected files, key symbols, and whether more raw reading was needed.
 
-"
