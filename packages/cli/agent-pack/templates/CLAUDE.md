@@ -15,5 +15,10 @@ Relevant skills live under `.claude/skills/codemap-*`:
 - `codemap-executing-plans` — execute approved plans in scoped steps
 - `codemap-test-driven-development` — RED → GREEN → REFACTOR using CodeMap tools
 - `codemap-verification-before-completion` — final diff/build/index/reimport gate
+- `codemap-systematic-debugging` — Use when debugging: 4-phase root cause process with Iron Law
+- `codemap-receiving-code-review` — Use when receiving code review feedback on a PR or diff
+- `codemap-requesting-code-review` — Use when you want to dispatch a code reviewer subagent
+- `codemap-finishing-a-development-branch` — Use when ready to merge or close a development branch
+- `codemap-subagent-driven-development` — Use when orchestrating parallel subagents for complex tasks
 
 When a CodeMap MCP tool returns ranked files, symbol context, or next steps, read the summary and ranking signals before opening raw files.

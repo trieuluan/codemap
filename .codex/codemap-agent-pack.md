@@ -31,12 +31,6 @@ Print the local plugin root path:
 codemap agent-pack-path
 ```
 
-Register a local Codex-style marketplace entry:
-
-```bash
-codemap init-agent-pack --target marketplace --plugin-path ./packages/mcp-server
-```
-
 Preview or test in another directory:
 
 ```bash

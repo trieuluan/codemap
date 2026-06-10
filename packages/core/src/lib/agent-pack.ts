@@ -25,6 +25,11 @@ export const AGENT_PACK_SKILLS = [
   "executing-plans",
   "test-driven-development",
   "verification-before-completion",
+  "systematic-debugging",
+  "receiving-code-review",
+  "requesting-code-review",
+  "finishing-a-development-branch",
+  "subagent-driven-development",
 ] as const;
 
 export type AgentPackSkillName = (typeof AGENT_PACK_SKILLS)[number];
