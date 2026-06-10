@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- **`/conventions` slash command** removed — no longer needed since AGENTS.md/CLAUDE.md are read automatically by Mastra Code runtime
+- **`convention-synthesizer.ts`** removed — LLM-based synthesis of agent convention files replaced by direct disk reads
+- **Startup convention synthesis** removed from `startup.ts` — eliminates LLM token cost at CLI startup
+
+### Changed
+- **Extra conventions now read directly from disk** via `loadExtraConventions()` in `extra-conventions.ts` — reads Cursor, Cline, Windsurf, GitHub Copilot convention files without any LLM calls
+- **`getSessionProjectContext()`** now uses `resolveWorkspace()` to find monorepo root before reading extra convention files — correctly handles subdirectory invocations
+
 ## [1.3.0] - 2026-06-10
 
 ### Added

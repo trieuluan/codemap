@@ -11,7 +11,6 @@ import { mcpCommand } from "./mcp.js";
 import { gitCommitCommand } from "./git-commit.js";
 import { gitPushCommand } from "./git-push.js";
 import { gitPrCommand } from "./git-pr.js";
-import { conventionsCommand } from "./conventions.js";
 import { copyCommand } from "./copy-cmd.js";
 import { loginCommand } from "./login.js";
 import { logoutCommand } from "./logout.js";
@@ -23,7 +22,6 @@ import { sessionsCommand } from "./sessions.js";
 import { hooksCommand } from "./hooks.js";
 import { configCommand } from "./config.js";
 import { memoryCommand } from "./memory.js";
-import { resetHarnessSingleton } from "../../agent/runtime/harness/lifecycle.js";
 import type { CommandContext, Command } from "./types.js";
 
 const commands: Command[] = [
@@ -41,7 +39,6 @@ const commands: Command[] = [
   gitCommitCommand,
   gitPushCommand,
   gitPrCommand,
-  conventionsCommand,
   copyCommand,
   clearCommand,
   historyCommand,

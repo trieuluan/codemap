@@ -1,4 +1,3 @@
-import { loadOrSynthesizeAll } from "../../../agent/prompt/convention-synthesizer.js";
 import { warmupFileSearch } from "../../../agent/utils/file-search.js";
 import { warmupHarness, autoResumeLatestThread, listMastraThreadMessages } from "../../../agent/runtime/harness-runtime.js";
 import { maybeCleanupMastraDb } from "../../../agent/runtime/mastra-db-cleanup.js";
@@ -71,15 +70,6 @@ export async function startChatTerminalRuntime({
     .catch(() => {});
 
   maybeCleanupMastraDb();
-
-  store.dispatch({ synthRunning: true });
-  bus.scheduleRefresh();
-  loadOrSynthesizeAll(options.provider, store.getState().config.model)
-    .catch(() => {})
-    .finally(() => {
-      store.dispatch({ synthRunning: false });
-      bus.scheduleRefresh();
-    });
 
   const { startPiTuiApp } = await import("../../../tui/app.js");
   await startPiTuiApp(terminal);

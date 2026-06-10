@@ -1,6 +1,9 @@
 import type { CodeMapMcpToolClient } from "../../../agent/tools/mcp/mcp-tool-client.js";
 import { fetchResourceContext } from "../../../agent/tools/mcp/mcp-tool-client.js";
-import { getCachedContext } from "../../../agent/prompt/convention-synthesizer.js";
+import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
+import {
+  loadExtraConventions,
+} from "../config/extra-conventions.js";
 
 export interface ProjectContext {
   conventions: string | null;
@@ -43,7 +46,8 @@ export async function getSessionProjectContext(
 ): Promise<ProjectContext> {
   if (cache.projectContext !== undefined) return cache.projectContext;
   try {
-    cache.projectContext = await getCachedContext();
+    const resolved = await resolveWorkspace();
+    cache.projectContext = await loadExtraConventions(resolved.workspaceRootPath);
   } catch {
     cache.projectContext = EMPTY_PROJECT_CONTEXT;
   }
