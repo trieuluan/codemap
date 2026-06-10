@@ -25,7 +25,7 @@ codemap doctor-agent-pack --target auto
 
 The installer writes workflow rules and skills for the chosen agent harness. Conflicting files are backed up unless `--force` is used.
 
-Codex installs `AGENTS.md`, `.codex/codemap-agent-pack.md`, and CodeMap skills under `.codex/skills/codemap-*`.
+Codex installs `AGENTS.md`, `.codex/codemap-agent-pack.md`, and CodeMap skills under `.agents/skills/codemap-*`.
 Claude installs `CLAUDE.md`, `.claude/rules/codemap-*`, and CodeMap skills under `.claude/skills/codemap-*`.
 Cursor installs `.cursor/rules/codemap.mdc` with MCP-first, lifecycle, and workflow-skill routing guidance.
 

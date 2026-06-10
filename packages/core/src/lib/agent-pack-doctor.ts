@@ -126,10 +126,12 @@ async function readIfExists(filePath: string) {
 }
 
 function skillExpectations(target: "codex" | "claude"): FileExpectation[] {
+  // Codex CLI discovers skills from .agents/skills/, not .codex/skills/
+  const skillsDir = target === "codex" ? ".agents" : `.${target}`;
   return AGENT_PACK_SKILLS.map((skill) => ({
     target,
     name: `Skill: codemap-${skill}`,
-    relativePath: `.${target}/skills/codemap-${skill}/SKILL.md`,
+    relativePath: `${skillsDir}/skills/codemap-${skill}/SKILL.md`,
     required: true,
   }));
 }

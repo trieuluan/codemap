@@ -99,7 +99,7 @@ CodeMap ships workflow guidance for AI coding agents (skills, rules, templates) 
 
 When editing agent-pack content, keep the installed copies in sync:
 
-- `.claude/skills/codemap-*` and `.codex/skills/codemap-*` — installed skill directories
+- `.claude/skills/codemap-*` and `.agents/skills/codemap-*` — installed skill directories
 - `.cursor/rules/*` — Cursor rule files
 - `AGENTS.md` and `CLAUDE.md` — root agent instructions
 

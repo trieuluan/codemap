@@ -13,7 +13,7 @@ Use CodeMap MCP before raw file reads or grep.
 - Read MCP output by summary, ranking reasons, next steps, and resource URIs before expanding context.
 - After edits: build/test, inspect diff, then reimport when needed.
 
-Installed CodeMap skills live under `.codex/skills/codemap-*`:
+Installed CodeMap skills live under `.agents/skills/codemap-*`:
 - `codemap-brainstorming` — design-first workflow with hard gate before implementation
 - `codemap-writing-plans` — decision-complete plan after approved design
 - `codemap-executing-plans` — execute approved plans in scoped steps

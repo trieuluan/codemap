@@ -2,9 +2,8 @@
 name: codemap-brainstorming
 description: "CodeMap skill: codemap-brainstorming"
 ---
-
 # Brainstorming
-
+"
 Use this skill when the user describes a new feature, a vague requirement, or says "design X", "plan X", or "how should we approach X". Do not write any code until the design is approved.
 
 ## Hard Gate
@@ -16,6 +15,7 @@ Use this skill when the user describes a new feature, a vague requirement, or sa
 1. **Gather real context with CodeMap**
    - `explore_task("feature or problem description")` — get likely files, entrypoints, risks
    - `get_project_insights()` — understand codebase size, language breakdown, patterns
+   - `summarize_feature_area(query)` — map the affected domain
 
 2. **Ask clarifying questions** — one at a time, stop when the scope is unambiguous:
    - What is the expected input and output?
@@ -30,7 +30,7 @@ Use this skill when the user describes a new feature, a vague requirement, or sa
    - Goal and non-goals
    - Chosen approach and why
    - Files to create/modify (with paths from CodeMap)
-   - Data flow, command flow, or integration contract
+   - Data flow or API contract
    - Open questions
 
 5. **Self-review the spec** — check for missing edge cases, unclear interfaces, or scope creep

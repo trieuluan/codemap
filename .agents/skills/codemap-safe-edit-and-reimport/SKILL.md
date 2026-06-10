@@ -2,7 +2,6 @@
 name: codemap-safe-edit-and-reimport
 description: "CodeMap skill: codemap-safe-edit-and-reimport"
 ---
-
 # Safe Edit And Reimport
 
 Use this skill when making code changes in a CodeMap-indexed repository.
@@ -19,3 +18,4 @@ Use this skill when making code changes in a CodeMap-indexed repository.
 
 Never declare the task complete without saying what was verified or why verification was skipped.
 
+"

@@ -41,6 +41,7 @@ export const importCommand: Command = {
       }
 
       ctx.setMessages((prev) => [...prev, { role: "system", content: result.content }]);
+      await ctx.refreshWorkspaceCommits?.();
     } catch (err) {
       ctx.setMessages((prev) => [
         ...prev,
