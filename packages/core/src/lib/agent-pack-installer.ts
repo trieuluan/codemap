@@ -121,10 +121,11 @@ async function exists(filePath: string) {
   }
 }
 
-async function listSkillWrites(root: string, harness: "claude" | "codex"): Promise<PlannedWrite[]> {
+async function listSkillWrites(root: string, harness: "claude" | "agents"): Promise<PlannedWrite[]> {
+  const dir = harness === "agents" ? ".agents" : ".claude";
   return Promise.all(
     AGENT_PACK_SKILLS.map(async (skill) => ({
-      path: path.join(root, `.${harness}`, "skills", `codemap-${skill}`, "SKILL.md"),
+      path: path.join(root, dir, "skills", `codemap-${skill}`, "SKILL.md"),
       content: await readAgentPackSkill(skill),
     })),
   );
@@ -140,7 +141,7 @@ async function planCodex(root: string): Promise<PlannedWrite[]> {
       path: path.join(root, ".codex", "codemap-agent-pack.md"),
       content: await readAgentPackFile("README.md"),
     },
-    ...(await listSkillWrites(root, "codex")),
+    ...(await listSkillWrites(root, "agents")),
   ];
 }
 
