@@ -89,4 +89,4 @@ packages/web/next-env.d.ts
 # docs/ is tracked (contains README assets like GIFs and VHS tape scripts)
 
 .pnpm-store
-.pnpm-store/*
+.pnpm-store/*.agents/skills/
