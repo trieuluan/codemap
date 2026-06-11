@@ -7,14 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-- **`/conventions` slash command** removed — no longer needed since AGENTS.md/CLAUDE.md are read automatically by Mastra Code runtime
-- **`convention-synthesizer.ts`** removed — LLM-based synthesis of agent convention files replaced by direct disk reads
-- **Startup convention synthesis** removed from `startup.ts` — eliminates LLM token cost at CLI startup
+### Added
+- **Headless CLI mode** for non-interactive execution and automation workflows
+- **POSIX `--` argument separator support** in CLI argument parsing for headless/scripted invocations
 
 ### Changed
+- **Harness model reporting now preserves the backend-resolved model name** from API responses, including streamed responses, so the UI can show the actual model selected by routing
+- **Model API failures now include better routing/debug context** to make provider issues easier to diagnose
+- **Headless mode argument parsing** now correctly preserves arguments after the POSIX separator in scripted runs
+- **Agent-pack skills now install to `.agents/skills`** instead of `.codex/skills`
+- **CodeMap agent skill docs** were refreshed for clarity and consistency
 - **Extra conventions now read directly from disk** via `loadExtraConventions()` in `extra-conventions.ts` — reads Cursor, Cline, Windsurf, GitHub Copilot convention files without any LLM calls
 - **`getSessionProjectContext()`** now uses `resolveWorkspace()` to find monorepo root before reading extra convention files — correctly handles subdirectory invocations
+
+### Removed
+- **`/conventions` slash command** removed — no longer needed since AGENTS.md/CLAUDE.md are read automatically by the runtime
+- **`convention-synthesizer.ts`** removed — LLM-based synthesis of agent convention files replaced by direct disk reads
+- **Startup convention synthesis** removed from `startup.ts` — eliminates LLM token cost at CLI startup
+- **Deprecated CodeMap skills** removed during the migration to the new skill directory structure
+- **Tracked `.agents/skills` files** removed from git in favor of generated/installed skill content
+
+### Fixed
+- **Resolved model capture for streaming API responses** now happens before the stream completes, so UI status can update with the real model immediately
+- **Harness request flow no longer mutates model selection at request time**, reducing brittle behavior and keeping routing transparent
 
 ## [1.3.0] - 2026-06-10
 
