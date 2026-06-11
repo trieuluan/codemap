@@ -48,6 +48,51 @@ async function main() {
     return;
   }
 
+  // Headless mode: --prompt / -p flag triggers non-interactive execution
+  // Must check before command routing since --prompt is a flag, not a command.
+  // Scan raw argv directly — parseFlags stops at POSIX "--" separator but
+  // pnpm injects "--" before forwarding args, so we must look past it.
+  if (argv.includes("--prompt") || argv.includes("-p")) {
+    // Extract headless flags from raw argv
+    let promptValue: string | undefined;
+    let headlessFormat: string | undefined;
+    let headlessTimeout: string | undefined;
+    let headlessModel: string | undefined;
+    let headlessMode: string | undefined;
+    for (let i = 0; i < argv.length; i++) {
+      const arg = argv[i];
+      if (arg === "--" || arg === "-") continue; // skip POSIX separator, keep scanning
+      if (arg === "--prompt" || arg === "-p") {
+        promptValue = argv[i + 1];
+      } else if (arg === "--format") {
+        headlessFormat = argv[i + 1];
+      } else if (arg === "--timeout") {
+        headlessTimeout = argv[i + 1];
+      } else if (arg === "--model") {
+        headlessModel = argv[i + 1];
+      } else if (arg === "--mode") {
+        headlessMode = argv[i + 1];
+      }
+    }
+    if (promptValue) {
+      const { loadGatewayConfig: loadGwConfig } = await import("./cli/config.js");
+      const headlessConfig = await loadGwConfig();
+      if (!headlessConfig.apiKey) {
+        const { runInteractiveSetup: setup } = await import("./agent/setup/index.js");
+        await setup();
+      }
+      const { runHeadless: runH } = await import("./cli/commands/headless.js");
+      await runH({
+        prompt: promptValue,
+        format: (headlessFormat as "text" | "json") ?? "text",
+        timeout: headlessTimeout ? Number(headlessTimeout) : undefined,
+        model: headlessModel,
+        mode: (headlessMode as "build" | "plan" | "fast") ?? undefined,
+      });
+      return;
+    }
+  }
+
   // Gateway commands: need LLM gateway config (model routing)
   const GATEWAY_COMMANDS = new Set([
     "chat",

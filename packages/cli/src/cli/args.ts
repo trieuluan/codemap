@@ -30,7 +30,15 @@ export function hasFlag(flags: Flags, key: string): boolean {
 
 function parseCommand(argv: string[]): Command {
   if (argv.includes("--help") || argv.includes("-h")) return "help";
-  const first = argv.find((arg) => !arg.startsWith("-"));
+  // Skip POSIX "--" separator, flags, and their values to find the actual command
+  const first = argv.find((arg, index) => {
+    if (arg === "--") return false; // POSIX end-of-flags
+    if (arg.startsWith("-")) return false;
+    // Skip values that follow a flag (e.g. --prompt "text" → skip "text")
+    const prev = argv[index - 1];
+    if (prev && prev !== "--" && prev.startsWith("--") && !prev.includes("=")) return false;
+    return true;
+  });
   if (!first) return "chat";
   if (first === "help") return "help";
   if (first === "--version" || first === "-v") return "version";
@@ -42,6 +50,7 @@ function parseFlags(argv: string[]): Flags {
   const flags: Flags = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--") break; // POSIX end-of-flags separator
     if (!arg.startsWith("--")) continue;
     const [key, inlineValue] = arg.slice(2).split("=", 2);
     flags[key] = inlineValue ?? argv[index + 1];
@@ -51,6 +60,7 @@ function parseFlags(argv: string[]): Flags {
 
 function readPositional(argv: string[]): string {
   const args = argv.filter((arg, index) => {
+    if (arg === "--") return false; // POSIX separator, not positional
     if (index === 0 && isCommand(arg)) return false;
     if (arg.startsWith("--")) return false;
     if (index > 0 && argv[index - 1]?.startsWith("--") && !argv[index - 1]?.includes("=")) {
