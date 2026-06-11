@@ -19,6 +19,7 @@ import {
 } from "../theme.js";
 import { fitLine, padToWidth, truncateVisible, visibleTextWidth } from "../text/text.js";
 import { isGatewayOffline } from "./stderr-interceptor.js";
+import { getResolvedModel } from "../../agent/runtime/harness/fetch-interceptor.js";
 
 function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   if (!localCommit || !cloudCommit) return false;
@@ -226,7 +227,7 @@ export function buildPanel(
       state.task.phase === "tool" && state.task.toolName
         ? ` · ${state.task.toolName}`
         : "";
-    const displayModel = state.task.model ?? "";
+    const displayModel = getResolvedModel() ?? "";
     const model = displayModel
       ? ` ${C_GRAY}${truncate(displayModel, 28)}${RESET}`
       : "";

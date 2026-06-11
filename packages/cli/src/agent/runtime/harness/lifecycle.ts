@@ -13,7 +13,7 @@ import {
   startDrainTracking,
 } from "./drain.js";
 import {
-  setCurrentEffort,
+  installResolvedModelInterceptor,
   uninstallFetchInterceptor,
 } from "./fetch-interceptor.js";
 import { applyAgentInstructions } from "./instructions.js";
@@ -196,6 +196,7 @@ async function getOrCreateHarness(
     singleton.baseUrl === opts.baseUrl &&
     singleton.apiKey === opts.apiKey
   ) {
+    installResolvedModelInterceptor(opts.baseUrl);
     if (singleton.harness.getCurrentModelId?.() !== wanted) {
       await forceHarnessModel(singleton.harness, wanted);
     }
@@ -226,7 +227,6 @@ export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
 export async function runWithMastraHarness(
   input: SingleAgentRuntimeInput,
 ): Promise<AgentLoopResult> {
-  setCurrentEffort(input.effort ?? null);
   await drainHarness();
   const harness = await getOrCreateHarness({
     toolClient: input.toolClient,
@@ -286,7 +286,7 @@ export async function runWithMastraHarness(
       input.imageFiles,
     );
   } finally {
-    setCurrentEffort(null);
+    // no-op: fetch interceptor state is reset on install/uninstall
   }
 
   if (!result.text.trim() && !input.signal?.aborted) {
@@ -364,6 +364,8 @@ async function createFreshHarness(
   opts: CreateHarnessOptions,
   harnessModelId: string,
 ): Promise<MastraHarness> {
+  installResolvedModelInterceptor(opts.baseUrl);
+
   // Force the resolved model before first agent turn so the provider is
   // registered in Mastra's global registry with the correct baseUrl/apiKey.
   const serverConfig = opts.toolClient.getServerConfig();
