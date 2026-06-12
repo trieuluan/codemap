@@ -19,7 +19,7 @@ import {
 } from "../theme.js";
 import { padToWidth, renderMarkdownish, renderUnifiedDiff, stripAnsi, truncateVisible, wrapPlain } from "../text/text.js";
 import { highlightBlock } from "./shiki-highlight.js";
-import { normalizeHtml } from "../../agent/utils/html-utils.js";
+import { normalizeHtml } from "@codemap-ai/runtime-node/utils";
 
 /**
  * Format expanded tool result content.
@@ -157,7 +157,7 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number, exp
     truncateVisible(`${indent}${line}`, prefixW + bodyW, true);
   const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
   if (renderedDiff) {
-    out.push(...rendered.map((line) => truncateVisible(line, bodyW, true)));
+    out.push(...rendered.map((line) => truncateVisible(`${indent}${" ".repeat(previewIndentW)}${line}`, prefixW + bodyW, true)));
   } else {
     out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
   }

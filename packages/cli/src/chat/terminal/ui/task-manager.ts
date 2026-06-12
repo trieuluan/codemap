@@ -1,6 +1,6 @@
 import type { EventBus } from "@codemap-ai/core/agent";
 import type { Store } from "../../state/store-class.js";
-import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
+import type { DebugLogger } from "@codemap-ai/runtime-node/utils";
 
 export interface TaskManagerContext {
   store: Store;

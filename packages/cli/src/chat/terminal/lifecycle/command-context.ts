@@ -1,5 +1,5 @@
-import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
-import { createDebugLogger } from "../../../agent/utils/debug-logger.js";
+import type { DebugLogger } from "@codemap-ai/runtime-node/utils";
+import { createDebugLogger } from "@codemap-ai/runtime-node/utils";
 import {
   resetHarnessSingleton,
   warmupHarness,

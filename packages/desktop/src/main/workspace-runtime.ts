@@ -1,5 +1,5 @@
 import { utilityProcess, type BrowserWindow, type UtilityProcess } from "electron";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   DESKTOP_IPC,
   runtimeMessageSchema,
@@ -27,6 +27,10 @@ export class WorkspaceRuntime {
     const child = utilityProcess.fork(join(__dirname, "utility.js"), [], {
       serviceName: `CodeMap Agent: ${this.workspacePath}`,
       stdio: "pipe",
+      env: {
+        ...process.env,
+        NODE_PATH: resolve(__dirname, "../../../../node_modules"),
+      },
     });
     this.child = child;
     child.on("message", (message) => this.handleMessage(message));

@@ -13,7 +13,7 @@ import { tryGetCurrentWorkspaceInfo } from "@codemap-ai/core/lib/workspace-git.j
 import {
   createDebugLogger,
   type DebugLogger,
-} from "../../agent/utils/debug-logger.js";
+} from "@codemap-ai/runtime-node/utils";
 import { EventBus } from "@codemap-ai/core/agent";
 import { Store } from "../state/store-class.js";
 import { createInitialState } from "../state/initial-state.js";

@@ -25,6 +25,12 @@ export default defineConfig({
     "tree-sitter-wasms",
     "tree-sitter-python",
     "better-sqlite3",
+    // Transitive deps of @codemap-ai/runtime-node — keep as require()
+    "mastracode",
+    /^@mastra\//,
+    "ai",
+    /^@ai-sdk\//,
+    "@modelcontextprotocol/sdk",
   ],
   onSuccess:
     "chmod +x dist/index.js && perl -pi -e 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",

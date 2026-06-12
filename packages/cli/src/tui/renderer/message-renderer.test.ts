@@ -177,8 +177,8 @@ test("messageLines keeps diff formatting when context contains markdown fences",
   assert.match(rendered, /^\s+```md$/m);
   assert.match(rendered, /^\s+unchanged$/m);
   assert.match(rendered, /^\s+```$/m);
-  assert.match(rendered, /^- old$/m);
-  assert.match(rendered, /^\+ new$/m);
+  assert.match(rendered, /^\s+- old$/m);
+  assert.match(rendered, /^\s+\+ new$/m);
 });
 
 test("messageLines keeps non-diff previews rendered as markdown", () => {
@@ -237,7 +237,7 @@ test("messageLines renders markdown list items as context lines in unified diff 
   assert.match(rendered, /^\s+- Codex$/m);
   assert.match(rendered, /^\s+- Claude$/m);
   assert.match(rendered, /^\s+- Cursor$/m);
-  assert.match(rendered, /^\+ - Gemini$/m);
+  assert.match(rendered, /^\s+\+ - Gemini$/m);
   assert.match(rendered, /^\s+OpenCode$/m);
   assert.match(rendered, /^\s+Copilot$/m);
 });

@@ -13,7 +13,8 @@
     "./settings": "./src/settings.ts",
     "./tools/mcp": "./src/tools/mcp/mcp-tool-client.ts",
     "./tools/hooks": "./src/tools/hooks/index.ts",
-    "./tools/custom": "./src/tools/custom/index.ts"
+    "./tools/custom": "./src/tools/custom/index.ts",
+    "./utils": "./src/utils/index.ts"
   },
   "files": [
     "dist",
@@ -33,7 +34,8 @@
     "@mastra/mcp": "1.9.1",
     "@mastra/memory": "1.20.2",
     "@modelcontextprotocol/sdk": "^1.21.0",
-    "mastracode": "^0.22.2"
+    "mastracode": "^0.22.2",
+    "sharp": "^0.34.2"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

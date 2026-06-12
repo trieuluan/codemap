@@ -4,13 +4,23 @@ import { defineConfig } from "electron-vite";
 
 export default defineConfig({
   main: {
-    ssr: {
-      noExternal: true,
-    },
     build: {
-      externalizeDeps: false,
       rollupOptions: {
-        external: [/^@duckdb\//],
+        external: [
+          // Native binaries — must be external
+          /^@duckdb\//,
+          /^@libsql\//,
+          "utf-8-validate",
+          "bufferutil",
+          // Workspace packages
+          /^@codemap-ai\//,
+          // Mastra runtime — keep as require() for faster startup
+          "mastracode",
+          /^@mastra\//,
+          // AI SDK
+          "ai",
+          /^@ai-sdk\//,
+        ],
         input: {
           index: resolve(import.meta.dirname, "src/main/index.ts"),
           utility: resolve(import.meta.dirname, "src/utility/index.ts"),

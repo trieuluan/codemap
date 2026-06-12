@@ -1,6 +1,6 @@
 import type { TaskPhase, UsageStats } from "@codemap-ai/core/agent";
 import type { GatewayModel } from "@codemap-ai/core/agent";
-import type { TaskItemSnapshot, HarnessDisplayState } from "@mastra/core/harness";
+import type { TaskItemSnapshot, HarnessDisplayState } from "@codemap-ai/runtime-node";
 
 /** @deprecated Use TaskItemSnapshot from @mastra/core/harness directly */
 export type TaskListItem = TaskItemSnapshot;

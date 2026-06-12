@@ -23,18 +23,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^3.0.81
-        version: 3.0.81(zod@4.4.3)
-      '@ai-sdk/google':
-        specifier: ^3.0.80
-        version: 3.0.80(zod@4.4.3)
-      '@ai-sdk/groq':
-        specifier: ^3.0.39
-        version: 3.0.39(zod@4.4.3)
-      '@ai-sdk/openai':
-        specifier: ^3.0.63
-        version: 3.0.68(zod@4.4.3)
       '@clack/prompts':
         specifier: ^1.5.0
         version: 1.5.1
@@ -50,24 +38,6 @@ importers:
       '@earendil-works/pi-tui':
         specifier: ^0.74.0
         version: 0.74.2
-      '@mastra/fastembed':
-        specifier: 1.1.2
-        version: 1.1.2
-      '@mastra/libsql':
-        specifier: 1.12.1
-        version: 1.12.1(@mastra/core@1.41.0(ai@6.0.197(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(zod@4.4.3))(bufferutil@4.1.0)
-      '@mastra/mcp':
-        specifier: 1.9.1
-        version: 1.9.1(@mastra/core@1.41.0(ai@6.0.197(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@mastra/memory':
-        specifier: 1.20.2
-        version: 1.20.2(@mastra/core@1.41.0(ai@6.0.197(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.21.0
-        version: 1.29.0(zod@4.4.3)
-      ai:
-        specifier: ^6.0.176
-        version: 6.0.197(zod@4.4.3)
       cfonts:
         specifier: ^3.3.1
         version: 3.3.1
@@ -83,9 +53,6 @@ importers:
       marked-terminal:
         specifier: ^7.3.0
         version: 7.3.0(marked@15.0.12)
-      mastracode:
-        specifier: ^0.22.2
-        version: 0.22.2(bufferutil@4.1.0)(express@5.2.1)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       sharp:
         specifier: ^0.34.2
         version: 0.34.5
@@ -99,9 +66,6 @@ importers:
       '@codemap-ai/code-index':
         specifier: workspace:*
         version: link:../code-index
-      '@mastra/core':
-        specifier: ^1.41.0
-        version: 1.41.0(ai@6.0.197(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(zod@4.4.3)
       '@types/diff':
         specifier: ^8.0.0
         version: 8.0.0
@@ -194,16 +158,16 @@ importers:
 
   packages/desktop:
     dependencies:
-      '@duckdb/node-api':
-        specifier: 1.5.2-r.2
-        version: 1.5.2-r.2
-    devDependencies:
       '@codemap-ai/core':
         specifier: workspace:*
         version: link:../core
       '@codemap-ai/runtime-node':
         specifier: workspace:*
         version: link:../runtime-node
+      '@duckdb/node-api':
+        specifier: 1.5.2-r.2
+        version: 1.5.2-r.2
+    devDependencies:
       '@types/node':
         specifier: ^24.12.2
         version: 24.13.0
@@ -301,6 +265,9 @@ importers:
       mastracode:
         specifier: ^0.22.2
         version: 0.22.2(bufferutil@4.1.0)(express@5.2.1)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      sharp:
+        specifier: ^0.34.2
+        version: 0.34.5
     devDependencies:
       '@types/node':
         specifier: ^24.12.2
@@ -405,20 +372,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@3.0.80':
-    resolution: {integrity: sha512-5ORbm/yFUPO0MEvZsxBMN0cdKw2+lwU/wVn5KN3KF8Dmk1LughuDuUohMh/7iU/XFTiyB0OvmTW/tdV/J7O9zg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/groq@2.0.40':
     resolution: {integrity: sha512-1EL8D1tyjOKjCFUt8XspDoA6zxDcalMsLR2O56ji8QklWsAPaf4TuMJAvf5x5KDrkuJaSAjk94KvPH5hOX+VNQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/groq@3.0.39':
-    resolution: {integrity: sha512-BZAr6DjCbzWQ0Qn1/TSsHo/bmCt4JaAMb4A7HCSUZBQCAcOjne/03D0sVjHnQhUC3TpwcmYiv7tHAviK7BluRw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -5514,24 +5469,12 @@ snapshots:
       zod: 4.4.3
     optional: true
 
-  '@ai-sdk/google@3.0.80(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
-      zod: 4.4.3
-
   '@ai-sdk/groq@2.0.40(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.25(zod@4.4.3)
       zod: 4.4.3
     optional: true
-
-  '@ai-sdk/groq@3.0.39(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
-      zod: 4.4.3
 
   '@ai-sdk/mistral@2.0.33(zod@4.4.3)':
     dependencies:

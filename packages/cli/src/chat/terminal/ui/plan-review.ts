@@ -4,7 +4,7 @@ import type {
   AskQuestionOption,
   HarnessQuestionAnswer,
 } from "../../../agent/runtime/events.js";
-import type { HarnessDisplayState } from "@mastra/core/harness";
+import type { HarnessDisplayState } from "@codemap-ai/runtime-node";
 
 export interface PlanReviewContext {
   bus: EventBus;

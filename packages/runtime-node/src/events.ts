@@ -8,6 +8,7 @@ import type {
   HarnessQuestionSelectionMode,
   HarnessEvent,
   HarnessDisplayState,
+  TaskItemSnapshot,
 } from "@mastra/core/harness";
 import type { createMastraCode } from "mastracode";
 export type { HarnessThread, HarnessMessage, HarnessMessageContent };
@@ -21,6 +22,7 @@ export type MastraHarness = Awaited<
 export type { HarnessQuestionSelectionMode };
 export type { HarnessEvent };
 export type { HarnessDisplayState };
+export type { TaskItemSnapshot };
 
 interface Ref<T> {
   get(): T;

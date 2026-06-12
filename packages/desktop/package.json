@@ -14,11 +14,11 @@
     "package:mac": "pnpm run build && electron-builder --mac"
   },
   "dependencies": {
+    "@codemap-ai/core": "workspace:*",
+    "@codemap-ai/runtime-node": "workspace:*",
     "@duckdb/node-api": "1.5.2-r.2"
   },
   "devDependencies": {
-    "@codemap-ai/core": "workspace:*",
-    "@codemap-ai/runtime-node": "workspace:*",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

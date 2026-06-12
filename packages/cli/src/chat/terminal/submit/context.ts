@@ -1,7 +1,7 @@
 import type { EventBus } from "@codemap-ai/core/agent";
 import type { Message } from "../../state/types.js";
 import type { Store } from "../../state/store-class.js";
-import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
+import type { DebugLogger } from "@codemap-ai/runtime-node/utils";
 import type { ChatTerminalOptions } from "../config/types.js";
 
 export interface SubmitHandlerContext {

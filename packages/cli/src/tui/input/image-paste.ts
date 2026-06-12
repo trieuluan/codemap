@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { basename, extname, isAbsolute, resolve } from "node:path";
-import { optimizeImageForModel } from "../../agent/utils/image-optimizer.js";
+import { optimizeImageForModel } from "@codemap-ai/runtime-node/utils";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
