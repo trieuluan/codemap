@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AgentPhase } from "@codemap-ai/core/agent";
+import type { AgentPhase } from "@codemap-ai/runtime-node";
 import type { HarnessEvent, MastraHarness } from "./events.js";
 
 /**

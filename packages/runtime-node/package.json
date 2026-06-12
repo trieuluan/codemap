@@ -1,0 +1,46 @@
+{
+  "name": "@codemap-ai/runtime-node",
+  "version": "1.4.0",
+  "type": "module",
+  "description": "CodeMap shared Node.js agent runtime",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./harness": "./src/harness/index.ts",
+    "./events": "./src/events.ts",
+    "./settings": "./src/settings.ts",
+    "./tools/mcp": "./src/tools/mcp/mcp-tool-client.ts",
+    "./tools/hooks": "./src/tools/hooks/index.ts",
+    "./tools/custom": "./src/tools/custom/index.ts"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:tsc": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@codemap-ai/core": "workspace:*",
+    "@codemap-ai/mcp": "workspace:*",
+    "@mastra/core": "^1.41.0",
+    "@mastra/fastembed": "1.1.2",
+    "@mastra/libsql": "1.12.1",
+    "@mastra/mcp": "1.9.1",
+    "@mastra/memory": "1.20.2",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "mastracode": "^0.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

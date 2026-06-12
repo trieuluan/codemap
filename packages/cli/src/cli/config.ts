@@ -8,7 +8,7 @@ import {
   getProjectSettingsPath,
   getGlobalSettingsPath,
   SETTINGS_DEFAULTS,
-} from "./settings.js";
+} from "@codemap-ai/runtime-node/settings";
 
 export const DEFAULT_PROVIDER = SETTINGS_DEFAULTS.gateway!.provider!;
 export const DEFAULT_BASE_URL = SETTINGS_DEFAULTS.gateway!.baseUrl!;

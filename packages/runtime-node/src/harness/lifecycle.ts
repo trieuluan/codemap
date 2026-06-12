@@ -6,8 +6,7 @@
  * `CreateHarnessOptions.deps` so both CLI and desktop can supply their own
  * implementations.
  */
-import type { AgentLoopResult } from "../agent-loop.js";
-import type { GatewayProviderId } from "../types.js";
+import type { AgentLoopResult, GatewayProviderId } from "@codemap-ai/core/agent";
 import type { SingleAgentRuntimeInput } from "../runtime-input.js";
 import type { MastraHarness } from "../events.js";
 import {
@@ -27,8 +26,8 @@ import {
   type MastraMcpInitResult,
   type MastraMcpManagerLike,
   startMastraMcpInitialization,
-} from "../mcp/index.js";
-import { resolveHarnessModelId } from "../config/models.js";
+} from "@codemap-ai/core/agent";
+import { resolveHarnessModelId } from "@codemap-ai/core/agent/config";
 import { runHarness } from "./harness-runner.js";
 import { Memory } from "@mastra/memory";
 import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
@@ -36,25 +35,18 @@ import { fastembed } from "@mastra/fastembed";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import type { ResolvedCustomTool } from "../tools/custom/index.js";
+import { loadCustomTools } from "../tools/custom/index.js";
+import { syncHooksToMastra } from "../tools/hooks/index.js";
+import { loadSettings } from "../settings.js";
+import { upsertGlobalMastraProvider } from "../config/mastra-settings.js";
+import { buildAgentPermissionRules } from "@codemap-ai/core/agent";
 
 // ── Re-exports used by callers via harness-runtime barrel ──────────────
 export type { MastraHarness };
 export { MASTRA_DISABLED_TOOLS, drainHarness };
 
 // ── Injectable dependencies ────────────────────────────────────────────
-
-/** Minimal custom-tool descriptor cached for introspection. */
-export interface ResolvedCustomTool {
-  name: string;
-  description: string;
-  parameters?: Record<string, unknown>;
-  source: "project" | "global";
-  executeFn: (
-    input: Record<string, unknown>,
-    context: { toolsDir: string; workspace: string },
-  ) => Promise<string>;
-  scriptPath: string;
-}
 
 /**
  * Functions that must be provided by the host (CLI or desktop app).
@@ -88,6 +80,14 @@ export interface HarnessDeps {
     modelId: string,
   ) => Promise<unknown> | unknown;
 }
+
+const defaultNodeHarnessDeps: HarnessDeps = {
+  loadSettings,
+  loadCustomTools,
+  syncHooksToMastra,
+  buildMastraPermissionRules: buildAgentPermissionRules,
+  upsertGlobalMastraProvider,
+};
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -274,7 +274,10 @@ async function getOrCreateHarness(
 
 /** Pre-initialize the harness singleton in the background so the first chat turn has no cold-start delay. */
 export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
-  return getOrCreateHarness(opts).then(() => {});
+  return getOrCreateHarness({
+    ...opts,
+    deps: opts.deps ?? defaultNodeHarnessDeps,
+  }).then(() => {});
 }
 
 /**
@@ -295,7 +298,7 @@ export async function runWithMastraHarness(
     modeDefaults: input.modeDefaults,
     onDebug: input.onDebug,
     extraServerConfigs: input.toolClient.getExtraServerConfigs(),
-    deps: input.deps,
+    deps: input.deps ?? defaultNodeHarnessDeps,
   });
   await ensureMastraThread();
   startDrainTracking(harness);
@@ -320,6 +323,7 @@ export async function runWithMastraHarness(
     onStreamReset: input.onStreamReset,
     onToolStart: input.onToolStart,
     onToolResult: input.onToolResult,
+    toolPreviewBuilder: input.toolPreviewBuilder,
     onMessageStart: input.onMessageStart,
     onUsage: input.onUsage,
     onDebug: input.onDebug,

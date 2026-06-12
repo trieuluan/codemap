@@ -1,6 +1,10 @@
 // Shared runtime input type for CLI harness and desktop app.
 
-import type { GatewayModeDefaults, GatewayProviderId, TokenUsage } from "./types.js";
+import type {
+  GatewayModeDefaults,
+  GatewayProviderId,
+  TokenUsage,
+} from "@codemap-ai/core/agent";
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.js";
 import type { HarnessDeps } from "./harness/lifecycle.js";
 
@@ -45,6 +49,10 @@ export interface SingleAgentRuntimeInput {
   onModel?: (model: string) => void;
   onToolStart?: (name: string, args: string, id: string, preview?: string) => void;
   onToolResult?: (name: string, result: string, id?: string) => void;
+  toolPreviewBuilder?: (
+    name: string,
+    args: Record<string, unknown>,
+  ) => string | undefined;
   onMessageStart?: (createdAt: number) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;

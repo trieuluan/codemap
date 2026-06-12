@@ -2,21 +2,25 @@ import type { TaskPhase } from "@codemap-ai/core/agent";
 import type { GatewayModel } from "@codemap-ai/core/agent";
 import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
-import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
+import {
+  buildCodeMapAgentInstructions,
+  buildCurrentTaskContent,
+} from "@codemap-ai/core/agent";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
 import { classifyTask } from "@codemap-ai/core/agent";
 import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
-} from "../../../agent/runtime/harness-runtime.js";
-import { resetResolvedModel } from "@codemap-ai/core/agent/harness";
+  hydrateMentionContext,
+  resetResolvedModel,
+} from "@codemap-ai/runtime-node";
 import { resolveGatewayModel } from "@codemap-ai/core/agent/config";
-import { hydrateMentionContext } from "../../../agent/prompt/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";
 import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
 import { captureGitDiffSnapshot, diffGitSnapshots } from "../../git/turn-changed-summary.js";
+import { buildToolPreview } from "../../../agent/runtime/config/tool-approval-policy.js";
 
 export async function handleSubmitWithContent(
   ctx: SubmitHandlerContext,
@@ -185,6 +189,7 @@ export async function handleSubmitWithContent(
           waitForPlanReview(ctx),
         ),
       imageFiles,
+      toolPreviewBuilder: buildToolPreview,
       ...runtimeCallbacks.callbacks,
     });
 

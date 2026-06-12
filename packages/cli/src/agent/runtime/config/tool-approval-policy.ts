@@ -1,57 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { structuredPatch, formatPatch } from "diff";
-import type {
+export {
+  buildAgentPermissionRules as buildMastraPermissionRules,
+} from "@codemap-ai/core/agent";
+export type {
+  AgentPermissionRules as PermissionRules,
   PermissionPolicy,
-  PermissionRules,
   ToolCategory,
-} from "@mastra/core/harness";
-
-export type { PermissionPolicy, PermissionRules, ToolCategory };
+} from "@codemap-ai/core/agent";
 
 /** Number of context lines shown above/below edits in preview diffs. */
 export const PREVIEW_CONTEXT_LINES = 5;
-
-const MUTATING_TOOL_NAMES = [
-  "apply_patch",
-  "ast_smart_edit",
-  "delete_file",
-  "edit_file",
-  "mkdir",
-  "move_file",
-  "rename_file",
-  "string_replace",
-  "string_replace_lsp",
-  "write_file",
-  "move_symbols",
-  "rename_symbol",
-  "reimport",
-];
-
-export function buildMastraPermissionRules(
-  mcpServerIds: Iterable<string> = ["codemap"],
-): PermissionRules {
-  const tools: Record<string, PermissionPolicy> = {};
-  const serverIds = [...mcpServerIds].filter(Boolean);
-
-  for (const toolName of MUTATING_TOOL_NAMES) {
-    tools[toolName] = "ask";
-    for (const serverId of serverIds) {
-      tools[`${serverId}_${toolName}`] = "ask";
-    }
-  }
-
-  return {
-    categories: {
-      read: "allow",
-      edit: "ask",
-      execute: "ask",
-      mcp: "allow",
-      other: "allow",
-    },
-    tools,
-  };
-}
 
 // ── Virtual Document Buffer ────────────────────────────────────────────
 // In-memory file state for edit tools. Tracks cumulative edits to the same

@@ -1,5 +1,5 @@
 import type { EventBus } from "@codemap-ai/core/agent";
-import type { Store } from "../../state/store.js";
+import type { Store } from "../../state/store-class.js";
 import type {
   AskQuestionOption,
   HarnessQuestionAnswer,

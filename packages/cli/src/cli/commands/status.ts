@@ -9,7 +9,7 @@ import {
   getMastraCurrentModelId,
   getMastraDisplayState,
   getMastraThreadId,
-} from "../../agent/runtime/introspection/index.js";
+} from "@codemap-ai/runtime-node";
 
 function formatAge(date: Date): string {
   const mins = Math.floor((Date.now() - date.getTime()) / 60_000);

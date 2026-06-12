@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { messageLines } from "./message-renderer.js";
 import { stripAnsi } from "../text/text.js";
-import type { Message } from "../../chat/state/store.js";
+import type { Message } from "../../chat/state/types.js";
 
 
 test("messageLines shows repeated timestamps only once per adjacent block", () => {

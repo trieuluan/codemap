@@ -1,6 +1,6 @@
 import cfonts from "cfonts";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { Message, UIState } from "../../chat/state/store.js";
+import type { Message, UIState } from "../../chat/state/types.js";
 import { formatTime, gradientStr, truncate } from "./ink-utils.js";
 import {
   BG_USER,

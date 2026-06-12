@@ -10,19 +10,19 @@
  *   2 = timeout
  */
 
-import { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
+import {
+  CodeMapMcpToolClient,
+  createSessionContextCache,
+  getMastraCurrentModelId,
+  getSessionProjectContext,
+  getSessionResourceContext,
+  resetHarnessSingleton,
+} from "@codemap-ai/runtime-node";
 import { NineRouterProvider } from "@codemap-ai/core/agent";
-import { resetHarnessSingleton } from "../../agent/runtime/harness-runtime.js";
-import { getMastraCurrentModelId } from "../../agent/runtime/harness-runtime.js";
 
 import { resolveGatewayModel } from "@codemap-ai/core/agent/config";
 import { runSingleAgentRuntime } from "../../agent/runtime/cli-runtime.js";
-import { buildCodeMapAgentInstructions } from "../../chat/terminal/config/agent-instructions.js";
-import {
-  createSessionContextCache,
-  getSessionResourceContext,
-  getSessionProjectContext,
-} from "../../chat/terminal/lifecycle/session-context.js";
+import { buildCodeMapAgentInstructions } from "@codemap-ai/core/agent";
 import { loadGatewayConfig } from "../config.js";
 import { loadConfig } from "@codemap-ai/core/config.js";
 import type { ChatMessage, TokenUsage } from "@codemap-ai/core/agent";

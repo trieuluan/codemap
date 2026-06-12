@@ -7,7 +7,7 @@ import {
   TUI,
   type Component,
 } from "@earendil-works/pi-tui";
-import type { UIState } from "../chat/state/store.js";
+import type { UIState } from "../chat/state/types.js";
 import type { ChatTerminalLike } from "../chat/terminal/ui/types.js";
 import type { HarnessThread } from "../agent/runtime/events.js";
 import { headerLines, messageLines } from "./renderer/message-renderer.js";
@@ -30,7 +30,12 @@ import {
 } from "./theme.js";
 import { workspaceStateCardLines } from "./text/text.js";
 import { buildPanel, getPlanReviewOptionActions, isActiveTaskPhase } from "./renderer/panel-builder.js";
-import { getMastraMessages, getMastraThreadId, listMastraThreads, switchMastraThread } from "../agent/runtime/harness-runtime.js";
+import {
+  getMastraMessages,
+  getMastraThreadId,
+  listMastraThreads,
+  switchMastraThread,
+} from "@codemap-ai/runtime-node";
 import { sortThreads } from "../chat/slash-commands/sessions.js";
 import { formatTime } from "./renderer/ink-utils.js";
 
@@ -422,7 +427,7 @@ export async function startPiTuiApp(
             return;
           }
           const { mapHarnessMessagesToUI } = await import("../chat/slash-commands/sessions.js");
-          const { listMastraThreadMessages } = await import("../agent/runtime/harness-runtime.js");
+          const { listMastraThreadMessages } = await import("@codemap-ai/runtime-node");
           const msgs = await listMastraThreadMessages(threadId, 100);
           const uiMsgs = mapHarnessMessagesToUI(msgs);
           chatTerminal.store.dispatch((prev: UIState) => ({

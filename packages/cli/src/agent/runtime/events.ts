@@ -3,8 +3,11 @@
 import { buildToolPreview } from "./config/tool-approval-policy.js";
 import {
   bridgeCommonEvent as coreBridgeCommonEvent,
-} from "@codemap-ai/core/agent";
-import type { BridgeCallbacks, HarnessEvent } from "@codemap-ai/core/agent";
+} from "@codemap-ai/runtime-node";
+import type {
+  BridgeCallbacks,
+  HarnessEvent,
+} from "@codemap-ai/runtime-node";
 
 export type {
   HarnessThread,
@@ -18,8 +21,8 @@ export type {
   HarnessDisplayState,
   MastraHarness,
   BridgeCallbacks,
-} from "@codemap-ai/core/agent";
-export { summarizeHarnessEvent } from "@codemap-ai/core/agent";
+} from "@codemap-ai/runtime-node";
+export { summarizeHarnessEvent } from "@codemap-ai/runtime-node";
 
 /**
  * CLI-aware wrapper: injects buildToolPreview into BridgeCallbacks before

@@ -1,5 +1,8 @@
-import type { TokenUsage } from "@mastra/core/harness";
-export type { TokenUsage };
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 
 export type TaskType =
   | "feature"

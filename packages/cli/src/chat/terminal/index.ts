@@ -1,9 +1,12 @@
-import type { Message } from "../state/store.js";
+import type { Message } from "../state/types.js";
 import type { HarnessQuestionAnswer } from "../../agent/runtime/events.js";
 import {
+  createSessionContextCache,
+  getSessionProjectContext,
+  getSessionResourceContext,
   listMastraThreadMessages,
   resetHarnessSingleton,
-} from "../../agent/runtime/harness-runtime.js";
+} from "@codemap-ai/runtime-node";
 import { executeCommand } from "../slash-commands/index.js";
 import { mapHarnessMessagesToUI } from "../slash-commands/sessions.js";
 import { tryGetCurrentWorkspaceInfo } from "@codemap-ai/core/lib/workspace-git.js";
@@ -12,7 +15,8 @@ import {
   type DebugLogger,
 } from "../../agent/utils/debug-logger.js";
 import { EventBus } from "@codemap-ai/core/agent";
-import { Store, createInitialState } from "../state/store.js";
+import { Store } from "../state/store-class.js";
+import { createInitialState } from "../state/initial-state.js";
 import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
 import { resolveAskQuestion as resolveAskQuestionHelper } from "./ui/plan-review.js";
 import { resolveToolApproval as resolveToolApprovalHelper } from "./ui/plan-review.js";
@@ -34,12 +38,7 @@ import {
   resolvePlanReview,
   cancelPendingPrompts,
 } from "./ui/plan-review.js";
-import {
-  createSessionContextCache,
-  getSessionResourceContext,
-  getSessionProjectContext,
-  type SessionContextCache,
-} from "./lifecycle/session-context.js";
+import type { SessionContextCache } from "@codemap-ai/runtime-node";
 import { handleSubmitWithContent, handleShellSubmit } from "./submit/handler.js";
 import type { SubmitHandlerContext } from "./submit/context.js";
 import type { ChatTerminalOptions } from "./config/types.js";

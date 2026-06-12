@@ -1,12 +1,14 @@
 import type { GatewayCommandContext } from ".././command-context.js";
-import { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
+import {
+  CodeMapMcpToolClient,
+  resetHarnessSingleton,
+} from "@codemap-ai/runtime-node";
 import type { ChatUiMode } from "../../agent/runtime/cli-runtime.js";
 import { NineRouterProvider } from "@codemap-ai/core/agent";
 import type { GatewayConfig, GatewayModel } from "@codemap-ai/core/agent";
 import { printGatewayHint } from "./doctor.js";
 import { loadConfig } from "@codemap-ai/core/config.js";
 import { installStderrInterceptor } from "../../tui/renderer/stderr-interceptor.js";
-import { resetHarnessSingleton } from "../../agent/runtime/harness-runtime.js";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const provider = new NineRouterProvider(
@@ -39,8 +41,7 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   }) as typeof process.exit;
 
   try {
-    const { ChatTerminal } =
-      await import("../../chat/terminal/chat-terminal.js");
+    const { ChatTerminal } = await import("../../chat/terminal/index.js");
     const terminal = new ChatTerminal({
       provider,
       gatewayConfig: ctx.config,

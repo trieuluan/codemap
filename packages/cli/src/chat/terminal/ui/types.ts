@@ -2,7 +2,7 @@
 // Extracted here to break the circular dependency between chat-terminal.ts and pi-tui-app.ts.
 
 import type { HarnessQuestionAnswer } from "../../../agent/runtime/events.js";
-import type { Store } from "../../state/store.js";
+import type { Store } from "../../state/store-class.js";
 import type { EventBus } from "@codemap-ai/core/agent";
 
 export interface ChatTerminalLike {

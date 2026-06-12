@@ -4,8 +4,11 @@
  * Pure status getters — no CLI deps.
  */
 import type { HarnessDisplayState } from "@mastra/core/harness";
-import type { MastraMcpServerStatus, MastraMcpStatusSummary } from "../mcp/index.js";
-import { stripProviderPrefix } from "../config/models.js";
+import type {
+  MastraMcpServerStatus,
+  MastraMcpStatusSummary,
+} from "@codemap-ai/core/agent";
+import { stripProviderPrefix } from "@codemap-ai/core/agent/config";
 import { getSingleton } from "../harness/lifecycle.js";
 
 export function getMastraCurrentModelId(): string | null {

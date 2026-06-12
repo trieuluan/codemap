@@ -7,8 +7,8 @@ import {
   loadCodemapHooks,
   type HookEventName,
   type HookDefinition,
-} from "../../agent/tools/hooks/index.js";
-import { reloadHooks } from "../../agent/runtime/harness-runtime.js";
+} from "@codemap-ai/runtime-node/tools/hooks";
+import { reloadHooks } from "../../agent/runtime/introspection/tools.js";
 import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 const BOLD = "\x1b[1m";

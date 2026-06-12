@@ -33,6 +33,7 @@
     "@clack/prompts": "^1.5.0",
     "@codemap-ai/core": "workspace:*",
     "@codemap-ai/mcp": "workspace:*",
+    "@codemap-ai/runtime-node": "workspace:*",
     "@earendil-works/pi-tui": "^0.74.0",
     "@mastra/fastembed": "1.1.2",
     "@mastra/libsql": "1.12.1",

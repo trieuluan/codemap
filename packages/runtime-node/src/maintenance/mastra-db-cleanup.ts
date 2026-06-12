@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
-import { loadSettings, writeSettings } from "../../cli/settings.js";
+import { loadSettings, writeSettings } from "../settings.js";
 
 const execFileAsync = promisify(execFile);
 

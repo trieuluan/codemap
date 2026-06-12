@@ -32,7 +32,7 @@ test("formatRuntimeStatusLines reports pending question prompts", () => {
           options: [{ label: "A", description: "Option A" }],
           selectionMode: "single_select",
         },
-      } as unknown as ReturnType<typeof import("../../agent/runtime/introspection/index.js").getMastraDisplayState>,
+      } as unknown as ReturnType<typeof import("@codemap-ai/runtime-node").getMastraDisplayState>,
     }),
     [
       "",
@@ -55,7 +55,7 @@ test("formatRuntimeStatusLines reports pending tool approvals", () => {
           toolName: "write_file",
           args: { path: "src/app.ts" },
         },
-      } as unknown as ReturnType<typeof import("../../agent/runtime/introspection/index.js").getMastraDisplayState>,
+      } as unknown as ReturnType<typeof import("@codemap-ai/runtime-node").getMastraDisplayState>,
     }),
     [
       "",

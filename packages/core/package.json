@@ -9,7 +9,7 @@
     "./config.js": "./src/config.ts",
     "./lib/*.js": "./src/lib/*.ts",
     "./agent": "./src/agent/index.ts",
-    "./agent/harness": "./src/agent/harness/index.ts",
+    "./agent/contracts": "./src/agent/contracts/index.ts",
     "./agent/config": "./src/agent/config/index.ts",
     "./agent/loop": "./src/agent/loop/index.ts"
   },

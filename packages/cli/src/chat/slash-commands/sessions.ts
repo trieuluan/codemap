@@ -1,7 +1,7 @@
 import type { Command } from "./types.js";
 import type { HarnessMessage, HarnessThread } from "../../agent/runtime/events.js";
-import { listMastraThreads } from "../../agent/runtime/harness-runtime.js";
-import type { Message } from "../state/store.js";
+import { listMastraThreads } from "@codemap-ai/runtime-node";
+import type { Message } from "../state/types.js";
 import { normalizeToolDisplayName, summarizeToolArgs } from "../terminal/ui/tool-call-messages.js";
 import { buildToolPreview, rebuildEditPreviewWithLineRanges } from "../../agent/runtime/config/tool-approval-policy.js";
 import { C_SUCCESS, C_ERROR, RESET } from "../../tui/theme.js";

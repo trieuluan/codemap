@@ -6,7 +6,7 @@ import {
   getProjectSettingsPath,
   type SettingsFile,
   type SettingsScope,
-} from "../../cli/settings.js";
+} from "@codemap-ai/runtime-node/settings";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";

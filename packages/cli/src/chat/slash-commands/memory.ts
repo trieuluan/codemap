@@ -1,5 +1,9 @@
 import type { Command } from "./types.js";
-import { loadSettings, writeSettings, getAgentSettings } from "../../cli/settings.js";
+import {
+  getAgentSettings,
+  loadSettings,
+  writeSettings,
+} from "@codemap-ai/runtime-node/settings";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";

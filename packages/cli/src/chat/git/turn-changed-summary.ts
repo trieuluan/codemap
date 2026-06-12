@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ChangedFileSummary, ChangedSummary } from "../state/store.js";
+import type { ChangedFileSummary, ChangedSummary } from "../state/types.js";
 
 const execFileAsync = promisify(execFile);
 

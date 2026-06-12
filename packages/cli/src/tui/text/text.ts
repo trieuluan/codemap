@@ -1,7 +1,7 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
-import type { ChatMode, ChatWorkspaceState } from "../../chat/state/store.js";
+import type { ChatMode, ChatWorkspaceState } from "../../chat/state/types.js";
 import {
   BOLD,
   C_ACTION,

@@ -3,10 +3,13 @@
  *
  * Extracted from harness-runtime.ts.
  */
-import type { ResolvedCustomTool } from "../../tools/custom/index.js";
-import { getCustomToolPaths } from "../../tools/custom/index.js";
-import { syncHooksToMastra } from "../../tools/hooks/index.js";
-import { getSingleton, getCachedCustomTools } from "../harness/lifecycle.js";
+import type { ResolvedCustomTool } from "@codemap-ai/runtime-node";
+import {
+  getCustomToolPaths,
+  syncHooksToMastra,
+  getSingleton,
+  getCachedCustomTools,
+} from "@codemap-ai/runtime-node";
 
 /** Get the list of loaded custom tools (for /tools command). */
 export function getLoadedCustomTools(): ResolvedCustomTool[] {

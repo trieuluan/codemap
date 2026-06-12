@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { GatewayProviderId } from "../types.js";
-import { stripProviderPrefix } from "./models.js";
+import type { GatewayProviderId } from "@codemap-ai/core/agent";
+import { stripProviderPrefix } from "@codemap-ai/core/agent/config";
 
 export type MastraProviderId = GatewayProviderId;
 

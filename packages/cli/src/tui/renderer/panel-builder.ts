@@ -1,6 +1,11 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import type { UIState, TaskListItem, ChangedSummary, ChangedFileSummary } from "../../chat/state/store.js";
-import type { PlanReviewAction } from "@codemap-ai/core/agent";
+import type {
+  UIState,
+  TaskListItem,
+  ChangedSummary,
+  ChangedFileSummary,
+} from "../../chat/state/types.js";
+import type { PlanReviewAction } from "@codemap-ai/runtime-node";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
 import { renderEditor } from "./editor-renderer.js";
@@ -20,7 +25,7 @@ import {
 } from "../theme.js";
 import { fitLine, padToWidth, truncateVisible, visibleTextWidth } from "../text/text.js";
 import { isGatewayOffline } from "./stderr-interceptor.js";
-import { getResolvedModel } from "@codemap-ai/core/agent/harness";
+import { getResolvedModel } from "@codemap-ai/runtime-node/harness";
 
 function commitsDiffer(localCommit?: string, cloudCommit?: string): boolean {
   if (!localCommit || !cloudCommit) return false;

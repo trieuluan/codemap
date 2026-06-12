@@ -8,7 +8,7 @@ import {
 import { getLastModelApiError } from "./fetch-interceptor.js";
 import { normalizePlanAction } from "./plan-actions.js";
 import type { AgentPhase, PlanReviewAction } from "../runtime-input.js";
-import type { AgentLoopResult } from "../agent-loop.js";
+import type { AgentLoopResult } from "@codemap-ai/core/agent";
 
 type RunHarnessCallbacks = Omit<
   BridgeCallbacks,

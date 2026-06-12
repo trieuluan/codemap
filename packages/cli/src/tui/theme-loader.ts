@@ -2,7 +2,7 @@ import { access, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { CODEMAP_DARK_THEME, type PartialTerminalColorTheme, setTheme } from "./theme.js";
-import { loadSettings } from "../cli/settings.js";
+import { loadSettings } from "@codemap-ai/runtime-node/settings";
 
 export interface ThemeLoadOptions {
   cwd?: string;

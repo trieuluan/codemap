@@ -4,7 +4,7 @@ import {
   saveMcpServerEntry,
   removeMcpServerEntry,
 } from "@codemap-ai/core/lib/workspace-project.js";
-import { getMastraMcpStatusSummary } from "../../agent/runtime/harness-runtime.js";
+import { getMastraMcpStatusSummary } from "@codemap-ai/runtime-node";
 
 export const mcpCommand: Command = {
   name: "mcp",

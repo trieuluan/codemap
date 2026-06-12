@@ -1,8 +1,10 @@
 import type {
   AgentLoopResult,
-  SingleAgentRuntimeInput,
 } from "@codemap-ai/core/agent";
-import { runWithMastraHarness } from "./harness-runtime.js";
+import {
+  runWithMastraHarness,
+  type SingleAgentRuntimeInput,
+} from "@codemap-ai/runtime-node";
 
 // Re-export types so existing consumers don't need to change imports
 export type {
@@ -10,7 +12,7 @@ export type {
   AgentPhase,
   PlanReviewAction,
   SingleAgentRuntimeInput,
-} from "@codemap-ai/core/agent";
+} from "@codemap-ai/runtime-node";
 
 export async function runSingleAgentRuntime(
   input: SingleAgentRuntimeInput,
