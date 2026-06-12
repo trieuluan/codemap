@@ -1,5 +1,4 @@
-// Minimal interface for ChatTerminal consumed by pi-tui-app.
-// Extracted here to break the circular dependency between chat-terminal.ts and pi-tui-app.ts.
+// Minimal terminal interface consumed by the TUI application.
 
 import type { HarnessQuestionAnswer } from "../../../agent/runtime/events.js";
 import type { Store } from "../../state/store-class.js";

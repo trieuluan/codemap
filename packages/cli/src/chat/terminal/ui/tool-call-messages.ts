@@ -284,7 +284,6 @@ function isTaskTool(toolName: string): boolean {
 
 /**
  * Update the store's taskList based on a task tool call.
- * Called from onToolResult in chat-terminal.ts.
  *
  * @param store - UI store
  * @param toolName - raw tool name (e.g. "codemap_task_write" or display name "codemap · task_write")

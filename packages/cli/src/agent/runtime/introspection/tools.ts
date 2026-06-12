@@ -1,8 +1,4 @@
-/**
- * Introspection — custom tools, hooks reload.
- *
- * Extracted from harness-runtime.ts.
- */
+/** Introspection helpers for custom tools and hook reloads. */
 import type { ResolvedCustomTool } from "@codemap-ai/runtime-node";
 import {
   getCustomToolPaths,

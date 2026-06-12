@@ -156,7 +156,11 @@ function renderPreviewLines(preview: string, bodyW: number, prefixW: number, exp
   const fitPreviewLine = (line: string) =>
     truncateVisible(`${indent}${line}`, prefixW + bodyW, true);
   const out = [fitPreviewLine(`${C_MUTED}⎿  ${summary}${RESET}`)];
-  out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
+  if (renderedDiff) {
+    out.push(...rendered.map((line) => truncateVisible(line, bodyW, true)));
+  } else {
+    out.push(...rendered.map((line) => fitPreviewLine(`${" ".repeat(previewIndentW)}${line}`)));
+  }
   if (truncated) {
     const hidden = totalRendered - MAX_PREVIEW_LINES;
     out.push(fitPreviewLine(`${" ".repeat(previewIndentW)}${C_MUTED}... ${hidden} more lines hidden (Ctrl+E to expand)${RESET}`));

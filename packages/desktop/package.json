@@ -1,0 +1,55 @@
+{
+  "name": "@codemap-ai/desktop",
+  "version": "1.4.0",
+  "private": true,
+  "type": "module",
+  "description": "CodeMap desktop coding agent",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:tsc": "tsc -p tsconfig.json --noEmit",
+    "preview": "electron-vite preview",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "package:mac": "pnpm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.2-r.2"
+  },
+  "devDependencies": {
+    "@codemap-ai/core": "workspace:*",
+    "@codemap-ai/runtime-node": "workspace:*",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.4.3",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.3",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "ai.codemap.desktop",
+    "productName": "CodeMap",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

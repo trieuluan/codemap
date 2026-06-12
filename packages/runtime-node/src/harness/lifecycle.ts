@@ -42,7 +42,7 @@ import { loadSettings } from "../settings.js";
 import { upsertGlobalMastraProvider } from "../config/mastra-settings.js";
 import { buildAgentPermissionRules } from "@codemap-ai/core/agent";
 
-// ── Re-exports used by callers via harness-runtime barrel ──────────────
+// Public harness lifecycle contracts.
 export type { MastraHarness };
 export { MASTRA_DISABLED_TOOLS, drainHarness };
 

@@ -1,0 +1,8 @@
+# electron-vite build output
+out/
+
+# electron-builder packaged app
+release/
+
+# electron-builder debug
+builder-debug.yml

@@ -10,12 +10,14 @@
     "./lib/*.js": "./src/lib/*.ts",
     "./agent": "./src/agent/index.ts",
     "./agent/contracts": "./src/agent/contracts/index.ts",
+    "./agent/session": "./src/agent/session/index.ts",
     "./agent/config": "./src/agent/config/index.ts",
     "./agent/loop": "./src/agent/loop/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsc -p tsconfig.build.json --watch"
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.63",

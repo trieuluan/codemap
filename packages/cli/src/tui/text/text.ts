@@ -328,8 +328,9 @@ function stripTrailingBlankLines(lines: string[]): string[] {
   return lines;
 }
 
-function reapplyBackground(line: string, bg: string): string {
-  return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + RESET;
+function reapplyBackground(line: string, bg: string, fillRest = false): string {
+  const fill = fillRest ? "\x1b[K" : "";
+  return bg + line.replace(/\x1b\[0m/g, `${RESET}${bg}`) + fill + RESET;
 }
 
 // edit_file preview puts the path in the hunk header: "@@ -1,4 +1,4 @@ /path/file.ts:1-10"
@@ -432,8 +433,7 @@ export function renderUnifiedDiff(
     const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
     const gutter = `${markerColor}${marker}${RESET} `;
     if (bg) {
-      const paddedCode = padToWidth(segment, codeWidth);
-      const coloredCode = reapplyBackground(paddedCode, bg);
+      const coloredCode = reapplyBackground(segment, bg, true);
       out.push(`${gutter}${coloredCode}${RESET}`);
     } else {
       out.push(`${gutter}${segment}${RESET}`);
