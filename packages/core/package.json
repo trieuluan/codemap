@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/core",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "CodeMap shared internal library",
   "main": "dist/index.js",

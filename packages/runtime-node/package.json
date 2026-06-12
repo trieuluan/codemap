@@ -1,6 +1,6 @@
 {
   "name": "@codemap-ai/runtime-node",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "CodeMap shared Node.js agent runtime",
   "license": "MIT",
