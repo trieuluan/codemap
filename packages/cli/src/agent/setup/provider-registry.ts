@@ -1,4 +1,4 @@
-import type { GatewayProviderId } from "../types.js";
+import type { GatewayProviderId } from "@codemap-ai/core/agent";
 
 export interface ProviderMeta {
   id: GatewayProviderId;

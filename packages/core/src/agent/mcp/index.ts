@@ -1,3 +1,7 @@
+/**
+ * MCP manager types and helpers — pure interfaces, no CLI deps.
+ */
+
 export interface MastraMcpServerStatus {
   name: string;
   connected: boolean;

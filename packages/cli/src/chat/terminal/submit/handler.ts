@@ -1,16 +1,16 @@
-import type { TaskPhase } from "../../events/event-bus.js";
-import type { GatewayModel } from "../../../agent/types.js";
+import type { TaskPhase } from "@codemap-ai/core/agent";
+import type { GatewayModel } from "@codemap-ai/core/agent";
 import { markToolDone } from "../ui/tool-call-messages.js";
 import { runShell } from "../../slash-commands/shell.js";
 import { buildCodeMapAgentInstructions, buildCurrentTaskContent } from "../config/agent-instructions.js";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
-import { classifyTask } from "../../../agent/loop/task-classifier.js";
+import { classifyTask } from "@codemap-ai/core/agent";
 import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
 } from "../../../agent/runtime/harness-runtime.js";
-import { resetResolvedModel } from "../../../agent/runtime/harness/fetch-interceptor.js";
-import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
+import { resetResolvedModel } from "@codemap-ai/core/agent/harness";
+import { resolveGatewayModel } from "@codemap-ai/core/agent/config";
 import { hydrateMentionContext } from "../../../agent/prompt/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";

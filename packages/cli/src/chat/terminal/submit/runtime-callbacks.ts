@@ -1,7 +1,7 @@
-import type { EventBus } from "../../events/event-bus.js";
+import type { EventBus } from "@codemap-ai/core/agent";
 import type { Store } from "../../state/store.js";
 import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
-import type { TokenUsage } from "../../../agent/types.js";
+import type { TokenUsage } from "@codemap-ai/core/agent";
 import type {
   AskQuestionOption,
   HarnessQuestionAnswer,

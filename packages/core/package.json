@@ -7,19 +7,30 @@
   "exports": {
     ".": "./src/index.ts",
     "./config.js": "./src/config.ts",
-    "./lib/*.js": "./src/lib/*.ts"
+    "./lib/*.js": "./src/lib/*.ts",
+    "./agent": "./src/agent/index.ts",
+    "./agent/harness": "./src/agent/harness/index.ts",
+    "./agent/config": "./src/agent/config/index.ts",
+    "./agent/loop": "./src/agent/loop/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
     "@codemap-ai/code-index": "workspace:*",
     "@codemap-ai/shared": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
+    "@mastra/core": "^1.41.0",
+    "@mastra/fastembed": "1.1.2",
+    "@mastra/libsql": "1.12.1",
+    "@mastra/memory": "1.20.2",
     "@modelcontextprotocol/sdk": "^1.21.0",
     "@parcel/watcher": "^2.5.0",
+    "ai": "^6.0.176",
     "jszip": "^3.10.1",
+    "mastracode": "^0.22.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {

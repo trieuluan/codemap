@@ -1,8 +1,8 @@
 import type { GatewayCommandContext } from ".././command-context.js";
 import { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
 import type { ChatUiMode } from "../../agent/runtime/cli-runtime.js";
-import { NineRouterProvider } from "../../agent/loop/provider.js";
-import type { GatewayConfig, GatewayModel } from "../../agent/types.js";
+import { NineRouterProvider } from "@codemap-ai/core/agent";
+import type { GatewayConfig, GatewayModel } from "@codemap-ai/core/agent";
 import { printGatewayHint } from "./doctor.js";
 import { loadConfig } from "@codemap-ai/core/config.js";
 import { installStderrInterceptor } from "../../tui/renderer/stderr-interceptor.js";

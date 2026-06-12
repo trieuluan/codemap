@@ -1,19 +1,33 @@
-// Shared types for cli-runtime and mastra-harness-runtime.
-// Extracted here to break the circular dependency between the two files.
+// Shared runtime input type for CLI harness and desktop app.
 
-import type { NineRouterProvider } from "../loop/provider.js";
-import type { ChatMessage, GatewayModeDefaults, GatewayProviderId, TokenUsage } from "../types.js";
-import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.js";
-import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode } from "./events.js";
-import type { HarnessDisplayState } from "@mastra/core/harness";
+import type { GatewayModeDefaults, GatewayProviderId, TokenUsage } from "./types.js";
+import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.js";
+import type { HarnessDeps } from "./harness/lifecycle.js";
 
-export type ChatUiMode = "tui";
+export type ChatUiMode = "tui" | "electron" | string;
 
 export type AgentPhase = "planning" | "executing";
 export type PlanReviewAction = "apply" | "cancel" | string;
 
+/**
+ * Interface for a tool client that the harness runtime uses.
+ * Both CLI's CodeMapMcpToolClient and desktop equivalents implement this.
+ */
+export interface ToolClientLike {
+  getServerConfig(): { command: string; args?: string[]; env?: Record<string, string> };
+  getExtraServerConfigs(): Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+}
+
+/**
+ * Interface for an AI provider (NineRouterProvider or compatible).
+ */
+export interface ProviderLike {
+  readonly baseUrl: string;
+  readonly apiKey: string | undefined;
+}
+
 export interface SingleAgentRuntimeInput {
-  provider: NineRouterProvider;
+  provider: ProviderLike;
   providerId?: GatewayProviderId;
   model: string;
   modeDefaults?: GatewayModeDefaults;
@@ -22,8 +36,8 @@ export interface SingleAgentRuntimeInput {
   /** Combo IDs from the gateway — passed through without model resolution. */
   availableCombos?: string[];
   agentInstructions?: string;
-  userMessage: ChatMessage;
-  toolClient: CodeMapMcpToolClient;
+  userMessage: { role: string; content: string };
+  toolClient: ToolClientLike;
   onToken?: (text: string) => void;
   onThinking?: (text: string) => void;
   /** Called when an intermediate agent message completes (before more tool calls follow). */
@@ -46,5 +60,6 @@ export interface SingleAgentRuntimeInput {
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string }>;
   effort?: "low" | "medium" | "high";
+  /** Injectable host-specific dependencies for the harness lifecycle. */
+  deps?: HarnessDeps;
 }
-

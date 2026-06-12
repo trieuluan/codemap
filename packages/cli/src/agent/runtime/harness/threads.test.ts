@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isMastraThreadAlreadyActive } from "./threads.js";
+import { isMastraThreadAlreadyActive } from "@codemap-ai/core/agent";
 
 test("returns true when switching to the already active thread", () => {
   assert.equal(isMastraThreadAlreadyActive("thread-1", "thread-1"), true);

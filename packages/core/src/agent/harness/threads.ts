@@ -1,7 +1,7 @@
 /**
  * Thread management — list, switch, messages, auto-resume.
  *
- * Extracted from harness-runtime.ts to keep each module focused on one domain.
+ * Pure UI-agnostic module: depends only on lifecycle singleton accessors.
  */
 import type { HarnessMessage, HarnessThread } from "../events.js";
 import {

@@ -1,5 +1,5 @@
 import type { Flags, ParsedArgs } from "./args.js";
-import type { GatewayConfig } from "../agent/types.js";
+import type { GatewayConfig } from "@codemap-ai/core/agent";
 
 export interface BaseCommandContext {
   argv: string[];

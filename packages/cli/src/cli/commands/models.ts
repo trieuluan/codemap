@@ -1,6 +1,6 @@
 import type { GatewayCommandContext } from ".././command-context.js";
-import { NineRouterProvider } from "../../agent/loop/provider.js";
-import type { GatewayConfig } from "../../agent/types.js";
+import { NineRouterProvider } from "@codemap-ai/core/agent";
+import type { GatewayConfig } from "@codemap-ai/core/agent";
 
 export async function runModels(ctx: GatewayCommandContext): Promise<void> {
   printModels(ctx.config);

@@ -11,7 +11,7 @@ import {
   createDebugLogger,
   type DebugLogger,
 } from "../../agent/utils/debug-logger.js";
-import { EventBus } from "../events/event-bus.js";
+import { EventBus } from "@codemap-ai/core/agent";
 import { Store, createInitialState } from "../state/store.js";
 import { markLastPendingToolCallCanceled } from "./ui/tool-call-messages.js";
 import { resolveAskQuestion as resolveAskQuestionHelper } from "./ui/plan-review.js";

@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import type { GatewayConfig } from "../agent/types.js";
+import type { GatewayConfig } from "@codemap-ai/core/agent";
 import {
   type SettingsScope,
   loadSettings,

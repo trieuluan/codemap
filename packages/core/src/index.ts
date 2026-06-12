@@ -21,6 +21,8 @@ export * from "./lib/server-instructions.js";
 export * from "./lib/session-context.js";
 export * from "./lib/session-tracker.js";
 export * from "./lib/sqlite-index-store.js";
+export * from "./lib/state-store.js";
+export * from "./lib/deep-merge.js";
 export * from "./lib/tool-response.js";
 export * from "./lib/uuid-schema.js";
 export * from "./lib/workspace-git.js";

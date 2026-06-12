@@ -9,7 +9,7 @@ import {
   readMcpServerConfigs,
   readPriorityResources,
 } from "@codemap-ai/core/lib/workspace-project.js";
-import type { ChatToolDefinition } from "../../types.js";
+import type { ChatToolDefinition } from "@codemap-ai/core/agent";
 import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
 
 // Re-export types so existing consumers don't need to change imports

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { AgentPhase } from "@codemap-ai/core/agent";
 import type { HarnessEvent, MastraHarness } from "./events.js";
-import type { AgentPhase } from "./types.js";
 
 /**
  * Integration-style tests for plan mode flow.

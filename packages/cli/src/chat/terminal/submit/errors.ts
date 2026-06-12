@@ -1,5 +1,5 @@
 import type { Store } from "../../state/store.js";
-import type { GatewayModel } from "../../../agent/types.js";
+import type { GatewayModel } from "@codemap-ai/core/agent";
 import { isStrongModel } from "../lifecycle/workspace-helpers.js";
 
 export function handleSubmitError(

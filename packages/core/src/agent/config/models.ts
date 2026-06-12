@@ -1,5 +1,5 @@
-import type { GatewayProviderId } from "../../types.js";
-import { GATEWAY_PROVIDER_IDS } from "../../types.js";
+import type { GatewayProviderId } from "../types.js";
+import { GATEWAY_PROVIDER_IDS } from "../types.js";
 
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";
@@ -21,7 +21,6 @@ export function resolveGatewayModel(
   availableModels: string[] | undefined,
   availableCombos?: string[],
 ): string {
-  // Combo IDs pass through directly — the gateway handles combo routing.
   if (availableCombos?.includes(modelId)) return modelId;
 
   if (availableModels && availableModels.length > 0) {
@@ -34,7 +33,6 @@ export function resolveGatewayModel(
     return fallback;
   }
 
-  // No available list — trust the caller's concrete modelId if provided.
   if (modelId.length > 0) return modelId;
 
   console.warn(

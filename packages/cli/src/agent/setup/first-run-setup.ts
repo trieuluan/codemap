@@ -1,6 +1,9 @@
 import * as p from "@clack/prompts";
+import type {
+  GatewayModeDefaults,
+  GatewayProviderId,
+} from "@codemap-ai/core/agent";
 import { writeGatewayConfig, DEFAULT_BASE_URL } from "../../cli/config.js";
-import type { GatewayModeDefaults, GatewayProviderId } from "../types.js";
 import {
   NINE_ROUTER_LOCAL_PORT,
   NINE_ROUTER_LOCAL_BASE_URL,

@@ -11,11 +11,11 @@
  */
 
 import { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
-import { NineRouterProvider } from "../../agent/loop/provider.js";
+import { NineRouterProvider } from "@codemap-ai/core/agent";
 import { resetHarnessSingleton } from "../../agent/runtime/harness-runtime.js";
 import { getMastraCurrentModelId } from "../../agent/runtime/harness-runtime.js";
 
-import { resolveGatewayModel } from "../../agent/runtime/config/models.js";
+import { resolveGatewayModel } from "@codemap-ai/core/agent/config";
 import { runSingleAgentRuntime } from "../../agent/runtime/cli-runtime.js";
 import { buildCodeMapAgentInstructions } from "../../chat/terminal/config/agent-instructions.js";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../../chat/terminal/lifecycle/session-context.js";
 import { loadGatewayConfig } from "../config.js";
 import { loadConfig } from "@codemap-ai/core/config.js";
-import type { ChatMessage, TokenUsage } from "../../agent/types.js";
+import type { ChatMessage, TokenUsage } from "@codemap-ai/core/agent";
 
 export interface HeadlessOptions {
   prompt: string;

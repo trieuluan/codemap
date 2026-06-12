@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyTask } from "./task-classifier.js";
-import type { NineRouterProvider } from "./provider.js";
+import {
+  classifyTask,
+  type NineRouterProvider,
+} from "@codemap-ai/core/agent";
 
 function providerReturning(json: object): NineRouterProvider {
   return {

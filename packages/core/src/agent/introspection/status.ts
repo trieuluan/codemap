@@ -1,7 +1,7 @@
 /**
  * Introspection — model ID, thread ID, MCP status, token usage, OM status.
  *
- * Pure status getters extracted from harness-runtime.ts.
+ * Pure status getters — no CLI deps.
  */
 import type { HarnessDisplayState } from "@mastra/core/harness";
 import type { MastraMcpServerStatus, MastraMcpStatusSummary } from "../mcp/index.js";

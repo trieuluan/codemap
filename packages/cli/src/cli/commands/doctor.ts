@@ -1,7 +1,7 @@
 import type { GatewayCommandContext } from ".././command-context.js";
-import { NineRouterProvider } from "../../agent/loop/provider.js";
+import { NineRouterProvider } from "@codemap-ai/core/agent";
 import { getGatewayConfigPath } from ".././config.js";
-import type { GatewayConfig } from "../../agent/types.js";
+import type { GatewayConfig } from "@codemap-ai/core/agent";
 import { getWorkspaceStatusLines } from "./status.js";
 
 export async function runDoctor(ctx: GatewayCommandContext): Promise<void> {

@@ -5,7 +5,7 @@ import {
   getResolvedModel,
   installResolvedModelInterceptor,
   uninstallFetchInterceptor,
-} from "./fetch-interceptor.js";
+} from "@codemap-ai/core/agent/harness";
 
 test("captures the resolved model from the first SSE chunk before the stream completes", async () => {
   const originalFetch = globalThis.fetch;

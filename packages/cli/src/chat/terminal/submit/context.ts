@@ -1,4 +1,4 @@
-import type { EventBus } from "../../events/event-bus.js";
+import type { EventBus } from "@codemap-ai/core/agent";
 import type { Message, Store } from "../../state/store.js";
 import type { DebugLogger } from "../../../agent/utils/debug-logger.js";
 import type { ChatTerminalOptions } from "../config/types.js";

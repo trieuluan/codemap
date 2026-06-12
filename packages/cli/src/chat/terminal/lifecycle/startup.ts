@@ -6,7 +6,7 @@ import {
   getMastraDisplayState,
 } from "../../../agent/runtime/harness-runtime.js";
 import { maybeCleanupMastraDb } from "../../../agent/runtime/mastra-db-cleanup.js";
-import type { EventBus } from "../../events/event-bus.js";
+import type { EventBus } from "@codemap-ai/core/agent";
 import type { Store } from "../../state/store.js";
 import type { ChatTerminalLike } from "../ui/types.js";
 import type { ChatTerminalOptions } from "../config/types.js";

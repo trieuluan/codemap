@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
-import type { GatewayProviderId } from "../agent/types.js";
+import type { GatewayProviderId } from "@codemap-ai/core/agent";
 
 // ─── Schema ───────────────────────────────────────────────────────
 

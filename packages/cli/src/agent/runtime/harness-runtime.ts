@@ -14,7 +14,7 @@ export type {
   MastraMcpServerStatus,
   MastraMcpSkippedServer,
   MastraMcpStatusSummary,
-} from "./mcp/index.js";
+} from "@codemap-ai/core/agent";
 
 // ── Lifecycle ──────────────────────────────────────────────────────────
 export type { MastraHarness } from "./harness/lifecycle.js";
@@ -34,7 +34,7 @@ export {
   listMastraThreadMessages,
   switchMastraThread,
   autoResumeLatestThread,
-} from "./harness/threads.js";
+} from "@codemap-ai/core/agent";
 
 // ── Introspection ──────────────────────────────────────────────────────
 export {

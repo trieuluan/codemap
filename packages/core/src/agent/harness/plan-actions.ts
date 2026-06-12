@@ -1,4 +1,4 @@
-import type { PlanReviewAction } from "../types.js";
+import type { PlanReviewAction } from "../runtime-input.js";
 
 const IMPLEMENT_SYNONYMS = new Set([
   "implement",

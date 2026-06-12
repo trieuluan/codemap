@@ -8,7 +8,7 @@ import {
 } from "../../../agent/runtime/harness-runtime.js";
 import { getCommandList } from "../../slash-commands/index.js";
 import type { CommandContext } from "../../slash-commands/types.js";
-import type { EventBus } from "../../events/event-bus.js";
+import type { EventBus } from "@codemap-ai/core/agent";
 import type { Message } from "../../state/store.js";
 import type { Store } from "../../state/store.js";
 import type { ChatTerminalOptions } from "../config/types.js";

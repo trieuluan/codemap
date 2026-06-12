@@ -1,6 +1,6 @@
 import type { AutocompleteItem, AutocompleteProvider, AutocompleteSuggestions } from "@earendil-works/pi-tui";
 import { searchIndexedFiles } from "../../agent/utils/file-search.js";
-import type { GatewayModel } from "../../agent/types.js";
+import type { GatewayModel } from "@codemap-ai/core/agent";
 import type { HarnessThread } from "../../agent/runtime/events.js";
 import { formatSessionLabel } from "../../chat/slash-commands/sessions.js";
 

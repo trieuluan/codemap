@@ -1,6 +1,6 @@
 import type { Message as ChatEntry } from "../state/store.js";
 import type { CodeMapMcpToolClient } from "../../agent/tools/mcp/mcp-tool-client.js";
-import type { NineRouterProvider } from "../../agent/loop/provider.js";
+import type { NineRouterProvider } from "@codemap-ai/core/agent";
 
 export interface CommandContext {
   currentModel: string;

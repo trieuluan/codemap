@@ -7,8 +7,8 @@ import {
 } from "../events.js";
 import { getLastModelApiError } from "./fetch-interceptor.js";
 import { normalizePlanAction } from "./plan-actions.js";
-import type { AgentPhase, PlanReviewAction } from "../types.js";
-import { AgentLoopResult } from "../../loop/agent-loop.js";
+import type { AgentPhase, PlanReviewAction } from "../runtime-input.js";
+import type { AgentLoopResult } from "../agent-loop.js";
 
 type RunHarnessCallbacks = Omit<
   BridgeCallbacks,
@@ -45,9 +45,6 @@ export function runHarness(
     const finish = (result: AgentLoopResult) => {
       if (settled) return;
       if (!result.text) {
-        // Empty result: the fetch interceptor's background stream reader may
-        // still be capturing an inline error chunk — give it a moment before
-        // deciding whether this is a real failure.
         void new Promise((r) => setTimeout(r, 100)).then(() =>
           finishEmpty(result),
         );
@@ -126,7 +123,7 @@ export function runHarness(
           });
           if (reminder) await reminder.accepted;
         } catch {
-          /* non-fatal — approval response is the important part */
+          /* non-fatal */
         }
       } else {
         await harness.respondToPlanApproval?.({
@@ -146,8 +143,7 @@ export function runHarness(
     let staleDisplayCount = 0;
     let lastDisplayStreamLength = -1;
     let lastMsgUpdateTextLength = -1;
-    // ~60 s at 30 display_state_changed/sec — abort frozen stream
-    const STALE_DISPLAY_THRESHOLD = 1800;
+    const STALE_DISPLAY_THRESHOLD = 18000;
 
     const finishWithCurrentText = () => {
       const raw = harness.getTokenUsage?.();
@@ -172,11 +168,6 @@ export function runHarness(
       try {
         handleHarnessEvent(event);
       } catch (err) {
-        // @mastra/core's dispatchToListeners wraps each listener in a
-        // try/catch and swallows thrown errors via console.error — invisible
-        // in a TUI and never reaching our debug log. Surface it here so an
-        // exception while handling one event (e.g. "error") doesn't silently
-        // vanish before agent_end fires from the next emit().
         callbacks.onDebug?.({
           event: "mastra_listener_error",
           eventType: event.type,
@@ -187,7 +178,6 @@ export function runHarness(
     });
 
     function handleHarnessEvent(event: HarnessEvent): void {
-      // Deduplicate noisy events before logging
       if (event.type === "message_update") {
         const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
         const newLen =
@@ -201,9 +191,6 @@ export function runHarness(
       } else {
         const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
         if (summary) {
-          // agent_end with no preceding error event is the unexplained
-          // failure mode under investigation — snapshot OM progress so we
-          // can tell whether observation/reflection was mid-flight.
           if (event.type === "agent_end") {
             (summary as Record<string, unknown>).omProgress =
               harness.getDisplayState?.()?.omProgress;
@@ -212,13 +199,9 @@ export function runHarness(
         }
       }
 
-      // Track pending tool calls for stale detection
       if (event.type === "tool_start") pendingToolCalls++;
       if (event.type === "tool_end") pendingToolCalls = Math.max(0, pendingToolCalls - 1);
 
-      // Stale stream detection: display_state_changed fires at ~30Hz from the UI
-      // poller. If it keeps arriving with no new content and no pending tool calls,
-      // the model stream is frozen — abort and finish with whatever text we have.
       if (event.type === "display_state_changed") {
         const curLen = currentStreamText.length;
         if (curLen > 0 && curLen === lastDisplayStreamLength && pendingToolCalls === 0) {
@@ -236,7 +219,7 @@ export function runHarness(
           staleDisplayCount = 0;
           lastDisplayStreamLength = curLen;
         }
-        return; // display_state_changed needs no further processing
+        return;
       }
 
       if (event.type === "mode_changed") {
@@ -245,13 +228,11 @@ export function runHarness(
         if (ev.modeId === "plan") callbacks.onPhaseStart?.("planning", modelId);
         else if (ev.modeId === "build") {
           callbacks.onPhaseStart?.("executing", modelId);
-          // Plan phase is ending. The harness emits message_end immediately
-          // after this mode_changed — flag it so that message_end handler skips
-          // the premature resolve and waits for the build phase instead.
           awaitingBuildPhase = true;
         }
         return;
       }
+
       bridgeCommonEvent(event, {
         ...callbacks,
         harness,
@@ -259,8 +240,6 @@ export function runHarness(
           get: () => currentStreamText,
           set: (v) => {
             currentStreamText = v;
-            // New tokens arrived — reset stale counter to avoid false-positive
-            // finish while the model is actively streaming.
             if (v.length !== lastDisplayStreamLength) {
               staleDisplayCount = 0;
               lastDisplayStreamLength = v.length;
@@ -269,29 +248,20 @@ export function runHarness(
         },
         currentThinkingRef: {
           get: () => currentThinking,
-          set: (v) => {
-            currentThinking = v;
-          },
+          set: (v) => { currentThinking = v; },
         },
         finalTextRef: {
           get: () => finalText,
-          set: (v) => {
-            finalText = v;
-          },
+          set: (v) => { finalText = v; },
         },
         usedToolsRef: {
           get: () => usedTools,
-          set: (v) => {
-            usedTools = v;
-          },
+          set: (v) => { usedTools = v; },
         },
         onPlanApproval: (planId, plan) => {
           handlePlanApproval(planId, plan).catch(fail);
         },
         onEnd: () => {
-          // Block agent_end while waiting for the build phase to start; a
-          // synthetic agent_end from sendMessage can fire between the plan
-          // phase ending and the system-reminder triggering the build phase.
           if (awaitingBuildPhase) return;
           finishWithCurrentText();
         },
@@ -301,6 +271,7 @@ export function runHarness(
           fail(lastHarnessError);
         },
       });
+
       if (event.type === "tool_start") {
         const argsKey = `${event.toolName}:${JSON.stringify(event.args ?? {})}`;
         toolCallMeta.set(event.toolCallId ?? event.toolName, {
@@ -328,14 +299,10 @@ export function runHarness(
         }
       }
       if (event.type === "message_start" && awaitingBuildPhase) {
-        // Build phase has actually started — safe to accept the next message_end.
         awaitingBuildPhase = false;
       }
       if (event.type === "message_end" && finalText.trim()) {
         if (awaitingBuildPhase) {
-          // This message_end belongs to the plan phase; the build phase hasn't
-          // started yet (no message_start received). Discard plan-phase text
-          // and keep waiting. awaitingBuildPhase is cleared on message_start.
           finalText = "";
           return;
         }
@@ -376,8 +343,6 @@ async function sendHarnessInput(
     contentLength: content.length,
     imageCount: imageFiles?.length ?? 0,
   });
-  // Prefer sendMessage: it awaits until stream idle and emits agent_end fallback,
-  // which guarantees the run resolves even when the server omits agent_end.
   if (harness.sendMessage) {
     const files = imageFiles?.map((f) => ({
       data: f.data,
@@ -387,8 +352,6 @@ async function sendHarnessInput(
     onDebug?.({ event: "mastra_send_message_done" });
     return;
   }
-  // Fallback: sendSignal — accepted promise resolves quickly but provides no
-  // agent_end guarantee; stale detection covers the stuck-stream case.
   if (harness.sendSignal) {
     const signalContent = imageFiles?.length
       ? ([

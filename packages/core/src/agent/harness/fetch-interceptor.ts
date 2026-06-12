@@ -56,12 +56,6 @@ function extractStreamErrorMessage(error: unknown): string | null {
   return null;
 }
 
-/**
- * Inspect a single SSE/JSON payload for resolved-model info or an inline
- * stream error. Routers (e.g. 9router) can respond 200 OK and stream an
- * `{"error": ...}` chunk when the routed backend model fails mid-stream —
- * that case never surfaces as a non-2xx response, so it must be caught here.
- */
 function captureResolvedModelPayload(payload: string): boolean {
   if (!payload.startsWith("{")) return false;
   try {

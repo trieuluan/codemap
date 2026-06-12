@@ -3,7 +3,7 @@
 
 import type { HarnessQuestionAnswer } from "../../../agent/runtime/events.js";
 import type { Store } from "../../state/store.js";
-import type { EventBus } from "../../events/event-bus.js";
+import type { EventBus } from "@codemap-ai/core/agent";
 
 export interface ChatTerminalLike {
   readonly store: Store;

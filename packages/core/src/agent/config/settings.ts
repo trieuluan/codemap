@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { GatewayProviderId } from "../../types.js";
+import type { GatewayProviderId } from "../types.js";
 import { stripProviderPrefix } from "./models.js";
 
 export type MastraProviderId = GatewayProviderId;
@@ -50,7 +50,6 @@ export async function upsertGlobalMastraProvider(
     completedAt: new Date().toISOString(),
   };
 
-  // Write modeDefaults so mastracode picks up the right model per mode
   if (opts.modeDefaults || harnessModelId) {
     const prefix = providerId === "openai" ? "openai" : providerId;
     const addPrefix = (id: string): string => {
@@ -62,10 +61,6 @@ export async function upsertGlobalMastraProvider(
         : {};
     const modeDefaults: Record<string, string> = {};
     const buildModel = opts.modeDefaults?.build ?? harnessModelId;
-    // Fall back to the build model when plan/fast aren't configured. Without
-    // this, mastracode leaves modeDefaults.plan/fast unset and falls back to
-    // its own hardcoded "openai/gpt-5.5" defaults, which fail for gateway
-    // providers (e.g. 9router) that don't have OPENAI_API_KEY set.
     const planModel = opts.modeDefaults?.plan ?? buildModel;
     const fastModel = opts.modeDefaults?.fast ?? buildModel;
     if (buildModel) modeDefaults.build = addPrefix(buildModel);
