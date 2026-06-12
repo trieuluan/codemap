@@ -1,5 +1,10 @@
 import { warmupFileSearch } from "../../../agent/utils/file-search.js";
-import { warmupHarness, autoResumeLatestThread, listMastraThreadMessages } from "../../../agent/runtime/harness-runtime.js";
+import {
+  warmupHarness,
+  autoResumeLatestThread,
+  listMastraThreadMessages,
+  getMastraDisplayState,
+} from "../../../agent/runtime/harness-runtime.js";
 import { maybeCleanupMastraDb } from "../../../agent/runtime/mastra-db-cleanup.js";
 import type { EventBus } from "../../events/event-bus.js";
 import type { Store } from "../../state/store.js";
@@ -55,15 +60,20 @@ export async function startChatTerminalRuntime({
   })
     .then(async () => {
       const resumedThreadId = await autoResumeLatestThread();
+      const { restorePendingPrompts } = await import("../ui/plan-review.js");
+      restorePendingPrompts(
+        { bus, store },
+        resumedThreadId ? getMastraDisplayState() : null,
+      );
       if (resumedThreadId) {
         const { mapHarnessMessagesToUI } = await import(
           "../../../chat/slash-commands/sessions.js"
         );
         const messages = await listMastraThreadMessages(resumedThreadId, 100);
-        store.dispatch((prev) => ({
+        store.dispatch({
           messages: mapHarnessMessagesToUI(messages),
           sessionTokens: 0,
-        }));
+        });
         bus.scheduleRefresh();
       }
     })

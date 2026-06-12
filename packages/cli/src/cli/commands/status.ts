@@ -5,6 +5,11 @@ import type { ProjectDetail } from "@codemap-ai/core/lib/api-types.js";
 import { readLocalIndex } from "@codemap-ai/core/lib/local-index.js";
 import { tryGetCurrentWorkspaceInfo } from "@codemap-ai/core/lib/workspace-git.js";
 import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
+import {
+  getMastraCurrentModelId,
+  getMastraDisplayState,
+  getMastraThreadId,
+} from "../../agent/runtime/introspection/index.js";
 
 function formatAge(date: Date): string {
   const mins = Math.floor((Date.now() - date.getTime()) / 60_000);
@@ -13,6 +18,44 @@ function formatAge(date: Date): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+export function formatRuntimeStatusLines(runtime?: {
+  modelId?: string | null;
+  threadId?: string | null;
+  displayState?: ReturnType<typeof getMastraDisplayState>;
+}): string[] {
+  const modelId = runtime?.modelId ?? getMastraCurrentModelId();
+  const threadId = runtime?.threadId ?? getMastraThreadId();
+  const displayState = runtime?.displayState ?? getMastraDisplayState();
+  const lines: string[] = [];
+
+  if (!modelId && !threadId && !displayState) return lines;
+
+  lines.push("", "Runtime:");
+
+  if (modelId) lines.push(`  Model:      ${modelId}`);
+  if (threadId) lines.push(`  Thread:     ${threadId}`);
+
+  const pendingQuestion = displayState?.pendingQuestion;
+  if (pendingQuestion) {
+    lines.push(
+      `  Prompt:     waiting for question${pendingQuestion.question ? ` — ${pendingQuestion.question}` : ""}`,
+    );
+  }
+
+  const pendingApproval = displayState?.pendingApproval;
+  if (pendingApproval) {
+    lines.push(
+      `  Prompt:     waiting for tool approval${pendingApproval.toolName ? ` — ${pendingApproval.toolName}` : ""}`,
+    );
+  }
+
+  if (!pendingQuestion && !pendingApproval) {
+    lines.push("  Prompt:     idle");
+  }
+
+  return lines;
 }
 
 export async function getWorkspaceStatusLines(): Promise<string[]> {
@@ -33,6 +76,7 @@ export async function getWorkspaceStatusLines(): Promise<string[]> {
   lines.push(`Workspace: ${workspacePath}`);
   lines.push(`Git:       ${gitInfo ? `${gitInfo.branch} @ ${gitInfo.commitSha.slice(0, 7)}` : "not available"}`);
   lines.push(`Remote:    ${gitInfo?.remoteUrl ?? "none"}`);
+  lines.push(...formatRuntimeStatusLines());
   lines.push("");
   lines.push(`Local index: ${store ? (indexFresh ? "fresh" : "stale") : "missing"}`);
   if (summary) {

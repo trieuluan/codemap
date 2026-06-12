@@ -48,7 +48,10 @@ function formatExpandedContent(
       const lines: string[] = [];
 
       if (typeof summary === "string" && (data !== undefined || error !== undefined)) {
-        const summaryLines = renderMarkdownish(summary, width);
+        // JSON.parse can decode \u001b (etc.) escapes into real control bytes
+        // (e.g. ESC) embedded in string fields — strip them again so they
+        // can't leak charset-switching escape sequences to the terminal.
+        const summaryLines = renderMarkdownish(stripAnsi(summary), width);
         lines.push(...summaryLines);
         const raw = data !== undefined ? data : error;
         const verbosity = getToolResultVerbosity(structured, raw);

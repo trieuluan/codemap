@@ -29,7 +29,7 @@ import {
   SPINNER,
 } from "./theme.js";
 import { workspaceStateCardLines } from "./text/text.js";
-import { buildPanel, isActiveTaskPhase } from "./renderer/panel-builder.js";
+import { buildPanel, getPlanReviewOptionActions, isActiveTaskPhase } from "./renderer/panel-builder.js";
 import { getMastraMessages, getMastraThreadId, listMastraThreads, switchMastraThread } from "../agent/runtime/harness-runtime.js";
 import { sortThreads } from "../chat/slash-commands/sessions.js";
 import { formatTime } from "./renderer/ink-utils.js";
@@ -713,10 +713,25 @@ export async function startPiTuiApp(
       const options = aq.options ?? [];
 
       if (options.length > 0) {
-        // Options mode: only allow navigation keys, block all typing.
+        // Options mode: only allow navigation keys/number shortcuts, block all typing.
         const sel = aq.selection ?? 0;
         const isMultiSelect = aq.selectionMode === "multi_select";
         if (editor.getText().trim() === "") {
+          const numericSelection = /^[1-9]$/.test(data) ? Number(data) - 1 : -1;
+          if (numericSelection >= 0 && numericSelection < options.length) {
+            if (isMultiSelect) {
+              const selected = aq.selected.includes(numericSelection)
+                ? aq.selected.filter((idx: number) => idx !== numericSelection)
+                : [...aq.selected, numericSelection];
+              chatTerminal.store.dispatch({
+                askQuestion: { ...aq, selection: numericSelection, selected },
+              });
+              tui.requestRender();
+            } else {
+              chatTerminal.resolveAskQuestion(options[numericSelection]!.label);
+            }
+            return { consume: true };
+          }
           if (matchesKey(data, Key.up)) {
             chatTerminal.store.dispatch({
               askQuestion: {
@@ -776,6 +791,16 @@ export async function startPiTuiApp(
       const ta = state.toolApproval;
       const sel = ta.selection ?? 0;
       const options = ["approve", "decline", "always_allow"] as const;
+      const map: Record<string, "approve" | "decline" | "always_allow_category"> = {
+        approve: "approve",
+        decline: "decline",
+        always_allow: "always_allow_category",
+      };
+      const numericSelection = /^[1-3]$/.test(data) ? Number(data) - 1 : -1;
+      if (numericSelection >= 0 && numericSelection < options.length) {
+        chatTerminal.resolveToolApproval(map[options[numericSelection]] ?? "decline");
+        return { consume: true };
+      }
 
       if (matchesKey(data, Key.up)) {
         chatTerminal.store.dispatch({
@@ -795,11 +820,6 @@ export async function startPiTuiApp(
         return { consume: true };
       }
       if (matchesKey(data, Key.enter)) {
-        const map: Record<string, "approve" | "decline" | "always_allow_category"> = {
-          approve: "approve",
-          decline: "decline",
-          always_allow: "always_allow_category",
-        };
         chatTerminal.resolveToolApproval(map[options[sel]] ?? "decline");
         return { consume: true };
       }
@@ -830,9 +850,25 @@ export async function startPiTuiApp(
         return { consume: true };
       }
 
-      // Not in revise mode — block all input except navigation keys.
+      const PLAN_OPTIONS = getPlanReviewOptionActions();
+      const sel = Math.max(0, Math.min(pr.selection ?? 0, PLAN_OPTIONS.length - 1));
+
+      // Not in revise mode — block all input except navigation keys/number shortcuts.
       // This prevents typing when plan review is active but revise mode is not selected.
       if (!pr.reviseMode) {
+        const numericSelection = /^[1-3]$/.test(data) ? Number(data) - 1 : -1;
+        if (numericSelection >= 0 && numericSelection < PLAN_OPTIONS.length) {
+          const chosen = PLAN_OPTIONS[numericSelection] ?? "apply";
+          if (chosen === "revise") {
+            chatTerminal.store.dispatch({
+              planReview: { active: true, selection: numericSelection, reviseMode: true },
+            });
+            tui.requestRender();
+          } else {
+            chatTerminal.resolvePlanReview(chosen);
+          }
+          return { consume: true };
+        }
         // Only allow navigation keys (up, down, enter, escape)
         if (
           !matchesKey(data, Key.up) &&
@@ -843,9 +879,6 @@ export async function startPiTuiApp(
           return { consume: true };
         }
       }
-
-      const PLAN_OPTIONS = ["apply", "no", "revise"] as const;
-      const sel = pr.selection ?? 0;
       if (matchesKey(data, Key.up)) {
         chatTerminal.store.dispatch({
           planReview: {

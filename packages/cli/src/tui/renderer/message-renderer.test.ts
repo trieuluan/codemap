@@ -174,11 +174,11 @@ test("messageLines keeps diff formatting when context contains markdown fences",
 
   assert.doesNotMatch(rendered, /```diff/);
   assert.match(rendered, /@@ -1,5 \+1,5 @@ README\.md/);
-  assert.match(rendered, /\s+1 │ ```md/);
-  assert.match(rendered, /\s+2 │ unchanged/);
-  assert.match(rendered, /\s+3 │ ```/);
-  assert.match(rendered, /\-\s+4 │ old/);
-  assert.match(rendered, /\+\s+4 │ new/);
+  assert.match(rendered, /^\s+```md$/m);
+  assert.match(rendered, /^\s+unchanged$/m);
+  assert.match(rendered, /^\s+```$/m);
+  assert.match(rendered, /^- old$/m);
+  assert.match(rendered, /^\+ new$/m);
 });
 
 test("messageLines keeps non-diff previews rendered as markdown", () => {
@@ -233,13 +233,13 @@ test("messageLines renders markdown list items as context lines in unified diff 
 
   const rendered = messageLines(messages, 120).map(stripAnsi).join("\n");
 
-  assert.match(rendered, /\d+ │ ## Targets/);
-  assert.match(rendered, /\d+ │ - Codex/);
-  assert.match(rendered, /\d+ │ - Claude/);
-  assert.match(rendered, /\d+ │ - Cursor/);
-  assert.match(rendered, /\+\s+\d+ │\s+- Gemini/);
-  assert.match(rendered, /\d+ │\s+OpenCode/);
-  assert.match(rendered, /\d+ │\s+Copilot/);
+  assert.match(rendered, /^\s+## Targets$/m);
+  assert.match(rendered, /^\s+- Codex$/m);
+  assert.match(rendered, /^\s+- Claude$/m);
+  assert.match(rendered, /^\s+- Cursor$/m);
+  assert.match(rendered, /^\+ - Gemini$/m);
+  assert.match(rendered, /^\s+OpenCode$/m);
+  assert.match(rendered, /^\s+Copilot$/m);
 });
 
 test("expanded CodeMap tool results show summary without raw data by default", () => {

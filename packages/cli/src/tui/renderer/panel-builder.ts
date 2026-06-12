@@ -1,5 +1,6 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import type { UIState, TaskListItem } from "../../chat/state/store.js";
+import type { UIState, TaskListItem, ChangedSummary, ChangedFileSummary } from "../../chat/state/store.js";
+import type { PlanReviewAction } from "../../agent/runtime/types.js";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
 import { renderEditor } from "./editor-renderer.js";
@@ -119,6 +120,255 @@ function formatToggleHint(key: string, label: string, enabled: boolean): string 
   return enabled
     ? `${C_ACTION}${key}${RESET} ${C_WHITE}${label}${RESET} ${C_SUCCESS}on${RESET}`
     : `${C_ACTION}${key}${RESET} ${C_GRAY}${label}${RESET}`;
+}
+
+function renderChangedSummary(summary: ChangedSummary, w: number): string[] {
+  const parts: string[] = [];
+  if (summary.newCount) parts.push(`${summary.newCount} new`);
+  if (summary.editedCount) parts.push(`${summary.editedCount} edited`);
+  if (summary.deletedCount) parts.push(`${summary.deletedCount} deleted`);
+  if (summary.renamedCount) parts.push(`${summary.renamedCount} renamed`);
+
+  const lines = [
+    fitLine(
+      ` ${C_ACTION}${BOLD}CHANGED${RESET}${parts.length ? ` ${C_MUTED}${parts.join(" · ")}${RESET}` : ""}`,
+      w,
+    ),
+  ];
+
+  for (const file of summary.files) {
+    lines.push(fitLine(`   ${formatChangedFile(file)}`, w));
+  }
+
+  return lines;
+}
+
+function formatChangedFile(file: ChangedFileSummary): string {
+  const icon = file.kind === "new"
+    ? `${C_SUCCESS}+${RESET}`
+    : file.kind === "deleted"
+      ? `${C_ERROR}-${RESET}`
+      : file.kind === "renamed"
+        ? `${C_ACTION}→${RESET}`
+        : `${C_WARNING}●${RESET}`;
+
+  const location = file.kind === "renamed" && file.previousPath
+    ? `${file.previousPath} ${C_MUTED}→${RESET} ${file.path}`
+    : file.path;
+
+  const stats = file.additions > 0 || file.deletions > 0
+    ? ` ${C_SUCCESS}+${file.additions}${RESET} ${C_ERROR}-${file.deletions}${RESET}`
+    : "";
+
+  return `${icon} ${location}${stats}`;
+}
+
+interface PlanReviewOption {
+  action: PlanReviewAction;
+  label: string;
+  desc: string;
+  tone: "apply" | "cancel" | "revise";
+}
+
+const PLAN_REVIEW_OPTIONS: PlanReviewOption[] = [
+  {
+    action: "apply",
+    label: "apply",
+    desc: "implement now — planner → coder → reviewer",
+    tone: "apply",
+  },
+  { action: "cancel", label: "no", desc: "cancel — don't implement this plan", tone: "cancel" },
+  { action: "revise", label: "revise", desc: "describe what to change", tone: "revise" },
+];
+
+export function getPlanReviewOptionActions(): PlanReviewAction[] {
+  return PLAN_REVIEW_OPTIONS.map((opt) => opt.action);
+}
+
+// ── Plan parser & structured renderer (Direction B) ────────────────
+
+interface ParsedPlan {
+  title: string;
+  goal: string;
+  steps: PlanStep[];
+  files: PlanFile[];
+}
+
+interface PlanStep {
+  num: number;
+  text: string;
+  files: string[]; // file paths mentioned in this step
+}
+
+interface PlanFile {
+  path: string;
+  status: "new" | "mod" | "del";
+  lines?: string; // e.g. "+351 −4"
+}
+
+/**
+ * Parse planner markdown output into structured plan data.
+ * Handles common planner formats:
+ *   ## Plan — title
+ *   goal description
+ *   1. Step text with `file.ts` mentions
+ *   2. Another step
+ *   ### Affected Files
+ *   - new file.ts (+100 −0)
+ *   - mod other.ts (+10 −2)
+ */
+export function parsePlanMarkdown(md: string): ParsedPlan {
+  const lines = md.split("\n");
+  let title = "Plan";
+  let goal = "";
+  const steps: PlanStep[] = [];
+  const files: PlanFile[] = [];
+
+  let currentStep: PlanStep | null = null;
+  let section: "body" | "files" = "body";
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    // Title: ## Plan — title  OR  ## Plan: title  OR  ## Plan
+    const titleMatch = line.match(/^##+\s+Plan\s*[—:–]\s*(.+)/i)
+      ?? line.match(/^##+\s+Plan\s*$/i);
+    if (titleMatch) {
+      title = titleMatch[1]?.trim() || "Plan";
+      continue;
+    }
+
+    // Section headers
+    if (/^##+ Affected Files/i.test(line) || /^##+ Files/i.test(line) || /^### Files/i.test(line)) {
+      section = "files";
+      continue;
+    }
+    if (/^##+ /.test(line) && !/^##+ Plan/i.test(line)) {
+      section = "body";
+    }
+
+    if (section === "files") {
+      // File line: - new path/to/file.ts (+100 −0)  OR  - path/to/file.ts
+      const fileMatch = line.match(/^[-*]\s+(new|mod|del|added|modified|deleted)\s+`?([\w./\-_.]+)`?\s*(?:[+(]([^)]*[−\-]\d+[^)]*)\))?/i)
+        ?? line.match(/^[-*]\s+`?([\w./\-_.]+)`?\s*(?:[+(]([^)]*[−\-]\d+[^)]*)\))?/);
+      if (fileMatch) {
+        if (fileMatch[2]) {
+          // Format: - status path (lines)
+          const rawStatus = fileMatch[1].toLowerCase();
+          const status: PlanFile["status"] =
+            rawStatus === "new" || rawStatus === "added" ? "new"
+              : rawStatus === "del" || rawStatus === "deleted" ? "del"
+                : "mod";
+          files.push({ path: fileMatch[2], status, lines: fileMatch[3]?.trim() });
+        } else {
+          // Format: - path (lines)  — assume mod
+          files.push({ path: fileMatch[1], status: "mod", lines: fileMatch[2]?.trim() });
+        }
+      }
+      continue;
+    }
+
+    // Numbered step: 1. Step text
+    const stepMatch = line.match(/^(\d+)\.\s+(.+)/);
+    if (stepMatch) {
+      if (currentStep) steps.push(currentStep);
+      const num = parseInt(stepMatch[1], 10);
+      currentStep = { num, text: stepMatch[2], files: [] };
+      continue;
+    }
+
+    // Goal / description line (non-empty, non-heading, before first step)
+    if (!currentStep && !titleMatch && line.trim() && !/^#{1,3}\s/.test(line)) {
+      goal = goal ? `${goal} ${line.trim()}` : line.trim();
+      continue;
+    }
+
+    // Continuation of current step
+    if (currentStep && line.trim()) {
+      currentStep.text += ` ${line.trim()}`;
+    }
+  }
+  if (currentStep) steps.push(currentStep);
+
+  // Extract file mentions from steps if no explicit files section
+  if (files.length === 0) {
+    const fileSet = new Map<string, PlanFile>();
+    for (const step of steps) {
+      // Match backtick-quoted file paths in step text
+      const matches = step.text.matchAll(/`([\w./\-_.]+\.\w+)`/g);
+      for (const m of matches) {
+        if (!fileSet.has(m[1])) {
+          fileSet.set(m[1], { path: m[1], status: "new" });
+        }
+        step.files.push(m[1]);
+      }
+    }
+    files.push(...fileSet.values());
+  }
+
+  return { title, goal, steps, files };
+}
+
+function renderRule(w: number, width?: number): string {
+  return `${DIM}${C_MUTED}${"─".repeat(Math.min(w - 4, width ?? 40))}${RESET}`;
+}
+
+function renderPlanContent(plan: string, w: number): string[] {
+  const parsed = parsePlanMarkdown(plan);
+  const lines: string[] = [];
+  const innerRule = `${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`;
+
+  // Plan header
+  lines.push(
+    fitLine(`    ${C_AI}◈${RESET} ${C_WHITE}${BOLD}Plan · ${parsed.title}${RESET}`, w),
+  );
+  if (parsed.goal) {
+    lines.push(fitLine(`    ${C_GRAY}${parsed.goal}${RESET}`, w));
+  }
+  lines.push(fitLine(`    ${innerRule}`, w));
+
+  // Steps block
+  if (parsed.steps.length > 0) {
+    lines.push(fitLine(`    ${C_MUTED}STEPS${RESET}`, w));
+    for (const step of parsed.steps) {
+      const num = `${C_AI}${BOLD}${step.num}${RESET}`;
+      lines.push(fitLine(`      ${num}  ${C_WHITE}${step.text}${RESET}`, w));
+    }
+    lines.push(fitLine(``, w));
+  }
+
+  // Affected files block
+  if (parsed.files.length > 0) {
+    lines.push(fitLine(`    ${C_MUTED}AFFECTED FILES${RESET}`, w));
+    for (const file of parsed.files) {
+      const statusIcon =
+        file.status === "new" ? `${C_SUCCESS}+${RESET}`
+          : file.status === "del" ? `${C_ERROR}−${RESET}`
+            : `${C_WARNING}~${RESET}`;
+      const statusLabel =
+        file.status === "new" ? `${C_SUCCESS}new${RESET}`
+          : file.status === "del" ? `${C_ERROR}del${RESET}`
+            : `${C_WARNING}mod${RESET}`;
+      const lineInfo = file.lines ? ` ${C_GRAY}${file.lines}${RESET}` : "";
+      lines.push(
+        fitLine(`      ${statusIcon} ${C_ACTION}${file.path}${RESET}  ${statusLabel}${lineInfo}`, w),
+      );
+    }
+    lines.push(fitLine(``, w));
+  }
+
+  return lines;
+}
+
+function renderPlanReviewOption(opt: PlanReviewOption, idx: number, selected: boolean, w: number): string {
+  const num = `${C_MUTED}${idx + 1}.${RESET}`;
+  const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
+  const labelColor =
+    opt.tone === "cancel" ? C_ERROR : opt.tone === "revise" ? C_WARNING : C_SUCCESS;
+  const label = selected
+    ? `${labelColor}${BOLD}${opt.label}${RESET}`
+    : `${labelColor}${opt.label}${RESET}`;
+  return fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w);
 }
 
 function renderTaskList(tasks: TaskListItem[], w: number): string[] {
@@ -271,6 +521,10 @@ export function buildPanel(
     out.push(...renderTaskList(state.taskList, w));
   }
 
+  if (state.changedSummary && state.changedSummary.files.length > 0) {
+    out.push(...renderChangedSummary(state.changedSummary, w));
+  }
+
   // Background synthesis indicator.
   if (state.synthRunning) {
     out.push(
@@ -398,75 +652,62 @@ export function buildPanel(
     // Bottom separator
     out.push(fitLine(`  ${sep}`, w));
   } else if (state.planReview?.active) {
-    const sel = state.planReview.selection ?? 0;
+    const sel = Math.max(
+      0,
+      Math.min(state.planReview.selection ?? 0, PLAN_REVIEW_OPTIONS.length - 1),
+    );
     const reviseMode = state.planReview.reviseMode ?? false;
-    const PLAN_OPTIONS = [
-      {
-        label: "apply",
-        desc: "Proceed with implementation (planner → coder → reviewer)",
-      },
-      { label: "no", desc: "Cancel — don't implement this plan" },
-      { label: "revise", desc: "Request changes to the plan" },
-    ];
+    const reviewRule = renderRule(w, 56);
+    const innerRule = `${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`;
 
-    // Top separator
-    out.push(fitLine(`  ${sep}`, w));
+    // Render structured plan content above the review dock
+    if (state.planContent && !reviseMode) {
+      out.push(...renderPlanContent(state.planContent, w));
+    }
+
+    out.push(fitLine(`  ${reviewRule}`, w));
 
     if (reviseMode) {
-      // Revise input mode: prompt user to type feedback.
       out.push(
         fitLine(`    ${C_WARNING}◈${RESET} ${C_WHITE}${BOLD}Revise plan${RESET}`, w),
       );
-      out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
-      out.push(
-        fitLine(`    ${C_GRAY}Describe what to change, then press ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to submit${RESET}`, w),
-      );
-      out.push(fitLine(``, w));
+      out.push(fitLine(`    ${innerRule}`, w));
       out.push(
         fitLine(
-          `    ${C_ACTION}Esc${RESET} ${C_GRAY}back to options${RESET}`,
+          `    ${C_GRAY}Describe what to change, then press ${RESET}${C_ACTION}Enter${RESET}${C_GRAY} to submit${RESET}`,
           w,
         ),
       );
+      out.push(
+        fitLine(
+          `    ${C_MUTED}›${RESET} ${C_GRAY}Type feedback in the prompt below${RESET}`,
+          w,
+        ),
+      );
+      out.push(fitLine(``, w));
+      out.push(
+        fitLine(`    ${C_ACTION}Esc${RESET} ${C_GRAY}back to options${RESET}`, w),
+      );
     } else {
-      // Option selection mode.
       out.push(
         fitLine(`    ${C_AI}◈${RESET} ${C_WHITE}${BOLD}Plan ready${RESET}`, w),
       );
+      out.push(fitLine(`    ${innerRule}`, w));
 
-      // Sub-separator
-      out.push(fitLine(`    ${DIM}${C_MUTED}${"─".repeat(Math.min(w - 8, 36))}${RESET}`, w));
-
-      // Options
-      for (const [idx, opt] of PLAN_OPTIONS.entries()) {
-        const selected = idx === sel;
-        const num = `${C_MUTED}${idx + 1}.${RESET}`;
-        const prefix = selected ? `${C_ACTION}>${RESET}` : " ";
-        const isNo = opt.label === "no";
-        const isRevise = opt.label === "revise";
-        const labelColor = isNo ? C_ERROR : isRevise ? C_WARNING : C_WHITE;
-        const label = selected
-          ? `${labelColor}${BOLD}${opt.label}${RESET}`
-          : `${labelColor}${opt.label}${RESET}`;
-        out.push(
-          fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w),
-        );
+      for (const [idx, opt] of PLAN_REVIEW_OPTIONS.entries()) {
+        out.push(renderPlanReviewOption(opt, idx, idx === sel, w));
       }
 
-      // Spacer between options and hint text
       out.push(fitLine(``, w));
-
-      // Help text
       out.push(
         fitLine(
-          `    ${C_ACTION}↑↓${RESET} ${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm${RESET}`,
+          `    ${C_ACTION}↑↓${RESET} ${C_GRAY}select · ${RESET}${C_ACTION}Enter${RESET} ${C_GRAY}confirm · ${RESET}${C_ACTION}Esc${RESET} ${C_GRAY}decline${RESET}`,
           w,
         ),
       );
     }
 
-    // Bottom separator
-    out.push(fitLine(`  ${sep}`, w));
+    out.push(fitLine(`  ${reviewRule}`, w));
   } else {
     out.push(
       fitLine(

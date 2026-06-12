@@ -9,12 +9,14 @@ import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
 } from "../../../agent/runtime/harness-runtime.js";
+import { resetResolvedModel } from "../../../agent/runtime/harness/fetch-interceptor.js";
 import { resolveGatewayModel } from "../../../agent/runtime/config/models.js";
 import { hydrateMentionContext } from "../../../agent/prompt/mention-context.js";
 import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";
 import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
+import { captureGitDiffSnapshot, diffGitSnapshots } from "../../git/turn-changed-summary.js";
 
 export async function handleSubmitWithContent(
   ctx: SubmitHandlerContext,
@@ -28,17 +30,20 @@ export async function handleSubmitWithContent(
   const forceMultiPhase = options?.forceMultiPhase;
   const imageFiles = options?.imageFiles;
 
-  store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
+  store.dispatch((prev) => ({ input: { ...prev.input, busy: true }, changedSummary: null }));
   const taskAbort = new AbortController();
   const taskId = ctx.beginTask(taskAbort);
+  const baselineSnapshot = await captureGitDiffSnapshot();
 
   ctx.appendMessage({ role: "user", content: text });
+  resetResolvedModel();
   store.dispatch({
     task: {
       phase: "thinking",
       startTime: Date.now(),
       toolsCalled: 0,
       model: store.getState().config.model,
+      effort: undefined,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     },
   });
@@ -136,9 +141,10 @@ export async function handleSubmitWithContent(
       sessionProjectCtx,
       resolvedAgentModel,
     );
-    const handlePlanReady = (_plan: string) => {
+    const handlePlanReady = (plan: string) => {
       if (!ctx.isActiveTask(taskId, taskAbort)) return;
       runtimeCallbacks.resetStreaming();
+      store.dispatch({ planContent: plan });
     };
 
     const result = await runSingleAgentRuntime({
@@ -245,6 +251,11 @@ export async function handleSubmitWithContent(
     }
 
     runtimeCallbacks.resetStreaming();
+    const changedSummary = diffGitSnapshots(
+      baselineSnapshot,
+      await captureGitDiffSnapshot(),
+    );
+    store.dispatch({ changedSummary });
     bus.scheduleRefresh();
 
     const mastraUsage = await getMastraThreadTokenUsage().catch(() => null);
@@ -277,7 +288,8 @@ export async function handleShellSubmit(
     return;
   }
 
-  store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
+  store.dispatch((prev) => ({ input: { ...prev.input, busy: true }, changedSummary: null }));
+  const baselineSnapshot = await captureGitDiffSnapshot();
   ctx.appendMessage({ role: "user", content: text });
   store.dispatch({
     task: {
@@ -310,6 +322,11 @@ export async function handleShellSubmit(
         endTime: Date.now(),
       },
     });
+    const changedSummary = diffGitSnapshots(
+      baselineSnapshot,
+      await captureGitDiffSnapshot(),
+    );
+    store.dispatch({ changedSummary });
   } catch (err) {
     if (isAbortError(err) || taskAbort.signal.aborted) return;
     const message = err instanceof Error ? err.message : String(err);

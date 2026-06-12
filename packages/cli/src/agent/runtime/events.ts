@@ -135,6 +135,23 @@ export function summarizeHarnessEvent(
     };
   }
 
+  if (event.type === "om_status") {
+    return {
+      ...base,
+      windows: event.windows,
+      recordId: event.recordId,
+      stepNumber: event.stepNumber,
+      generationCount: event.generationCount,
+    };
+  }
+
+  // Catch-all for OM lifecycle events (observation/reflection/buffering
+  // start|end|failed) — surface every field so failures aren't silently
+  // dropped to the bare {event,type} shape.
+  if (event.type.startsWith("om_")) {
+    return { ...base, ...event };
+  }
+
   return base;
 }
 

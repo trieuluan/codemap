@@ -3,6 +3,7 @@
  *
  * Pure status getters extracted from harness-runtime.ts.
  */
+import type { HarnessDisplayState } from "@mastra/core/harness";
 import type { MastraMcpServerStatus, MastraMcpStatusSummary } from "../mcp/index.js";
 import { stripProviderPrefix } from "../config/models.js";
 import { getSingleton } from "../harness/lifecycle.js";
@@ -76,20 +77,24 @@ export async function getMastraThreadTokenUsage(): Promise<{
   }
 }
 
+export function getMastraDisplayState(): HarnessDisplayState | null {
+  const singleton = getSingleton();
+  if (!singleton) return null;
+  try {
+    return singleton.harness.getDisplayState?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getMastraOMStatus(): {
   observationTokens: number;
   status: string;
 } | null {
-  const singleton = getSingleton();
-  if (!singleton) return null;
-  try {
-    const ds = singleton.harness.getDisplayState?.();
-    if (!ds?.omProgress) return null;
-    return {
-      observationTokens: ds.omProgress.observationTokens ?? 0,
-      status: ds.omProgress.status ?? "idle",
-    };
-  } catch {
-    return null;
-  }
+  const ds = getMastraDisplayState();
+  if (!ds?.omProgress) return null;
+  return {
+    observationTokens: ds.omProgress.observationTokens ?? 0,
+    status: ds.omProgress.status ?? "idle",
+  };
 }

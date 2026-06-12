@@ -197,6 +197,7 @@ export class ChatTerminal {
       input: { ...state.input, busy: false },
       task: { phase: "idle", toolsCalled: 0 },
       planReview: { active: false, selection: 0 },
+      planContent: null,
       askQuestion: null,
       streaming: { active: false, content: "", entryIndex: -1 },
     });

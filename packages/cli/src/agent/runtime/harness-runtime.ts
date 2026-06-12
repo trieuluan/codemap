@@ -43,6 +43,7 @@ export {
   getMastraMcpServerStatuses,
   getMastraMcpStatusSummary,
   getMastraThreadTokenUsage,
+  getMastraDisplayState,
   getMastraOMStatus,
   getLoadedCustomTools,
   getCustomToolPaths,

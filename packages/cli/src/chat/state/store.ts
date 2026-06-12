@@ -14,6 +14,22 @@ export interface ToolResult {
   success: boolean;
 }
 
+export interface ChangedFileSummary {
+  path: string;
+  kind: "new" | "edited" | "deleted" | "renamed";
+  previousPath?: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface ChangedSummary {
+  files: ChangedFileSummary[];
+  newCount: number;
+  editedCount: number;
+  deletedCount: number;
+  renamedCount: number;
+}
+
 export interface Message {
   role: "user" | "assistant" | "tool_call" | "system" | "welcome";
   content: string;
@@ -133,6 +149,8 @@ export interface UIState {
     availableModels: GatewayModel[];
   };
 
+  changedSummary: ChangedSummary | null;
+
   // Git workspace info — populated async after start
   workspace?: {
     repoName: string;
@@ -153,6 +171,9 @@ export interface UIState {
 
   // Plan review: paused after planner finishes, waiting for user to approve/revise/cancel
   planReview: { active: boolean; selection: number; reviseMode?: boolean };
+
+  // Plan content: raw markdown from the planner, stored for structured rendering
+  planContent: string | null;
 
   // ask_user: AI is waiting for user to answer an inline question
   askQuestion: HarnessDisplayState["pendingQuestion"] & {
@@ -210,6 +231,7 @@ export function createInitialState(opts: {
       debug: opts.debug ?? false,
       availableModels: opts.availableModels ?? [],
     },
+    changedSummary: null,
     chatMode: "auto",
     workspaceState: {
       indexStatus: "unknown",
@@ -230,6 +252,7 @@ export function createInitialState(opts: {
     synthRunning: false,
     planMode: false,
     planReview: { active: false, selection: 0, reviseMode: false },
+    planContent: null,
     askQuestion: null,
     toolApproval: null,
     debug: opts.debug ?? false,

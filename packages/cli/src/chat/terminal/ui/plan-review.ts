@@ -35,6 +35,7 @@ export function resolvePlanReview(
   planReviewResolve = null;
   ctx.store.dispatch({
     planReview: { active: false, selection: 0, reviseMode: false },
+    planContent: null,
   });
   ctx.bus.scheduleRefresh();
 }
@@ -127,5 +128,30 @@ export function resolveToolApproval(
   toolApprovalResolve?.(decision);
   toolApprovalResolve = null;
   ctx.store.dispatch({ toolApproval: null });
+  ctx.bus.scheduleRefresh();
+}
+
+export function restorePendingPrompts(
+  ctx: PlanReviewContext,
+  displayState: HarnessDisplayState | null | undefined,
+): void {
+  ctx.store.dispatch({
+    askQuestion: displayState?.pendingQuestion
+      ? {
+          ...displayState.pendingQuestion,
+          selection: 0,
+          selected: [],
+          selectionMode:
+            displayState.pendingQuestion.selectionMode ??
+            (displayState.pendingQuestion.options?.length ? "single_select" : undefined),
+        }
+      : null,
+    toolApproval: displayState?.pendingApproval
+      ? {
+          ...displayState.pendingApproval,
+          selection: 0,
+        }
+      : null,
+  });
   ctx.bus.scheduleRefresh();
 }

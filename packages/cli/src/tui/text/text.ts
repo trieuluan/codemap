@@ -64,6 +64,14 @@ export function stripAnsi(s: string): string {
   return s
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "") // CSI sequences (colors, cursor, etc.)
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC sequences
+    // Character set designations (SCS), e.g. ESC ( 0 / ESC ) " — these are
+    // "locking shifts" that remap ASCII bytes (like `{`/`}`) to other glyphs
+    // (e.g. National Replacement Character Sets) until reset, corrupting the
+    // terminal's charset state for the rest of the session if left unbalanced.
+    .replace(/\x1b[()*+\-./][\x20-\x7e]/g, "")
+    // Other common two-byte escape sequences without a `[`/`]` introducer
+    // (e.g. ESC = / ESC > keypad modes, ESC c reset).
+    .replace(/\x1b[=>cnodNOP78]/g, "")
     .replace(CURSOR_MARKER, "");
 }
 
@@ -73,18 +81,24 @@ export function visibleTextWidth(text: string): number {
 
 function ansiSequenceEnd(text: string, index: number): number | null {
   if (text.charCodeAt(index) !== 0x1b) return null;
-  if (text[index + 1] === "[") {
+  const next = text[index + 1] ?? "";
+  if (next === "[") {
     for (let i = index + 2; i < text.length; i++) {
       const code = text.charCodeAt(i);
       if (code >= 0x40 && code <= 0x7e) return i + 1;
     }
   }
-  if (text[index + 1] === "]") {
+  if (next === "]") {
     const bel = text.indexOf("\x07", index + 2);
     const st = text.indexOf("\x1b\\", index + 2);
     if (bel !== -1 && (st === -1 || bel < st)) return bel + 1;
     if (st !== -1) return st + 2;
   }
+  // Character set designations (SCS), e.g. ESC ( 0 — two bytes after ESC.
+  if ("()*+-./".includes(next) && index + 2 < text.length) return index + 3;
+  // Other common two-byte escapes without a `[`/`]` introducer
+  // (e.g. ESC = / ESC > keypad modes, ESC c reset).
+  if ("=>cnodNOP78".includes(next)) return index + 2;
   return null;
 }
 
@@ -397,15 +411,7 @@ export function renderUnifiedDiff(
     preHighlighted = contentTexts;
   }
 
-  // Calculate gutter width from max line number
-  let maxLineNo = 0;
-  for (const line of allLines) {
-    const n = line.type === "add" ? line.newNo : line.oldNo;
-    if (n && n > maxLineNo) maxLineNo = n;
-  }
-  const lineNoW = maxLineNo > 0 ? Math.max(2, String(maxLineNo).length) : 0;
-  const gutterWidth = lineNoW > 0 ? 1 + lineNoW + 4 : 2;
-  const codeWidth = Math.max(8, width - gutterWidth);
+  const codeWidth = Math.max(8, width - 2);
   const out: string[] = [];
 
   if (filePath) out.push(`${C_GRAY}${filePath}${RESET}`);
@@ -424,14 +430,7 @@ export function renderUnifiedDiff(
     const highlighted = preHighlighted[lineIdx++] ?? "";
     const segment = fitLineSilent(highlighted, codeWidth).trimEnd();
     const bg = isAdd ? BG_DIFF_ADD : isDelete ? BG_DIFF_DELETE : "";
-    let gutter: string;
-    if (lineNoW > 0) {
-      const lineNo = isAdd ? line.newNo : line.oldNo;
-      const num = lineNo != null ? String(lineNo).padStart(lineNoW) : " ".repeat(lineNoW);
-      gutter = `${markerColor}${marker}${RESET}${C_GRAY} ${num} │${RESET} `;
-    } else {
-      gutter = `${markerColor}${marker}${RESET} `;
-    }
+    const gutter = `${markerColor}${marker}${RESET} `;
     if (bg) {
       const paddedCode = padToWidth(segment, codeWidth);
       const coloredCode = reapplyBackground(paddedCode, bg);

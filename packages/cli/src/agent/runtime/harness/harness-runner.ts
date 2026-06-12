@@ -44,11 +44,28 @@ export function runHarness(
 
     const finish = (result: AgentLoopResult) => {
       if (settled) return;
+      if (!result.text) {
+        // Empty result: the fetch interceptor's background stream reader may
+        // still be capturing an inline error chunk — give it a moment before
+        // deciding whether this is a real failure.
+        void new Promise((r) => setTimeout(r, 100)).then(() =>
+          finishEmpty(result),
+        );
+        return;
+      }
+      settle(result);
+    };
+    const finishEmpty = (result: AgentLoopResult) => {
+      if (settled) return;
       const upstreamError = lastHarnessError ?? getLastModelApiError();
-      if (!result.text && upstreamError) {
+      if (upstreamError) {
         fail(upstreamError);
         return;
       }
+      settle(result);
+    };
+    const settle = (result: AgentLoopResult) => {
+      if (settled) return;
       settled = true;
       callbacks.onDebug?.({
         event: "mastra_run_finish",
@@ -152,6 +169,24 @@ export function runHarness(
     };
 
     const unsubscribe = harness.subscribe((event: HarnessEvent) => {
+      try {
+        handleHarnessEvent(event);
+      } catch (err) {
+        // @mastra/core's dispatchToListeners wraps each listener in a
+        // try/catch and swallows thrown errors via console.error — invisible
+        // in a TUI and never reaching our debug log. Surface it here so an
+        // exception while handling one event (e.g. "error") doesn't silently
+        // vanish before agent_end fires from the next emit().
+        callbacks.onDebug?.({
+          event: "mastra_listener_error",
+          eventType: event.type,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        });
+      }
+    });
+
+    function handleHarnessEvent(event: HarnessEvent): void {
       // Deduplicate noisy events before logging
       if (event.type === "message_update") {
         const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
@@ -165,7 +200,16 @@ export function runHarness(
         }
       } else {
         const summary = summarizeHarnessEvent(event, currentStreamText, finalText);
-        if (summary) callbacks.onDebug?.(summary);
+        if (summary) {
+          // agent_end with no preceding error event is the unexplained
+          // failure mode under investigation — snapshot OM progress so we
+          // can tell whether observation/reflection was mid-flight.
+          if (event.type === "agent_end") {
+            (summary as Record<string, unknown>).omProgress =
+              harness.getDisplayState?.()?.omProgress;
+          }
+          callbacks.onDebug?.(summary);
+        }
       }
 
       // Track pending tool calls for stale detection
@@ -302,7 +346,7 @@ export function runHarness(
         });
         finishWithCurrentText();
       }
-    });
+    }
 
     const onAbort = () => {
       harness.abort?.();

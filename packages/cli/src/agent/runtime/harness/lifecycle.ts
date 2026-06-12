@@ -13,6 +13,8 @@ import {
   startDrainTracking,
 } from "./drain.js";
 import {
+  getLastModelApiError,
+  getLastResponseDebugInfo,
   installResolvedModelInterceptor,
   uninstallFetchInterceptor,
 } from "./fetch-interceptor.js";
@@ -290,9 +292,14 @@ export async function runWithMastraHarness(
   }
 
   if (!result.text.trim() && !input.signal?.aborted) {
+    // Give the fetch interceptor's background stream reader a moment to
+    // finish capturing an inline error chunk before snapshotting it.
+    await new Promise((r) => setTimeout(r, 100));
     input.onDebug?.({
       event: "mastra_empty_response_reset_singleton",
       model: harness.getCurrentModelId?.(),
+      lastModelApiError: getLastModelApiError()?.message,
+      lastResponse: getLastResponseDebugInfo(),
     });
     await resetHarnessSingleton();
   }
@@ -374,6 +381,8 @@ async function createFreshHarness(
       baseUrl: opts.baseUrl,
       apiKey: opts.apiKey,
       provider: opts.providerId ?? "9router",
+      availableModels: opts.availableModels,
+      modeDefaults: opts.modeDefaults,
     },
     harnessModelId,
   );
