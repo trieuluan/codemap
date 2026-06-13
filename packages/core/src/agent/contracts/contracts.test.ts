@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   agentSessionCommandSchema,
   agentSessionEventSchema,
-} from "./index.js";
+} from "./index.ts";
 
 test("agent session schemas accept browser-safe commands and events", () => {
   assert.equal(
@@ -42,6 +42,15 @@ test("agent session schemas accept browser-safe commands and events", () => {
       },
     }).type,
     "snapshot",
+  );
+
+  assert.equal(
+    agentSessionCommandSchema.parse({
+      type: "delete_thread",
+      requestId: "req-2",
+      threadId: "thread-1",
+    }).type,
+    "delete_thread",
   );
 });
 

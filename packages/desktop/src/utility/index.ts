@@ -11,6 +11,7 @@ import {
   getSessionResourceContext,
   loadSettings,
   resetHarnessSingleton,
+  warmupHarness,
 } from "@codemap-ai/runtime-node";
 import {
   redactSettingsMetadata,
@@ -108,6 +109,19 @@ async function initialize(nextWorkspacePath: string): Promise<void> {
   unsubscribeSession = session.subscribe((event) =>
     post({ type: "agent_event", event }),
   );
+
+  // Warm up harness so listThreads() works immediately after init
+  await warmupHarness({
+    toolClient,
+    baseUrl: provider.baseUrl,
+    apiKey: gateway.apiKey,
+    modelId: model,
+    availableModels,
+    providerId: gateway.provider,
+    modeDefaults: gateway.modeDefaults,
+    extraServerConfigs: toolClient.getExtraServerConfigs(),
+  }).catch(() => {});
+
   const metadata = await readSettingsMetadata();
   post({ type: "ready", workspacePath, settings: metadata });
   post({ type: "runtime_status", status: "ready" });
@@ -130,6 +144,9 @@ async function handleAgentCommand(
       return session.switchThread(command.threadId);
     case "new_thread":
       await initialize(workspacePath);
+      return;
+    case "delete_thread":
+      await session.deleteThread(command.threadId);
       return;
     case "respond_approval":
       session.respondToApproval(command.response);

@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve, join } from "node:path";
-import type { ResolvedCustomTool, ScriptToolContext } from "./custom-tools-types.js";
+import type { ResolvedCustomTool, ScriptToolContext } from "./custom-tools-types.ts";
 
 const TOOLS_DIR_NAME = "tools";
 const SCRIPT_TOOL_EXT = ".tool.ts";

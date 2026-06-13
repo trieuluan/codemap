@@ -5,25 +5,34 @@ import { defineConfig } from "electron-vite";
 export default defineConfig({
   main: {
     build: {
+      // Bundle @codemap-ai/* from source (not externalized) for hot-reload during dev
+      externalizeDeps: {
+        exclude: ["@codemap-ai/core", "@codemap-ai/runtime-node"],
+      },
       rollupOptions: {
         external: [
-          // Native binaries — must be external
+          // Native binaries — must stay external
           /^@duckdb\//,
           /^@libsql\//,
           "utf-8-validate",
           "bufferutil",
-          // Workspace packages
-          /^@codemap-ai\//,
-          // Mastra runtime — keep as require() for faster startup
+          // These packages use dynamic require() for native .node bindings and
+          // cannot be bundled by rollup/commonjs. Resolved at runtime via NODE_PATH.
           "mastracode",
           /^@mastra\//,
-          // AI SDK
-          "ai",
-          /^@ai-sdk\//,
+          /^onnxruntime/,
+          "sharp",
+          /^@img\//,
         ],
         input: {
           index: resolve(import.meta.dirname, "src/main/index.ts"),
           utility: resolve(import.meta.dirname, "src/utility/index.ts"),
+        },
+        output: {
+          // CJS so require() works for externalized native packages
+          format: "cjs",
+          entryFileNames: "[name].cjs",
+          chunkFileNames: "chunks/[name]-[hash].cjs",
         },
       },
     },

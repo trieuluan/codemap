@@ -17,3 +17,5 @@ allowBuilds:
   protobufjs: true
   sharp: false
   tree-sitter-python: true
+minimumReleaseAgeExclude:
+  - '@mastra/core@1.42.0'

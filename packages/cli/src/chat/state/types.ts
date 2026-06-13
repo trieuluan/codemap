@@ -12,22 +12,6 @@ export interface ToolResult {
   success: boolean;
 }
 
-export interface ChangedFileSummary {
-  path: string;
-  kind: "new" | "edited" | "deleted" | "renamed";
-  previousPath?: string;
-  additions: number;
-  deletions: number;
-}
-
-export interface ChangedSummary {
-  files: ChangedFileSummary[];
-  newCount: number;
-  editedCount: number;
-  deletedCount: number;
-  renamedCount: number;
-}
-
 export interface Message {
   role: "user" | "assistant" | "tool_call" | "system" | "welcome";
   content: string;
@@ -138,7 +122,6 @@ export interface UIState {
     debug: boolean;
     availableModels: GatewayModel[];
   };
-  changedSummary: ChangedSummary | null;
   workspace?: {
     repoName: string;
     branch: string;

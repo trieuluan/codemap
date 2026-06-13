@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createInitialSessionSnapshot, reduceAgentSessionEvent } from "./index.js";
+import { createInitialSessionSnapshot, reduceAgentSessionEvent } from "./index.ts";
 
 test("session reducer tracks streaming, tools, usage, and completion", () => {
   let state = createInitialSessionSnapshot();

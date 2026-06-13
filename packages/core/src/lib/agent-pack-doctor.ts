@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { AGENT_PACK_SKILLS } from "./agent-pack.js";
+import { AGENT_PACK_SKILLS } from "./agent-pack.ts";
 
 export const AGENT_PACK_DOCTOR_TARGETS = [
   "auto",

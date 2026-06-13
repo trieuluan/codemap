@@ -10,10 +10,10 @@ import {
   readPriorityResources,
 } from "@codemap-ai/core/lib/workspace-project.js";
 import type { ChatToolDefinition } from "@codemap-ai/core/agent";
-import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
+import type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.ts";
 
 // Re-export types so existing consumers don't need to change imports
-export type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.js";
+export type { AgentTool, AgentToolCallResult, McpServerStatus } from "./mcp-types.ts";
 
 type ExtraServerConfig = { command: string; args?: string[]; env?: Record<string, string> };
 

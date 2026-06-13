@@ -1,8 +1,8 @@
-import { IndexWatcher } from "./file-watcher.js";
-import { SymbolDependencyGraph } from "./symbol-dependency.js";
-import { WatchEventHandler } from "./watch-event-handler.js";
-import type { SQLiteIndexStore } from "./sqlite-index-store.js";
-import { refreshLocalFile, refreshLocalFiles } from "./local-index.js";
+import { IndexWatcher } from "./file-watcher.ts";
+import { SymbolDependencyGraph } from "./symbol-dependency.ts";
+import { WatchEventHandler } from "./watch-event-handler.ts";
+import type { SQLiteIndexStore } from "./sqlite-index-store.ts";
+import { refreshLocalFile, refreshLocalFiles } from "./local-index.ts";
 
 // Module-level state
 let _watcher: IndexWatcher | null = null;

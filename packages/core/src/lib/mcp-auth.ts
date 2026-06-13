@@ -10,9 +10,9 @@ import {
   type McpConfigUser,
   type McpServerConfig,
   saveGlobalConfig,
-} from "../config.js";
-import { createCodeMapClient, type CodeMapClient } from "./codemap-api.js";
-import { openUrlInBrowser } from "./open-url.js";
+} from "../config.ts";
+import { createCodeMapClient, type CodeMapClient } from "./codemap-api.ts";
+import { openUrlInBrowser } from "./open-url.ts";
 
 export type StartAuthResponse = McpStartAuthResponse;
 export type AuthStatusResponse = McpAuthStatusResponse;

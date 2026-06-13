@@ -1,6 +1,6 @@
-import { SQLiteIndexStore } from "./sqlite-index-store.js";
-import { SymbolDependencyGraph } from "./symbol-dependency.js";
-import type { FileWatchEvent } from "./file-watcher.js";
+import { SQLiteIndexStore } from "./sqlite-index-store.ts";
+import { SymbolDependencyGraph } from "./symbol-dependency.ts";
+import type { FileWatchEvent } from "./file-watcher.ts";
 
 export interface WatchEventHandlerConfig {
   store: SQLiteIndexStore;

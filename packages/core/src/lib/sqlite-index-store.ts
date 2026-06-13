@@ -13,7 +13,7 @@ import type {
   SearchExportResult,
   SearchFileResult,
   SearchSymbolResult,
-} from "./api-types.js";
+} from "./api-types.ts";
 
 export interface LocalIndexSummary {
   workspaceRootPath: string;

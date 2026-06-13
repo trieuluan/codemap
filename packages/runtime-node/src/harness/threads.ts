@@ -3,11 +3,17 @@
  *
  * Pure UI-agnostic module: depends only on lifecycle singleton accessors.
  */
-import type { HarnessMessage, HarnessThread } from "../events.js";
+import type { HarnessMessage, HarnessThread } from "../events.ts";
 import {
   getSingleton,
   setPendingNewThread,
-} from "./lifecycle.js";
+} from "./lifecycle.ts";
+
+const deletedThreadIds = new Set<string>();
+
+function filterDeletedThreads(threads: HarnessThread[]): HarnessThread[] {
+  return threads.filter((thread) => !deletedThreadIds.has(thread.id));
+}
 
 export function isMastraThreadAlreadyActive(
   currentThreadId: string | null | undefined,
@@ -34,9 +40,26 @@ export async function listMastraThreads(): Promise<HarnessThread[]> {
   const singleton = getSingleton();
   if (!singleton) return [];
   try {
-    return await singleton.harness.listThreads();
+    return filterDeletedThreads(await singleton.harness.listThreads());
   } catch {
     return [];
+  }
+}
+
+export async function deleteMastraThread(threadId: string): Promise<void> {
+  const singleton = getSingleton();
+  if (!singleton) return;
+  deletedThreadIds.add(threadId);
+  try {
+    await (singleton.harness as any).deleteThread?.({ threadId });
+  } catch (error) {
+    deletedThreadIds.delete(threadId);
+    throw error;
+  }
+
+  const currentThreadId = singleton.harness.getCurrentThreadId?.();
+  if (isMastraThreadAlreadyActive(currentThreadId, threadId)) {
+    setPendingNewThread(true);
   }
 }
 

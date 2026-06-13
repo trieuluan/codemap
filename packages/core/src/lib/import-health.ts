@@ -1,10 +1,10 @@
-import type { CodeMapClient } from "./codemap-api.js";
-import type { CurrentWorkspaceInfo } from "./workspace-git.js";
+import type { CodeMapClient } from "./codemap-api.ts";
+import type { CurrentWorkspaceInfo } from "./workspace-git.ts";
 import {
   resolveWorkspace,
   type ResolvedWorkspace,
-} from "./workspace-resolver.js";
-import type { ProjectImportDetail } from "./api-types.js";
+} from "./workspace-resolver.ts";
+import type { ProjectImportDetail } from "./api-types.ts";
 
 type ProjectLike = {
   repositoryUrl?: string | null;

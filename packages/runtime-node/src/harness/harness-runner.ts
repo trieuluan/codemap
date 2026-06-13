@@ -4,10 +4,10 @@ import {
   type HarnessEvent,
   type MastraHarness,
   summarizeHarnessEvent,
-} from "../events.js";
-import { getLastModelApiError } from "./fetch-interceptor.js";
-import { normalizePlanAction } from "./plan-actions.js";
-import type { AgentPhase, PlanReviewAction } from "../runtime-input.js";
+} from "../events.ts";
+import { getLastModelApiError } from "./fetch-interceptor.ts";
+import { normalizePlanAction } from "./plan-actions.ts";
+import type { AgentPhase, PlanReviewAction } from "../runtime-input.ts";
 import type { AgentLoopResult } from "@codemap-ai/core/agent";
 
 type RunHarnessCallbacks = Omit<

@@ -5,7 +5,7 @@ import {
   AGENT_PACK_TEMPLATES,
   type AgentPackSkillName,
   skillResourceUri,
-} from "./agent-pack.js";
+} from "./agent-pack.ts";
 
 export const MCP_FIRST_RULE_URI = "codemap://rules/mcp-first";
 export const TASK_LIFECYCLE_RULE_URI = "codemap://rules/task-lifecycle";

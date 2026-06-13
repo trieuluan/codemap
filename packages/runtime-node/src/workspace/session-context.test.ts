@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadExtraConventions } from "./session-context.js";
+import { loadExtraConventions } from "./session-context.ts";
 
 test("workspace context preserves conventions and dedicated rule content", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "codemap-runtime-"));

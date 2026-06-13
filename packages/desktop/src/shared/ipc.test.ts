@@ -27,6 +27,18 @@ test("desktop IPC accepts workspace and agent commands", () => {
     }).type,
     "agent",
   );
+
+  assert.equal(
+    desktopCommandSchema.parse({
+      type: "agent",
+      command: {
+        type: "delete_thread",
+        requestId: "req-3",
+        threadId: "thread-1",
+      },
+    }).type,
+    "agent",
+  );
 });
 
 test("desktop IPC rejects credentials in renderer commands", () => {

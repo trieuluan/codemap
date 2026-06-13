@@ -1,2 +1,2 @@
-export * from "./controller.js";
-export * from "./reducer.js";
+export * from "./controller.ts";
+export * from "./reducer.ts";

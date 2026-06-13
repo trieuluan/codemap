@@ -1,7 +1,7 @@
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
-import { findMonorepoRoot } from "./monorepo-root.js";
+import { tryGetCurrentWorkspaceInfo } from "./workspace-git.ts";
+import { findMonorepoRoot } from "./monorepo-root.ts";
 
 const WORKSPACE_CONFIG_FILE = ".codemap/settings.json";
 

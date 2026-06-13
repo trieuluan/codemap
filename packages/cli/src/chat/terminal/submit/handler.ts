@@ -19,7 +19,6 @@ import { abortable, isAbortError } from "./abort.js";
 import type { SubmitHandlerContext } from "./context.js";
 import { handleSubmitError } from "./errors.js";
 import { createSubmitRuntimeCallbacks } from "./runtime-callbacks.js";
-import { captureGitDiffSnapshot, diffGitSnapshots } from "../../git/turn-changed-summary.js";
 import { buildToolPreview } from "../../../agent/runtime/config/tool-approval-policy.js";
 
 export async function handleSubmitWithContent(
@@ -34,10 +33,9 @@ export async function handleSubmitWithContent(
   const forceMultiPhase = options?.forceMultiPhase;
   const imageFiles = options?.imageFiles;
 
-  store.dispatch((prev) => ({ input: { ...prev.input, busy: true }, changedSummary: null }));
+  store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
   const taskAbort = new AbortController();
   const taskId = ctx.beginTask(taskAbort);
-  const baselineSnapshot = await captureGitDiffSnapshot();
 
   ctx.appendMessage({ role: "user", content: text });
   resetResolvedModel();
@@ -256,11 +254,6 @@ export async function handleSubmitWithContent(
     }
 
     runtimeCallbacks.resetStreaming();
-    const changedSummary = diffGitSnapshots(
-      baselineSnapshot,
-      await captureGitDiffSnapshot(),
-    );
-    store.dispatch({ changedSummary });
     bus.scheduleRefresh();
 
     const mastraUsage = await getMastraThreadTokenUsage().catch(() => null);
@@ -293,8 +286,7 @@ export async function handleShellSubmit(
     return;
   }
 
-  store.dispatch((prev) => ({ input: { ...prev.input, busy: true }, changedSummary: null }));
-  const baselineSnapshot = await captureGitDiffSnapshot();
+  store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
   ctx.appendMessage({ role: "user", content: text });
   store.dispatch({
     task: {
@@ -327,11 +319,6 @@ export async function handleShellSubmit(
         endTime: Date.now(),
       },
     });
-    const changedSummary = diffGitSnapshots(
-      baselineSnapshot,
-      await captureGitDiffSnapshot(),
-    );
-    store.dispatch({ changedSummary });
   } catch (err) {
     if (isAbortError(err) || taskAbort.signal.aborted) return;
     const message = err instanceof Error ? err.message : String(err);

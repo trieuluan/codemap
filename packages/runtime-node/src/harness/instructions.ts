@@ -1,5 +1,5 @@
 import type { RequestContext } from "@mastra/core/request-context";
-import type { MastraHarness } from "../events.js";
+import type { MastraHarness } from "../events.ts";
 
 const ORIGINAL_AGENT_INSTRUCTIONS = new WeakMap<
   object,

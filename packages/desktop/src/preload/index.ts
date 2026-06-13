@@ -54,6 +54,13 @@ const api: DesktopApi = {
       command: { type: "new_thread", requestId },
     });
   },
+  deleteThread: (threadId) => {
+    const requestId = crypto.randomUUID();
+    return invoke({
+      type: "agent",
+      command: { type: "delete_thread", requestId, threadId },
+    });
+  },
   respondToApproval: (approvalId, decision) => {
     const requestId = crypto.randomUUID();
     return invoke({

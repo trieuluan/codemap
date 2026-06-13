@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   CircleStop,
+  EllipsisVertical,
   FileCode2,
   FolderOpen,
   ImagePlus,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Send,
   TerminalSquare,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -30,6 +32,21 @@ import type { SettingsMetadata } from "../shared/ipc.js";
 
 type RuntimeStatus = "starting" | "ready" | "disconnected";
 type LocalMessage = SessionMessage & { localId: string };
+type ThreadSummaryWithMetadata = ThreadSummary & {
+  metadata?: {
+    mastra?: {
+      om?: {
+        threadTitle?: string;
+      };
+    };
+  };
+};
+
+function getThreadDisplayTitle(thread: ThreadSummary): string {
+  if (thread.title) return thread.title;
+  const fallback = (thread as ThreadSummaryWithMetadata).metadata?.mastra?.om?.threadTitle;
+  return fallback || "Untitled session";
+}
 
 export function App() {
   const [workspace, setWorkspace] = useState<string | null>(null);
@@ -46,6 +63,8 @@ export function App() {
     [],
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [openThreadMenuId, setOpenThreadMenuId] = useState<string | null>(null);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const streamingRef = useRef("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -70,6 +89,7 @@ export function App() {
   const projectName = workspace?.split("/").filter(Boolean).at(-1) ?? "CodeMap";
   const isBusy =
     snapshot.status === "running" || snapshot.status === "aborting";
+  const hasSelectedThreads = selectedThreadIds.length > 0;
   const displayMessages = useMemo(
     () => [
       ...messages,
@@ -128,6 +148,7 @@ export function App() {
     setWorkspace(path);
     setMessages([]);
     setSnapshot(createInitialSessionSnapshot());
+    await refreshMetadata();
   }
 
   async function refreshMetadata() {
@@ -181,11 +202,55 @@ export function App() {
     await window.codemap.switchThread(threadId);
   }
 
+  function toggleThreadSelection(threadId: string) {
+    setSelectedThreadIds((current) =>
+      current.includes(threadId)
+        ? current.filter((id) => id !== threadId)
+        : [...current, threadId],
+    );
+  }
+
   async function createThread() {
     await window.codemap.newThread();
     setMessages([]);
     setSnapshot(createInitialSessionSnapshot());
     await refreshMetadata();
+  }
+
+  async function deleteThread(threadId: string) {
+    const confirmed = window.confirm("Delete this thread?");
+    if (!confirmed) return;
+    await removeThreads([threadId]);
+  }
+
+  async function removeThreads(threadIds: string[]) {
+    if (threadIds.length === 0) return;
+    setError(null);
+    setOpenThreadMenuId(null);
+    try {
+      await Promise.all(threadIds.map((threadId) => window.codemap.deleteThread(threadId)));
+      setSelectedThreadIds((current) =>
+        current.filter((threadId) => !threadIds.includes(threadId)),
+      );
+      if (snapshot.threadId && threadIds.includes(snapshot.threadId)) {
+        setMessages([]);
+        setSnapshot(createInitialSessionSnapshot());
+      }
+      await refreshMetadata();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  async function deleteSelectedThreads() {
+    if (!hasSelectedThreads) return;
+    const confirmed = window.confirm(
+      selectedThreadIds.length === 1
+        ? "Delete the selected thread?"
+        : `Delete ${selectedThreadIds.length} selected threads?`,
+    );
+    if (!confirmed) return;
+    await removeThreads(selectedThreadIds);
   }
 
   async function attachImages(files: FileList | null) {
@@ -240,26 +305,86 @@ export function App() {
             <span className="eyebrow">Workspace</span>
             <strong title={workspace}>{projectName}</strong>
           </div>
-          <button className="icon-button" onClick={createThread} title="New thread">
-            <MessageSquarePlus size={16} />
-          </button>
+          <div className="sidebar-header-actions">
+            {hasSelectedThreads && (
+              <button
+                className="secondary-button danger-button"
+                onClick={() => void deleteSelectedThreads()}
+                title="Delete selected threads"
+              >
+                <Trash2 size={14} />
+                Delete ({selectedThreadIds.length})
+              </button>
+            )}
+            <button className="icon-button" onClick={createThread} title="New thread">
+              <MessageSquarePlus size={16} />
+            </button>
+          </div>
         </div>
         <div className="thread-list">
           {threads.length === 0 ? (
             <p className="empty-note">No saved threads yet.</p>
           ) : (
-            threads.map((thread) => (
-              <button
-                key={thread.id}
-                className={`thread-item ${
-                  snapshot.threadId === thread.id ? "active" : ""
-                }`}
-                onClick={() => selectThread(thread.id)}
-              >
-                <span>{thread.title || "Untitled session"}</span>
-                <code>{thread.id.slice(0, 8)}</code>
-              </button>
-            ))
+            threads.map((thread) => {
+              const isActive = snapshot.threadId === thread.id;
+              const isMenuOpen = openThreadMenuId === thread.id;
+              const isSelected = selectedThreadIds.includes(thread.id);
+              return (
+                <div
+                  key={thread.id}
+                  className={`thread-item ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
+                  onMouseLeave={() => {
+                    if (isMenuOpen) setOpenThreadMenuId(null);
+                  }}
+                >
+                  <label
+                    className="thread-select"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleThreadSelection(thread.id)}
+                      aria-label={`Select ${getThreadDisplayTitle(thread)}`}
+                    />
+                  </label>
+                  <button
+                    className="thread-item-button"
+                    onClick={() => selectThread(thread.id)}
+                  >
+                    <span>{getThreadDisplayTitle(thread)}</span>
+                    <code>{thread.id.slice(0, 8)}</code>
+                  </button>
+                  <button
+                    className={`thread-menu-trigger ${isMenuOpen ? "open" : ""}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setOpenThreadMenuId((current) =>
+                        current === thread.id ? null : thread.id,
+                      );
+                    }}
+                    title="Thread actions"
+                    aria-label={`Actions for ${getThreadDisplayTitle(thread)}`}
+                  >
+                    <EllipsisVertical size={14} />
+                  </button>
+                  {isMenuOpen && (
+                    <div className="thread-menu">
+                      <button
+                        className="thread-menu-item danger"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void deleteThread(thread.id);
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Delete thread
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
         <div className="sidebar-footer">

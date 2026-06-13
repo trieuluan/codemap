@@ -1,4 +1,4 @@
-import type { McpServerConfig } from "../config.js";
+import type { McpServerConfig } from "../config.ts";
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";

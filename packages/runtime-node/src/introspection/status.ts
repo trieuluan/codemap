@@ -9,7 +9,7 @@ import type {
   MastraMcpStatusSummary,
 } from "@codemap-ai/core/agent";
 import { stripProviderPrefix } from "@codemap-ai/core/agent/config";
-import { getSingleton } from "../harness/lifecycle.js";
+import { getSingleton } from "../harness/lifecycle.ts";
 
 export function getMastraCurrentModelId(): string | null {
   const singleton = getSingleton();

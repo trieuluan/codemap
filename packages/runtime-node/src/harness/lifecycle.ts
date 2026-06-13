@@ -7,20 +7,20 @@
  * implementations.
  */
 import type { AgentLoopResult, GatewayProviderId } from "@codemap-ai/core/agent";
-import type { SingleAgentRuntimeInput } from "../runtime-input.js";
-import type { MastraHarness } from "../events.js";
+import type { SingleAgentRuntimeInput } from "../runtime-input.ts";
+import type { MastraHarness } from "../events.ts";
 import {
   clearDrainTracking,
   drainHarness,
   startDrainTracking,
-} from "./drain.js";
+} from "./drain.ts";
 import {
   getLastModelApiError,
   getLastResponseDebugInfo,
   installResolvedModelInterceptor,
   uninstallFetchInterceptor,
-} from "./fetch-interceptor.js";
-import { applyAgentInstructions } from "./instructions.js";
+} from "./fetch-interceptor.ts";
+import { applyAgentInstructions } from "./instructions.ts";
 import {
   MASTRA_DISABLED_TOOLS,
   type MastraMcpInitResult,
@@ -28,18 +28,18 @@ import {
   startMastraMcpInitialization,
 } from "@codemap-ai/core/agent";
 import { resolveHarnessModelId } from "@codemap-ai/core/agent/config";
-import { runHarness } from "./harness-runner.js";
+import { runHarness } from "./harness-runner.ts";
 import { Memory } from "@mastra/memory";
 import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { ResolvedCustomTool } from "../tools/custom/index.js";
-import { loadCustomTools } from "../tools/custom/index.js";
-import { syncHooksToMastra } from "../tools/hooks/index.js";
-import { loadSettings } from "../settings.js";
-import { upsertGlobalMastraProvider } from "../config/mastra-settings.js";
+import type { ResolvedCustomTool } from "../tools/custom/index.ts";
+import { loadCustomTools } from "../tools/custom/index.ts";
+import { syncHooksToMastra } from "../tools/hooks/index.ts";
+import { loadSettings } from "../settings.ts";
+import { upsertGlobalMastraProvider } from "../config/mastra-settings.ts";
 import { buildAgentPermissionRules } from "@codemap-ai/core/agent";
 
 // Public harness lifecycle contracts.

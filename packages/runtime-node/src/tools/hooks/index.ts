@@ -11,4 +11,4 @@ export {
   loadMastracodeHooks,
   writeMastracodeHooks,
   syncHooksToMastra,
-} from "./hooks-config.js";
+} from "./hooks-config.ts";

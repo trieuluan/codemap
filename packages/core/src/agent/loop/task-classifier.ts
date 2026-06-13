@@ -1,4 +1,4 @@
-import type { NineRouterProvider } from "./provider.js";
+import type { NineRouterProvider } from "./provider.ts";
 
 export interface TaskClassification {
   phase: "single" | "multi";

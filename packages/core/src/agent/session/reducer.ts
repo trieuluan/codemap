@@ -1,7 +1,7 @@
 import type {
   AgentSessionEvent,
   SessionSnapshot,
-} from "../contracts/index.js";
+} from "../contracts/index.ts";
 
 const EMPTY_USAGE = {
   promptTokens: 0,

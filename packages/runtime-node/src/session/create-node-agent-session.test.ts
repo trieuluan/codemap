@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentSessionEvent } from "@codemap-ai/core/agent/contracts";
-import { createNodeAgentSession } from "./create-node-agent-session.js";
+import { createNodeAgentSession } from "./create-node-agent-session.ts";
 
 test("node session maps runtime callbacks to shared session events", async () => {
   const session = createNodeAgentSession({
@@ -33,6 +33,7 @@ test("node session maps runtime callbacks to shared session events", async () =>
         return [];
       },
       async switchThread() {},
+      async deleteThread() {},
       async listThreadMessages() {
         return [];
       },
@@ -82,6 +83,7 @@ test("node session resolves approvals without exposing callbacks as events", asy
         return [];
       },
       async switchThread() {},
+      async deleteThread() {},
       async listThreadMessages() {
         return [];
       },

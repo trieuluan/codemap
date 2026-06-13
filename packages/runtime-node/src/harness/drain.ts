@@ -1,4 +1,4 @@
-import type { HarnessEvent, MastraHarness } from "../events.js";
+import type { HarnessEvent, MastraHarness } from "../events.ts";
 
 let drainResolve: (() => void) | null = null;
 let drainPromise: Promise<void> | null = null;

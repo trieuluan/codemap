@@ -1,6 +1,6 @@
 import path from "node:path";
-import { readLocalIndex } from "./local-index.js";
-import { tryGetCurrentWorkspaceInfo } from "./workspace-git.js";
+import { readLocalIndex } from "./local-index.ts";
+import { tryGetCurrentWorkspaceInfo } from "./workspace-git.ts";
 
 function formatAge(date: Date): string {
   const mins = Math.floor((Date.now() - date.getTime()) / 60_000);

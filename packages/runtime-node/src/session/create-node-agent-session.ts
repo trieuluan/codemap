@@ -13,24 +13,26 @@ import type { AgentLoopResult } from "@codemap-ai/core/agent";
 import type {
   HarnessMessage,
   HarnessThread,
-} from "../events.js";
+} from "../events.ts";
 import type {
   ProviderLike,
   SingleAgentRuntimeInput,
   ToolClientLike,
-} from "../runtime-input.js";
-import { runWithMastraHarness, getSingleton } from "../harness/lifecycle.js";
+} from "../runtime-input.ts";
+import { runWithMastraHarness, getSingleton } from "../harness/lifecycle.ts";
 import {
+  deleteMastraThread,
   listMastraThreads,
   listMastraThreadMessages,
   switchMastraThread,
-} from "../harness/threads.js";
+} from "../harness/threads.ts";
 
 interface NodeSessionRuntime {
   run(input: SingleAgentRuntimeInput): Promise<AgentLoopResult>;
   abort(): void;
   listThreads(): Promise<HarnessThread[]>;
   switchThread(threadId: string): Promise<unknown>;
+  deleteThread(threadId: string): Promise<unknown>;
   listThreadMessages(threadId: string, limit?: number): Promise<HarnessMessage[]>;
 }
 
@@ -160,6 +162,9 @@ export function createNodeAgentSession(
       const messages = await runtime.listThreadMessages(threadId, 100);
       return { threadId, messages: messages.map(mapMessage) };
     },
+    async deleteThread(threadId) {
+      await runtime.deleteThread(threadId);
+    },
     respondToApproval(input) {
       approvalResponders.get(input.approvalId)?.(input.decision);
       approvalResponders.delete(input.approvalId);
@@ -179,6 +184,7 @@ function createDefaultRuntime(): NodeSessionRuntime {
     abort: () => getSingleton()?.harness.abort?.(),
     listThreads: listMastraThreads,
     switchThread: switchMastraThread,
+    deleteThread: deleteMastraThread,
     listThreadMessages: listMastraThreadMessages,
   };
 }
@@ -189,13 +195,11 @@ function mapThread(thread: HarnessThread): ThreadSummary {
     title: thread.title,
     createdAt: toIsoString(thread.createdAt),
     updatedAt: toIsoString(thread.updatedAt),
-    tokenUsage: thread.tokenUsage
-      ? {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: thread.tokenUsage.totalTokens ?? 0,
-        }
-      : undefined,
+    tokenUsage: thread.tokenUsage,
+    metadata:
+      thread.metadata && typeof thread.metadata === "object"
+        ? (thread.metadata as Record<string, unknown>)
+        : undefined,
   };
 }
 

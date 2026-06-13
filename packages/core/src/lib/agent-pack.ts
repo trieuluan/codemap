@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
-import { getPackageRoot } from "./bundled-runtime.js";
+import { getPackageRoot } from "./bundled-runtime.ts";
 
 export const AGENT_PACK_INDEX_URI = "codemap://agent-pack/index";
 export const AGENT_PACK_INSTALL_URI = "codemap://agent-pack/install";

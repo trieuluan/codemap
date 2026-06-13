@@ -28,7 +28,7 @@
   "dependencies": {
     "@codemap-ai/core": "workspace:*",
     "@codemap-ai/mcp": "workspace:*",
-    "@mastra/core": "^1.41.0",
+    "@mastra/core": "^1.42.0",
     "@mastra/fastembed": "1.1.2",
     "@mastra/libsql": "1.12.1",
     "@mastra/mcp": "1.9.1",

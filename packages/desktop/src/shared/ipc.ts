@@ -162,6 +162,7 @@ export interface DesktopApi {
   listThreads(): Promise<ThreadSummary[]>;
   switchThread(threadId: string): Promise<void>;
   newThread(): Promise<void>;
+  deleteThread(threadId: string): Promise<void>;
   respondToApproval(
     approvalId: string,
     decision: "approve" | "decline" | "always_allow_category",

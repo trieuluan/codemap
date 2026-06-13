@@ -7,7 +7,7 @@ import {
   getAgentPackRoot,
   readAgentPackFile,
   readAgentPackSkill,
-} from "./agent-pack.js";
+} from "./agent-pack.ts";
 
 type InstallTarget =
   | "codex"

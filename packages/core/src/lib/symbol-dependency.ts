@@ -1,4 +1,4 @@
-import type { SQLiteIndexStore } from "./sqlite-index-store.js";
+import type { SQLiteIndexStore } from "./sqlite-index-store.ts";
 
 export interface SymbolDependencyEdge {
   sourceFilePath: string;

@@ -5,8 +5,8 @@ import type {
   GatewayProviderId,
   TokenUsage,
 } from "@codemap-ai/core/agent";
-import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.js";
-import type { HarnessDeps } from "./harness/lifecycle.js";
+import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.ts";
+import type { HarnessDeps } from "./harness/lifecycle.ts";
 
 export type ChatUiMode = "tui" | "electron" | string;
 

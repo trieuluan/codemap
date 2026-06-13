@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "CodeMap desktop coding agent",
-  "main": "out/main/index.js",
+  "main": "out/main/index.cjs",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -16,7 +16,15 @@
   "dependencies": {
     "@codemap-ai/core": "workspace:*",
     "@codemap-ai/runtime-node": "workspace:*",
-    "@duckdb/node-api": "1.5.2-r.2"
+    "@duckdb/node-api": "1.5.2-r.2",
+    "@libsql/client": "^0.14.0",
+    "@mastra/core": "^1.42.0",
+    "@mastra/fastembed": "1.1.2",
+    "@mastra/libsql": "1.12.1",
+    "@mastra/mcp": "1.9.1",
+    "@mastra/memory": "1.20.2",
+    "mastracode": "^0.22.2",
+    "sharp": "^0.34.2"
   },
   "devDependencies": {
     "lucide-react": "^0.468.0",

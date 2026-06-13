@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { findMonorepoRoot } from "./lib/monorepo-root.js";
+import { findMonorepoRoot } from "./lib/monorepo-root.ts";
 
 export const DEFAULT_API_URL = "https://api.codemap.codes";
 

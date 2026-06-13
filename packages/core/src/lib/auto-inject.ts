@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { installAgentPack } from "./agent-pack-installer.js";
+import { installAgentPack } from "./agent-pack-installer.ts";
 
 type DetectedEditor = "claude" | "cursor" | "copilot" | "gemini" | "codex" | null;
 

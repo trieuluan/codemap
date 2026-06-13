@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAgentPermissionRules } from "./permissions.js";
+import { buildAgentPermissionRules } from "./permissions.ts";
 
 test("permission rules ask for local and MCP mutating tools", () => {
   const rules = buildAgentPermissionRules(["codemap", "github"]);

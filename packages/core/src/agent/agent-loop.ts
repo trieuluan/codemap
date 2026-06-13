@@ -1,4 +1,4 @@
-import type { ChatMessage, TokenUsage } from "./types.js";
+import type { ChatMessage, TokenUsage } from "./types.ts";
 
 export interface AgentLoopResult {
   text: string;

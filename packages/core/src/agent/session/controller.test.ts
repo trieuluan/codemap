@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AgentSessionEvent } from "../contracts/index.js";
-import type { AgentSessionDriver } from "./index.js";
-import { createAgentSessionController } from "./index.js";
+import type { AgentSessionEvent } from "../contracts/index.ts";
+import type { AgentSessionDriver } from "./index.ts";
+import { createAgentSessionController } from "./index.ts";
 
 test("controller emits snapshot before driver events and serializes sends", async () => {
   const pending: Array<() => void> = [];
@@ -18,6 +18,7 @@ test("controller emits snapshot before driver events and serializes sends", asyn
     async switchThread() {
       return { threadId: "thread-1", messages: [] };
     },
+    async deleteThread() {},
     respondToApproval() {},
     respondToQuestion() {},
   };
@@ -53,6 +54,9 @@ test("controller forwards abort and prompt responses to the driver", () => {
     async switchThread() {
       return { threadId: "thread-1", messages: [] };
     },
+    async deleteThread() {
+      calls.push("delete");
+    },
     respondToApproval(input) {
       calls.push(input.decision);
     },
@@ -63,6 +67,7 @@ test("controller forwards abort and prompt responses to the driver", () => {
   const controller = createAgentSessionController(driver);
 
   controller.abort();
+  void controller.deleteThread("thread-1");
   controller.respondToApproval({
     requestId: "req-1",
     approvalId: "approval-1",
@@ -74,5 +79,5 @@ test("controller forwards abort and prompt responses to the driver", () => {
     answer: "yes",
   });
 
-  assert.deepEqual(calls, ["abort", "approve", "yes"]);
+  assert.deepEqual(calls, ["abort", "delete", "approve", "yes"]);
 });

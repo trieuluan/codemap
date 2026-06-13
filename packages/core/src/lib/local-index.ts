@@ -7,18 +7,18 @@ import {
   PARSE_TOOL_NAME,
   PARSE_TOOL_VERSION,
 } from "@codemap-ai/code-index";
-import { resolveWorkspace } from "./workspace-resolver.js";
-import type { CodeMapClient } from "./codemap-api.js";
-import { fetchLatestProjectImport } from "./import-health.js";
+import { resolveWorkspace } from "./workspace-resolver.ts";
+import type { CodeMapClient } from "./codemap-api.ts";
+import { fetchLatestProjectImport } from "./import-health.ts";
 import {
   SQLiteIndexStore,
   sqliteIndexDbPath,
-} from "./sqlite-index-store.js";
+} from "./sqlite-index-store.ts";
 import type {
   LocalIndexedFile,
   LocalImportedBy,
   LocalIndexSummary,
-} from "./sqlite-index-store.js";
+} from "./sqlite-index-store.ts";
 
 export type {
   LocalIndexedFile,
@@ -26,7 +26,7 @@ export type {
   LocalIndexSummary,
   LocalFileParseResponse,
   SQLiteIndexStore,
-} from "./sqlite-index-store.js";
+} from "./sqlite-index-store.ts";
 
 // Module-level cache — reused across tool calls in the same MCP server process
 let _cachedStore: SQLiteIndexStore | null = null;

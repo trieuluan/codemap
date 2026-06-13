@@ -36,7 +36,6 @@ export function createInitialState(opts: {
       debug: opts.debug ?? false,
       availableModels: opts.availableModels ?? [],
     },
-    changedSummary: null,
     chatMode: "auto",
     workspaceState: {
       indexStatus: "unknown",

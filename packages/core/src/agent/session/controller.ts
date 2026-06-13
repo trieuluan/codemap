@@ -7,11 +7,11 @@ import type {
   SessionSnapshot,
   ThreadSessionData,
   ThreadSummary,
-} from "../contracts/index.js";
+} from "../contracts/index.ts";
 import {
   createInitialSessionSnapshot,
   reduceAgentSessionEvent,
-} from "./reducer.js";
+} from "./reducer.ts";
 
 export interface AgentSessionDriver {
   send(
@@ -21,6 +21,7 @@ export interface AgentSessionDriver {
   abort(): void;
   listThreads(): Promise<ThreadSummary[]>;
   switchThread(threadId: string): Promise<ThreadSessionData>;
+  deleteThread(threadId: string): Promise<void>;
   respondToApproval(input: ApprovalResponse): void;
   respondToQuestion(input: QuestionResponse): void;
 }
@@ -77,6 +78,9 @@ export function createAgentSessionController(
         messages: thread.messages,
       });
       return snapshot;
+    },
+    deleteThread(threadId) {
+      return driver.deleteThread(threadId);
     },
     respondToApproval(input) {
       driver.respondToApproval(input);

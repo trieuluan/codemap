@@ -1,7 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.js";
-import { fetchResourceContext } from "../tools/mcp/mcp-tool-client.js";
+import type { CodeMapMcpToolClient } from "../tools/mcp/mcp-tool-client.ts";
+import { fetchResourceContext } from "../tools/mcp/mcp-tool-client.ts";
 import { resolveWorkspace } from "@codemap-ai/core/lib/workspace-resolver.js";
 
 export interface ProjectContext {

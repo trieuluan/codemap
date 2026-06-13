@@ -1,10 +1,10 @@
 import path from "node:path";
-import { readWorkspaceProjectConfig } from "./workspace-project.js";
+import { readWorkspaceProjectConfig } from "./workspace-project.ts";
 import {
   tryGetCurrentWorkspaceInfo,
   type CurrentWorkspaceInfo,
-} from "./workspace-git.js";
-import { findMonorepoRoot } from "./monorepo-root.js";
+} from "./workspace-git.ts";
+import { findMonorepoRoot } from "./monorepo-root.ts";
 
 type ProjectLike = {
   localWorkspacePath?: string | null;

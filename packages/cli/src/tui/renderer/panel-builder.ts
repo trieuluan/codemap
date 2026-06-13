@@ -1,10 +1,5 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import type {
-  UIState,
-  TaskListItem,
-  ChangedSummary,
-  ChangedFileSummary,
-} from "../../chat/state/types.js";
+import type { UIState, TaskListItem } from "../../chat/state/types.js";
 import type { PlanReviewAction } from "@codemap-ai/runtime-node";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
@@ -125,47 +120,6 @@ function formatToggleHint(key: string, label: string, enabled: boolean): string 
   return enabled
     ? `${C_ACTION}${key}${RESET} ${C_WHITE}${label}${RESET} ${C_SUCCESS}on${RESET}`
     : `${C_ACTION}${key}${RESET} ${C_GRAY}${label}${RESET}`;
-}
-
-function renderChangedSummary(summary: ChangedSummary, w: number): string[] {
-  const parts: string[] = [];
-  if (summary.newCount) parts.push(`${summary.newCount} new`);
-  if (summary.editedCount) parts.push(`${summary.editedCount} edited`);
-  if (summary.deletedCount) parts.push(`${summary.deletedCount} deleted`);
-  if (summary.renamedCount) parts.push(`${summary.renamedCount} renamed`);
-
-  const lines = [
-    fitLine(
-      ` ${C_ACTION}${BOLD}CHANGED${RESET}${parts.length ? ` ${C_MUTED}${parts.join(" · ")}${RESET}` : ""}`,
-      w,
-    ),
-  ];
-
-  for (const file of summary.files) {
-    lines.push(fitLine(`   ${formatChangedFile(file)}`, w));
-  }
-
-  return lines;
-}
-
-function formatChangedFile(file: ChangedFileSummary): string {
-  const icon = file.kind === "new"
-    ? `${C_SUCCESS}+${RESET}`
-    : file.kind === "deleted"
-      ? `${C_ERROR}-${RESET}`
-      : file.kind === "renamed"
-        ? `${C_ACTION}→${RESET}`
-        : `${C_WARNING}●${RESET}`;
-
-  const location = file.kind === "renamed" && file.previousPath
-    ? `${file.previousPath} ${C_MUTED}→${RESET} ${file.path}`
-    : file.path;
-
-  const stats = file.additions > 0 || file.deletions > 0
-    ? ` ${C_SUCCESS}+${file.additions}${RESET} ${C_ERROR}-${file.deletions}${RESET}`
-    : "";
-
-  return `${icon} ${location}${stats}`;
 }
 
 interface PlanReviewOption {
@@ -524,10 +478,6 @@ export function buildPanel(
   // Task list widget — shows tracked tasks when visible.
   if (state.taskListVisible && state.taskList.length > 0) {
     out.push(...renderTaskList(state.taskList, w));
-  }
-
-  if (state.changedSummary && state.changedSummary.files.length > 0) {
-    out.push(...renderChangedSummary(state.changedSummary, w));
   }
 
   // Background synthesis indicator.

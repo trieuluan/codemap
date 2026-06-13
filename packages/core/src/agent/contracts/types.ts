@@ -1,3 +1,5 @@
+import type { HarnessThread } from "@mastra/core/harness";
+
 export interface AgentTokenUsage {
   promptTokens: number;
   completionTokens: number;
@@ -18,7 +20,8 @@ export interface ThreadSummary {
   title?: string;
   createdAt?: string;
   updatedAt?: string;
-  tokenUsage?: AgentTokenUsage;
+  tokenUsage?: HarnessThread["tokenUsage"];
+  metadata?: Record<string, unknown>;
 }
 
 export interface ThreadSessionData {
@@ -140,6 +143,7 @@ export type AgentSessionCommand =
   | { type: "list_threads"; requestId: string }
   | { type: "switch_thread"; requestId: string; threadId: string }
   | { type: "new_thread"; requestId: string }
+  | { type: "delete_thread"; requestId: string; threadId: string }
   | { type: "respond_approval"; requestId: string; response: ApprovalResponse }
   | { type: "respond_question"; requestId: string; response: QuestionResponse };
 
@@ -148,6 +152,7 @@ export interface AgentSessionController {
   abort(): void;
   listThreads(): Promise<ThreadSummary[]>;
   switchThread(threadId: string): Promise<SessionSnapshot>;
+  deleteThread(threadId: string): Promise<void>;
   respondToApproval(input: ApprovalResponse): void;
   respondToQuestion(input: QuestionResponse): void;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;

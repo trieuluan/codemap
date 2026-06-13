@@ -2,4 +2,4 @@ export {
   resolveGatewayModel,
   resolveHarnessModelId,
   stripProviderPrefix,
-} from "./models.js";
+} from "./models.ts";

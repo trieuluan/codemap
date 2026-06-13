@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   buildCodeMapAgentInstructions,
   buildCurrentTaskContent,
-} from "./prompt.js";
+} from "./prompt.ts";
 
 test("buildCodeMapAgentInstructions keeps stable context before resources", () => {
   const instructions = buildCodeMapAgentInstructions(

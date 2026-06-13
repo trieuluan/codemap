@@ -24,12 +24,19 @@ export class WorkspaceRuntime {
   async start(): Promise<void> {
     if (this.child) return this.readyPromise ?? Promise.resolve();
     this.emitStatus("starting");
-    const child = utilityProcess.fork(join(__dirname, "utility.js"), [], {
+    const child = utilityProcess.fork(join(__dirname, "utility.cjs"), [], {
       serviceName: `CodeMap Agent: ${this.workspacePath}`,
       stdio: "pipe",
       env: {
         ...process.env,
-        NODE_PATH: resolve(__dirname, "../../../../node_modules"),
+        // NODE_PATH lets externalized packages (mastracode, @mastra/*, ai, @ai-sdk/*)
+        // be resolved at runtime. They live in runtime-node's node_modules (pnpm hoisting).
+        NODE_PATH: [
+          resolve(__dirname, "../../node_modules"),
+          resolve(__dirname, "../../../../packages/runtime-node/node_modules"),
+          resolve(__dirname, "../../../../packages/core/node_modules"),
+          resolve(__dirname, "../../../../node_modules"),
+        ].join(":"),
       },
     });
     this.child = child;

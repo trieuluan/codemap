@@ -1,5 +1,5 @@
-import type { GatewayProviderId } from "../types.js";
-import { GATEWAY_PROVIDER_IDS } from "../types.js";
+import type { GatewayProviderId } from "../types.ts";
+import { GATEWAY_PROVIDER_IDS } from "../types.ts";
 
 const FALLBACK_GATEWAY_MODEL =
   process.env.CODEMAP_LLM_GATEWAY_DEFAULT_MODEL ?? "cx/gpt-5.3-codex";

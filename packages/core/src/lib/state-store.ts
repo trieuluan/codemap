@@ -1,4 +1,4 @@
-import { deepMerge } from "./deep-merge.js";
+import { deepMerge } from "./deep-merge.ts";
 
 export type StateUpdater<TState extends object> = (
   prev: TState,

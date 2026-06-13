@@ -3,7 +3,7 @@ import { join, dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-import type { AgentTool, AgentToolCallResult } from "./mcp-types.js";
+import type { AgentTool, AgentToolCallResult } from "./mcp-types.ts";
 import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 export interface McpServerEntryConfig {

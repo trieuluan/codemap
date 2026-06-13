@@ -99,6 +99,13 @@ export const agentSessionCommandSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("delete_thread"),
+      requestId: requestIdSchema,
+      threadId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("respond_approval"),
       requestId: requestIdSchema,
       response: z
