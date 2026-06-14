@@ -597,12 +597,89 @@ body.sidebar-resizing {
   overflow-wrap: anywhere;
 }
 
-.message-body code {
+.message-body > * {
+  margin: 0;
+}
+
+.message-body p,
+.message-body ul,
+.message-body ol,
+.message-body blockquote,
+.message-body pre,
+.message-body table,
+.message-body hr,
+.message-body h1,
+.message-body h2,
+.message-body h3,
+.message-body h4,
+.message-body h5,
+.message-body h6 {
+  margin: 0;
+}
+
+.message-body ul,
+.message-body ol {
+  padding-left: 20px;
+}
+
+.message-body li + li {
+  margin-top: 4px;
+}
+
+.message-body a {
+  color: #8ab4ff;
+  text-decoration: none;
+}
+
+.message-body a:hover {
+  text-decoration: underline;
+}
+
+.message-body blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+  color: #b8b8bb;
+}
+
+.message-body pre {
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0d0d0f;
+}
+
+.message-body pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+}
+
+.message-body :not(pre) > code {
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #0d0d0f;
   font-size: 12px;
+}
+
+.message-body table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.message-body th,
+.message-body td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.message-body th {
+  color: #f2f2f3;
+  background: rgb(255 255 255 / 3%);
 }
 
 .thinking-row,

@@ -14,6 +14,11 @@ export type LocalMessage = {
   content: string;
 };
 
+function extractTaskContent(raw: string): string {
+  const match = raw.match(/<task>\n([\s\S]*?)\n<\/task>/);
+  return match?.[1]?.trim() ?? raw.trim();
+}
+
 export function useAgentSession(onError: (message: string) => void) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(
     createInitialSessionSnapshot(),
@@ -85,7 +90,11 @@ export function useAgentSession(onError: (message: string) => void) {
   function appendUserMessage(content: string) {
     setMessages((current) => [
       ...current,
-      { localId: crypto.randomUUID(), role: "user", content },
+      {
+        localId: crypto.randomUUID(),
+        role: "user",
+        content: extractTaskContent(content),
+      },
     ]);
   }
 

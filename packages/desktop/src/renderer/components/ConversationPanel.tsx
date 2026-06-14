@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   CircleHelp,
   FileCode2,
@@ -22,11 +24,16 @@ interface ConversationPanelProps {
 }
 
 function renderMessageText(content: string) {
-  return content.split(/\n{2,}/).map((block, index) => (
-    <p key={`${index}-${block.slice(0, 20)}`}>
-      {block}
-    </p>
-  ));
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 export function ConversationPanel({
