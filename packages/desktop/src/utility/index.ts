@@ -124,7 +124,6 @@ async function initialize(nextWorkspacePath: string): Promise<void> {
 
   const metadata = await readSettingsMetadata();
   post({ type: "ready", workspacePath, settings: metadata });
-  post({ type: "runtime_status", status: "ready" });
 }
 
 async function handleAgentCommand(
