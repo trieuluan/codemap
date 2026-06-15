@@ -2,27 +2,27 @@ import type {
   HarnessThread,
   HarnessMessage,
   HarnessMessageContent,
-  HarnessQuestionOption,
   HarnessRequestContext,
-  HarnessQuestionAnswer,
-  HarnessQuestionSelectionMode,
   HarnessEvent,
   HarnessDisplayState,
   TaskItemSnapshot,
 } from "@mastra/core/harness";
 import type { createMastraCode } from "mastracode";
 export type { HarnessThread, HarnessMessage, HarnessMessageContent };
-export type { HarnessQuestionOption as AskQuestionOption };
-export type { HarnessRequestContext, HarnessQuestionAnswer };
+export type { HarnessRequestContext };
 
 /** Derived harness type from mastracode's createMastraCode return */
 export type MastraHarness = Awaited<
   ReturnType<typeof createMastraCode>
 >["harness"];
-export type { HarnessQuestionSelectionMode };
 export type { HarnessEvent };
 export type { HarnessDisplayState };
 export type { TaskItemSnapshot };
+
+// These types were removed from @mastra/core/harness — define locally to preserve API compatibility
+export type AskQuestionOption = { label: string; value: string; description?: string };
+export type HarnessQuestionAnswer = { value: string } | { values: string[] };
+export type HarnessQuestionSelectionMode = "single_select" | "multi_select";
 
 interface Ref<T> {
   get(): T;
@@ -51,7 +51,7 @@ export interface BridgeCallbacks {
   onAskQuestion?: (
     questionId: string,
     question: string,
-    options: HarnessQuestionOption[] | undefined,
+    options: AskQuestionOption[] | undefined,
     respond: (answer: HarnessQuestionAnswer) => void,
     selectionMode?: "single_select" | "multi_select",
   ) => void;
@@ -61,12 +61,18 @@ export interface BridgeCallbacks {
   finalTextRef: Ref<string>;
   usedToolsRef: Ref<boolean>;
   onMessageStart?: (createdAt: number) => void;
-  onPlanApproval?: (planId: string, plan: string) => void;
-  onToolApproval?: (
-    pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>,
-    respond: (
-      decision: "approve" | "decline" | "always_allow_category",
-    ) => void,
+  /** Called when the harness suspends a built-in tool (tool_suspended).
+   *  Covers approval (write_file etc.), questions (ask_user), and plan submissions (submit_plan). */
+  onToolSuspended?: (
+    toolSuspended: {
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      suspendPayload?: unknown;
+      resumeSchema?: string;
+      suspendType?: "approval" | "question";
+    },
+    respond: (result: string) => void,
   ) => void;
   onEnd: (
     usage:
@@ -138,16 +144,6 @@ export function summarizeHarnessEvent(
       ...base,
       modeId: event.modeId,
       previousModeId: event.previousModeId,
-    };
-  }
-
-  if (event.type === "om_status") {
-    return {
-      ...base,
-      windows: event.windows,
-      recordId: event.recordId,
-      stepNumber: event.stepNumber,
-      generationCount: event.generationCount,
     };
   }
 
@@ -253,42 +249,71 @@ export function bridgeCommonEvent(
     return;
   }
 
-  if (event.type === "tool_approval_required") {
-    const approvalToolName = event.toolName;
-    cb.onToolApproval?.(
-      {
-        toolCallId: event.toolCallId,
-        toolName: approvalToolName,
-        args: event.args,
-      },
-      (decision) => {
-        if (decision === "always_allow_category") {
-          cb.harness.setPermissionForTool?.({
-            toolName: approvalToolName,
-            policy: "allow",
+  // ── Tool suspension (replaces ask_question + plan_approval_required) ──
+  if (event.type === "tool_suspended") {
+    if (event.toolName === "ask_user") {
+      const payload = (event.suspendPayload ?? {}) as {
+        question?: string;
+        options?: AskQuestionOption[];
+        selectionMode?: HarnessQuestionSelectionMode;
+      };
+      cb.onAskQuestion?.(
+        event.toolCallId,
+        payload.question ?? "",
+        payload.options,
+        (answer) => {
+          const resumeData =
+            answer && typeof answer === "object" && "values" in answer
+              ? (answer as { values: string[] }).values
+              : (answer as { value: string }).value;
+          cb.harness.respondToToolSuspension({
+            resumeData,
           });
-        }
-        cb.harness.respondToToolApproval?.({ decision });
-      },
-    );
-    return;
-  }
+        },
+        payload.selectionMode,
+      );
+      return;
+    }
 
-  if (event.type === "plan_approval_required") {
-    cb.onPlanApproval?.(event.planId, event.plan);
-    return;
-  }
+    if (event.toolName === "submit_plan") {
+      // Route through onToolSuspended so the session can emit a "suspended" event
+      if (cb.onToolSuspended) {
+        cb.onToolSuspended(
+          {
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            args: (event.args ?? {}) as Record<string, unknown>,
+            suspendPayload: event.suspendPayload,
+            resumeSchema: event.resumeSchema,
+            suspendType: "question",
+          },
+          (result) => {
+            cb.harness.respondToToolSuspension({
+              resumeData: result,
+            });
+          },
+        );
+      }
+      return;
+    }
 
-  if (event.type === "ask_question") {
-    const respond = (answer: HarnessQuestionAnswer) =>
-      cb.harness.respondToQuestion?.({ questionId: event.questionId, answer });
-    cb.onAskQuestion?.(
-      event.questionId,
-      event.question,
-      event.options,
-      respond,
-      event.selectionMode,
-    );
+    if (cb.onToolSuspended) {
+      cb.onToolSuspended(
+        {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: (event.args ?? {}) as Record<string, unknown>,
+          suspendPayload: event.suspendPayload,
+          resumeSchema: event.resumeSchema,
+          suspendType: "approval",
+        },
+        (result) => {
+          cb.harness.respondToToolSuspension({
+            resumeData: result,
+          });
+        },
+      );
+    }
     return;
   }
 

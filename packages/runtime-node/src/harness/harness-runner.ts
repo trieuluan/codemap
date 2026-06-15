@@ -17,7 +17,6 @@ type RunHarnessCallbacks = Omit<
   | "currentThinkingRef"
   | "finalTextRef"
   | "usedToolsRef"
-  | "onPlanApproval"
   | "onEnd"
   | "onError"
 > & {
@@ -88,51 +87,6 @@ export function runHarness(
       reject(err);
     };
 
-    const handlePlanApproval = async (planId: string, plan: string) => {
-      callbacks.onPlanReady?.(plan);
-      if (!callbacks.onPlanWait) {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "approved" },
-        });
-        return;
-      }
-
-      const raw = await callbacks.onPlanWait();
-      const action = normalizePlanAction(raw);
-      if (action === "cancel") {
-        harness.abort?.();
-        finish({
-          text: "Plan cancelled.",
-          messages: [],
-          usedTools: false,
-          unsupportedToolCalling: false,
-        });
-        return;
-      }
-
-      if (action === "apply" || action === "implement") {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "approved" },
-        });
-        try {
-          const reminder = harness.sendSignal?.({
-            type: "system-reminder",
-            contents: "The user has approved the plan, begin executing.",
-          });
-          if (reminder) await reminder.accepted;
-        } catch {
-          /* non-fatal */
-        }
-      } else {
-        await harness.respondToPlanApproval?.({
-          planId,
-          response: { action: "rejected", feedback: action },
-        });
-      }
-    };
-
     const toolCallMeta = new Map<
       string,
       { toolName: string; argsKey: string }
@@ -164,9 +118,9 @@ export function runHarness(
       });
     };
 
-    const unsubscribe = harness.subscribe((event: HarnessEvent) => {
+    const unsubscribe = harness.subscribe((event) => {
       try {
-        handleHarnessEvent(event);
+        handleHarnessEvent(event as HarnessEvent);
       } catch (err) {
         callbacks.onDebug?.({
           event: "mastra_listener_error",
@@ -258,8 +212,46 @@ export function runHarness(
           get: () => usedTools,
           set: (v) => { usedTools = v; },
         },
-        onPlanApproval: (planId, plan) => {
-          handlePlanApproval(planId, plan).catch(fail);
+        onToolSuspended: (toolSuspended, respond) => {
+          if (toolSuspended.toolName !== "submit_plan") return;
+          const plan =
+            (toolSuspended.suspendPayload as { plan?: string } | undefined)?.plan ?? "";
+          callbacks.onPlanReady?.(plan);
+          if (!callbacks.onPlanWait) {
+            respond(JSON.stringify({ action: "approved" }));
+            return;
+          }
+          callbacks
+            .onPlanWait()
+            .then(async (raw) => {
+              const action = normalizePlanAction(raw);
+              if (action === "cancel") {
+                harness.abort?.();
+                finish({
+                  text: "Plan cancelled.",
+                  messages: [],
+                  usedTools: false,
+                  unsupportedToolCalling: false,
+                });
+                return;
+              }
+
+              if (action === "apply" || action === "implement") {
+                respond(JSON.stringify({ action: "approved" }));
+                try {
+                  const reminder = harness.sendSignal?.({
+                    type: "system-reminder",
+                    contents: "The user has approved the plan, begin executing.",
+                  });
+                  if (reminder) await reminder.accepted;
+                } catch {
+                  /* non-fatal */
+                }
+              } else {
+                respond(JSON.stringify({ action: "rejected", feedback: action }));
+              }
+            })
+            .catch(fail);
         },
         onEnd: () => {
           if (awaitingBuildPhase) return;

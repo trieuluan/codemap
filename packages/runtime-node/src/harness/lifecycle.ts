@@ -607,7 +607,7 @@ async function createFreshHarness(
   };
 
   const { harness, mcpManager, resolveModel, effectiveDefaults, hookManager } =
-    await createMastraCode(config as MastraCodeConfig);
+    await createMastraCode(config as unknown as MastraCodeConfig);
 
   await harness.init();
 

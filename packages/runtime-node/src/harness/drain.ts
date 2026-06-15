@@ -1,4 +1,4 @@
-import type { HarnessEvent, MastraHarness } from "../events.ts";
+import type { MastraHarness } from "../events.ts";
 
 let drainResolve: (() => void) | null = null;
 let drainPromise: Promise<void> | null = null;
@@ -11,7 +11,7 @@ export function startDrainTracking(harness: MastraHarness): void {
     resolve = r;
   });
   drainResolve = resolve;
-  drainUnsubscribe = harness.subscribe((event: HarnessEvent) => {
+  drainUnsubscribe = harness.subscribe((event) => {
     if (event.type === "agent_end" || event.type === "error") {
       drainUnsubscribe?.();
       drainUnsubscribe = null;

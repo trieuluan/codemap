@@ -13,46 +13,142 @@ function formatTokens(value: number) {
   }).format(value);
 }
 
+interface TokenCategory {
+  key: "system" | "tools" | "files" | "history" | "reasoning";
+  label: string;
+  tokens: number;
+}
+
+const fileToolPattern = /(file|read|search|find|symbol|explore|project|related)/i;
+
+function contentTokens(content: string | undefined) {
+  return content ? Math.ceil(content.length / 4) : 0;
+}
+
+function estimateAttribution(snapshot: SessionSnapshot, used: number): TokenCategory[] {
+  const systemWeight = snapshot.messages
+    .filter((message) => message.role === "system")
+    .reduce((total, message) => total + contentTokens(message.content), 0);
+  const historyWeight = snapshot.messages
+    .filter((message) => message.role !== "system" && message.role !== "tool")
+    .reduce((total, message) => total + contentTokens(message.content), 0);
+  const toolWeights = snapshot.tools.reduce(
+    (weights, tool) => {
+      const weight = contentTokens(tool.name) + contentTokens(tool.args) + contentTokens(tool.result);
+      weights[fileToolPattern.test(tool.name) ? "files" : "tools"] += weight;
+      return weights;
+    },
+    { files: 0, tools: 0 },
+  );
+  const reasoningWeight = contentTokens(snapshot.thinkingText) + snapshot.usage.completionTokens;
+  const weights = [
+    Math.max(systemWeight, used > 0 ? 1 : 0),
+    Math.max(toolWeights.tools, used > 0 ? 1 : 0),
+    Math.max(toolWeights.files, used > 0 ? 1 : 0),
+    Math.max(historyWeight, used > 0 ? 1 : 0),
+    Math.max(reasoningWeight, used > 0 ? 1 : 0),
+  ];
+  const totalWeight = weights.reduce((total, weight) => total + weight, 0);
+  const values = weights.map((weight) => totalWeight > 0 ? Math.floor((weight / totalWeight) * used) : 0);
+  const remainder = used - values.reduce((total, value) => total + value, 0);
+  values[3] += remainder;
+
+  return [
+    { key: "system", label: "System", tokens: values[0] },
+    { key: "tools", label: "Tools", tokens: values[1] },
+    { key: "files", label: "Files", tokens: values[2] },
+    { key: "history", label: "History", tokens: values[3] },
+    { key: "reasoning", label: "Reasoning", tokens: values[4] },
+  ];
+}
+
 export function TokenObservabilityPanel({ snapshot }: TokenObservabilityPanelProps) {
   const used = Math.min(snapshot.usage.totalTokens, contextLimit);
-  const promptWidth = `${Math.min((snapshot.usage.promptTokens / contextLimit) * 100, 100)}%`;
-  const completionWidth = `${Math.min((snapshot.usage.completionTokens / contextLimit) * 100, 100)}%`;
+  const available = contextLimit - used;
+  const usagePercent = Math.round((used / contextLimit) * 100);
+  const categories = estimateAttribution(snapshot, used);
+  const modelStatus = snapshot.status === "running" || snapshot.status === "aborting"
+    ? "running"
+    : snapshot.status === "error" || snapshot.status === "disconnected"
+      ? "active"
+      : "done";
 
   return (
-    <section className="flex flex-col min-h-0 p-4 overflow-y-auto" aria-label="Context observability">
-      <header className="flex items-start justify-between gap-3 mb-4">
-        <div><h2 className="text-sm font-semibold text-foreground">Context</h2><p className="text-xs text-muted-foreground mt-0.5">Token usage and tool execution</p></div>
-        <strong className="flex-shrink-0 text-sm text-foreground">{formatTokens(used)} / 64k</strong>
+    <section className="context-panel" aria-label="Context observability">
+      <header className="xp-panel-head">
+        <div className="xp-head-title">
+          <span className={`xp-dot ${snapshot.status}`} />
+          <div>
+            <strong>Context window</strong>
+            <span className="xp-head-sub">estimated attribution</span>
+          </div>
+        </div>
+        <div className="token-head-value">
+          <strong>{formatTokens(used)} / 64k</strong>
+          <span className="token-pct">{usagePercent}% used</span>
+        </div>
       </header>
 
-      <div className="grid gap-2.5 mb-4">
-        <div className="flex h-1.5 rounded-full token-meter-bar">
-          <i className="prompt" style={{ width: promptWidth }} />
-          <i className="completion" style={{ width: completionWidth }} />
-        </div>
-        <div className="grid gap-1.5 p-2.5 border border-border rounded-lg token-breakdown">
-          <span className="flex items-center gap-1.5"><i className="prompt" />Prompt <strong className="ml-auto font-mono text-[11px] text-secondary-foreground">{formatTokens(snapshot.usage.promptTokens)}</strong></span>
-          <span className="flex items-center gap-1.5"><i className="completion" />Completion <strong className="ml-auto font-mono text-[11px] text-secondary-foreground">{formatTokens(snapshot.usage.completionTokens)}</strong></span>
-          <span className="flex items-center gap-1.5"><i className="free" />Available <strong className="ml-auto font-mono text-[11px] text-secondary-foreground">{formatTokens(contextLimit - used)}</strong></span>
-        </div>
+      <div className="token-bar" aria-label={`${usagePercent}% of context used`}>
+        {categories.map((category) => (
+          <span
+            className={`token-seg ${category.key}`}
+            key={category.key}
+            style={{ width: `${(category.tokens / contextLimit) * 100}%` }}
+          />
+        ))}
+        <span className="token-seg free" style={{ width: `${(available / contextLimit) * 100}%` }} />
       </div>
 
-      <div className="grid gap-1 p-3 tool-tree">
-        <div className="grid gap-2 p-3 tool-tree-root">
-          <span className="tool-tree-branch" />
-          <div><strong className="text-xs text-foreground">Model session</strong><small className="text-[11px] text-muted-foreground block mt-0.5">{snapshot.model ?? "Default model"}</small></div>
-          <b className="text-[11px] font-medium text-muted-foreground capitalize self-start mt-0.5">{formatTokens(snapshot.usage.totalTokens)}</b>
-        </div>
-        {snapshot.tools.length > 0 ? snapshot.tools.map((tool) => (
-          <div className="grid gap-1.5 pl-4 border-l border-border tool-tree-item" key={tool.toolCallId}>
-            <span className="tool-tree-branch" />
-            <div>
-              <strong className="text-xs text-foreground">{tool.name}</strong>
-              <small className="text-[11px] text-muted-foreground block mt-0.5">{tool.preview || (tool.isError ? "Tool failed" : tool.result !== undefined ? "Completed" : "Running")}</small>
-            </div>
-            <b className="text-[11px] font-medium text-muted-foreground capitalize self-start mt-0.5">{tool.isError ? "error" : tool.result !== undefined ? "done" : "live"}</b>
+      <div className="token-legend">
+        {categories.map((category) => (
+          <div className="token-legend-row" key={category.key}>
+            <span className={`token-swatch ${category.key}`} />
+            <span className="token-legend-label">{category.label}</span>
+            <code>{formatTokens(category.tokens)}</code>
           </div>
-        )) : <div className="p-3 text-muted-foreground text-xs text-center tool-tree-empty">Tool calls will appear here as the session runs.</div>}
+        ))}
+      </div>
+
+      <div className="token-tree">
+        <div className="token-tree-head">
+          <span>Execution tree</span>
+          <span className="token-pill">{snapshot.tools.length} tools</span>
+        </div>
+
+        <div className="token-tree-row">
+          <span className="token-tree-mark"><span className={`token-tree-dot ${modelStatus}`} /></span>
+          <span>
+            <strong className="token-tree-name">{snapshot.model ?? "Model session"}</strong>
+            <small className="token-tree-role">model</small>
+          </span>
+          <span className="token-tree-role">{snapshot.status}</span>
+          <code className="token-tree-tokens">{formatTokens(snapshot.usage.totalTokens)}</code>
+        </div>
+
+        {snapshot.tools.map((tool) => {
+          const status = tool.isError ? "active" : tool.result !== undefined ? "done" : "running";
+          return (
+            <div className="token-tree-row depth-1" key={tool.toolCallId}>
+              <span className="token-tree-mark">
+                <span className="token-tree-branch" />
+                <span className={`token-tree-dot ${status}`} />
+              </span>
+              <span>
+                <strong className="token-tree-name">{tool.name}</strong>
+                <small className="token-tree-role">tool</small>
+              </span>
+              <span className="token-tree-role">
+                {tool.isError ? "error" : tool.result !== undefined ? "done" : "running"}
+              </span>
+              <code className="token-tree-tokens">—</code>
+            </div>
+          );
+        })}
+
+        {snapshot.tools.length === 0 && (
+          <p className="token-tree-empty">Tool calls will appear here as the session runs.</p>
+        )}
       </div>
     </section>
   );

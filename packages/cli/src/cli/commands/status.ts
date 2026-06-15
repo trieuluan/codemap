@@ -37,21 +37,25 @@ export function formatRuntimeStatusLines(runtime?: {
   if (modelId) lines.push(`  Model:      ${modelId}`);
   if (threadId) lines.push(`  Thread:     ${threadId}`);
 
-  const pendingQuestion = displayState?.pendingQuestion;
-  if (pendingQuestion) {
+  const pendingApproval = displayState?.pendingApproval;
+  const askSuspension = displayState?.pendingSuspensions
+    ? [...displayState.pendingSuspensions.values()].find((s) => s.toolName === "ask_user")
+    : undefined;
+
+  if (askSuspension) {
+    const question = (askSuspension.args as Record<string, unknown>)?.question;
     lines.push(
-      `  Prompt:     waiting for question${pendingQuestion.question ? ` — ${pendingQuestion.question}` : ""}`,
+      `  Prompt:     waiting for question${question ? ` — ${question}` : ""}`,
     );
   }
 
-  const pendingApproval = displayState?.pendingApproval;
   if (pendingApproval) {
     lines.push(
       `  Prompt:     waiting for tool approval${pendingApproval.toolName ? ` — ${pendingApproval.toolName}` : ""}`,
     );
   }
 
-  if (!pendingQuestion && !pendingApproval) {
+  if (!askSuspension && !pendingApproval) {
     lines.push("  Prompt:     idle");
   }
 

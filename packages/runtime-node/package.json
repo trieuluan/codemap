@@ -34,7 +34,7 @@
     "@mastra/mcp": "1.9.1",
     "@mastra/memory": "1.20.2",
     "@modelcontextprotocol/sdk": "^1.21.0",
-    "mastracode": "^0.22.2",
+    "mastracode": "^0.22.3",
     "sharp": "^0.34.2"
   },
   "devDependencies": {

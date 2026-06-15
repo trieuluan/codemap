@@ -88,7 +88,7 @@ export function cancelPendingPrompts(): {
 } {
   planReviewResolve?.("cancel");
   planReviewResolve = null;
-  askQuestionResolve?.("(skipped)");
+  askQuestionResolve?.({ value: "(skipped)" });
   askQuestionResolve = null;
   toolApprovalResolve?.("decline");
   toolApprovalResolve = null;
@@ -135,15 +135,21 @@ export function restorePendingPrompts(
   ctx: PlanReviewContext,
   displayState: HarnessDisplayState | null | undefined,
 ): void {
+  // In mastracode 0.22.3+, questions are suspended tools (toolName === "ask_user")
+  const askSuspension = displayState?.pendingSuspensions
+    ? [...displayState.pendingSuspensions.values()].find((s) => s.toolName === "ask_user")
+    : undefined;
+  const askArgs = askSuspension?.args as Record<string, unknown> | undefined;
+
   ctx.store.dispatch({
-    askQuestion: displayState?.pendingQuestion
+    askQuestion: askSuspension
       ? {
-          ...displayState.pendingQuestion,
+          questionId: askSuspension.toolCallId,
+          question: (askArgs?.question as string) ?? "",
+          options: askArgs?.options as AskQuestionOption[] | undefined,
+          selectionMode: askArgs?.selectionMode as "single_select" | "multi_select" | undefined,
           selection: 0,
           selected: [],
-          selectionMode:
-            displayState.pendingQuestion.selectionMode ??
-            (displayState.pendingQuestion.options?.length ? "single_select" : undefined),
         }
       : null,
     toolApproval: displayState?.pendingApproval

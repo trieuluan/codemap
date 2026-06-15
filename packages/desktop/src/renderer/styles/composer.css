@@ -3,9 +3,12 @@
    ═══════════════════════════════════════════════ */
 
 .composer-wrap {
+  display: grid;
+  gap: 10px;
   padding: 14px max(24px, calc((100% - 860px) / 2)) 18px;
   border-top: 1px solid var(--border);
   background: rgb(11 11 12 / 96%);
+  backdrop-filter: blur(18px);
 }
 
 .composer-header-row {
@@ -30,6 +33,15 @@
 }
 
 .composer {
+  display: block;
+}
+
+.composer > [data-slot="input-group"] {
+  display: flex;
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
   padding: 12px;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -37,11 +49,11 @@
   box-shadow: 0 10px 40px rgb(0 0 0 / 18%);
 }
 
-.composer:focus-within {
+.composer > [data-slot="input-group"]:focus-within {
   border-color: #55555a;
 }
 
-.composer textarea {
+.composer [data-slot="input-group-control"] {
   width: 100%;
   min-height: 78px;
   max-height: 220px;
@@ -56,9 +68,12 @@
 
 .composer-actions {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
+  order: initial;
   margin-top: 10px;
+  padding: 0;
   gap: 10px;
 }
 
@@ -66,6 +81,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.composer-actions .send-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
 }
 
 .attachment-row {
@@ -95,4 +116,3 @@
   color: inherit;
   cursor: pointer;
 }
-

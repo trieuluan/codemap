@@ -482,7 +482,7 @@ export async function startPiTuiApp(
       !state.askQuestion.options?.length
     ) {
       editor.setText("");
-      chatTerminal.resolveAskQuestion(trimmed);
+      chatTerminal.resolveAskQuestion({ value: trimmed });
       return;
     }
 
@@ -733,7 +733,7 @@ export async function startPiTuiApp(
               });
               tui.requestRender();
             } else {
-              chatTerminal.resolveAskQuestion(options[numericSelection]!.label);
+              chatTerminal.resolveAskQuestion({ value: options[numericSelection]!.label });
             }
             return { consume: true };
           }
@@ -764,21 +764,21 @@ export async function startPiTuiApp(
           }
           if (matchesKey(data, Key.enter)) {
             if (isMultiSelect) {
-              chatTerminal.resolveAskQuestion(
-                aq.selected
+              chatTerminal.resolveAskQuestion({
+                values: aq.selected
                   .map((idx: number) => options[idx]?.label)
                   .filter((label: string | undefined): label is string => Boolean(label)),
-              );
+              });
             } else {
               const selected = options[sel];
-              if (selected) chatTerminal.resolveAskQuestion(selected.label);
+              if (selected) chatTerminal.resolveAskQuestion({ value: selected.label });
             }
             return { consume: true };
           }
         }
         // Block all other input when options are shown.
         if (matchesKey(data, Key.escape)) {
-          chatTerminal.resolveAskQuestion(isMultiSelect ? [] : "(skipped)");
+          chatTerminal.resolveAskQuestion(isMultiSelect ? { values: [] } : { value: "(skipped)" });
           return { consume: true };
         }
         return { consume: true };
@@ -786,7 +786,7 @@ export async function startPiTuiApp(
 
       // No options — free text mode, only intercept Escape.
       if (matchesKey(data, Key.escape)) {
-        chatTerminal.resolveAskQuestion("(skipped)");
+        chatTerminal.resolveAskQuestion({ value: "(skipped)" });
         return { consume: true };
       }
     }

@@ -239,6 +239,7 @@ export function App() {
                 onApprove={(id) => window.codemap.respondToApproval(id, "approve")}
                 onDecline={(id) => window.codemap.respondToApproval(id, "decline")}
                 onAnswerQuestion={(id, answer) => window.codemap.respondToQuestion(id, answer)}
+                onSubmitPrompt={(content) => void submit(content, [])}
               />
 
               <ComposerFooter

@@ -150,30 +150,35 @@ test("emits text from MCP-style content arrays", () => {
   assert.equal(result, "file content");
 });
 
-test("routes tool_approval_required to onToolApproval callback", async () => {
+test("routes approval tool_suspended to onToolSuspended callback", async () => {
+  let suspendedToolName: string | undefined;
   let decision: unknown;
   const cb = callbacks(() => {});
   cb.harness = {
-    respondToToolApproval: (input) => {
-      decision = input.decision;
+    respondToToolSuspension: (input) => {
+      decision = input.resumeData;
     },
   } as MastraHarness;
-  cb.onToolApproval = (pendingApproval, respond) => {
+  cb.onToolSuspended = (toolSuspended, respond) => {
+    suspendedToolName = toolSuspended.toolName;
     respond("approve");
   };
 
   bridgeCommonEvent(
     {
-      type: "tool_approval_required",
+      type: "tool_suspended",
       toolCallId: "call_1",
       toolName: "write_file",
       args: { path: "src/app.ts", content: "export const ok = true;" },
+      suspendPayload: { reason: "approval_required" },
+      resumeSchema: "string",
     } as Parameters<typeof bridgeCommonEvent>[0],
     cb,
   );
 
   await nextTick();
 
+  assert.equal(suspendedToolName, "write_file");
   assert.equal(decision, "approve");
 });
 
@@ -181,25 +186,28 @@ function nextTick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-test("routes plan_approval_required to onPlanApproval callback", () => {
-  let receivedPlanId: string | undefined;
+test("routes submit_plan tool_suspended to onToolSuspended callback", () => {
+  let receivedToolCallId: string | undefined;
   let receivedPlan: string | undefined;
   const cb = callbacks(() => {});
-  cb.onPlanApproval = (planId, plan) => {
-    receivedPlanId = planId;
-    receivedPlan = plan;
+  cb.onToolSuspended = (toolSuspended) => {
+    receivedToolCallId = toolSuspended.toolCallId;
+    receivedPlan = (toolSuspended.suspendPayload as { plan?: string } | undefined)?.plan;
   };
 
   bridgeCommonEvent(
     {
-      type: "plan_approval_required",
-      planId: "plan_123",
-      plan: "## Plan\n1. Do thing\n2. Do other thing",
+      type: "tool_suspended",
+      toolCallId: "plan_123",
+      toolName: "submit_plan",
+      args: { title: "Plan title" },
+      suspendPayload: { plan: "## Plan\n1. Do thing\n2. Do other thing" },
+      resumeSchema: "string",
     } as Parameters<typeof bridgeCommonEvent>[0],
     cb,
   );
 
-  assert.equal(receivedPlanId, "plan_123");
+  assert.equal(receivedToolCallId, "plan_123");
   assert.equal(receivedPlan, "## Plan\n1. Do thing\n2. Do other thing");
 });
 

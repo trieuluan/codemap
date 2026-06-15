@@ -84,7 +84,7 @@ export function getMastraDisplayState(): HarnessDisplayState | null {
   const singleton = getSingleton();
   if (!singleton) return null;
   try {
-    return singleton.harness.getDisplayState?.() ?? null;
+    return (singleton.harness.getDisplayState?.() ?? null) as unknown as HarnessDisplayState | null;
   } catch {
     return null;
   }

@@ -32,7 +32,7 @@
     "@parcel/watcher": "^2.5.0",
     "ai": "^6.0.176",
     "jszip": "^3.10.1",
-    "mastracode": "^0.22.2",
+    "mastracode": "^0.22.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {

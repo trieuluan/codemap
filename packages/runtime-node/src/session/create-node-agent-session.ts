@@ -130,7 +130,13 @@ export function createNodeAgentSession(
             respond,
             selectionMode,
           ) => {
-            questionResponders.set(questionId, respond);
+            questionResponders.set(questionId, (answer) => {
+              const harnessAnswer =
+                Array.isArray(answer)
+                  ? { values: answer }
+                  : { value: answer };
+              respond(harnessAnswer as Parameters<typeof respond>[0]);
+            });
             emit({
               type: "question",
               requestId: input.requestId,

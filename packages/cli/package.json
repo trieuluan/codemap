@@ -43,7 +43,6 @@
   },
   "devDependencies": {
     "@codemap-ai/code-index": "workspace:*",
-    "@types/diff": "^8.0.0",
     "@types/node": "^24.12.2",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

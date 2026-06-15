@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════ */
 
 @import "tailwindcss";
+@source "../../components/**/*.tsx";
 @source "../../node_modules/streamdown/dist/*.js";
 
 @theme inline {
@@ -79,7 +80,8 @@ button,
 textarea,
 select,
 input {
-  font: inherit;
+  font-family: inherit;
+  line-height: inherit;
 }
 
 button {

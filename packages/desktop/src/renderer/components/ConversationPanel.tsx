@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import {
+  Check,
   CircleHelp,
+  Copy,
   FileCode2,
+  RefreshCw,
   ShieldCheck,
+  Sparkles,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -15,6 +19,8 @@ import {
 } from "../../components/ai-elements/conversation.js";
 import {
   Message,
+  MessageAction,
+  MessageActions,
   MessageContent,
   MessageResponse,
 } from "../../components/ai-elements/message.js";
@@ -33,7 +39,14 @@ interface ConversationPanelProps {
   onApprove: (approvalId: string) => void;
   onDecline: (approvalId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => void;
+  onSubmitPrompt: (content: string) => void;
 }
+
+const suggestions = [
+  "Explain the workspace runtime",
+  "Find the IPC entrypoints",
+  "Add a request tracker",
+];
 
 export function ConversationPanel({
   displayMessages,
@@ -43,56 +56,133 @@ export function ConversationPanel({
   onApprove,
   onDecline,
   onAnswerQuestion,
+  onSubmitPrompt,
 }: ConversationPanelProps) {
   const [questionAnswer, setQuestionAnswer] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | undefined>(undefined);
 
   const orderedTools = useMemo(() => [...snapshot.tools], [snapshot.tools]);
+  const latestAssistantIndex = displayMessages.findLastIndex(
+    (message) => message.role === "assistant",
+  );
+
+  function messageId(message: SessionMessage) {
+    return (message as { localId?: string; id?: string }).localId ?? message.id;
+  }
+
+  async function copyMessage(message: SessionMessage) {
+    await navigator.clipboard.writeText(message.content);
+    const id = messageId(message);
+    setCopiedMessageId(id);
+    window.setTimeout(() => setCopiedMessageId(undefined), 1600);
+  }
 
   return (
     <Conversation className="conversation">
       <ConversationContent className="conversation-content">
         {displayMessages.length === 0 ? (
-          <ConversationEmptyState
-            className="empty-chat"
-            icon={
-              <span className="grid w-[52px] h-[52px] place-items-center border border-border rounded-[14px] bg-card">
-                <FileCode2 size={25} />
-              </span>
-            }
-            title="What are we building?"
-            description="Mention files with @path/to/file, attach images, or ask CodeMap to inspect and modify this workspace."
-          />
+          <div className="empty-chat">
+            <ConversationEmptyState
+              icon={
+                <span className="grid w-13 h-13 place-items-center border border-border rounded-[14px] bg-card">
+                  <FileCode2 size={25} />
+                </span>
+              }
+              title="What are we building?"
+              description="Mention files with @path/to/file, attach images, or ask CodeMap to inspect and modify this workspace."
+            />
+            <div className="empty-suggestions" aria-label="Suggested prompts">
+              {suggestions.map((suggestion) => (
+                <button
+                  className="suggestion-chip"
+                  disabled={isBusy}
+                  key={suggestion}
+                  onClick={() => onSubmitPrompt(suggestion)}
+                  type="button"
+                >
+                  <Sparkles size={13} />
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
-          <div className="grid gap-[18px]">
-          {displayMessages.map((message) => (
-            <article
-              key={(message as { localId?: string; id?: string }).localId ?? message.id}
-              className={`flex flex-col gap-1.5 ${message.role === "user" ? "items-end" : ""}`}
-            >
-              <Message
-                className="codemap-message grid gap-2 p-3 border border-border rounded-[10px] bg-card"
-                from={message.role === "user" ? "user" : "assistant"}
+          <div className="message-stack">
+          {displayMessages.map((message, index) => {
+            const id = messageId(message);
+            const previousUserMessage = displayMessages
+              .slice(0, index)
+              .findLast((candidate) => candidate.role === "user");
+            const isLatestAssistant =
+              message.role === "assistant" && index === latestAssistantIndex;
+
+            return (
+              <article
+                key={id}
+                className={`message-row ${message.role === "user" ? "user" : "assistant"}`}
               >
-                <MessageContent className="codemap-message-content">
-                  <MessageResponse>{message.content}</MessageResponse>
-                </MessageContent>
-              </Message>
-            </article>
-          ))}
+                <div className="message-avatar" aria-hidden="true">
+                  {message.role === "user" ? "You" : "AI"}
+                </div>
+                <div className="message-card">
+                  <div className="message-role">
+                    {message.role === "user" ? "You" : "CodeMap"}
+                  </div>
+                  <Message
+                    className="codemap-message"
+                    from={message.role === "user" ? "user" : "assistant"}
+                  >
+                    <MessageContent className="codemap-message-content message-body">
+                      <MessageResponse>{message.content}</MessageResponse>
+                    </MessageContent>
+                  </Message>
+                  {isLatestAssistant && message.content && !isBusy && (
+                    <MessageActions className="message-actions">
+                      <MessageAction
+                        label="Copy response"
+                        onClick={() => void copyMessage(message)}
+                        tooltip={copiedMessageId === id ? "Copied" : "Copy"}
+                      >
+                        {copiedMessageId === id ? <Check size={14} /> : <Copy size={14} />}
+                      </MessageAction>
+                      <MessageAction
+                        disabled={!previousUserMessage}
+                        label="Retry response"
+                        onClick={() => {
+                          if (previousUserMessage) onSubmitPrompt(previousUserMessage.content);
+                        }}
+                        tooltip="Retry"
+                      >
+                        <RefreshCw size={14} />
+                      </MessageAction>
+                    </MessageActions>
+                  )}
+                </div>
+              </article>
+            );
+          })}
           </div>
         )}
 
         {snapshot.thinkingText && (
-          <div className="grid gap-1.5">
-            <Reasoning className="codemap-reasoning text-muted-foreground text-xs italic" isStreaming={isBusy}>
-              <ReasoningTrigger />
-              <ReasoningContent>{snapshot.thinkingText}</ReasoningContent>
+          <div className="turn-activity thinking-row">
+            <Reasoning className="codemap-reasoning" defaultOpen={isBusy} isStreaming={isBusy}>
+              <ReasoningTrigger
+                getThinkingMessage={(streaming, duration) =>
+                  streaming
+                    ? "Reasoning..."
+                    : `Reasoned for ${duration ?? "a few"} seconds`
+                }
+              />
+              <ReasoningContent className="codemap-reasoning-content">
+                {snapshot.thinkingText}
+              </ReasoningContent>
             </Reasoning>
           </div>
         )}
 
         {orderedTools.length > 0 && (
-          <section className="grid gap-[18px]">
+          <section className="turn-activity tool-stack">
             {orderedTools.map((tool) => (
               <ToolExecution
                 key={tool.toolCallId}

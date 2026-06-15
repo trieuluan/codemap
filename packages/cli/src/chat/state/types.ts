@@ -136,10 +136,14 @@ export interface UIState {
   planReview: { active: boolean; selection: number; reviseMode?: boolean };
   planContent: string | null;
   askQuestion:
-    | (HarnessDisplayState["pendingQuestion"] & {
+    | {
+        questionId: string;
+        question: string;
+        options?: { label: string; value: string; description?: string }[];
+        selectionMode?: "single_select" | "multi_select";
         selection: number;
         selected: number[];
-      })
+      }
     | null;
   toolApproval:
     | (HarnessDisplayState["pendingApproval"] & {
@@ -149,4 +153,20 @@ export interface UIState {
   debug: boolean;
   debugLogFile: string | null;
   previewDiffExpanded: boolean;
+}
+
+export interface ChangedFileSummary {
+  path: string;
+  previousPath?: string;
+  kind: "edited" | "new" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+}
+
+export interface ChangedSummary {
+  files: ChangedFileSummary[];
+  newCount: number;
+  editedCount: number;
+  deletedCount: number;
+  renamedCount: number;
 }

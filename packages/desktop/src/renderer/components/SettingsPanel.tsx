@@ -33,8 +33,8 @@ function SettingsCard({
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-3 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[linear-gradient(180deg,#141416,#101012)] p-[14px]">
-      <div className="flex items-center gap-2">
+    <section className="settings-card">
+      <div className="settings-card-header">
         {icon}
         <strong>{title}</strong>
       </div>
@@ -44,12 +44,12 @@ function SettingsCard({
 }
 
 function SettingList({ children }: { children: React.ReactNode }) {
-  return <dl className="grid gap-3 [&_div]:grid [&_div]:gap-1 [&_dd]:m-0 [&_dd]:text-[13px] [&_dd]:text-[#ededee] [&_dd_code]:text-[11px] [&_dt]:text-[11px] [&_dt]:uppercase [&_dt]:text-[var(--muted)]">{children}</dl>;
+  return <dl>{children}</dl>;
 }
 
 export function SettingsContent({ settings }: SettingsContentProps) {
   return (
-    <div className="grid gap-3 overflow-auto p-[14px]">
+    <div className="settings-panel-body">
       <SettingsCard icon={<Server size={15} />} title="Gateway">
         <SettingList>
           <div>
@@ -81,21 +81,21 @@ export function SettingsContent({ settings }: SettingsContentProps) {
       </SettingsCard>
 
       <SettingsCard icon={<KeyRound size={15} />} title="Credentials">
-        <div className="flex flex-col items-stretch gap-2">
+        <div className="settings-credential-list">
           <div
-            className={`flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--card-soft)] px-3 py-2.5 text-[12px] ${settings?.hasApiKey ? "text-[#b5ddc0]" : "text-[#ddb7b7]"}`}
+            className={`credential-state ${settings?.hasApiKey ? "ok" : "missing"}`}
           >
             <CheckCircle2 size={14} />
             Gateway API key {settings?.hasApiKey ? "configured" : "missing"}
           </div>
           <div
-            className={`flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--card-soft)] px-3 py-2.5 text-[12px] ${settings?.hasApiToken ? "text-[#b5ddc0]" : "text-[#ddb7b7]"}`}
+            className={`credential-state ${settings?.hasApiToken ? "ok" : "missing"}`}
           >
             <CheckCircle2 size={14} />
             CodeMap API token {settings?.hasApiToken ? "configured" : "missing"}
           </div>
         </div>
-        <p className="muted text-[12px]">
+        <p className="muted settings-note">
           Secrets stay in your local config. This panel only shows whether they are present.
         </p>
       </SettingsCard>

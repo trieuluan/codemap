@@ -57,6 +57,43 @@ async function handleRawCommand(raw: unknown): Promise<void> {
   }
 }
 
+function buildToolPreview(name: string, args: Record<string, unknown>): string | undefined {
+  const s = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : undefined);
+  // Strip MCP server prefix (e.g. "codemap_explore_task" → "explore_task")
+  const local = name.includes("_") ? name.slice(name.indexOf("_") + 1) : name;
+  switch (local) {
+    case "explore_task": return s("task");
+    case "search_codebase": return s("query");
+    case "find_related_files": return s("query") ?? s("file_path") ?? s("symbol_name");
+    case "get_file": {
+      const p = args["path"];
+      if (Array.isArray(p)) return p.slice(0, 2).join(", ") + (p.length > 2 ? ` +${p.length - 2}` : "");
+      return s("path");
+    }
+    case "symbol": return s("symbol_name");
+    case "view_ide": return s("path");
+    case "write_file_ide":
+    case "write_file": return s("path");
+    case "string_replace_lsp_ide":
+    case "string_replace_lsp": return s("path");
+    case "execute_command_ide":
+    case "execute_command": return s("command");
+    case "search_content_ide":
+    case "search_content": {
+      const pattern = s("pattern");
+      const path = s("path");
+      return pattern && path ? `"${pattern}" in ${path}` : pattern ? `"${pattern}"` : undefined;
+    }
+    case "find_files_ide":
+    case "find_files": return s("path");
+    case "web_search_ide":
+    case "web_search": return s("query");
+    case "web_fetch_ide":
+    case "web_fetch": return s("url");
+    default: return undefined;
+  }
+}
+
 async function handleCommand(command: UtilityCommand): Promise<unknown> {
   if (command.type === "initialize") {
     await initialize(command.workspacePath);
@@ -100,6 +137,7 @@ async function initialize(nextWorkspacePath: string): Promise<void> {
     availableModels: [model],
     toolClient,
     agentInstructions: undefined,
+    toolPreviewBuilder: buildToolPreview,
   };
 
   session = createNodeAgentSession(sessionOptions);

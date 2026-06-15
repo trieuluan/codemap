@@ -257,7 +257,7 @@ export function createSubmitRuntimeCallbacks({
             respond(answer);
           })
           .catch(() => {
-            respond("(skipped)");
+            respond({ value: "(skipped)" });
           });
       });
     },

@@ -26,12 +26,16 @@ test("formatRuntimeStatusLines reports pending question prompts", () => {
       modelId: "claude-sonnet-4",
       threadId: "thread_123",
       displayState: {
-        pendingQuestion: {
-          id: "question_1",
-          question: "Choose a provider?",
-          options: [{ label: "A", description: "Option A" }],
-          selectionMode: "single_select",
-        },
+        pendingSuspensions: new Map([
+          [
+            "question_1",
+            {
+              toolCallId: "question_1",
+              toolName: "ask_user",
+              args: { question: "Choose a provider?" },
+            },
+          ],
+        ]),
       } as unknown as ReturnType<typeof import("@codemap-ai/runtime-node").getMastraDisplayState>,
     }),
     [

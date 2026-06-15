@@ -65,7 +65,7 @@ export function WorkspaceSwitcher({
         <FolderTree size={15} />
         <span className="grid gap-0.5 text-left">
           <strong className="text-[14px]">{workspaceName}</strong>
-          <small className="flex items-center gap-[7px] text-[11px] text-[var(--muted)]">
+          <small className="flex items-center gap-[7px] whitespace-nowrap text-[11px] text-[var(--muted)]">
             <i className={`h-[7px] w-[7px] rounded-full ${runtimeDotClass(runtimeStatus)}`} />
             {runtimeCopy(runtimeStatus)}
           </small>

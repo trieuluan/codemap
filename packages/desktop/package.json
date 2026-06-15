@@ -36,7 +36,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "mastracode": "^0.22.2",
+    "mastracode": "^0.22.3",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
     "sharp": "^0.34.2",

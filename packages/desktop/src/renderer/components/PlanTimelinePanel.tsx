@@ -1,3 +1,8 @@
+import {
+  Check,
+  Circle,
+  LoaderCircle,
+} from "lucide-react";
 import type { SessionSnapshot } from "@codemap-ai/core/agent/contracts";
 
 interface PlanTimelinePanelProps {
@@ -27,37 +32,105 @@ export function PlanTimelinePanel({ mode, snapshot }: PlanTimelinePanelProps) {
   const verifyState = phaseState(snapshot, verifyPattern, editState === "done");
   const recentTools = snapshot.tools.slice(-4).reverse();
   const phases = [
-    { title: "Orient", detail: "Understand the repository and task boundaries.", state: orientState },
-    { title: "Read", detail: "Inspect the relevant files, symbols, and dependencies.", state: readState },
-    { title: "Edit", detail: "Implement the approved desktop UI changes.", state: editState },
-    { title: "Verify", detail: "Build, test, and inspect the finished experience.", state: verifyState },
+    {
+      title: "Orient",
+      detail: "Understand the repository and task boundaries.",
+      steps: ["Map the workspace", "Identify ownership boundaries"],
+      state: orientState,
+    },
+    {
+      title: "Read",
+      detail: "Inspect the relevant files, symbols, and dependencies.",
+      steps: ["Rank relevant files", "Trace symbols and dependencies"],
+      state: readState,
+    },
+    {
+      title: "Edit",
+      detail: "Implement the approved desktop UI changes.",
+      steps: ["Apply scoped changes", "Preserve runtime contracts"],
+      state: editState,
+    },
+    {
+      title: "Verify",
+      detail: "Build, test, and inspect the finished experience.",
+      steps: ["Run focused checks", "Inspect the final diff"],
+      state: verifyState,
+    },
   ];
+  const completedPhases = phases.filter((phase) => phase.state === "done").length;
 
   return (
-    <section className="flex flex-col min-h-0 p-4 overflow-y-auto" aria-label="Plan timeline">
-      <header className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Execution plan</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{mode === "plan" ? "Planning mode" : "Build mode"} · {snapshot.status}</p>
+    <section className="plan-panel" aria-label="Plan timeline">
+      <header className="xp-panel-head">
+        <div className="xp-head-title">
+          <span className={`xp-dot ${snapshot.status}`} />
+          <div>
+            <strong>Execution plan</strong>
+            <span className="xp-head-sub">
+              {mode === "plan" ? "Plan mode" : "Build mode"} · {snapshot.status}
+            </span>
+          </div>
         </div>
-        <span className={`xp-status ${snapshot.status}`}>{snapshot.status}</span>
+        <span className="plan-progress">
+          {completedPhases}/{phases.length} phases
+        </span>
       </header>
 
-      <div className="grid gap-0">
+      <div className="plan-timeline">
         {phases.map((phase, index) => (
-          <article className={`plan-step ${phase.state}`} key={phase.title}>
-            <div className="plan-marker"><span>{phase.state === "done" ? "✓" : index + 1}</span></div>
-            <div><strong>{phase.title}</strong><p>{phase.detail}</p></div>
+          <article className={`plan-phase ${phase.state}`} key={phase.title}>
+            <div className="plan-rail">
+              <span className="plan-node">
+                {phase.state === "done" ? (
+                  <Check size={13} />
+                ) : phase.state === "active" ? (
+                  <LoaderCircle className="spin" size={13} />
+                ) : (
+                  <Circle size={8} />
+                )}
+              </span>
+              {index < phases.length - 1 ? <span className="plan-line" /> : null}
+            </div>
+            <div className="plan-content">
+              <div className="plan-phase-head">
+                <strong>{phase.title}</strong>
+                <span className={`plan-status-chip ${phase.state}`}>
+                  {phase.state}
+                </span>
+              </div>
+              <p className="plan-note">{phase.detail}</p>
+              <div className="plan-steps">
+                {phase.steps.map((step, stepIndex) => {
+                  const stepDone = phase.state === "done";
+                  const stepActive = phase.state === "active" && stepIndex === 0;
+                  return (
+                    <div
+                      className={`plan-step${stepDone ? " done" : ""}${stepActive ? " active" : ""}`}
+                      key={step}
+                    >
+                      {stepDone ? (
+                        <Check size={12} />
+                      ) : stepActive ? (
+                        <LoaderCircle size={12} />
+                      ) : (
+                        <Circle size={7} />
+                      )}
+                      <span>{step}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </article>
         ))}
       </div>
 
-      <div className="mt-4 pt-4 plan-activity">
-        <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recent activity</span>
+      <div className="plan-activity">
+        <span>Recent activity</span>
         {recentTools.length > 0 ? recentTools.map((tool) => (
-          <div className="flex items-center justify-between py-1.5 text-xs" key={tool.toolCallId}>
-            <code className="font-mono text-foreground">{tool.name}</code>
-            <small className="text-muted-foreground">{tool.isError ? "error" : tool.result !== undefined ? "done" : "running"}</small>
+          <div className="plan-activity-row" key={tool.toolCallId}>
+            <code>{tool.name}</code>
+            <small>{tool.isError ? "error" : tool.result !== undefined ? "done" : "running"}</small>
           </div>
         )) : <p>No tool activity yet.</p>}
       </div>
