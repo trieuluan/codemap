@@ -1,16 +1,28 @@
 import { useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   CircleHelp,
   FileCode2,
-  LoaderCircle,
   ShieldCheck,
-  Sparkles,
   TriangleAlert,
   X,
 } from "lucide-react";
 import type { SessionSnapshot, SessionMessage } from "@codemap-ai/core/agent/contracts";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "../../components/ai-elements/conversation.js";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "../../components/ai-elements/message.js";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "../../components/ai-elements/reasoning.js";
 import { ToolExecution } from "./ToolExecution.js";
 
 interface ConversationPanelProps {
@@ -21,19 +33,6 @@ interface ConversationPanelProps {
   onApprove: (approvalId: string) => void;
   onDecline: (approvalId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => void;
-}
-
-function renderMessageText(content: string) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
-      }}
-    >
-      {content}
-    </ReactMarkdown>
-  );
 }
 
 export function ConversationPanel({
@@ -50,65 +49,63 @@ export function ConversationPanel({
   const orderedTools = useMemo(() => [...snapshot.tools], [snapshot.tools]);
 
   return (
-    <div className="conversation">
-      {displayMessages.length === 0 ? (
-        <div className="empty-chat">
-          <div className="empty-chat-icon">
-            <FileCode2 size={25} />
-          </div>
-          <h2>What are we building?</h2>
-          <p>
-            Mention files with <code>@path/to/file</code>, attach images, or ask
-            CodeMap to inspect and modify this workspace.
-          </p>
-        </div>
-      ) : (
-        <div className="message-stack">
+    <Conversation className="conversation">
+      <ConversationContent className="conversation-content">
+        {displayMessages.length === 0 ? (
+          <ConversationEmptyState
+            className="empty-chat"
+            icon={
+              <span className="grid w-[52px] h-[52px] place-items-center border border-border rounded-[14px] bg-card">
+                <FileCode2 size={25} />
+              </span>
+            }
+            title="What are we building?"
+            description="Mention files with @path/to/file, attach images, or ask CodeMap to inspect and modify this workspace."
+          />
+        ) : (
+          <div className="grid gap-[18px]">
           {displayMessages.map((message) => (
             <article
               key={(message as { localId?: string; id?: string }).localId ?? message.id}
-              className={message.role === "user" ? "message-row user" : "message-row assistant"}
+              className={`flex flex-col gap-1.5 ${message.role === "user" ? "items-end" : ""}`}
             >
-              <div className="message-avatar">
-                {message.role === "user" ? "You" : "AI"}
-              </div>
-              <div className="message-card">
-                <div className="message-role">
-                  {message.role === "user" ? "You" : "CodeMap"}
-                </div>
-                <div className="message-body">{renderMessageText(message.content)}</div>
-              </div>
+              <Message
+                className="codemap-message grid gap-2 p-3 border border-border rounded-[10px] bg-card"
+                from={message.role === "user" ? "user" : "assistant"}
+              >
+                <MessageContent className="codemap-message-content">
+                  <MessageResponse>{message.content}</MessageResponse>
+                </MessageContent>
+              </Message>
             </article>
           ))}
-        </div>
-      )}
-
-      {snapshot.thinkingText && isBusy && (
-        <div className="thinking-row">
-          <LoaderCircle className="spin" size={14} />
-          <span>Reasoning in progress</span>
-        </div>
-      )}
-
-      {orderedTools.length > 0 && (
-        <section className="tool-stack">
-          <div className="section-label">
-            <Sparkles size={14} />
-            Tool activity
           </div>
-          {orderedTools.map((tool) => (
-            <ToolExecution
-              key={tool.toolCallId}
-              toolCallId={tool.toolCallId}
-              name={tool.name}
-              preview={tool.preview}
-              result={tool.result}
-            />
-          ))}
-        </section>
-      )}
+        )}
 
-      {snapshot.pendingApproval && (
+        {snapshot.thinkingText && (
+          <div className="grid gap-1.5">
+            <Reasoning className="codemap-reasoning text-muted-foreground text-xs italic" isStreaming={isBusy}>
+              <ReasoningTrigger />
+              <ReasoningContent>{snapshot.thinkingText}</ReasoningContent>
+            </Reasoning>
+          </div>
+        )}
+
+        {orderedTools.length > 0 && (
+          <section className="grid gap-[18px]">
+            {orderedTools.map((tool) => (
+              <ToolExecution
+                key={tool.toolCallId}
+                toolCallId={tool.toolCallId}
+                name={tool.name}
+                preview={tool.preview}
+                result={tool.result}
+              />
+            ))}
+          </section>
+        )}
+
+        {snapshot.pendingApproval && (
         <section className="prompt-card approval-card">
           <div className="prompt-card-header">
             <ShieldCheck size={16} />
@@ -135,9 +132,9 @@ export function ConversationPanel({
             </button>
           </div>
         </section>
-      )}
+        )}
 
-      {snapshot.pendingQuestion && (
+        {snapshot.pendingQuestion && (
         <section className="prompt-card question-card">
           <div className="prompt-card-header">
             <CircleHelp size={16} />
@@ -185,15 +182,17 @@ export function ConversationPanel({
             </form>
           )}
         </section>
-      )}
+        )}
 
-      {(error || snapshot.error) && (
-        <div className="error-banner">
+        {(error || snapshot.error) && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-destructive/45 bg-destructive/10 text-[#dca2a2] text-xs">
           <TriangleAlert size={15} />
           <span>{error ?? snapshot.error ?? "Unknown error"}</span>
           <X size={15} />
         </div>
-      )}
-    </div>
+        )}
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }

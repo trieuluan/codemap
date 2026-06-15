@@ -1,0 +1,358 @@
+/* ═══════════════════════════════════════════════
+   launcher.css — Launcher, workspace picker, recents
+   ═══════════════════════════════════════════════ */
+
+.launcher,
+.launcher-empty {
+  height: 100%;
+  background: var(--background);
+}
+
+.launcher {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.15fr);
+}
+
+.launcher-intro,
+.launcher-recents {
+  min-width: 0;
+  padding: 36px;
+}
+
+.launcher-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #101012, #0d0d0e);
+}
+
+.launcher-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.launcher-heading h1 {
+  margin: 4px 0 0;
+  font-size: 21px;
+}
+
+.launcher-intro > .muted {
+  max-width: 440px;
+  font-size: 13px;
+}
+
+.launcher-resume {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.launcher-resume span {
+  margin-left: auto;
+  color: #6a6a55;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.launcher-recents {
+  overflow: auto;
+}
+
+.recent-workspace-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.recent-workspace {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-workspace:hover {
+  border-color: var(--border);
+  background: var(--hover);
+}
+
+.recent-workspace-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text-dim);
+}
+
+.recent-workspace-copy {
+  min-width: 0;
+}
+
+.recent-workspace-copy strong,
+.recent-workspace-copy code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-workspace-copy strong {
+  font-size: 13px;
+}
+
+.recent-workspace-copy code,
+.recent-workspace-time {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.recent-workspace-copy code {
+  margin-top: 4px;
+}
+
+.recent-workspace-time {
+  white-space: nowrap;
+}
+
+.launcher-empty {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 26%, #161618 0, transparent 40%),
+    var(--background);
+}
+
+.launcher-empty-card {
+  width: min(420px, 100%);
+  padding: 34px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #121214, #0f0f10);
+  box-shadow: 0 18px 70px rgb(0 0 0 / 35%);
+}
+
+.launcher-empty-card .primary-button {
+  margin-top: 22px;
+}
+
+/* Workspace picker (legacy) */
+.workspace-picker {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 30%, #171719 0, transparent 38%),
+    var(--background);
+}
+
+.app-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 28px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+/* Launcher shell variants used by current JSX */
+.lc-left,
+.lc-right {
+  min-width: 0;
+  padding: 36px;
+}
+
+.lc-left {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #101012, #0d0d0e);
+}
+
+.lc-right {
+  overflow: auto;
+}
+
+.lc-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lc-head h1 {
+  margin: 4px 0 0;
+  font-size: 21px;
+}
+
+.lc-actions,
+.lc-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lc-resume {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.lc-resume-ago {
+  margin-left: auto;
+  color: #6a6a55;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.launcher-loading-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lc-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  margin-top: auto;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 2%);
+  font-size: 13px;
+}
+
+.lc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.lc-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.rec {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rec:hover {
+  border-color: var(--border);
+  background: var(--hover);
+}
+
+.rec.loading {
+  opacity: 0.8;
+}
+
+.rec-ico {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text-dim);
+}
+
+.rec-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.rec-name,
+.rec-path,
+.rec-meta code,
+.rec-meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-name {
+  font-size: 13px;
+}
+
+.rec-path,
+.rec-meta {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.rec-path {
+  margin-top: 4px;
+}
+
+.rec-meta {
+  text-align: right;
+}
+
+/* Launcher error */
+.launcher-error {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--error-bg, rgba(248, 113, 113, 0.1));
+  border: 1px solid var(--error-border, rgba(248, 113, 113, 0.3));
+  border-radius: var(--radius);
+  color: var(--error-text, #f87171);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .launcher {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lc-left {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}

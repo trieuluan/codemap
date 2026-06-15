@@ -1,0 +1,167 @@
+/* ═══════════════════════════════════════════════
+   layout.css — App shell, sidebar, main panel
+   ═══════════════════════════════════════════════ */
+
+.app-shell {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 280px 6px minmax(0, 1fr);
+  background: var(--background);
+}
+
+.app-shell.sidebar-closed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #0f0f10 0%, #111114 100%);
+}
+
+.app-shell.sidebar-closed .sidebar {
+  padding: 0;
+  border-right: 0;
+}
+
+.sidebar-section-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.sidebar-resize-handle {
+  position: relative;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+  transition: background 120ms ease;
+}
+
+.sidebar-resize-handle:hover::after,
+body.sidebar-resizing .sidebar-resize-handle::after {
+  background: var(--border-strong);
+}
+
+body.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sidebar-primary-action {
+  width: 100%;
+}
+
+.sidebar-toolbar,
+.sidebar-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+}
+
+.sidebar-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.main-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.workspace-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.inspector-closed .workspace-body {
+  grid-template-columns: minmax(0, 1fr) 56px;
+}
+
+.settings-closed .settings-panel {
+  width: 0;
+  min-width: 0;
+  border-left: 0;
+  overflow: hidden;
+}
+
+.conversation-column {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* Responsive */
+@media (max-width: 1080px) {
+  .workspace-body,
+  .inspector-closed .workspace-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-panel,
+  .settings-panel.collapsed {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 240px 6px minmax(0, 1fr);
+  }
+
+  .conversation,
+  .composer-wrap {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   Inspector active states (dynamic — can't be Tailwind)
+   ═══════════════════════════════════════════════ */
+.inspector-collapsed-tab.active,
+.inspector-tab.active {
+  color: var(--foreground);
+  background: var(--hover);
+}
+
+.inspector-tab.active {
+  border-bottom-color: var(--text-dim);
+}

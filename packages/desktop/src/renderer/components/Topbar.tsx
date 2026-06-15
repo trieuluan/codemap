@@ -1,55 +1,67 @@
 import {
-  FolderTree,
+  Hammer,
+  Map,
+  MessagesSquare,
   PanelLeft,
+  PanelRight,
   RefreshCw,
-  Settings2,
-  Sparkles,
+  Waypoints,
 } from "lucide-react";
 import type { RuntimeStatus } from "../types.js";
 import type { SettingsMetadata } from "../../shared/ipc.js";
 import { ModelSelector } from "./ModelSelector.js";
+import type { RecentWorkspace } from "./Launcher.js";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher.js";
 
 interface TopbarProps {
   runtimeStatus: RuntimeStatus;
   settings: SettingsMetadata | null;
-  totalTokens: number;
-  workspaceName: string;
-  settingsOpen: boolean;
+  workspace: string;
+  recents: RecentWorkspace[];
+  inspectorOpen: boolean;
+  mode: "plan" | "build";
+  view: "chat" | "map";
   onToggleSidebar: () => void;
   onModelChange: (model: string) => void;
-  onToggleSettings: () => void;
+  onModeChange: (mode: "plan" | "build") => void;
+  onToggleInspector: () => void;
+  onViewChange: (view: "chat" | "map") => void;
   onRestart: () => void;
-}
-
-function runtimeCopy(status: RuntimeStatus) {
-  switch (status) {
-    case "ready":
-      return "Runtime ready";
-    case "starting":
-      return "Connecting runtime";
-    case "disconnected":
-      return "Runtime disconnected";
-  }
+  onSwitchWorkspace: (path: string) => void;
+  onOpenWorkspace: () => void;
+  onOpenLauncher: () => void;
 }
 
 export function Topbar({
   runtimeStatus,
   settings,
-  totalTokens,
-  workspaceName,
-  settingsOpen,
+  workspace,
+  recents,
+  inspectorOpen,
+  mode,
+  view,
   onToggleSidebar,
   onModelChange,
-  onToggleSettings,
+  onModeChange,
+  onToggleInspector,
+  onViewChange,
   onRestart,
+  onSwitchWorkspace,
+  onOpenWorkspace,
+  onOpenLauncher,
 }: TopbarProps) {
   const selectedModel = settings?.defaultModel ?? "coder";
   const availableModels =
     settings?.availableModels.length ? settings.availableModels : [selectedModel];
 
+  const segmentedControlClass =
+    "inline-flex items-center gap-0.5 rounded-[10px] border border-[var(--border)] bg-[var(--card)] p-[3px]";
+  const segmentedButtonClass = (active: boolean) =>
+    `inline-flex cursor-pointer items-center gap-1.5 rounded-[8px] border-0 px-2.5 py-[7px] text-[12px] ${active ? "bg-[var(--hover)] text-[var(--foreground)]" : "bg-transparent text-[var(--muted)] hover:text-[var(--text-dim)]"}`;
+
   return (
-    <header className="topbar">
-      <div className="topbar-left">
+    <header className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[rgb(11_11_12_/_88%)] px-[18px] py-3 backdrop-blur-[18px]">
+      <div className="flex items-center gap-3">
         <button
           className="icon-button"
           onClick={onToggleSidebar}
@@ -59,24 +71,59 @@ export function Topbar({
           <PanelLeft size={17} />
         </button>
 
-        <div className="topbar-status-block">
-          <div className="topbar-title-row">
-            <FolderTree size={15} />
-            <strong>{workspaceName}</strong>
-          </div>
-          <div className="topbar-status-row">
-            <span className={`status-dot ${runtimeStatus}`} />
-            <span>{runtimeCopy(runtimeStatus)}</span>
-          </div>
+        <WorkspaceSwitcher
+          workspace={workspace}
+          runtimeStatus={runtimeStatus}
+          recents={recents}
+          onSwitchWorkspace={onSwitchWorkspace}
+          onOpenWorkspace={onOpenWorkspace}
+          onOpenLauncher={onOpenLauncher}
+        />
+      </div>
+
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className={segmentedControlClass} aria-label="Workspace view">
+          <button
+            className={segmentedButtonClass(view === "chat")}
+            onClick={() => onViewChange("chat")}
+            type="button"
+          >
+            <MessagesSquare size={13} />
+            Chat
+          </button>
+          <button
+            className={segmentedButtonClass(view === "map")}
+            onClick={() => onViewChange("map")}
+            type="button"
+          >
+            <Waypoints size={13} />
+            Map
+          </button>
+        </div>
+        <div
+          className={segmentedControlClass}
+          title="Plan = read-only · Build = full tool access"
+        >
+          <button
+            className={segmentedButtonClass(mode === "plan")}
+            onClick={() => onModeChange("plan")}
+            type="button"
+          >
+            <Map size={13} />
+            Plan
+          </button>
+          <button
+            className={segmentedButtonClass(mode === "build")}
+            onClick={() => onModeChange("build")}
+            type="button"
+          >
+            <Hammer size={13} />
+            Build
+          </button>
         </div>
       </div>
 
-      <div className="topbar-right">
-        <div className="token-pill" title="Total tokens in the active session">
-          <Sparkles size={14} />
-          <code>{totalTokens.toLocaleString()} tokens</code>
-        </div>
-
+      <div className="flex items-center gap-3">
         <ModelSelector
           models={availableModels}
           selectedModel={selectedModel}
@@ -85,13 +132,12 @@ export function Topbar({
         />
 
         <button
-          className={settingsOpen ? "secondary-button active" : "secondary-button"}
-          onClick={onToggleSettings}
+          className={inspectorOpen ? "icon-button active" : "icon-button"}
+          onClick={onToggleInspector}
           type="button"
-          title="Toggle settings panel"
+          title="Toggle inspector"
         >
-          <Settings2 size={14} />
-          Settings
+          <PanelRight size={17} />
         </button>
 
         {runtimeStatus === "disconnected" && (

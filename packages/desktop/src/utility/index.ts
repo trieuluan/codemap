@@ -3,6 +3,7 @@ import type {
   AgentSessionCommand,
   AgentSessionController,
 } from "@codemap-ai/core/agent/contracts";
+import type { CreateNodeAgentSessionOptions } from "@codemap-ai/runtime-node";
 import {
   CodeMapMcpToolClient,
   createNodeAgentSession,
@@ -28,6 +29,9 @@ let session: AgentSessionController | null = null;
 let unsubscribeSession: (() => void) | null = null;
 let toolClient: CodeMapMcpToolClient | null = null;
 let availableModels: string[] = [];
+
+/** Resolves when background warmup (MCP connect, context load, harness init) is complete. */
+let warmupPromise: Promise<void> | null = null;
 
 parentPort.on("message", (event) => {
   void handleRawCommand(event.data);
@@ -68,62 +72,94 @@ async function handleCommand(command: UtilityCommand): Promise<unknown> {
 async function initialize(nextWorkspacePath: string): Promise<void> {
   workspacePath = nextWorkspacePath;
   process.chdir(workspacePath);
+
+  // Tear down existing session/harness
   session?.abort();
   unsubscribeSession?.();
   unsubscribeSession = null;
   session = null;
+  warmupPromise = null;
   await toolClient?.close().catch(() => {});
   await resetHarnessSingleton().catch(() => {});
 
+  // ── Fast path: only what's needed to create a session object ──────────
   const settings = await loadSettings(workspacePath);
   const gateway = settings.gateway ?? {};
   const baseUrl = gateway.baseUrl ?? "http://localhost:4000/v1";
   const model = gateway.defaultModel ?? gateway.modeDefaults?.build ?? "coder";
   const provider = new NineRouterProvider(baseUrl, gateway.apiKey);
   toolClient = new CodeMapMcpToolClient();
-  await toolClient.connectExtras(settings.mcpServers);
-  availableModels = await provider
-    .listModels()
-    .catch(() => [model]);
 
-  const contextCache = createSessionContextCache();
-  const [resourceContext, projectContext] = await Promise.all([
-    getSessionResourceContext(contextCache, toolClient),
-    getSessionProjectContext(contextCache),
-  ]);
-  const instructions = buildCodeMapAgentInstructions(
-    resourceContext,
-    projectContext,
-    model,
-  );
-
-  session = createNodeAgentSession({
+  // sessionOptions is a mutable reference — background task will fill in
+  // agentInstructions and availableModels once they are ready.
+  const sessionOptions: CreateNodeAgentSessionOptions = {
     provider,
     providerId: gateway.provider,
     model,
     modeDefaults: gateway.modeDefaults,
-    availableModels,
+    availableModels: [model],
     toolClient,
-    agentInstructions: instructions,
-  });
+    agentInstructions: undefined,
+  };
+
+  session = createNodeAgentSession(sessionOptions);
   unsubscribeSession = session.subscribe((event) =>
     post({ type: "agent_event", event }),
   );
 
-  // Warm up harness so listThreads() works immediately after init
-  await warmupHarness({
-    toolClient,
-    baseUrl: provider.baseUrl,
+  // Emit ready immediately — UI can open and list threads as soon as harness warms up
+  const metadata = redactSettingsMetadata({
+    provider: gateway.provider,
+    baseUrl,
+    defaultModel: model,
     apiKey: gateway.apiKey,
-    modelId: model,
-    availableModels,
-    providerId: gateway.provider,
-    modeDefaults: gateway.modeDefaults,
-    extraServerConfigs: toolClient.getExtraServerConfigs(),
-  }).catch(() => {});
-
-  const metadata = await readSettingsMetadata();
+    apiToken: settings.codemap?.apiToken,
+    availableModels: sessionOptions.availableModels,
+  });
   post({ type: "ready", workspacePath, settings: metadata });
+
+  // ── Background: MCP connect, model list, context load, harness warmup ─
+  const capturedToolClient = toolClient;
+  warmupPromise = (async () => {
+    try {
+      // Phase 1: parallel network/disk work
+      const [, models] = await Promise.all([
+        capturedToolClient.connectExtras(settings.mcpServers),
+        provider.listModels().catch(() => [model] as string[]),
+      ]);
+
+      // Update available models on the live session options object
+      availableModels = models;
+      sessionOptions.availableModels = models;
+
+      const contextCache = createSessionContextCache();
+      const [resourceContext, projectContext] = await Promise.all([
+        getSessionResourceContext(contextCache, capturedToolClient),
+        getSessionProjectContext(contextCache),
+      ]);
+
+      // Inject instructions into the live session — next send() will use them
+      sessionOptions.agentInstructions = buildCodeMapAgentInstructions(
+        resourceContext,
+        projectContext,
+        model,
+      );
+
+      // Phase 2: warm up Mastra harness (LibSQL, fastembed, MCP child process)
+      await warmupHarness({
+        toolClient: capturedToolClient,
+        baseUrl: provider.baseUrl,
+        apiKey: gateway.apiKey,
+        modelId: model,
+        availableModels: models,
+        providerId: gateway.provider,
+        modeDefaults: gateway.modeDefaults,
+        extraServerConfigs: capturedToolClient.getExtraServerConfigs(),
+      });
+    } catch {
+      // Background warmup is best-effort — don't crash the utility process
+    }
+  })();
 }
 
 async function handleAgentCommand(
@@ -138,6 +174,14 @@ async function handleAgentCommand(
       session.abort();
       return;
     case "list_threads":
+      // Wait for background warmup before listing — harness must be ready for thread access.
+      // Cap at 8 s so the UI isn't blocked indefinitely if warmup hangs.
+      if (warmupPromise) {
+        await Promise.race([
+          warmupPromise,
+          new Promise<void>((r) => setTimeout(r, 8_000)),
+        ]);
+      }
       return session.listThreads();
     case "switch_thread":
       return session.switchThread(command.threadId);

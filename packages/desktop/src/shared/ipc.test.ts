@@ -18,6 +18,14 @@ test("desktop IPC accepts workspace and agent commands", () => {
 
   assert.equal(
     desktopCommandSchema.parse({
+      type: "select_workspace",
+      requestId: "req-select",
+    }).type,
+    "select_workspace",
+  );
+
+  assert.equal(
+    desktopCommandSchema.parse({
       type: "agent",
       command: {
         type: "send",

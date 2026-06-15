@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, TerminalSquare } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { ThreadSummary } from "@codemap-ai/core/agent/contracts";
 import type { SettingsMetadata } from "../shared/ipc.js";
 import type { RuntimeStatus } from "./types.js";
@@ -7,22 +6,41 @@ import { ThreadSidebar } from "./components/ThreadSidebar.js";
 import { ConversationPanel } from "./components/ConversationPanel.js";
 import { ComposerFooter } from "./components/ComposerFooter.js";
 import { Topbar } from "./components/Topbar.js";
-import { SettingsPanel } from "./components/SettingsPanel.js";
+import { CodeMapPanel } from "./components/CodeMapPanel.js";
+import {
+  RightRail,
+  type InspectorTab,
+} from "./components/RightRail.js";
+import {
+  Launcher,
+  type RecentWorkspace,
+} from "./components/Launcher.js";
 import { useAgentSession } from "./hooks/useAgentSession.js";
 import { useSidebarResize } from "./hooks/useSidebarResize.js";
 import { useThreadSelection } from "./hooks/useThreadSelection.js";
 
 export function App() {
+  const [mode, setMode] = useState<"plan" | "build">("build");
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("disconnected");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [settings, setSettings] = useState<SettingsMetadata | null>(null);
-  const [draft, setDraft] = useState("");
-  const [images, setImages] = useState<Array<{ data: string; mimeType: string }>>([]);
+  const [recents, setRecents] = useState<RecentWorkspace[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("codemap.recentWorkspaces") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("plan");
+  const [view, setView] = useState<"chat" | "map">("chat");
+  const [openingWorkspace, setOpeningWorkspace] = useState<string | null>(null);
+  const [workspaceOpenError, setWorkspaceOpenError] = useState<string | null>(null);
   const [openThreadMenuId, setOpenThreadMenuId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const openingWorkspaceRef = useRef(false);
 
   const {
     snapshot,
@@ -35,11 +53,6 @@ export function App() {
   const threadSelection = useThreadSelection(threads, removeThreads);
 
   const isBusy = snapshot.status === "running" || snapshot.status === "aborting";
-  const workspaceName = useMemo(
-    () => workspace?.split("/").filter(Boolean).at(-1) ?? "CodeMap",
-    [workspace],
-  );
-
   useEffect(() => {
     return window.codemap.onRuntimeStatus((status) => {
       setRuntimeStatus(status);
@@ -60,28 +73,54 @@ export function App() {
     }
   }
 
-  async function openWorkspace() {
-    setError(null);
-    const path = await window.codemap.openWorkspace();
-    if (!path) return;
-    setWorkspace(path);
-    resetSession();
-    await refreshMetadata();
+  function rememberWorkspace(path: string) {
+    const name = path.split("/").filter(Boolean).at(-1) ?? path;
+    setRecents((current) => {
+      const next = [
+        { path, name, openedAt: Date.now() },
+        ...current.filter((recent) => recent.path !== path),
+      ].slice(0, 8);
+      localStorage.setItem("codemap.recentWorkspaces", JSON.stringify(next));
+      return next;
+    });
   }
 
-  async function submit() {
-    const content = draft.trim();
+  async function openWorkspace(path?: string) {
+    if (openingWorkspaceRef.current) return;
+    openingWorkspaceRef.current = true;
+    setOpeningWorkspace(path ?? "Choose folder");
+    setWorkspaceOpenError(null);
+    try {
+      const selectedPath = path
+        ? await window.codemap.openWorkspacePath(path)
+        : await window.codemap.openWorkspace();
+      if (!selectedPath) return;
+      setWorkspace(selectedPath);
+      setView("chat");
+      rememberWorkspace(selectedPath);
+      resetSession();
+      await refreshMetadata();
+    } catch (cause) {
+      setWorkspaceOpenError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      openingWorkspaceRef.current = false;
+      setOpeningWorkspace(null);
+    }
+  }
+
+  async function submit(
+    content: string,
+    images: Array<{ data: string; mimeType: string }>,
+  ) {
     if (!content || !workspace || isBusy) return;
-    setDraft("");
     setError(null);
     appendUserMessage(content);
     resetSnapshotForSubmit();
-    const attached = images;
-    setImages([]);
     try {
       await window.codemap.send(content, {
         model: settings?.defaultModel,
-        images: attached.length > 0 ? attached : undefined,
+        planMode: mode === "plan",
+        images: images.length > 0 ? images : undefined,
       });
       await refreshMetadata();
     } catch (cause) {
@@ -114,69 +153,33 @@ export function App() {
     }
   }
 
-  async function attachImages(files: FileList | null) {
-    if (!files) return;
-    const next = await Promise.all(
-      [...files].map(
-        (file) =>
-          new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = () => reject(reader.error);
-            reader.onload = () => {
-              const dataUrl = String(reader.result);
-              resolve({
-                data: dataUrl.slice(dataUrl.indexOf(",") + 1),
-                mimeType: file.type || "image/png",
-              });
-            };
-            reader.readAsDataURL(file);
-          }),
-      ),
-    );
-    setImages((current) => [...current, ...next]);
-  }
-
   function toggleSidebar() {
     setSidebarOpen((value) => !value);
   }
 
-  function toggleSettings() {
-    setSettingsOpen((value) => !value);
+  function toggleInspector() {
+    setInspectorOpen((value) => !value);
   }
 
   function changeModel(model: string) {
     setSettings((current) => (current ? { ...current, defaultModel: model } : current));
   }
 
-  function removeImage(index: number) {
-    setImages((current) => current.filter((_, currentIndex) => currentIndex !== index));
-  }
-
   if (!workspace) {
     return (
-      <main className="workspace-picker">
-        <div className="picker-card">
-          <div className="app-mark">
-            <TerminalSquare size={22} />
-          </div>
-          <p className="eyebrow">CodeMap desktop</p>
-          <h1>Open a workspace</h1>
-          <p className="muted">
-            Start a coding session with the same account, models, MCP servers,
-            hooks, and settings as the CLI.
-          </p>
-          <button className="primary-button" onClick={openWorkspace} type="button">
-            <FolderOpen size={16} />
-            Choose folder
-          </button>
-        </div>
-      </main>
+      <Launcher
+        error={workspaceOpenError}
+        openingWorkspace={openingWorkspace}
+        recents={recents}
+        onOpenWorkspace={() => void openWorkspace()}
+        onResumeWorkspace={(path) => void openWorkspace(path)}
+      />
     );
   }
 
   return (
     <div
-      className={`app-shell ${sidebarOpen ? "" : "sidebar-closed"} ${settingsOpen ? "settings-open" : "settings-closed"}`}
+      className={`app-shell ${sidebarOpen ? "" : "sidebar-closed"} ${inspectorOpen ? "inspector-open" : "inspector-closed"}`}
       style={
         sidebarOpen
           ? {
@@ -192,14 +195,12 @@ export function App() {
         sidebarOpen={sidebarOpen}
         sidebarWidth={clampedWidth}
         selectedThreadIds={threadSelection.selectedThreadIds}
-        onToggleSidebar={toggleSidebar}
         onSelectThread={(threadId) => window.codemap.switchThread(threadId)}
         onCreateThread={createThread}
         onDeleteThread={deleteThread}
         onToggleThreadSelection={threadSelection.toggleSelection}
         onDeleteSelectedThreads={threadSelection.deleteSelected}
         onClearSelection={threadSelection.clearSelection}
-        onOpenWorkspace={openWorkspace}
         onStartSidebarResize={startResize}
         onSetOpenThreadMenuId={setOpenThreadMenuId}
         openThreadMenuId={openThreadMenuId}
@@ -211,44 +212,57 @@ export function App() {
         <Topbar
           runtimeStatus={runtimeStatus}
           settings={settings}
-          totalTokens={snapshot.usage.totalTokens}
-          workspaceName={workspaceName}
-          settingsOpen={settingsOpen}
+          workspace={workspace}
+          recents={recents}
+          inspectorOpen={inspectorOpen}
+          mode={mode}
+          view={view}
           onToggleSidebar={toggleSidebar}
           onModelChange={changeModel}
-          onToggleSettings={toggleSettings}
+          onModeChange={setMode}
+          onToggleInspector={toggleInspector}
+          onViewChange={setView}
           onRestart={() => window.codemap.restartRuntime()}
+          onSwitchWorkspace={(path) => void openWorkspace(path)}
+          onOpenWorkspace={() => void openWorkspace()}
+          onOpenLauncher={() => setWorkspace(null)}
         />
 
         <div className="workspace-body">
-          <div className="conversation-column">
-            <ConversationPanel
-              displayMessages={displayMessages}
-              snapshot={snapshot}
-              error={error}
-              isBusy={isBusy}
-              onApprove={(id) => window.codemap.respondToApproval(id, "approve")}
-              onDecline={(id) => window.codemap.respondToApproval(id, "decline")}
-              onAnswerQuestion={(id, answer) => window.codemap.respondToQuestion(id, answer)}
-            />
+          {view === "chat" ? (
+            <div className="conversation-column">
+              <ConversationPanel
+                displayMessages={displayMessages}
+                snapshot={snapshot}
+                error={error}
+                isBusy={isBusy}
+                onApprove={(id) => window.codemap.respondToApproval(id, "approve")}
+                onDecline={(id) => window.codemap.respondToApproval(id, "decline")}
+                onAnswerQuestion={(id, answer) => window.codemap.respondToQuestion(id, answer)}
+              />
 
-            <ComposerFooter
-              images={images}
-              draft={draft}
-              runtimeStatus={runtimeStatus}
-              isBusy={isBusy}
-              onDraftChange={setDraft}
-              onAttachImages={attachImages}
-              onRemoveImage={removeImage}
-              onSubmit={submit}
-              onStop={() => window.codemap.abort()}
-            />
-          </div>
+              <ComposerFooter
+                runtimeStatus={runtimeStatus}
+                isBusy={isBusy}
+                mode={mode}
+                onSubmit={submit}
+                onStop={() => window.codemap.abort()}
+              />
+            </div>
+          ) : (
+            <div className="map-column">
+              <CodeMapPanel />
+            </div>
+          )}
 
-          <SettingsPanel
+          <RightRail
+            mode={mode}
+            snapshot={snapshot}
             settings={settings}
-            open={settingsOpen}
-            onToggle={toggleSettings}
+            open={inspectorOpen}
+            tab={inspectorTab}
+            onTabChange={setInspectorTab}
+            onToggle={toggleInspector}
           />
         </div>
       </section>

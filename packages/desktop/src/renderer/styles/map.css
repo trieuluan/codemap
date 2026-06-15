@@ -1,0 +1,409 @@
+/* ═══════════════════════════════════════════════
+   map.css — Right-rail panels, code map, tokens
+   ═══════════════════════════════════════════════ */
+
+/* ── Shared panel wrapper ── */
+
+.xp-status {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+  background: var(--card);
+  color: var(--muted);
+}
+
+.xp-status.running {
+  color: var(--text-dim);
+}
+
+.xp-status.completed {
+  color: var(--success);
+}
+
+.xp-status.error {
+  color: var(--error);
+}
+
+/* ── Token meter ── */
+.token-meter {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.token-meter-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.token-meter-bar i {
+  display: block;
+  height: 100%;
+  transition: width 300ms ease;
+}
+
+.token-meter-bar i.prompt {
+  background: var(--accent);
+}
+
+.token-meter-bar i.completion {
+  background: var(--success);
+}
+
+.token-meter i.prompt,
+.token-meter i.completion,
+.token-meter i.free {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.token-meter i.prompt {
+  background: var(--accent);
+}
+
+.token-meter i.completion {
+  background: var(--success);
+}
+
+.token-meter i.free {
+  background: var(--muted);
+}
+
+.token-meter .token-breakdown span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.token-meter .token-breakdown strong {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.codemap-view-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.codemap-view-switch button {
+  flex: 1;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.codemap-view-switch button:hover {
+  color: var(--text-dim);
+}
+
+.codemap-view-switch button.active {
+  background: var(--hover);
+  color: var(--foreground);
+}
+
+.codemap-edge {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.codemap-edge.highlighted {
+  stroke: var(--text-dim);
+  stroke-width: 2;
+}
+
+.codemap-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.codemap-node circle {
+  fill: var(--card-soft);
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  transition: fill 120ms ease;
+}
+
+.codemap-node:hover circle,
+.codemap-node:focus circle {
+  fill: var(--hover);
+}
+
+.codemap-node.selected circle {
+  stroke: var(--text-dim);
+  stroke-width: 2;
+}
+
+.codemap-node.dimmed {
+  opacity: 0.4;
+}
+
+.codemap-node-label {
+  fill: var(--text-dim);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.codemap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.codemap-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codemap-legend i,
+.codemap-detail-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.codemap-detail {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.codemap-detail-main {
+  display: grid;
+  gap: 6px;
+}
+
+.codemap-detail-main div,
+.codemap-health,
+.codemap-impact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.codemap-detail-main strong,
+.codemap-health strong,
+.codemap-impact strong {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.codemap-detail-main span,
+.codemap-health span,
+.codemap-impact span {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.codemap-health {
+  color: var(--success);
+}
+
+.codemap-health div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.codemap-health i {
+  background: var(--success);
+}
+
+.codemap-impact {
+  color: var(--warning);
+}
+
+.codemap-message {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.codemap-message.is-user {
+  background: var(--hover);
+}
+
+.codemap-message-content {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.codemap-message.is-user .codemap-message-content {
+  color: var(--foreground);
+}
+
+.codemap-reasoning {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.codemap-ai-tool {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-soft);
+  font-size: 12px;
+}
+
+.codemap-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.codemap-tool-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Plan timeline */
+.plan-step {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--border);
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-step.active {
+  border-left-color: var(--text-dim);
+  color: var(--text-dim);
+}
+
+.plan-step.completed {
+  border-left-color: var(--success);
+  color: var(--success);
+}
+
+.plan-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+/* Token breakdown */
+.token-breakdown {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 12px;
+}
+
+.token-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.token-breakdown-label {
+  color: var(--muted);
+}
+
+.token-breakdown-value {
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+/* ═══════════════════════════════════════════════
+   Code map panel (from code-map.css)
+   ═══════════════════════════════════════════════ */
+.map-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════
+   Plan timeline wrapper + activity (from plan-timeline.css)
+   ═══════════════════════════════════════════════ */
+.plan-timeline {
+  display: grid;
+  gap: 0;
+}
+
+.plan-activity {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.plan-activity > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.plan-activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.plan-activity-row code {
+  font-family: var(--mono);
+  color: var(--foreground);
+}
+
+.plan-activity-row small {
+  color: var(--muted);
+}

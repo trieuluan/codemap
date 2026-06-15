@@ -152,6 +152,7 @@ export function redactSettingsMetadata(
 
 export interface DesktopApi {
   openWorkspace(): Promise<string | null>;
+  openWorkspacePath(workspacePath: string): Promise<string>;
   send(content: string, options?: {
     model?: string;
     effort?: "low" | "medium" | "high";

@@ -15,6 +15,12 @@ const api: DesktopApi = {
       type: "select_workspace",
       requestId: crypto.randomUUID(),
     }),
+  openWorkspacePath: (workspacePath) =>
+    invoke({
+      type: "open_workspace",
+      requestId: crypto.randomUUID(),
+      workspacePath,
+    }),
   send: (content, options = {}) => {
     const requestId = crypto.randomUUID();
     return invoke({

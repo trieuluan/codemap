@@ -1,0 +1,326 @@
+/* ═══════════════════════════════════════════════
+   sidebar.css — Thread list, thread items, menus
+   ═══════════════════════════════════════════════ */
+
+.thread-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.ws-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 2px;
+}
+
+.ws-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text-dim);
+}
+
+.ws-identity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ws-identity-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.ws-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ws-clean,
+.mid {
+  color: var(--muted);
+}
+
+.sidebar-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.thread-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--muted);
+}
+
+.thread-search:focus-within {
+  border-color: var(--border-focus);
+}
+
+.thread-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.thread-search input::placeholder {
+  color: var(--muted);
+}
+
+.thread-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.thread-search button:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.thread-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thread-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.thread-group {
+  display: grid;
+  gap: 6px;
+}
+
+.thread-empty-state {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  place-items: start;
+}
+
+.thread-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.thread-item:hover {
+  border-color: var(--border);
+  background: rgb(255 255 255 / 3.5%);
+}
+
+.thread-item.active {
+  background: linear-gradient(180deg, #1a1a1e, #161619);
+}
+
+.thread-item.active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 3px 3px 0;
+  background: #d4d4d6;
+  content: "";
+}
+
+.thread-item.selected {
+  border-color: var(--border);
+  background: var(--hover);
+}
+
+.thread-item-button {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 8px 9px 13px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-item-button span,
+.thread-item-button code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-item-button span {
+  font-size: 13px;
+}
+
+.thread-item-button code {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.thread-title {
+  color: var(--text-dim);
+}
+
+.thread-subtitle {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.thread-meta span,
+.thread-meta i {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+}
+
+.thread-group-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.thread-group-count {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.thread-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 0;
+}
+
+.thread-select-trigger,
+.thread-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.thread-item:hover .thread-menu-trigger,
+.thread-menu-trigger.open,
+.thread-item:focus-within .thread-menu-trigger,
+.thread-list.selection-mode .thread-select-trigger,
+.thread-item.selected .thread-select-trigger {
+  opacity: 1;
+}
+
+.thread-select-trigger.selected {
+  background: #ececef;
+  color: #111113;
+}
+
+.thread-select-trigger:hover,
+.thread-select-trigger:focus-visible,
+.thread-menu-trigger:hover,
+.thread-menu-trigger:focus-visible,
+.thread-menu-trigger.open {
+  background: rgb(255 255 255 / 6%);
+  color: #ededee;
+}
+
+.thread-menu {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 8px;
+  z-index: 10;
+  min-width: 160px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: #161618;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 35%);
+}
+
+.thread-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  color: #ededee;
+  cursor: pointer;
+}
+
+.thread-menu-item:hover {
+  background: var(--hover);
+}
+
+.thread-menu-item.danger {
+  color: #e7b0b0;
+}

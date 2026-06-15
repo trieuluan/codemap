@@ -1,0 +1,98 @@
+/* ═══════════════════════════════════════════════
+   composer.css — Composer, model selector, attachments
+   ═══════════════════════════════════════════════ */
+
+.composer-wrap {
+  padding: 14px max(24px, calc((100% - 860px) / 2)) 18px;
+  border-top: 1px solid var(--border);
+  background: rgb(11 11 12 / 96%);
+}
+
+.composer-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-hint,
+.composer-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.composer-status.ready {
+  color: #b5ddc0;
+}
+
+.composer-status.inactive {
+  color: #ddb7b7;
+}
+
+.composer {
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: #111112;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 18%);
+}
+
+.composer:focus-within {
+  border-color: #55555a;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 78px;
+  max-height: 220px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ededee;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.composer-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: var(--card);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.attachment-chip button {
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+

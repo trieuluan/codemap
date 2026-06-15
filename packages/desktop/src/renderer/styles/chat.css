@@ -1,0 +1,321 @@
+/* ═══════════════════════════════════════════════
+   chat.css — Conversation, messages, streaming, tools
+   ═══════════════════════════════════════════════ */
+
+.conversation {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px max(24px, calc((100% - 860px) / 2)) 36px;
+}
+
+.empty-chat {
+  display: grid;
+  min-height: 55vh;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.empty-chat p {
+  max-width: 540px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* Streaming indicator */
+.streaming-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.streaming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: streaming-bounce 1.4s ease-in-out infinite;
+}
+
+.streaming-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.streaming-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes streaming-bounce {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Quick action chips */
+.quick-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.quick-action-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+  color: var(--foreground);
+}
+
+/* Tool inline (collapsible) */
+.tool-inline {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.tool-inline.severity-success {
+  border-left: 3px solid var(--success);
+}
+
+.tool-inline.severity-warning {
+  border-left: 3px solid var(--warning);
+}
+
+.tool-inline.severity-error {
+  border-left: 3px solid var(--danger);
+}
+
+.tool-inline.severity-info {
+  border-left: 3px solid var(--text-dim);
+}
+
+.tool-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.tool-trigger:hover {
+  background: var(--hover);
+}
+
+.tool-content {
+  border-top: 1px solid var(--border);
+}
+
+.diff-preview,
+.tool-result {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px 14px;
+  color: #bdbdc0;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* Thinking/reasoning */
+.thinking-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.thinking-trigger:hover {
+  color: var(--text-dim);
+}
+
+.thinking-content {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-soft);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Prompt card */
+.prompt-card {
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #141416, #101012);
+}
+
+.prompt-card pre {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0d0d0e;
+  color: #bdbdc0;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.prompt-card-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.question-form {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.question-form textarea {
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0f0f11;
+  color: #ededee;
+  resize: vertical;
+}
+
+/* Tool tree (for nested tool calls) */
+.tool-tree {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.tool-tree-root {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.tool-tree-branch {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin-right: 8px;
+}
+
+.tool-tree-item {
+  display: grid;
+  gap: 6px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.tool-tree-item strong {
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.tool-tree-item small {
+  font-size: 11px;
+  color: var(--muted);
+  display: block;
+  margin-top: 2px;
+}
+
+.tool-tree-item b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: capitalize;
+  align-self: start;
+  margin-top: 2px;
+}
+
+.tool-tree-empty {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════
+   Conversation content and scroll (from conversation.css)
+   ═══════════════════════════════════════════════ */
+.conversation-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ═══════════════════════════════════════════════
+   Question and approval cards (from prompt.css)
+   ═══════════════════════════════════════════════ */
+.question-card {
+  border-color: var(--info-border, rgba(96, 165, 250, 0.4));
+}
+
+.approval-card {
+  border-color: var(--warning-border, rgba(251, 191, 36, 0.4));
+}
+
+/* ═══════════════════════════════════════════════
+   CodeMap tool section (from tool.css)
+   ═══════════════════════════════════════════════ */
+.codemap-tool-section {
+  font-size: 12px;
+  line-height: 1.5;
+}
