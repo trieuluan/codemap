@@ -53,55 +53,63 @@ export function diffLines(oldLines: string[], newLines: string[]): DiffChange[] 
   return changes;
 }
 
+export interface BuildUnifiedDiffOptions {
+  /** 1-based line number for the hunk header. Defaults to 1. */
+  startLine?: number;
+}
+
 export function buildUnifiedDiff(
   fileName: string,
   oldLines: string[],
   newLines: string[],
+  options?: BuildUnifiedDiffOptions,
 ): string {
   const changes = diffLines(oldLines, newLines);
 
+  const header = `diff --git a/${fileName} b/${fileName}\n--- a/${fileName}\n+++ b/${fileName}\n`;
+  const startLine = options?.startLine ?? 1;
+
   if (changes.every((c) => c.type === "equal")) {
-    return `--- a/${fileName}\n+++ b/${fileName}\n@@ -1,${oldLines.length} +1,${newLines.length} @@\n`;
+    return `${header}@@ -${startLine},${oldLines.length} +${startLine},${newLines.length} @@\n`;
   }
 
-  const sections: Array<{
-    oldStart: number;
-    oldLen: number;
-    newStart: number;
-    newLen: number;
-    lines: string[];
-  }> = [];
-
-  let currentSection: typeof sections[0] | null = null;
+  // Emit all changes in a single hunk section — no artificial gaps
+  // so the renderer shows the full diff without "N lines hidden" skip blocks.
   let oldPos = 0;
   let newPos = 0;
+  const hunkLines: string[] = [];
+  let hunkOldLen = 0;
+  let hunkNewLen = 0;
+
+  // Find the first non-equal change to set the start positions
+  let hunkStarted = false;
+  let hunkOldStart = startLine;
+  let hunkNewStart = startLine;
 
   for (const change of changes) {
     if (change.type === "equal") {
-      if (currentSection) {
-        sections.push(currentSection);
-        currentSection = null;
+      if (hunkStarted) {
+        for (const line of change.content) {
+          hunkLines.push(" " + line);
+          hunkOldLen++;
+          hunkNewLen++;
+        }
       }
       oldPos += change.content.length;
       newPos += change.content.length;
     } else {
-      if (!currentSection) {
-        currentSection = {
-          oldStart: oldPos + 1,
-          oldLen: 0,
-          newStart: newPos + 1,
-          newLen: 0,
-          lines: [],
-        };
+      if (!hunkStarted) {
+        hunkStarted = true;
+        hunkOldStart = startLine + oldPos;
+        hunkNewStart = startLine + newPos;
       }
-
       for (const line of change.content) {
         if (change.type === "remove") {
-          currentSection.oldLen++;
-          currentSection.lines.push("-" + line);
-        } else if (change.type === "insert") {
-          currentSection.newLen++;
-          currentSection.lines.push("+" + line);
+          hunkOldLen++;
+          hunkLines.push("-" + line);
+        } else {
+          hunkNewLen++;
+          hunkLines.push("+" + line);
         }
       }
       oldPos += change.content.length;
@@ -109,20 +117,5 @@ export function buildUnifiedDiff(
     }
   }
 
-  if (currentSection) {
-    sections.push(currentSection);
-  }
-
-  const parts: string[] = [];
-
-  for (const section of sections) {
-    parts.push(`--- a/${fileName}`);
-    parts.push(`+++ b/${fileName}`);
-    parts.push(
-      `@@ -${section.oldStart},${section.oldLen} +${section.newStart},${section.newLen} @@`,
-    );
-    parts.push(...section.lines);
-  }
-
-  return parts.join("\n");
+  return `${header}@@ -${hunkOldStart},${hunkOldLen} +${hunkNewStart},${hunkNewLen} @@\n${hunkLines.join("\n")}`;
 }

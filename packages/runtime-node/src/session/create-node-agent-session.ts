@@ -65,6 +65,8 @@ export function createNodeAgentSession(
     string,
     (answer: string | string[]) => void
   >();
+  const messagesCache = new Map<string, SessionMessage[]>();
+  let currentThreadId: string | null = null;
 
   const driver: AgentSessionDriver = {
     async send(input, emit) {
@@ -155,6 +157,8 @@ export function createNodeAgentSession(
       } finally {
         activeAbortController = null;
       }
+      // Invalidate cached messages for this thread — new messages were added
+      if (currentThreadId) messagesCache.delete(currentThreadId);
     },
     abort() {
       activeAbortController?.abort();
@@ -164,11 +168,23 @@ export function createNodeAgentSession(
       return (await runtime.listThreads()).map(mapThread);
     },
     async switchThread(threadId) {
-      await runtime.switchThread(threadId);
-      const messages = await runtime.listThreadMessages(threadId, 100);
-      return { threadId, messages: messages.flatMap(expandMessage) };
+      const cached = messagesCache.get(threadId);
+      if (cached) {
+        await runtime.switchThread(threadId);
+        currentThreadId = threadId;
+        return { threadId, messages: cached };
+      }
+      const [, messages] = await Promise.all([
+        runtime.switchThread(threadId),
+        runtime.listThreadMessages(threadId),
+      ]);
+      currentThreadId = threadId;
+      const expanded = messages.flatMap(expandMessage);
+      messagesCache.set(threadId, expanded);
+      return { threadId, messages: expanded };
     },
     async deleteThread(threadId) {
+      messagesCache.delete(threadId);
       await runtime.deleteThread(threadId);
     },
     respondToApproval(input) {
@@ -302,13 +318,37 @@ function extractMessageText(content: unknown): string {
   return content
     .map((part) => {
       if (typeof part === "string") return part;
+      if (typeof part !== "object" || part === null) return "";
+      // Text parts
+      if ("text" in part && typeof part.text === "string") return part.text;
+      // Image parts — embed as inline markdown data URI (alt = filename if available)
       if (
-        typeof part === "object" &&
-        part !== null &&
-        "text" in part &&
-        typeof part.text === "string"
+        "type" in part && part.type === "image" &&
+        "data" in part && typeof part.data === "string" &&
+        "mimeType" in part && typeof part.mimeType === "string"
       ) {
-        return part.text;
+        const alt = "filename" in part && typeof part.filename === "string" ? part.filename : "image";
+        return `\n![${alt}](data:${part.mimeType};base64,${part.data})`;
+      }
+      // File parts with image media types — same treatment
+      if (
+        "type" in part && part.type === "file" &&
+        "data" in part && typeof part.data === "string" &&
+        "mediaType" in part && typeof part.mediaType === "string" &&
+        part.mediaType.startsWith("image/")
+      ) {
+        const alt = "filename" in part && typeof part.filename === "string" ? part.filename : "image";
+        return `\n![${alt}](data:${part.mediaType};base64,${part.data})`;
+      }
+      // Non-image files — show a marker
+      if (
+        "type" in part && part.type === "file" &&
+        "mediaType" in part
+      ) {
+        const name = "filename" in part && typeof part.filename === "string"
+          ? part.filename
+          : "file";
+        return `\n[📎 ${name}]`;
       }
       return "";
     })

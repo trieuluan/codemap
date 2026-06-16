@@ -23,7 +23,7 @@ interface ComposerFooterProps {
   mode: "plan" | "build";
   onSubmit: (
     content: string,
-    images: Array<{ data: string; mimeType: string }>,
+    images: Array<{ data: string; mimeType: string; filename?: string }>,
   ) => void;
   onStop: () => void;
 }
@@ -36,6 +36,7 @@ function toRuntimeImages(files: PromptInputMessage["files"]) {
     return [{
       data: file.url.slice(separator + 1),
       mimeType: file.mediaType || "image/png",
+      filename: file.filename,
     }];
   });
 }

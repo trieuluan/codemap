@@ -4,6 +4,7 @@ import {
   CircleHelp,
   Copy,
   FileCode2,
+  Loader2,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -22,6 +23,7 @@ import {
   Message,
   MessageAction,
   MessageActions,
+  MessageAttachments,
   MessageContent,
   MessageResponse,
 } from "./ai-elements/message.js";
@@ -37,6 +39,8 @@ interface ConversationPanelProps {
   snapshot: SessionSnapshot;
   error: string | null;
   isBusy: boolean;
+  loadingMessages?: boolean;
+  workspaceRoot?: string | null;
   onApprove: (approvalId: string) => void;
   onDecline: (approvalId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => void;
@@ -54,6 +58,8 @@ export function ConversationPanel({
   snapshot,
   error,
   isBusy,
+  loadingMessages = false,
+  workspaceRoot,
   onApprove,
   onDecline,
   onAnswerQuestion,
@@ -79,34 +85,48 @@ export function ConversationPanel({
   }
 
   return (
-    <Conversation className="conversation">
+    <Conversation key={snapshot.threadId ?? "empty"} className="conversation">
       <ConversationContent className="conversation-content">
         {displayMessages.length === 0 ? (
-          <div className="empty-chat">
-            <ConversationEmptyState
-              icon={
-                <span className="grid w-13 h-13 place-items-center border border-border rounded-[14px] bg-card">
-                  <FileCode2 size={25} />
-                </span>
-              }
-              title="What are we building?"
-              description="Mention files with @path/to/file, attach images, or ask CodeMap to inspect and modify this workspace."
-            />
-            <div className="empty-suggestions" aria-label="Suggested prompts">
-              {suggestions.map((suggestion) => (
-                <button
-                  className="suggestion-chip"
-                  disabled={isBusy}
-                  key={suggestion}
-                  onClick={() => onSubmitPrompt(suggestion)}
-                  type="button"
-                >
-                  <Sparkles size={13} />
-                  {suggestion}
-                </button>
-              ))}
+          loadingMessages ? (
+            <div className="empty-chat">
+              <ConversationEmptyState
+                icon={
+                  <span className="grid w-13 h-13 place-items-center border border-border rounded-[14px] bg-card">
+                    <Loader2 size={25} className="animate-spin" />
+                  </span>
+                }
+                title="Loading conversation..."
+                description="Fetching messages for this thread"
+              />
             </div>
-          </div>
+          ) : (
+            <div className="empty-chat">
+              <ConversationEmptyState
+                icon={
+                  <span className="grid w-13 h-13 place-items-center border border-border rounded-[14px] bg-card">
+                    <FileCode2 size={25} />
+                  </span>
+                }
+                title="What are we building?"
+                description="Mention files with @path/to/file, attach images, or ask CodeMap to inspect and modify this workspace."
+              />
+              <div className="empty-suggestions" aria-label="Suggested prompts">
+                {suggestions.map((suggestion) => (
+                  <button
+                    className="suggestion-chip"
+                    disabled={isBusy}
+                    key={suggestion}
+                    onClick={() => onSubmitPrompt(suggestion)}
+                    type="button"
+                  >
+                    <Sparkles size={13} />
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
         ) : (
           <div className="message-stack">
           {displayMessages.map((message, index) => {
@@ -133,6 +153,7 @@ export function ConversationPanel({
                         preview={tool.preview}
                         result={tool.result}
                         isError={tool.isError}
+                        workspaceRoot={workspaceRoot}
                       />
                     ))}
                   </section>
@@ -147,6 +168,17 @@ export function ConversationPanel({
                       from={isUser ? "user" : "assistant"}
                     >
                       <MessageContent className="codemap-message-content message-body">
+                        {isUser && message.images && message.images.length > 0 && (
+                          <MessageAttachments
+                            files={message.images.map((img, i) => ({
+                              type: "file" as const,
+                              url: `data:${img.mimeType};base64,${img.data}`,
+                              mediaType: img.mimeType,
+                              filename: img.filename,
+                              id: String(i),
+                            }))}
+                          />
+                        )}
                         <MessageResponse>{message.content}</MessageResponse>
                       </MessageContent>
                     </Message>
@@ -189,6 +221,7 @@ export function ConversationPanel({
                   preview={tool.preview}
                   result={tool.result}
                   isError={tool.isError}
+                  workspaceRoot={workspaceRoot}
                 />
               ))}
             </section>

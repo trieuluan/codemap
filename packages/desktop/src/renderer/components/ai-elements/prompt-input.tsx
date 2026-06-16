@@ -1,6 +1,11 @@
 "use client";
 
-import { Button } from "../ui/button.js";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  AttachmentRemove,
+} from "./attachments.js";
 import {
   Command,
   CommandEmpty,
@@ -41,7 +46,6 @@ import {
   ImageIcon,
   Loader2Icon,
   MicIcon,
-  PaperclipIcon,
   PlusIcon,
   SquareIcon,
   XIcon,
@@ -289,61 +293,25 @@ export function PromptInputAttachment({
   const attachments = usePromptInputAttachments();
 
   const filename = data.filename || "";
-
-  const mediaType =
-    data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
-  const isImage = mediaType === "image";
-
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
+  const isImage = data.mediaType?.startsWith("image/") && !!data.url;
 
   return (
     <PromptInputHoverCard>
       <HoverCardTrigger asChild>
-        <div
-          className={cn(
-            "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-            className
-          )}
-          key={data.id}
+        <Attachment
+          className={className}
+          data={data}
+          onRemove={() => attachments.remove(data.id)}
           {...props}
         >
-          <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
-              {isImage ? (
-                <img
-                  alt={filename || "attachment"}
-                  className="size-5 object-cover"
-                  height={20}
-                  src={data.url}
-                  width={20}
-                />
-              ) : (
-                <div className="flex size-5 items-center justify-center text-muted-foreground">
-                  <PaperclipIcon className="size-3" />
-                </div>
-              )}
-            </div>
-            <Button
-              aria-label="Remove attachment"
-              className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                attachments.remove(data.id);
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
-          </div>
-
-          <span className="flex-1 truncate">{attachmentLabel}</span>
-        </div>
+          <AttachmentPreview />
+          <AttachmentInfo showMediaType={false} />
+          <AttachmentRemove />
+        </Attachment>
       </HoverCardTrigger>
       <PromptInputHoverCardContent className="w-auto p-2">
         <div className="w-auto space-y-3">
-          {isImage && (
+          {isImage && data.url && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
               <img
                 alt={filename || "attachment preview"}

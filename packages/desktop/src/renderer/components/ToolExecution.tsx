@@ -1,5 +1,6 @@
-import { type BundledLanguage } from "shiki";
-import { CodeBlock } from "./ai-elements/code-block.js";
+import { useState } from "react";
+import { CodeBlock } from "streamdown";
+import { ChevronDown } from "lucide-react";
 import {
   Tool,
   ToolContent,
@@ -7,8 +8,8 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool.js";
-import { buildUnifiedDiff } from "./diff/utils.js";
-import { DiffPreview } from "./diff/index.js";
+import { buildUnifiedDiff } from "./ui/diff/utils/build-unified-diff.js";
+import { DiffPreview } from "./ui/diff/preview.js";
 
 interface ToolExecutionProps {
   toolCallId: string;
@@ -17,8 +18,57 @@ interface ToolExecutionProps {
   preview?: string | null;
   result?: string | null;
   isError?: boolean;
+  workspaceRoot?: string | null;
 }
 
+/** Convert absolute path to workspace-relative (e.g. `packages/foo/bar.ts`). */
+function toRelativePath(absPath: string, workspaceRoot: string | null | undefined): string {
+  if (!workspaceRoot || !absPath.startsWith(workspaceRoot)) return absPath;
+  const rel = absPath.slice(workspaceRoot.length);
+  return rel.startsWith("/") ? rel.slice(1) : rel;
+}
+
+function CollapsibleSection({
+  label,
+  children,
+  defaultOpen = true,
+}: {
+  label: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="collapsible-section">
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-4 py-2 text-left"
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <ChevronDown
+          size={14}
+          className="text-muted-foreground transition-transform duration-200"
+          style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+        />
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+      </button>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 200ms ease-out",
+        }}
+      >
+        <div style={{ overflow: "hidden", minHeight: 0 }}>
+          <div className="px-4 pb-4">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function friendlyTitle(name: string): string {
   return localName(name);
@@ -49,7 +99,20 @@ function extractDiffText(result: string | null | undefined): string | null {
   return null;
 }
 
-const EXT_LANG: Record<string, BundledLanguage> = {
+/**
+ * Parse line range from tool result string.
+ * Matches patterns like "(lines 47)", "(lines 47-49)", "(lines 10, 47-49)".
+ * Returns [start, end] (1-based inclusive) or null.
+ */
+function parseLineRangesFromResult(result: string): [number, number] | null {
+  const match = result.match(/\(lines?\s+(\d+)(?:-(\d+))?(?:,\s*\d+(?:-\d+)?)*\)/);
+  if (!match) return null;
+  const start = parseInt(match[1]!, 10);
+  const end = match[2] ? parseInt(match[2]!, 10) : start;
+  return [start, end];
+}
+
+const EXT_LANG: Record<string, string> = {
   ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".jsx": "jsx",
   ".py": "python", ".rb": "ruby", ".go": "go", ".rs": "rust",
   ".java": "java", ".kt": "kotlin", ".swift": "swift",
@@ -60,27 +123,29 @@ const EXT_LANG: Record<string, BundledLanguage> = {
   ".vue": "vue", ".svelte": "svelte",
 };
 
-function languageFromPath(filePath: string): BundledLanguage {
+function languageFromPath(filePath: string): string {
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (EXT_LANG[ext] ?? "plaintext") as any;
+  return EXT_LANG[ext] ?? "plaintext";
 }
 
 interface ArgsPreview {
   filePath: string;
   diff?: string;
   content?: string;
-  language?: BundledLanguage;
+  language?: string;
 }
 
 function generateArgsPreview(
   toolName: string,
   parsedArgs: Record<string, unknown> | null,
+  workspaceRoot?: string | null,
+  startLine?: number,
 ): ArgsPreview | null {
   if (!parsedArgs || typeof parsedArgs !== "object") return null;
 
-  const path = typeof parsedArgs.path === "string" ? parsedArgs.path : null;
-  if (!path) return null;
+  const absPath = typeof parsedArgs.path === "string" ? parsedArgs.path : null;
+  if (!absPath) return null;
+  const path = toRelativePath(absPath, workspaceRoot);
 
   const local = localName(toolName);
 
@@ -89,7 +154,7 @@ function generateArgsPreview(
     const oldStr = typeof parsedArgs.old_string === "string" ? parsedArgs.old_string : null;
     const newStr = typeof parsedArgs.new_string === "string" ? parsedArgs.new_string : null;
     if (oldStr === null || newStr === null) return null;
-    return { filePath: path, diff: buildUnifiedDiff(path, oldStr.split("\n"), newStr.split("\n")) };
+    return { filePath: path, diff: buildUnifiedDiff(path, oldStr.split("\n"), newStr.split("\n"), { startLine }) };
   }
 
   // ast_smart_edit → show pattern → replacement as diff
@@ -97,7 +162,7 @@ function generateArgsPreview(
     const pattern = typeof parsedArgs.pattern === "string" ? parsedArgs.pattern : null;
     const replacement = typeof parsedArgs.replacement === "string" ? parsedArgs.replacement : null;
     if (pattern === null || replacement === null) return null;
-    return { filePath: path, diff: buildUnifiedDiff(path, pattern.split("\n"), replacement.split("\n")) };
+    return { filePath: path, diff: buildUnifiedDiff(path, pattern.split("\n"), replacement.split("\n"), { startLine }) };
   }
 
   // write_file → show content as code block
@@ -117,6 +182,7 @@ export function ToolExecution({
   preview,
   result,
   isError,
+  workspaceRoot,
 }: ToolExecutionProps) {
   const state = isError
     ? ("output-error" as const)
@@ -133,7 +199,8 @@ export function ToolExecution({
   const outputText = diffText && rawOutputText?.includes(diffText) ? null : rawOutputText;
 
   const toolArgs = args ? JSON.parse(args) : null;
-  const previewData = generateArgsPreview(name, toolArgs);
+  const startLine = result && isEditTool(name) ? parseLineRangesFromResult(result)?.[0] : undefined;
+  const previewData = generateArgsPreview(name, toolArgs, workspaceRoot, startLine);
 
   return (
     <Tool>
@@ -145,24 +212,18 @@ export function ToolExecution({
       <ToolContent>
         {/* Edit tools: show diff (string_replace_lsp / ast_smart_edit) */}
         {previewData?.diff && (
-          <div className="space-y-2 overflow-hidden p-4">
-            <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-              Diff
-            </h4>
+          <CollapsibleSection label="Diff">
             <DiffPreview diff={previewData.diff} language={languageFromPath(previewData.filePath)} />
-          </div>
+          </CollapsibleSection>
         )}
         {/* write_file: show file content as code */}
         {previewData?.content && (
-          <div className="space-y-2 overflow-hidden p-4">
-            <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-              Content
-            </h4>
+          <CollapsibleSection label="Content">
             <CodeBlock
-              language={previewData.language as BundledLanguage}
+              language={previewData.language ?? "plaintext"}
               code={previewData.content}
             />
-          </div>
+          </CollapsibleSection>
         )}
         {/* Non-edit tools: show args via ToolInput (has "Parameters" label) */}
         {!previewData && toolArgs && (

@@ -24,6 +24,7 @@ export function App() {
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("disconnected");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [loadingThreads, setLoadingThreads] = useState(true);
   const [settings, setSettings] = useState<SettingsMetadata | null>(null);
   const [recents, setRecents] = useState<RecentWorkspace[]>(() => {
     try {
@@ -38,13 +39,14 @@ export function App() {
   const [view, setView] = useState<"chat" | "map">("chat");
   const [openingWorkspace, setOpeningWorkspace] = useState<string | null>(null);
   const [workspaceOpenError, setWorkspaceOpenError] = useState<string | null>(null);
-  const [openThreadMenuId, setOpenThreadMenuId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const openingWorkspaceRef = useRef(false);
 
   const {
     snapshot,
     displayMessages,
+    loadingMessages,
+    switchThread,
     resetSession,
     appendUserMessage,
     resetSnapshotForSubmit,
@@ -61,6 +63,7 @@ export function App() {
   }, []);
 
   async function refreshMetadata(options?: { skipThreads?: boolean }) {
+    if (!options?.skipThreads) setLoadingThreads(true);
     try {
       const [nextSettings, nextThreads] = await Promise.all([
         window.codemap.readSettings(),
@@ -70,6 +73,8 @@ export function App() {
       if (nextThreads !== null) setThreads(nextThreads);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setLoadingThreads(false);
     }
   }
 
@@ -110,11 +115,11 @@ export function App() {
 
   async function submit(
     content: string,
-    images: Array<{ data: string; mimeType: string }>,
+    images: Array<{ data: string; mimeType: string; filename?: string }>,
   ) {
     if (!content || !workspace || isBusy) return;
     setError(null);
-    appendUserMessage(content);
+    appendUserMessage(content, images);
     resetSnapshotForSubmit();
     try {
       await window.codemap.send(content, {
@@ -142,7 +147,6 @@ export function App() {
   async function removeThreads(threadIds: string[]) {
     if (threadIds.length === 0) return;
     setError(null);
-    setOpenThreadMenuId(null);
     try {
       await Promise.all(threadIds.map((id) => window.codemap.deleteThread(id)));
       threadSelection.clearAfterRemove(threadIds);
@@ -195,15 +199,14 @@ export function App() {
         sidebarOpen={sidebarOpen}
         sidebarWidth={clampedWidth}
         selectedThreadIds={threadSelection.selectedThreadIds}
-        onSelectThread={(threadId) => window.codemap.switchThread(threadId)}
+        isLoading={loadingThreads}
+        onSelectThread={switchThread}
         onCreateThread={createThread}
         onDeleteThread={deleteThread}
         onToggleThreadSelection={threadSelection.toggleSelection}
         onDeleteSelectedThreads={threadSelection.deleteSelected}
         onClearSelection={threadSelection.clearSelection}
         onStartSidebarResize={startResize}
-        onSetOpenThreadMenuId={setOpenThreadMenuId}
-        openThreadMenuId={openThreadMenuId}
         lastSelectedThreadId={threadSelection.lastSelectedThreadId}
         onSetLastSelectedThreadId={threadSelection.setLastSelectedThreadId}
       />
@@ -236,6 +239,8 @@ export function App() {
                 snapshot={snapshot}
                 error={error}
                 isBusy={isBusy}
+                loadingMessages={loadingMessages}
+                workspaceRoot={workspace}
                 onApprove={(id) => window.codemap.respondToApproval(id, "approve")}
                 onDecline={(id) => window.codemap.respondToApproval(id, "decline")}
                 onAnswerQuestion={(id, answer) => window.codemap.respondToQuestion(id, answer)}

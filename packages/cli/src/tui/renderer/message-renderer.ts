@@ -261,6 +261,7 @@ function renderMessageLines(
       : `${C_MUTED}${timeText}${RESET}`;
     lastRenderedTime = timeText;
     if (msg.role === "user") {
+      if (!msg.content?.trim()) continue;
       const bg = (raw: string) =>
         BG_USER +
         padToWidth(raw, width).replace(/\x1b\[0m/g, `\x1b[0m${BG_USER}`) +

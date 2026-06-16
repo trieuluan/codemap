@@ -16,9 +16,18 @@ import type { FileUIPart, UIMessage } from "ai";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  PaperclipIcon,
-  XIcon,
 } from "lucide-react";
+import {
+  Attachment,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "./attachments.js";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "../ui/hover-card.js";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -324,111 +333,85 @@ export const MessageResponse = memo(
 
 MessageResponse.displayName = "MessageResponse";
 
-export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart;
-  className?: string;
+export type MessageAttachmentProps = {
+  data: FileUIPart & { id: string };
   onRemove?: () => void;
+  className?: string;
 };
 
 export function MessageAttachment({
   data,
-  className,
   onRemove,
-  ...props
+  className,
 }: MessageAttachmentProps) {
-  const filename = data.filename || "";
-  const mediaType =
-    data.mediaType?.startsWith("image/") && data.url ? "image" : "file";
-  const isImage = mediaType === "image";
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment");
+  const isImage = data.mediaType?.startsWith("image/") && !!data.url;
 
   return (
-    <div
-      className={cn(
-        "group relative size-24 overflow-hidden rounded-lg",
-        className
-      )}
-      {...props}
-    >
-      {isImage ? (
-        <>
-          <img
-            alt={filename || "attachment"}
-            className="size-full object-cover"
-            height={100}
-            src={data.url}
-            width={100}
-          />
-          {onRemove && (
-            <Button
-              aria-label="Remove attachment"
-              className="absolute top-2 right-2 size-6 rounded-full bg-background/80 p-0 opacity-0 backdrop-blur-sm transition-opacity hover:bg-background group-hover:opacity-100 [&>svg]:size-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
+    <HoverCard closeDelay={0} openDelay={0}>
+      <HoverCardTrigger asChild>
+        <Attachment
+          className={className}
+          data={data}
+          onRemove={onRemove}
+        >
+          <AttachmentPreview />
+          <AttachmentRemove />
+        </Attachment>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-auto p-2">
+        <div className="w-auto space-y-3">
+          {isImage && data.url && (
+            <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
+              <img
+                alt={data.filename || "attachment preview"}
+                className="max-h-full max-w-full object-contain"
+                src={data.url}
+              />
+            </div>
           )}
-        </>
-      ) : (
-        <>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex size-full shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <PaperclipIcon className="size-4" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{attachmentLabel}</p>
-            </TooltipContent>
-          </Tooltip>
-          {onRemove && (
-            <Button
-              aria-label="Remove attachment"
-              className="size-6 shrink-0 rounded-full p-0 opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100 [&>svg]:size-3"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              type="button"
-              variant="ghost"
-            >
-              <XIcon />
-              <span className="sr-only">Remove</span>
-            </Button>
-          )}
-        </>
-      )}
-    </div>
+          <div className="flex items-center gap-2.5">
+            <div className="min-w-0 flex-1 space-y-1 px-0.5">
+              <h4 className="truncate font-semibold text-sm leading-none">
+                {data.filename || (isImage ? "Image" : "Attachment")}
+              </h4>
+              {data.mediaType && (
+                <p className="truncate font-mono text-muted-foreground text-xs">
+                  {data.mediaType}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
-export type MessageAttachmentsProps = ComponentProps<"div">;
+export type MessageAttachmentsProps = {
+  files: (FileUIPart & { id: string })[];
+  onRemove?: (id: string) => void;
+  className?: string;
+};
 
 export function MessageAttachments({
-  children,
+  files,
+  onRemove,
   className,
-  ...props
 }: MessageAttachmentsProps) {
-  if (!children) {
+  if (!files.length) {
     return null;
   }
 
   return (
-    <div
-      className={cn(
-        "ml-auto flex w-fit flex-wrap items-start gap-2",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </div>
+    <Attachments className={className} variant="grid">
+      {files.map((file) => (
+        <MessageAttachment
+          data={file}
+          key={file.id}
+          onRemove={onRemove ? () => onRemove(file.id) : undefined}
+        />
+      ))}
+    </Attachments>
   );
 }
 

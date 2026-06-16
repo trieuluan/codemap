@@ -90,8 +90,9 @@
   max-width: 80%;
   margin-left: auto;
   align-self: flex-end;
-  text-align: right;
+  text-align: left;
 }
+
 
 /* Strip Message/MessageContent defaults — we control layout from here */
 .codemap-message {
@@ -501,6 +502,16 @@
 
 .approval-card {
   border-color: var(--warning-border, rgba(251, 191, 36, 0.4));
+}
+
+/* ─── Streamdown code-block copy button: hidden until hover ─── */
+[data-streamdown="code-block-actions"] {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+[data-streamdown="code-block"]:hover [data-streamdown="code-block-actions"],
+[data-streamdown="code-block"]:focus-within [data-streamdown="code-block-actions"] {
+  opacity: 1;
 }
 
 /* ═══════════════════════════════════════════════

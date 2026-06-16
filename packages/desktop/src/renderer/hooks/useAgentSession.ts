@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createInitialSessionSnapshot,
   reduceAgentSessionEvent,
@@ -14,6 +14,8 @@ export type LocalMessage = {
   localId: string;
   role: "user" | "assistant";
   content: string;
+  /** Images attached to a user message */
+  images?: Array<{ data: string; mimeType: string; filename?: string }>;
   /** Tool calls that ran during this assistant turn */
   tools?: ToolCallState[];
 };
@@ -40,7 +42,40 @@ function extractTaskContent(raw: string): string {
     content = userMatch[1].trim();
   }
 
+  // Strip image markers like [image: filename.png] — internal placeholders for backend
+  content = content.replace(/\[image:[^\]]*\]\s*/g, "").trim();
+
+  // Strip embedded markdown image data URIs — images rendered via MessageAttachments instead
+  content = content.replace(/\n?!\[image\]\(data:[^)]+\)/g, "").trim();
+
   return content;
+}
+
+/** Extract inline image data URIs from content string into LocalImage objects.
+ *  Handles two formats:
+ *    - Markdown: `![alt](data:mimeType;base64,data)` — alt = harness filename
+ *    - CLI placeholder: `[image: name.png]` followed by data URI on next line
+ *  Filesnames from CLI placeholders are paired with images in order of appearance.
+ */
+function extractInlineImages(content: string): Array<{ data: string; mimeType: string; filename?: string }> {
+  const images: Array<{ data: string; mimeType: string; filename?: string }> = [];
+
+  // Extract filenames from CLI `[image: name.png]` placeholders
+  const filenameMatches = [...content.matchAll(/\[image:([^\]]*)\]/g)];
+  const filenames = filenameMatches.map((m) => m[1]!.trim());
+
+  // Extract images from markdown data URIs
+  const mdPattern = /!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  let imageIndex = 0;
+  while ((match = mdPattern.exec(content)) !== null) {
+    const alt = match[1];
+    // Prefer CLI placeholder filename, fall back to alt text, then undefined
+    const filename = filenames[imageIndex] || (alt !== "image" ? alt : undefined);
+    images.push({ mimeType: match[2], data: match[3], filename });
+    imageIndex++;
+  }
+  return images;
 }
 
 function extractTextContent(content: unknown): string {
@@ -143,12 +178,19 @@ export function normalizeThreadMessages(messages: SessionMessage[]): LocalMessag
       continue;
     }
 
-    if (!content) continue;
+    if (!content && textContent === "") continue;
+
+    // For user messages: extract any embedded image data URIs from the raw text
+    // (harness may store images as ![image](data:...) in the content string)
+    const inlineImages = extractInlineImages(textContent);
+
+    if (!content && inlineImages.length === 0) continue;
 
     normalized.push({
       localId: message.id ?? `thread-${index}`,
       role: "user",
       content,
+      ...(inlineImages.length > 0 ? { images: inlineImages } : {}),
     });
     lastAssistantMessage = null;
   }
@@ -176,6 +218,7 @@ export function useAgentSession(onError: (message: string) => void) {
     createInitialSessionSnapshot(),
   );
   const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const streamingRef = useRef("");
   // Accumulate tool calls for the current running turn
   const pendingToolsRef = useRef<ToolCallState[]>([]);
@@ -216,6 +259,7 @@ export function useAgentSession(onError: (message: string) => void) {
     if (event.type === "thread_change") {
       streamingRef.current = "";
       pendingToolsRef.current = [];
+      setLoadingMessages(false);
       setMessages(normalizeThreadMessages(event.messages));
       return;
     }
@@ -251,19 +295,32 @@ export function useAgentSession(onError: (message: string) => void) {
     [messages, snapshot.streamingText],
   );
 
+  const switchThread = useCallback(
+    async (threadId: string) => {
+      // Immediately clear messages and show loading state
+      setMessages([]);
+      setLoadingMessages(true);
+      streamingRef.current = "";
+      pendingToolsRef.current = [];
+      await window.codemap.switchThread(threadId);
+    },
+    [],
+  );
+
   function resetSession() {
     streamingRef.current = "";
     setMessages([]);
     setSnapshot(createInitialSessionSnapshot());
   }
 
-  function appendUserMessage(content: string) {
+  function appendUserMessage(content: string, images?: Array<{ data: string; mimeType: string; filename?: string }>) {
     setMessages((current) => [
       ...current,
       {
         localId: crypto.randomUUID(),
         role: "user",
         content: extractTaskContent(content),
+        ...(images && images.length > 0 ? { images } : {}),
       },
     ]);
   }
@@ -284,6 +341,8 @@ export function useAgentSession(onError: (message: string) => void) {
     snapshot,
     messages,
     displayMessages,
+    loadingMessages,
+    switchThread,
     resetSession,
     appendUserMessage,
     resetSnapshotForSubmit,

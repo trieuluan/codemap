@@ -200,3 +200,91 @@ test("node session resolves approvals without exposing callbacks as events", asy
 
   assert.equal(decision, "approve");
 });
+
+test("switchThread reuses cached messages on second load — only calls listThreadMessages once per thread", async () => {
+  let callCount = 0;
+  const session = createNodeAgentSession({
+    provider: { baseUrl: "http://localhost", apiKey: undefined },
+    model: "coder",
+    toolClient: {
+      getServerConfig: () => ({ command: "node" }),
+      getExtraServerConfigs: () => ({}),
+    },
+    runtime: {
+      async run() {
+        return { text: "", messages: [], usedTools: false, unsupportedToolCalling: false };
+      },
+      abort() {},
+      async listThreads() { return []; },
+      async switchThread() {},
+      async deleteThread() {},
+      async listThreadMessages(threadId) {
+        callCount++;
+        return [
+          makeAssistantMessage([{ type: "text", text: `msg from ${threadId}` }]),
+        ];
+      },
+    },
+  });
+
+  // First load — should call listThreadMessages
+  await session.switchThread("thread-1");
+  assert.equal(callCount, 1);
+
+  // Switch to another thread — should call again
+  await session.switchThread("thread-2");
+  assert.equal(callCount, 2);
+
+  // Switch back to thread-1 — should hit cache, no new call
+  await session.switchThread("thread-1");
+  assert.equal(callCount, 2);
+
+  // Verify the cached message is correct
+  const events: AgentSessionEvent[] = [];
+  session.subscribe((e) => events.push(e));
+  await session.switchThread("thread-1");
+  const lastChange = events.filter((e) => e.type === "thread_change").pop();
+  assert.ok(lastChange && lastChange.type === "thread_change");
+  assert.equal(lastChange.messages.length, 1);
+  assert.equal(lastChange.messages[0].content, "msg from thread-1");
+});
+
+test("sending a message invalidates thread cache so next switchThread reloads", async () => {
+  let callCount = 0;
+  const session = createNodeAgentSession({
+    provider: { baseUrl: "http://localhost", apiKey: undefined },
+    model: "coder",
+    toolClient: {
+      getServerConfig: () => ({ command: "node" }),
+      getExtraServerConfigs: () => ({}),
+    },
+    runtime: {
+      async run() {
+        return { text: "", messages: [], usedTools: false, unsupportedToolCalling: false };
+      },
+      abort() {},
+      async listThreads() { return []; },
+      async switchThread() {},
+      async deleteThread() {},
+      async listThreadMessages() {
+        callCount++;
+        return [
+          makeAssistantMessage([{ type: "text", text: "fresh messages" }]),
+        ];
+      },
+    },
+  });
+
+  // Load thread-1 — messages get cached
+  await session.switchThread("thread-1");
+  assert.equal(callCount, 1);
+
+  // Send a message on thread-1 — should invalidate cache
+  await session.send({ requestId: "req-1", content: "hello" });
+  // Switch away and back — should reload
+  await session.switchThread("thread-2");
+  assert.equal(callCount, 2);
+
+  await session.switchThread("thread-1");
+  assert.equal(callCount, 3, "cache was invalidated, should reload thread-1 messages");
+});

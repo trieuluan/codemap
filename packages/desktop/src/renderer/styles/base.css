@@ -135,10 +135,8 @@ p {
   text-transform: uppercase;
 }
 
-.muted,
-.empty-note {
+.muted {
   color: var(--muted);
-  line-height: 1.6;
 }
 
 /* Shared button styles */

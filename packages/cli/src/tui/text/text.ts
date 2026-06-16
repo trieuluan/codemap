@@ -1,6 +1,7 @@
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import { Marked } from "marked";
 import TerminalRenderer from "marked-terminal";
+import { parse as parseHtml } from "node-html-parser";
 import type { ChatMode, ChatWorkspaceState } from "../../chat/state/types.js";
 import {
   BOLD,
@@ -443,6 +444,32 @@ export function renderUnifiedDiff(
   return out;
 }
 
+// ─── HTML Table → Pipe-Table Conversion (via node-html-parser) ────────────────
+// Used by the html() renderer to convert real HTML <table> blocks to
+// pipe-separated rows that render correctly in the terminal.
+// Regex pre-processing on raw text cannot distinguish <table> inside backticks
+// from actual HTML table blocks, so this runs inside the renderer instead.
+function htmlTableToText(html: string): string {
+  try {
+    const root = parseHtml(html, { parseNoneClosedTags: true });
+    const table = root.querySelector("table");
+    if (!table) return html;
+
+    const rows: string[] = [];
+    for (const row of table.querySelectorAll("tr")) {
+      const cells: string[] = [];
+      for (const cell of row.querySelectorAll("th, td")) {
+        cells.push(cell.textContent.trim());
+      }
+      if (cells.length > 0) rows.push(cells.join(" | "));
+    }
+    return rows.length > 0 ? rows.join("\n") : html;
+  } catch {
+    // Parse failed (malformed HTML, streaming fragment, etc.)
+    return "";
+  }
+}
+
 class CodeMapTerminalRenderer extends TerminalRenderer {
   constructor(
     private readonly width: number,
@@ -608,8 +635,8 @@ class CodeMapTerminalRenderer extends TerminalRenderer {
     return "\n";
   }
 
-  html(): string {
-    return "";
+  html({ text }: { text: string }): string {
+    return htmlTableToText(text);
   }
 
   table(token: unknown): string {

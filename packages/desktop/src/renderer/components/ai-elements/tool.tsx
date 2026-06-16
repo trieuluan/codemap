@@ -1,6 +1,6 @@
 "use client";
 
-import { CodeBlock } from "./code-block.js";
+import { CodeBlock } from "streamdown";
 import { Badge } from "../ui/badge.js";
 import {
   Collapsible,
@@ -139,8 +139,7 @@ export const ToolOutput = ({
   } else if (typeof output === "string") {
     let isJson = false;
     try { JSON.parse(output); isJson = true; } catch { /* plain text */ }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Output = <CodeBlock code={output} language={isJson ? "json" : "text" as any} />;
+    Output = <CodeBlock code={output} language={isJson ? "json" : "text"} />;
   }
 
   return (
@@ -148,12 +147,11 @@ export const ToolOutput = ({
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>
-      {errorText && (
-        <pre className="overflow-auto rounded-md bg-destructive/10 p-3 text-xs font-mono text-destructive whitespace-pre-wrap break-all">
-          {errorText}
-        </pre>
+      {errorText ? (
+        <CodeBlock code={errorText} language="text" />
+      ) : (
+        Output
       )}
-      {Output}
     </div>
   );
 };

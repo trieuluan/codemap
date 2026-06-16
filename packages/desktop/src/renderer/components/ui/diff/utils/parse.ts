@@ -426,19 +426,24 @@ const insertSkipBlocks = (hunks: Hunk[]): (Hunk | SkipBlock)[] => {
 };
 
 const defaultOptions: ParseOptions = {
-  maxDiffDistance: 30,
-  maxChangeRatio: 0.45,
+  maxDiffDistance: 40,
+  maxChangeRatio: 0.35,
   mergeModifiedLines: true,
-  inlineMaxCharEdits: 4,
+  inlineMaxCharEdits: 3,
   wordDiff: false,
 };
+
+// gitdiff-parser CJS default export isn't resolvable under TS NodeNext ESM;
+// cast once to satisfy the type checker.
+const parse = (gitDiffParser as unknown as { parse: (s: string) => _File[] })
+  .parse;
 
 export const parseDiff = (
   diff: string,
   options?: Partial<ParseOptions>
 ): File[] => {
   const opts = { ...defaultOptions, ...options };
-  const files = gitDiffParser.parse(diff);
+  const files = parse(diff);
 
   return files.map((file) => ({
     ...file,
