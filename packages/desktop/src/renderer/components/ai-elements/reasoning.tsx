@@ -5,8 +5,8 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../../renderer/components/ui/collapsible.js";
-import { cn } from "../../renderer/lib/utils.js";
+} from "../ui/collapsible.js";
+import { cn } from "../../lib/utils.js";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";

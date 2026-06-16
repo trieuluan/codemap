@@ -1,12 +1,12 @@
 import { type BundledLanguage } from "shiki";
-import { CodeBlock } from "../../components/ai-elements/code-block.js";
+import { CodeBlock } from "./ai-elements/code-block.js";
 import {
   Tool,
   ToolContent,
   ToolHeader,
   ToolInput,
   ToolOutput,
-} from "../../components/ai-elements/tool.js";
+} from "./ai-elements/tool.js";
 import { buildUnifiedDiff } from "./diff/utils.js";
 import { DiffPreview } from "./diff/index.js";
 

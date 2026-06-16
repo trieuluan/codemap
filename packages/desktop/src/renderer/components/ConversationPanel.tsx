@@ -17,19 +17,19 @@ import {
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
-} from "../../components/ai-elements/conversation.js";
+} from "./ai-elements/conversation.js";
 import {
   Message,
   MessageAction,
   MessageActions,
   MessageContent,
   MessageResponse,
-} from "../../components/ai-elements/message.js";
+} from "./ai-elements/message.js";
 import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
-} from "../../components/ai-elements/reasoning.js";
+} from "./ai-elements/reasoning.js";
 import { ToolExecution } from "./ToolExecution.js";
 
 interface ConversationPanelProps {

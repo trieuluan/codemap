@@ -15,7 +15,7 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
-} from "../../components/ai-elements/prompt-input.js";
+} from "./ai-elements/prompt-input.js";
 
 interface ComposerFooterProps {
   runtimeStatus: RuntimeStatus;

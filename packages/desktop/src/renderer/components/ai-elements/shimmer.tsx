@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "../../renderer/lib/utils.js";
+import { cn } from "../../lib/utils.js";
 import { motion } from "motion/react";
 import {
   type CSSProperties,

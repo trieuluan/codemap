@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "../../renderer/lib/utils.js";
+import { cn } from "../../lib/utils.js";
 import type { ComponentProps } from "react";
 
 export type StreamingIndicatorProps = ComponentProps<"div">;

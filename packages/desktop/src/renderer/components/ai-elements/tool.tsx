@@ -1,13 +1,13 @@
 "use client";
 
 import { CodeBlock } from "./code-block.js";
-import { Badge } from "../../renderer/components/ui/badge.js";
+import { Badge } from "../ui/badge.js";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "../../renderer/components/ui/collapsible.js";
-import { cn } from "../../renderer/lib/utils.js";
+} from "../ui/collapsible.js";
+import { cn } from "../../lib/utils.js";
 import type { ToolUIPart } from "ai";
 import {
   CheckCircleIcon,

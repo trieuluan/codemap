@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "../../renderer/components/ui/button.js";
-import { cn } from "../../renderer/lib/utils.js";
+import { Button } from "../ui/button.js";
+import { cn } from "../../lib/utils.js";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   type ComponentProps,

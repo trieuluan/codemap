@@ -1,17 +1,17 @@
 "use client";
 
-import { Button } from "../../renderer/components/ui/button.js";
+import { Button } from "../ui/button.js";
 import {
   ButtonGroup,
   ButtonGroupText,
-} from "../../renderer/components/ui/button-group.js";
+} from "../ui/button-group.js";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../../renderer/components/ui/tooltip.js";
-import { cn } from "../../renderer/lib/utils.js";
+} from "../ui/tooltip.js";
+import { cn } from "../../lib/utils.js";
 import type { FileUIPart, UIMessage } from "ai";
 import {
   ChevronLeftIcon,

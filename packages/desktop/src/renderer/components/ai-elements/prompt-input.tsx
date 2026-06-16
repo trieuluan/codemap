@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "../../renderer/components/ui/button.js";
+import { Button } from "../ui/button.js";
 import {
   Command,
   CommandEmpty,
@@ -9,32 +9,32 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "../../renderer/components/ui/command.js";
+} from "../ui/command.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../../renderer/components/ui/dropdown-menu.js";
+} from "../ui/dropdown-menu.js";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from "../../renderer/components/ui/hover-card.js";
+} from "../ui/hover-card.js";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
-} from "../../renderer/components/ui/input-group.js";
+} from "../ui/input-group.js";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../renderer/components/ui/select.js";
-import { cn } from "../../renderer/lib/utils.js";
+} from "../ui/select.js";
+import { cn } from "../../lib/utils.js";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
   CornerDownLeftIcon,
