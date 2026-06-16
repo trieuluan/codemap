@@ -100,7 +100,7 @@ async function captureResolvedModelFromStream(
   let preview = "";
 
   try {
-    while (state.resolvedModel === null) {
+    while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       const chunkText = decoder.decode(value, { stream: true });
@@ -116,7 +116,6 @@ async function captureResolvedModelFromStream(
         if (!data || data === "[DONE]") continue;
         if (captureResolvedModelPayload(data)) {
           state.lastResponseInfo = { ...responseMeta, bodyPreview: preview };
-          return;
         }
       }
     }

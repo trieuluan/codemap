@@ -434,16 +434,6 @@
   font-style: italic;
 }
 
-.codemap-ai-tool {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card-soft);
-  font-size: 12px;
-}
-
 .codemap-tool-header {
   display: flex;
   align-items: center;

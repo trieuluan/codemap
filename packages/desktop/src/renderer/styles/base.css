@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════ */
 
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @source "../../components/**/*.tsx";
 @source "../../node_modules/streamdown/dist/*.js";
 
@@ -57,6 +58,24 @@
   --accent: #ececef;
   --radius: 10px;
   --mono: "Geist Mono", "SFMono-Regular", Consolas, monospace;
+
+  /* Prose (Tailwind Typography) theme */
+  --tw-prose-body: #ededee;
+  --tw-prose-headings: #ededee;
+  --tw-prose-lead: #c6c6cb;
+  --tw-prose-links: #e8e8e9;
+  --tw-prose-bold: #ededee;
+  --tw-prose-counters: #929296;
+  --tw-prose-bullets: #929296;
+  --tw-prose-hr: #29292c;
+  --tw-prose-quotes: #c6c6cb;
+  --tw-prose-quote-borders: #3a3a3f;
+  --tw-prose-captions: #929296;
+  --tw-prose-code: #c4b5fd;
+  --tw-prose-pre-code: #ededee;
+  --tw-prose-pre-bg: #0d0d0e;
+  --tw-prose-th-borders: #29292c;
+  --tw-prose-td-borders: #29292c;
 }
 
 * {

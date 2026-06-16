@@ -10,7 +10,8 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import type { SessionSnapshot, SessionMessage } from "@codemap-ai/core/agent/contracts";
+import type { SessionSnapshot } from "@codemap-ai/core/agent/contracts";
+import type { LocalMessage } from "../hooks/useAgentSession.js";
 import {
   Conversation,
   ConversationContent,
@@ -32,7 +33,7 @@ import {
 import { ToolExecution } from "./ToolExecution.js";
 
 interface ConversationPanelProps {
-  displayMessages: SessionMessage[];
+  displayMessages: LocalMessage[];
   snapshot: SessionSnapshot;
   error: string | null;
   isBusy: boolean;
@@ -66,11 +67,11 @@ export function ConversationPanel({
     (message) => message.role === "assistant",
   );
 
-  function messageId(message: SessionMessage) {
-    return (message as { localId?: string; id?: string }).localId ?? message.id;
+  function messageId(message: LocalMessage) {
+    return message.localId;
   }
 
-  async function copyMessage(message: SessionMessage) {
+  async function copyMessage(message: LocalMessage) {
     await navigator.clipboard.writeText(message.content);
     const id = messageId(message);
     setCopiedMessageId(id);
@@ -116,51 +117,82 @@ export function ConversationPanel({
             const isLatestAssistant =
               message.role === "assistant" && index === latestAssistantIndex;
 
+            const isUser = message.role === "user";
+
             return (
-              <article
-                key={id}
-                className={`message-row ${message.role === "user" ? "user" : "assistant"}`}
-              >
-                <div className="message-avatar" aria-hidden="true">
-                  {message.role === "user" ? "You" : "AI"}
-                </div>
-                <div className="message-card">
-                  <div className="message-role">
-                    {message.role === "user" ? "You" : "CodeMap"}
+              <div key={id} className="turn-group">
+                {/* Tool calls that ran during this assistant turn (before the response) */}
+                {!isUser && message.tools && message.tools.length > 0 && (
+                  <section className="tool-stack">
+                    {message.tools.map((tool) => (
+                      <ToolExecution
+                        key={tool.toolCallId}
+                        toolCallId={tool.toolCallId}
+                        name={tool.name}
+                        args={tool.args}
+                        preview={tool.preview}
+                        result={tool.result}
+                        isError={tool.isError}
+                      />
+                    ))}
+                  </section>
+                )}
+                {(isUser || message.content) && <article
+                  className={`message-row ${isUser ? "message-row-user" : ""}`}
+                  data-role={message.role}
+                >
+                  <div className="min-w-0">
+                    <Message
+                      className="codemap-message"
+                      from={isUser ? "user" : "assistant"}
+                    >
+                      <MessageContent className="codemap-message-content message-body">
+                        <MessageResponse>{message.content}</MessageResponse>
+                      </MessageContent>
+                    </Message>
+                    {isLatestAssistant && message.content && !isBusy && (
+                      <MessageActions className="message-actions">
+                        <MessageAction
+                          label="Copy response"
+                          onClick={() => void copyMessage(message)}
+                          tooltip={copiedMessageId === id ? "Copied" : "Copy"}
+                        >
+                          {copiedMessageId === id ? <Check size={14} /> : <Copy size={14} />}
+                        </MessageAction>
+                        <MessageAction
+                          disabled={!previousUserMessage}
+                          label="Retry response"
+                          onClick={() => {
+                            if (previousUserMessage) onSubmitPrompt(previousUserMessage.content);
+                          }}
+                          tooltip="Retry"
+                        >
+                          <RefreshCw size={14} />
+                        </MessageAction>
+                      </MessageActions>
+                    )}
                   </div>
-                  <Message
-                    className="codemap-message"
-                    from={message.role === "user" ? "user" : "assistant"}
-                  >
-                    <MessageContent className="codemap-message-content message-body">
-                      <MessageResponse>{message.content}</MessageResponse>
-                    </MessageContent>
-                  </Message>
-                  {isLatestAssistant && message.content && !isBusy && (
-                    <MessageActions className="message-actions">
-                      <MessageAction
-                        label="Copy response"
-                        onClick={() => void copyMessage(message)}
-                        tooltip={copiedMessageId === id ? "Copied" : "Copy"}
-                      >
-                        {copiedMessageId === id ? <Check size={14} /> : <Copy size={14} />}
-                      </MessageAction>
-                      <MessageAction
-                        disabled={!previousUserMessage}
-                        label="Retry response"
-                        onClick={() => {
-                          if (previousUserMessage) onSubmitPrompt(previousUserMessage.content);
-                        }}
-                        tooltip="Retry"
-                      >
-                        <RefreshCw size={14} />
-                      </MessageAction>
-                    </MessageActions>
-                  )}
-                </div>
-              </article>
+                </article>}
+              </div>
             );
           })}
+
+          {/* Live tool calls for the current in-progress turn */}
+          {isBusy && orderedTools.length > 0 && (
+            <section className="tool-stack tool-stack-live">
+              {orderedTools.map((tool) => (
+                <ToolExecution
+                  key={tool.toolCallId}
+                  toolCallId={tool.toolCallId}
+                  name={tool.name}
+                  args={tool.args}
+                  preview={tool.preview}
+                  result={tool.result}
+                  isError={tool.isError}
+                />
+              ))}
+            </section>
+          )}
           </div>
         )}
 
@@ -179,20 +211,6 @@ export function ConversationPanel({
               </ReasoningContent>
             </Reasoning>
           </div>
-        )}
-
-        {orderedTools.length > 0 && (
-          <section className="turn-activity tool-stack">
-            {orderedTools.map((tool) => (
-              <ToolExecution
-                key={tool.toolCallId}
-                toolCallId={tool.toolCallId}
-                name={tool.name}
-                preview={tool.preview}
-                result={tool.result}
-              />
-            ))}
-          </section>
         )}
 
         {snapshot.pendingApproval && (

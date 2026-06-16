@@ -1,5 +1,6 @@
 "use client";
 
+import { CodeBlock } from "./code-block.js";
 import { Badge } from "../../renderer/components/ui/badge.js";
 import {
   Collapsible,
@@ -18,7 +19,6 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
-import { CodeBlock } from "./code-block.js";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -111,9 +111,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
-    </div>
+    <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
   </div>
 );
 
@@ -132,14 +130,17 @@ export const ToolOutput = ({
     return null;
   }
 
-  let Output = <div>{output as ReactNode}</div>;
+  let Output: ReactNode;
 
-  if (typeof output === "object" && !isValidElement(output)) {
-    Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
-    );
+  if (isValidElement(output)) {
+    Output = output;
+  } else if (typeof output === "object" && output !== null) {
+    Output = <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />;
   } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
+    let isJson = false;
+    try { JSON.parse(output); isJson = true; } catch { /* plain text */ }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Output = <CodeBlock code={output} language={isJson ? "json" : "text" as any} />;
   }
 
   return (
@@ -147,17 +148,12 @@ export const ToolOutput = ({
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>
-      <div
-        className={cn(
-          "overflow-x-auto rounded-md text-xs [&_table]:w-full",
-          errorText
-            ? "bg-destructive/10 text-destructive"
-            : "bg-muted/50 text-foreground"
-        )}
-      >
-        {errorText && <div>{errorText}</div>}
-        {Output}
-      </div>
+      {errorText && (
+        <pre className="overflow-auto rounded-md bg-destructive/10 p-3 text-xs font-mono text-destructive whitespace-pre-wrap break-all">
+          {errorText}
+        </pre>
+      )}
+      {Output}
     </div>
   );
 };

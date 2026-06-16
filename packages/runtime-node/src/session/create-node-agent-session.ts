@@ -166,7 +166,7 @@ export function createNodeAgentSession(
     async switchThread(threadId) {
       await runtime.switchThread(threadId);
       const messages = await runtime.listThreadMessages(threadId, 100);
-      return { threadId, messages: messages.map(mapMessage) };
+      return { threadId, messages: messages.flatMap(expandMessage) };
     },
     async deleteThread(threadId) {
       await runtime.deleteThread(threadId);
@@ -209,13 +209,81 @@ function mapThread(thread: HarnessThread): ThreadSummary {
   };
 }
 
-function mapMessage(message: HarnessMessage): SessionMessage {
-  return {
+/**
+ * Expand a single HarnessMessage into one or more SessionMessages.
+ *
+ * HarnessMessage uses role 'user' | 'assistant' | 'system' only.
+ * Tool calls and results are embedded inside the assistant message's content[]
+ * as { type: 'tool_call', id, name, args } / { type: 'tool_result', id, name, result, isError }.
+ *
+ * We explode each assistant message into:
+ *   - an assistant SessionMessage (text only, tool_call parts stripped)
+ *   - synthetic tool_call SessionMessages (one per tool_call part)
+ *   - synthetic tool SessionMessages (one per tool_result part, matched by id)
+ */
+function expandMessage(message: HarnessMessage): SessionMessage[] {
+  const createdAt = toIsoString(message.createdAt);
+
+  if (message.role !== "assistant") {
+    return [
+      {
+        id: message.id,
+        role: normalizeRole(message.role),
+        content: extractMessageText(message.content),
+        createdAt,
+      },
+    ];
+  }
+
+  const results: SessionMessage[] = [];
+
+  // Text-only content for the assistant message
+  const textContent = message.content
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  results.push({
     id: message.id,
-    role: normalizeRole(message.role),
-    content: extractMessageText(message.content),
-    createdAt: toIsoString(message.createdAt),
-  };
+    role: "assistant",
+    content: textContent,
+    createdAt,
+  });
+
+  // Merge tool_call + tool_result parts by id
+  const toolCallMap = new Map<string, { name: string; args: unknown }>();
+  for (const part of message.content) {
+    if (part.type === "tool_call") {
+      toolCallMap.set(part.id, { name: part.name, args: part.args });
+    }
+  }
+
+  for (const part of message.content) {
+    if (part.type === "tool_call") {
+      results.push({
+        role: "tool_call",
+        toolCallId: part.id,
+        name: part.name,
+        content: part.args != null ? JSON.stringify(part.args) : "{}",
+        createdAt,
+      });
+    } else if (part.type === "tool_result") {
+      const meta = toolCallMap.get(part.id);
+      results.push({
+        role: "tool",
+        toolCallId: part.id,
+        name: part.name || meta?.name || "tool",
+        content: part.result != null
+          ? typeof part.result === "string"
+            ? part.result
+            : JSON.stringify(part.result)
+          : "",
+        createdAt,
+      });
+    }
+  }
+
+  return results;
 }
 
 function normalizeRole(role: string): SessionMessage["role"] {
