@@ -77,7 +77,7 @@ export class ChatTerminal {
   async handleSubmitWithContent(
     text: string,
     forceMultiPhase = false,
-    imageFiles?: Array<{ data: string; mimeType: string }>,
+    imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>,
   ): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;

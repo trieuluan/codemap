@@ -66,7 +66,7 @@ export interface SingleAgentRuntimeInput {
   /** When true, switch harness to "plan" mode before sending. */
   planMode?: boolean;
   signal?: AbortSignal;
-  imageFiles?: Array<{ data: string; mimeType: string }>;
+  imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>;
   effort?: "low" | "medium" | "high";
   /** Injectable host-specific dependencies for the harness lifecycle. */
   deps?: HarnessDeps;

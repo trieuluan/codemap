@@ -52,28 +52,18 @@ function extractTaskContent(raw: string): string {
 }
 
 /** Extract inline image data URIs from content string into LocalImage objects.
- *  Handles two formats:
- *    - Markdown: `![alt](data:mimeType;base64,data)` — alt = harness filename
- *    - CLI placeholder: `[image: name.png]` followed by data URI on next line
- *  Filesnames from CLI placeholders are paired with images in order of appearance.
+ *  Parses `![filename](data:mimeType;base64,data)` markdown — alt text is the
+ *  filename stored by the harness (passed via the `filename` field on file parts).
+ *  Falls back to undefined when alt is the generic sentinel "image".
  */
 function extractInlineImages(content: string): Array<{ data: string; mimeType: string; filename?: string }> {
   const images: Array<{ data: string; mimeType: string; filename?: string }> = [];
-
-  // Extract filenames from CLI `[image: name.png]` placeholders
-  const filenameMatches = [...content.matchAll(/\[image:([^\]]*)\]/g)];
-  const filenames = filenameMatches.map((m) => m[1]!.trim());
-
-  // Extract images from markdown data URIs
   const mdPattern = /!\[([^\]]*)\]\(data:([^;]+);base64,([^)]+)\)/g;
   let match: RegExpExecArray | null;
-  let imageIndex = 0;
   while ((match = mdPattern.exec(content)) !== null) {
-    const alt = match[1];
-    // Prefer CLI placeholder filename, fall back to alt text, then undefined
-    const filename = filenames[imageIndex] || (alt !== "image" ? alt : undefined);
-    images.push({ mimeType: match[2], data: match[3], filename });
-    imageIndex++;
+    const alt = match[1]!.trim();
+    const filename = alt && alt !== "image" ? alt : undefined;
+    images.push({ mimeType: match[2]!, data: match[3]!, filename });
   }
   return images;
 }

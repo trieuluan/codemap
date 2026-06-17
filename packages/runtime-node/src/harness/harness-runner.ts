@@ -31,7 +31,7 @@ export function runHarness(
   userMessage: { role: string; content: string },
   signal: AbortSignal | undefined,
   callbacks: RunHarnessCallbacks,
-  imageFiles?: Array<{ data: string; mimeType: string }>,
+  imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>,
 ): Promise<AgentLoopResult> {
   return new Promise<AgentLoopResult>((resolve, reject) => {
     let finalText = "";
@@ -327,7 +327,7 @@ export function runHarness(
 async function sendHarnessInput(
   harness: MastraHarness,
   content: string,
-  imageFiles: Array<{ data: string; mimeType: string }> | undefined,
+  imageFiles: Array<{ data: string; mimeType: string; filename?: string }> | undefined,
   onDebug?: (info: Record<string, unknown>) => void,
 ): Promise<void> {
   onDebug?.({
@@ -339,6 +339,7 @@ async function sendHarnessInput(
     const files = imageFiles?.map((f) => ({
       data: f.data,
       mediaType: f.mimeType,
+      ...(f.filename !== undefined ? { filename: f.filename } : {}),
     }));
     await harness.sendMessage({ content, files });
     onDebug?.({ event: "mastra_send_message_done" });
@@ -352,10 +353,11 @@ async function sendHarnessInput(
             type: "file" as const,
             data: f.data,
             mediaType: f.mimeType,
+            ...(f.filename !== undefined ? { filename: f.filename } : {}),
           })),
         ] satisfies Array<
           | { type: "text"; text: string }
-          | { type: "file"; data: string; mediaType: string }
+          | { type: "file"; data: string; mediaType: string; filename?: string }
         >)
       : content;
     const signal = harness.sendSignal({ content: signalContent });

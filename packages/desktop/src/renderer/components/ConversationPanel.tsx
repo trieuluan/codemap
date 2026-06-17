@@ -179,7 +179,7 @@ export function ConversationPanel({
                             }))}
                           />
                         )}
-                        <MessageResponse>{message.content}</MessageResponse>
+                        <MessageResponse isStreaming={isBusy && !isUser}>{message.content}</MessageResponse>
                       </MessageContent>
                     </Message>
                     {isLatestAssistant && message.content && !isBusy && (

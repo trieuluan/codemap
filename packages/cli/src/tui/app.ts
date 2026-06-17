@@ -497,10 +497,12 @@ export async function startPiTuiApp(
       void openSessionPicker();
       return;
     }
-    const imageFiles = pendingImages.map((img) => ({
-      data: img.data,
-      mimeType: img.mimeType,
-    }));
+    const imageFiles = pendingImages.map((img) => {
+      // Extract filename from marker e.g. "[image: screenshot.png]"
+      const nameMatch = img.marker.match(/^\[image:\s*(.+)\]$/);
+      const filename = nameMatch ? nameMatch[1]!.trim() : undefined;
+      return { data: img.data, mimeType: img.mimeType, filename };
+    });
     pendingImages.length = 0;
     chatTerminal.store.dispatch((prev: UIState) => ({
       input: { ...prev.input, history: [...prev.input.history, trimmed] },

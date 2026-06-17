@@ -26,7 +26,7 @@ export async function handleSubmitWithContent(
   text: string,
   options?: {
     forceMultiPhase?: boolean;
-    imageFiles?: Array<{ data: string; mimeType: string }>;
+    imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>;
   },
 ): Promise<void> {
   const { store, bus, logger } = ctx;

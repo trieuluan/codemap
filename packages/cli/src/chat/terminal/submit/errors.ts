@@ -6,7 +6,7 @@ export function handleSubmitError(
   err: unknown,
   store: Store,
   appendMessage: (msg: { role: "system"; content: string }) => number,
-  imageFiles?: Array<{ data: string; mimeType: string }>,
+  imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>,
 ): void {
   store.dispatch({ task: { phase: "idle", toolsCalled: 0 } });
   const errMsg = err instanceof Error ? err.message : String(err);

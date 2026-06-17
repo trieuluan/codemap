@@ -315,16 +315,19 @@ export const MessageBranchPage = ({
   );
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+  isStreaming?: boolean;
+};
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, isStreaming, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "prose prose-invert prose-sm max-w-none",
         "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      mode={isStreaming ? "streaming" : "static"}
       {...props}
     />
   ),

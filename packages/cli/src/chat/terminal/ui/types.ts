@@ -10,6 +10,6 @@ export interface ChatTerminalLike {
   resolvePlanReview(action: string): void;
   resolveAskQuestion(answer: HarnessQuestionAnswer): void;
   resolveToolApproval(decision: "approve" | "decline" | "always_allow_category"): void;
-  handleSubmitWithContent(content: string, skipConfirmation?: boolean, images?: Array<{ data: string; mimeType: string }>): void;
+  handleSubmitWithContent(content: string, skipConfirmation?: boolean, images?: Array<{ data: string; mimeType: string; filename?: string }>): void;
   cancelTask(): string | null;
 }

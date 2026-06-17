@@ -157,7 +157,7 @@ export interface DesktopApi {
     model?: string;
     effort?: "low" | "medium" | "high";
     planMode?: boolean;
-    images?: Array<{ data: string; mimeType: string }>;
+    images?: Array<{ data: string; mimeType: string; filename?: string }>;
   }): Promise<void>;
   abort(): Promise<void>;
   listThreads(): Promise<ThreadSummary[]>;
