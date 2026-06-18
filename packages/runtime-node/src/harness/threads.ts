@@ -77,7 +77,7 @@ export async function listMastraThreadMessages(
 }
 
 export type SwitchMastraThreadResult =
-  | { ok: true }
+  | { ok: true; tokenUsage?: HarnessThread["tokenUsage"] }
   | { ok: false; message?: string };
 
 export async function switchMastraThread(
@@ -94,8 +94,10 @@ export async function switchMastraThread(
 
   try {
     await singleton.harness.switchThread({ threadId });
+    const threads = await singleton.harness.listThreads();
+    const active = threads.find((t) => t.id === threadId);
     setPendingNewThread(false);
-    return { ok: true };
+    return { ok: true, tokenUsage: active?.metadata?.tokenUsage as HarnessThread["tokenUsage"] };
   } catch (error) {
     return {
       ok: false,

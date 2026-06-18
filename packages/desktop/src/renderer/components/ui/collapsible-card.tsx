@@ -19,7 +19,7 @@ const CollapsibleCard = ({
     <Collapsible.Root
       {...props}
       className={cn(
-        "relative rounded-xl overflow-hidden border bg-card flex flex-col min-h-14",
+        "relative rounded-xl border border-border bg-card",
         className
       )}
     >
@@ -37,8 +37,7 @@ const CollapsibleCardHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
     <div
       {...props}
       className={cn(
-        "absolute h-14 inset-x-4 z-20",
-        "flex items-center gap-2 justify-between",
+        "h-14 px-4 flex items-center gap-2 justify-between",
         className
       )}
     >
@@ -76,7 +75,7 @@ const CollapsibleCardTitle: React.FC<
 
 const CollapsibleCardContent: React.FC<
   React.HTMLAttributes<HTMLDivElement>
-> = ({ className, ...props }) => {
+> = ({ className, children, ...props }) => {
   const bottomFadeRef = useRef<HTMLDivElement>(null);
   const topFadeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -108,41 +107,36 @@ const CollapsibleCardContent: React.FC<
   }
 
   return (
-    <Collapsible.Content
-      className={cn(
-        "overflow-hidden",
-        "data-[state=open]:animate-collapsible-down",
-        "data-[state=closed]:animate-collapsible-up"
-      )}
-    >
+    <Collapsible.Content className="collapsible-card-content">
       <div
         {...props}
         ref={contentRef}
-        className={cn("max-h-[70svh] pt-14 pb-4 overflow-auto", className)}
+        className={cn(
+          "max-h-[70svh] pb-4 overflow-auto",
+          className
+        )}
         onScroll={onScroll}
-      />
-      <Fade
-        ref={topFadeRef}
-        background="var(--color-background)"
-        className="inset-x-0 top-0 h-17 z-10 rounded-t-xl"
-        side="top"
-        blur="4px"
-        stop="60%"
-        style={{
-          opacity: 0,
-        }}
-      />
-      <Fade
-        ref={bottomFadeRef}
-        side="bottom"
-        background="var(--color-background)"
-        className="inset-x-0 bottom-0 h-16 z-10 rounded-b-xl"
-        stop="50%"
-        blur="2px"
-        style={{
-          opacity: 0,
-        }}
-      />
+      >
+        {children}
+        <Fade
+          ref={topFadeRef}
+          background="var(--color-background)"
+          className="inset-x-0 top-0 h-17 z-10 rounded-t-xl"
+          side="top"
+          blur="4px"
+          stop="60%"
+          style={{ opacity: 0 }}
+        />
+        <Fade
+          ref={bottomFadeRef}
+          side="bottom"
+          background="var(--color-background)"
+          className="inset-x-0 bottom-0 h-16 z-10 rounded-b-xl"
+          stop="50%"
+          blur="2px"
+          style={{ opacity: 0 }}
+        />
+      </div>
     </Collapsible.Content>
   );
 };

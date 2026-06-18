@@ -71,13 +71,13 @@ export class NineRouterProvider implements GatewayProvider {
       throw new Error(`Failed to list models: HTTP ${response.status}`);
     }
     const body = (await response.json()) as {
-      data?: Array<{ id?: string; owned_by?: string; ownedBy?: string }>;
+      data?: Array<{ id?: string; object?: string; owned_by?: string; ownedBy?: string }>;
     };
     return (
       body.data?.flatMap((model) => {
         if (!isString(model.id)) return [];
         const ownedBy = model.owned_by ?? model.ownedBy;
-        return [{ id: model.id, ownedBy }];
+        return [{ id: model.id, object: model.object, ownedBy }];
       }) ?? []
     );
   }
@@ -325,6 +325,10 @@ function normalizeUsage(usage: LanguageModelUsage): TokenUsage {
     promptTokens: usage.inputTokens ?? 0,
     completionTokens: usage.outputTokens ?? 0,
     totalTokens: usage.totalTokens ?? 0,
+    reasoningTokens: usage.outputTokenDetails.reasoningTokens ?? usage.reasoningTokens,
+    cachedInputTokens: usage.inputTokenDetails.cacheReadTokens ?? usage.cachedInputTokens,
+    cacheCreationInputTokens: usage.inputTokenDetails.cacheWriteTokens,
+    raw: usage.raw ?? usage,
   };
 }
 

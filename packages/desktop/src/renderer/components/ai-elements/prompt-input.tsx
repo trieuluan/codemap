@@ -5,6 +5,7 @@ import {
   AttachmentInfo,
   AttachmentPreview,
   AttachmentRemove,
+  Attachments,
 } from "./attachments.js";
 import {
   Command,
@@ -296,47 +297,49 @@ export function PromptInputAttachment({
   const isImage = data.mediaType?.startsWith("image/") && !!data.url;
 
   return (
-    <PromptInputHoverCard>
-      <HoverCardTrigger asChild>
-        <Attachment
-          className={className}
-          data={data}
-          onRemove={() => attachments.remove(data.id)}
-          {...props}
-        >
-          <AttachmentPreview />
-          <AttachmentInfo showMediaType={false} />
-          <AttachmentRemove />
-        </Attachment>
-      </HoverCardTrigger>
-      <PromptInputHoverCardContent className="w-auto p-2">
-        <div className="w-auto space-y-3">
-          {isImage && data.url && (
-            <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
-              <img
-                alt={filename || "attachment preview"}
-                className="max-h-full max-w-full object-contain"
-                height={384}
-                src={data.url}
-                width={448}
-              />
-            </div>
-          )}
-          <div className="flex items-center gap-2.5">
-            <div className="min-w-0 flex-1 space-y-1 px-0.5">
-              <h4 className="truncate font-semibold text-sm leading-none">
-                {filename || (isImage ? "Image" : "Attachment")}
-              </h4>
-              {data.mediaType && (
-                <p className="truncate font-mono text-muted-foreground text-xs">
-                  {data.mediaType}
-                </p>
-              )}
+    <Attachments variant="inline">
+      <PromptInputHoverCard>
+        <HoverCardTrigger asChild>
+          <Attachment
+            className={className}
+            data={data}
+            onRemove={() => attachments.remove(data.id)}
+            {...props}
+          >
+            <AttachmentPreview />
+            <AttachmentInfo showMediaType={false} />
+            <AttachmentRemove />
+          </Attachment>
+        </HoverCardTrigger>
+        <PromptInputHoverCardContent className="w-auto p-2">
+          <div className="w-auto space-y-3">
+            {isImage && data.url && (
+              <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
+                <img
+                  alt={filename || "attachment preview"}
+                  className="max-h-full max-w-full object-contain"
+                  height={384}
+                  src={data.url}
+                  width={448}
+                />
+              </div>
+            )}
+            <div className="flex items-center gap-2.5">
+              <div className="min-w-0 flex-1 space-y-1 px-0.5">
+                <h4 className="truncate font-semibold text-sm leading-none">
+                  {filename || (isImage ? "Image" : "Attachment")}
+                </h4>
+                {data.mediaType && (
+                  <p className="truncate font-mono text-muted-foreground text-xs">
+                    {data.mediaType}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </PromptInputHoverCardContent>
-    </PromptInputHoverCard>
+        </PromptInputHoverCardContent>
+      </PromptInputHoverCard>
+    </Attachments>
   );
 }
 
@@ -1214,7 +1217,7 @@ export const PromptInputSelectContent = ({
   className,
   ...props
 }: PromptInputSelectContentProps) => (
-  <SelectContent className={cn(className)} {...props} />
+  <SelectContent className={cn("max-h-60", className)} {...props} />
 );
 
 export type PromptInputSelectItemProps = ComponentProps<typeof SelectItem>;

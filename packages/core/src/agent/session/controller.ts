@@ -24,6 +24,8 @@ export interface AgentSessionDriver {
   deleteThread(threadId: string): Promise<void>;
   respondToApproval(input: ApprovalResponse): void;
   respondToQuestion(input: QuestionResponse): void;
+  /** Returns the current system prompt text for token attribution. */
+  getSystemPrompt?(): string | undefined;
 }
 
 export function createAgentSessionController(
@@ -76,6 +78,8 @@ export function createAgentSessionController(
         type: "thread_change",
         threadId: thread.threadId,
         messages: thread.messages,
+        tokenUsage: thread.tokenUsage,
+        systemPrompt: driver.getSystemPrompt?.(),
       });
       return snapshot;
     },

@@ -203,7 +203,7 @@ function finalizeAssistantTurn(content: string, tools: ToolCallState[]): LocalMe
   };
 }
 
-export function useAgentSession(onError: (message: string) => void) {
+export function useAgentSession(onError: (message: string | null) => void) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(
     createInitialSessionSnapshot(),
   );
@@ -287,14 +287,27 @@ export function useAgentSession(onError: (message: string) => void) {
 
   const switchThread = useCallback(
     async (threadId: string) => {
-      // Immediately clear messages and show loading state
-      setMessages([]);
+      // Don't clear messages — keep the current conversation visible during
+      // the switch. thread_change event replaces them on success; on failure
+      // they stay untouched (no scroll jump to restore).
       setLoadingMessages(true);
       streamingRef.current = "";
       pendingToolsRef.current = [];
-      await window.codemap.switchThread(threadId);
+      try {
+        await window.codemap.switchThread(threadId);
+        // Clear any previous error when switch succeeds
+        onError(null);
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message.trim().length > 0
+            ? err.message
+            : "Failed to switch thread";
+        onError(message);
+      } finally {
+        setLoadingMessages(false);
+      }
     },
-    [],
+    [onError],
   );
 
   function resetSession() {

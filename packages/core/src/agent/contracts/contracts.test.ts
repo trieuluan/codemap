@@ -37,6 +37,7 @@ test("agent session schemas accept browser-safe commands and events", () => {
         pendingApproval: null,
         pendingQuestion: null,
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        threadUsage: null,
         model: null,
         error: null,
       },

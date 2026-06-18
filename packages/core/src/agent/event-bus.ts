@@ -1,10 +1,12 @@
+import type { TokenUsage } from "./types.ts";
+
 // ─── Typed UI Events ─────────────────────────────────────
 
 export type UIEvent =
   | { type: "agent:start"; model: string }
   | { type: "agent:token"; text: string }
   | { type: "agent:thinking"; elapsed: number }
-  | { type: "agent:done"; usage: UsageStats }
+  | { type: "agent:done"; usage: TokenUsage }
   | { type: "agent:error"; message: string }
   | { type: "tool:start"; name: string; args: string; id: string }
   | { type: "tool:log"; id: string; chunk: string }
@@ -23,12 +25,6 @@ export type UIEvent =
   | { type: "screen:resize"; width: number; height: number };
 
 export type UIEventType = UIEvent["type"];
-
-export interface UsageStats {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
 
 export type TaskPhase = "idle" | "thinking" | "tool" | "streaming" | "done" | "classifying" | "planning" | "executing" | "reviewing";
 

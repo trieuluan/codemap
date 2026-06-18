@@ -16,7 +16,18 @@ test("controller emits snapshot before driver events and serializes sends", asyn
       return [];
     },
     async switchThread() {
-      return { threadId: "thread-1", messages: [] };
+      return {
+        threadId: "thread-1",
+        messages: [],
+        tokenUsage: {
+          promptTokens: 7,
+          completionTokens: 5,
+          totalTokens: 12,
+          reasoningTokens: 2,
+          cachedInputTokens: 3,
+          cacheCreationInputTokens: 1,
+        },
+      };
     },
     async deleteThread() {},
     respondToApproval() {},
@@ -41,6 +52,54 @@ test("controller emits snapshot before driver events and serializes sends", asyn
   );
 });
 
+test("controller propagates thread token usage on switch", async () => {
+  const driver: AgentSessionDriver = {
+    async send() {},
+    abort() {},
+    async listThreads() {
+      return [];
+    },
+    async switchThread() {
+      return {
+        threadId: "thread-2",
+        messages: [],
+        tokenUsage: {
+          promptTokens: 11,
+          completionTokens: 13,
+          totalTokens: 24,
+          reasoningTokens: 4,
+          cachedInputTokens: 6,
+          cacheCreationInputTokens: 2,
+        },
+      };
+    },
+    async deleteThread() {},
+    respondToApproval() {},
+    respondToQuestion() {},
+  };
+
+  const controller = createAgentSessionController(driver);
+  const events: AgentSessionEvent[] = [];
+  controller.subscribe((event) => events.push(event));
+
+  const snapshot = await controller.switchThread("thread-2");
+
+  const lastEvent = events.at(-1);
+  assert.ok(lastEvent && lastEvent.type === "thread_change");
+  assert.equal(lastEvent.threadId, "thread-2");
+  assert.deepEqual(lastEvent.tokenUsage, {
+    promptTokens: 11,
+    completionTokens: 13,
+    totalTokens: 24,
+    reasoningTokens: 4,
+    cachedInputTokens: 6,
+    cacheCreationInputTokens: 2,
+  });
+  assert.equal(snapshot.threadUsage?.reasoningTokens, 4);
+  assert.equal(snapshot.threadUsage?.cachedInputTokens, 6);
+  assert.equal(snapshot.usage.totalTokens, 0);
+});
+
 test("controller forwards abort and prompt responses to the driver", () => {
   const calls: string[] = [];
   const driver: AgentSessionDriver = {
@@ -52,7 +111,18 @@ test("controller forwards abort and prompt responses to the driver", () => {
       return [];
     },
     async switchThread() {
-      return { threadId: "thread-1", messages: [] };
+      return {
+        threadId: "thread-1",
+        messages: [],
+        tokenUsage: {
+          promptTokens: 7,
+          completionTokens: 5,
+          totalTokens: 12,
+          reasoningTokens: 2,
+          cachedInputTokens: 3,
+          cacheCreationInputTokens: 1,
+        },
+      };
     },
     async deleteThread() {
       calls.push("delete");

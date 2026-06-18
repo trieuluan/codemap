@@ -6,6 +6,10 @@ const usageSchema = z
     promptTokens: z.number().int().nonnegative(),
     completionTokens: z.number().int().nonnegative(),
     totalTokens: z.number().int().nonnegative(),
+    reasoningTokens: z.number().int().nonnegative().optional(),
+    cachedInputTokens: z.number().int().nonnegative().optional(),
+    cacheCreationInputTokens: z.number().int().nonnegative().optional(),
+    raw: z.unknown().optional(),
   })
   .strict();
 const sessionMessageSchema = z
@@ -139,6 +143,14 @@ const statusSchema = z.enum([
   "disconnected",
   "error",
 ]);
+const threadChangeSchema = z
+  .object({
+    threadId: z.string(),
+    messages: z.array(sessionMessageSchema),
+    tokenUsage: usageSchema.optional(),
+    systemPrompt: z.string().optional(),
+  })
+  .strict();
 const sessionSnapshotSchema = z
   .object({
     threadId: z.string().nullable(),
@@ -150,8 +162,10 @@ const sessionSnapshotSchema = z
     pendingApproval: approvalSchema.nullable(),
     pendingQuestion: questionSchema.nullable(),
     usage: usageSchema,
+    threadUsage: usageSchema.nullable(),
     model: z.string().nullable(),
     error: z.string().nullable(),
+    systemPrompt: z.string().optional(),
   })
   .strict();
 
@@ -187,6 +201,6 @@ export const agentSessionEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("question"), requestId: requestIdSchema, question: questionSchema }).strict(),
   z.object({ type: z.literal("question_resolved"), requestId: requestIdSchema, questionId: z.string() }).strict(),
   z.object({ type: z.literal("usage"), requestId: requestIdSchema.optional(), usage: usageSchema }).strict(),
-  z.object({ type: z.literal("thread_change"), threadId: z.string(), messages: z.array(sessionMessageSchema) }).strict(),
+  threadChangeSchema.extend({ type: z.literal("thread_change") }),
   z.object({ type: z.literal("error"), requestId: requestIdSchema.optional(), message: z.string() }).strict(),
 ]);

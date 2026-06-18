@@ -132,7 +132,7 @@ export function ThreadSidebar({
 
   return (
     <>
-      <aside className="flex min-w-0 flex-col gap-2.5 overflow-x-hidden border-r border-borderar-gradient(180deg,#0f0f10_0%,#111114_100%)] p-3 transition-[padding,border]" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
+      <aside className="flex min-w-0 flex-col gap-2.5 overflow-x-hidden border-borderar-gradient(180deg,#0f0f10_0%,#111114_100%)] p-3 transition-[padding,border]" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
         <div className="flex items-center gap-2.5 px-1 pb-0.5 pt-1.5">
           <span className="inline-flex h-8.5[w-8.5ems-center justify-center rounded-[10px] border borborder-border-[var(--card)] text-[var(--text-dim)]">
             <FolderGit2 size={17} />
@@ -149,7 +149,7 @@ export function ThreadSidebar({
         </div>
 
         <div className="grid gap-2.5">
-          <button className="primary-button w-full" type="button" onClick={onCreateThread}>
+          <button className="primary-button w-full text-[13px]" type="button" onClick={onCreateThread}>
             <MessageSquarePlus size={15} />
             New thread
           </button>

@@ -1,63 +1,100 @@
+import { useMemo } from "react";
 import {
-  Check,
+  Activity,
+  CheckCircle2,
   Circle,
-  LoaderCircle,
+  Loader2,
 } from "lucide-react";
-import type { SessionSnapshot } from "@codemap-ai/core/agent/contracts";
+import type { SessionSnapshot, ToolCallState } from "@codemap-ai/core/agent/contracts";
+import {
+  Task,
+  TaskTrigger,
+  TaskContent,
+  TaskList,
+  type TaskItemData,
+} from "./ai-elements/task.js";
 
 interface PlanTimelinePanelProps {
   mode: "plan" | "build";
   snapshot: SessionSnapshot;
 }
 
-type PhaseState = "done" | "active" | "pending";
+const TASK_NAME_RE = /(?:_|^)(task_write|task_update|task_complete)(?:_ide)?$/;
 
-const readPattern = /(read|search|find|symbol|explore|get_file)/i;
-const editPattern = /(apply_patch|edit|write|create)/i;
-const verifyPattern = /(test|build|verify|lint|check)/i;
+function taskCat(name: string): "write" | "update" | "complete" | null {
+  const m = name.match(TASK_NAME_RE);
+  if (!m) return null;
+  return m[1] as "write" | "update" | "complete";
+}
 
-function phaseState(snapshot: SessionSnapshot, pattern: RegExp, priorComplete: boolean): PhaseState {
-  const matching = snapshot.tools.filter((tool) => pattern.test(tool.name));
-  if (matching.some((tool) => tool.result !== undefined || tool.isError)) return "done";
-  if (matching.length > 0 || (priorComplete && snapshot.status === "running")) return "active";
-  return "pending";
+function isValidStatus(s: unknown): s is TaskItemData["status"] {
+  return s === "pending" || s === "in_progress" || s === "completed";
+}
+
+function aggregateTasks(tools: ToolCallState[]): TaskItemData[] {
+  const map = new Map<string, TaskItemData>();
+
+  for (const tool of tools) {
+    const cat = taskCat(tool.name);
+    if (!cat) continue;
+
+    let args: Record<string, unknown> | null = null;
+    if (tool.args) {
+      try { args = JSON.parse(tool.args); } catch { /* skip malformed */ }
+    }
+    if (!args || typeof args !== "object") continue;
+
+    if (cat === "write") {
+      const tasks = args.tasks;
+      if (!Array.isArray(tasks)) continue;
+      for (const t of tasks) {
+        if (!t || typeof t !== "object") continue;
+        const r = t as Record<string, unknown>;
+        if (typeof r.id === "string" && typeof r.content === "string") {
+          map.set(r.id, {
+            id: r.id,
+            content: r.content,
+            status: isValidStatus(r.status) ? r.status : "pending",
+            activeForm: typeof r.activeForm === "string" ? r.activeForm : undefined,
+          });
+        }
+      }
+    } else if (cat === "update") {
+      const id = typeof args.id === "string" ? args.id : null;
+      if (!id) continue;
+      const existing = map.get(id);
+      if (existing) {
+        if (typeof args.content === "string") existing.content = args.content;
+        if (isValidStatus(args.status)) existing.status = args.status;
+        if (typeof args.activeForm === "string") existing.activeForm = args.activeForm;
+      }
+    } else if (cat === "complete") {
+      const id = typeof args.id === "string" ? args.id : null;
+      if (!id) continue;
+      const existing = map.get(id);
+      if (existing) existing.status = "completed";
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 export function PlanTimelinePanel({ mode, snapshot }: PlanTimelinePanelProps) {
-  const orientState: PhaseState = snapshot.tools.length > 0
-    ? "done"
-    : snapshot.status === "running" ? "active" : "pending";
-  const readState = phaseState(snapshot, readPattern, orientState === "done");
-  const editState = phaseState(snapshot, editPattern, readState === "done");
-  const verifyState = phaseState(snapshot, verifyPattern, editState === "done");
-  const recentTools = snapshot.tools.slice(-4).reverse();
-  const phases = [
-    {
-      title: "Orient",
-      detail: "Understand the repository and task boundaries.",
-      steps: ["Map the workspace", "Identify ownership boundaries"],
-      state: orientState,
-    },
-    {
-      title: "Read",
-      detail: "Inspect the relevant files, symbols, and dependencies.",
-      steps: ["Rank relevant files", "Trace symbols and dependencies"],
-      state: readState,
-    },
-    {
-      title: "Edit",
-      detail: "Implement the approved desktop UI changes.",
-      steps: ["Apply scoped changes", "Preserve runtime contracts"],
-      state: editState,
-    },
-    {
-      title: "Verify",
-      detail: "Build, test, and inspect the finished experience.",
-      steps: ["Run focused checks", "Inspect the final diff"],
-      state: verifyState,
-    },
-  ];
-  const completedPhases = phases.filter((phase) => phase.state === "done").length;
+  const tasks = useMemo(() => aggregateTasks(snapshot.tools), [snapshot.tools]);
+
+  const completed = tasks.filter((t) => t.status === "completed").length;
+  const total = tasks.length;
+
+  const nonTaskTools = useMemo(
+    () => snapshot.tools.filter((t) => !taskCat(t.name)).slice(-5).reverse(),
+    [snapshot.tools],
+  );
+
+  const hasTasks = tasks.length > 0;
+  const inProgress = tasks.find((t) => t.status === "in_progress");
+  const statusText = snapshot.status === "running"
+    ? (inProgress ? `Working on: ${inProgress.activeForm ?? inProgress.content}` : "Running…")
+    : snapshot.status;
 
   return (
     <section className="plan-panel" aria-label="Plan timeline">
@@ -65,74 +102,60 @@ export function PlanTimelinePanel({ mode, snapshot }: PlanTimelinePanelProps) {
         <div className="xp-head-title">
           <span className={`xp-dot ${snapshot.status}`} />
           <div>
-            <strong>Execution plan</strong>
+            <strong>Tasks</strong>
             <span className="xp-head-sub">
-              {mode === "plan" ? "Plan mode" : "Build mode"} · {snapshot.status}
+              {mode === "plan" ? "Plan mode" : "Build mode"} · {statusText}
             </span>
           </div>
         </div>
-        <span className="plan-progress">
-          {completedPhases}/{phases.length} phases
-        </span>
+        {hasTasks && (
+          <span className="plan-progress">
+            {completed}/{total} completed
+          </span>
+        )}
       </header>
 
-      <div className="plan-timeline">
-        {phases.map((phase, index) => (
-          <article className={`plan-phase ${phase.state}`} key={phase.title}>
-            <div className="plan-rail">
-              <span className="plan-node">
-                {phase.state === "done" ? (
-                  <Check size={13} />
-                ) : phase.state === "active" ? (
-                  <LoaderCircle className="spin" size={13} />
-                ) : (
-                  <Circle size={8} />
-                )}
-              </span>
-              {index < phases.length - 1 ? <span className="plan-line" /> : null}
-            </div>
-            <div className="plan-content">
-              <div className="plan-phase-head">
-                <strong>{phase.title}</strong>
-                <span className={`plan-status-chip ${phase.state}`}>
-                  {phase.state}
-                </span>
-              </div>
-              <p className="plan-note">{phase.detail}</p>
-              <div className="plan-steps">
-                {phase.steps.map((step, stepIndex) => {
-                  const stepDone = phase.state === "done";
-                  const stepActive = phase.state === "active" && stepIndex === 0;
-                  return (
-                    <div
-                      className={`plan-step${stepDone ? " done" : ""}${stepActive ? " active" : ""}`}
-                      key={step}
-                    >
-                      {stepDone ? (
-                        <Check size={12} />
-                      ) : stepActive ? (
-                        <LoaderCircle size={12} />
-                      ) : (
-                        <Circle size={7} />
-                      )}
-                      <span>{step}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
+      {hasTasks ? (
+        <Task defaultOpen className="task-plan">
+          <TaskTrigger title="Current tasks" count={total} />
+          <TaskContent>
+            <TaskList tasks={tasks} />
+          </TaskContent>
+        </Task>
+      ) : (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          <Circle className="mx-auto mb-2 size-8 opacity-30" />
+          <p>No tasks yet.</p>
+          <p className="mt-1 text-xs">
+            Tasks appear when the agent calls{" "}
+            <code className="text-[11px]">task_write</code>.
+          </p>
+        </div>
+      )}
 
       <div className="plan-activity">
-        <span>Recent activity</span>
-        {recentTools.length > 0 ? recentTools.map((tool) => (
+        <header className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Activity size={13} />
+          <span>Recent activity</span>
+        </header>
+        {nonTaskTools.length > 0 ? nonTaskTools.map((tool) => (
           <div className="plan-activity-row" key={tool.toolCallId}>
             <code>{tool.name}</code>
-            <small>{tool.isError ? "error" : tool.result !== undefined ? "done" : "running"}</small>
+            <small>
+              {tool.isError ? (
+                <span className="text-red-400">error</span>
+              ) : tool.result !== undefined ? (
+                <CheckCircle2 size={12} className="text-green-400" />
+              ) : (
+                <Loader2 size={12} className="animate-spin text-blue-400" />
+              )}
+            </small>
           </div>
-        )) : <p>No tool activity yet.</p>}
+        )) : (
+          <p className="px-4 py-2 text-xs text-muted-foreground">
+            No tool activity yet.
+          </p>
+        )}
       </div>
     </section>
   );

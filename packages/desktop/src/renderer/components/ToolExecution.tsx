@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CodeBlock } from "streamdown";
-import { ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronDown, ListChecks, Loader2 } from "lucide-react";
 import {
   Tool,
   ToolContent,
@@ -8,6 +8,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool.js";
+import type { TaskItemData } from "./ai-elements/task.js";
 import { buildUnifiedDiff } from "./ui/diff/utils/build-unified-diff.js";
 import { DiffPreview } from "./ui/diff/preview.js";
 
@@ -89,6 +90,59 @@ function localName(name: string): string {
 
 function isEditTool(name: string): boolean {
   return /(?:string_replace_lsp|write_file|ast_smart_edit)(?:_ide)?$/.test(localName(name));
+}
+
+function isTaskTool(name: string): boolean {
+  return /(?:^|_)(?:task_write|task_update|task_complete|task_check)(?:_ide)?$/.test(localName(name));
+}
+
+function parseTaskArgs(parsedArgs: Record<string, unknown> | null): TaskItemData[] | null {
+  if (!parsedArgs || typeof parsedArgs !== "object") return null;
+  const tasks = parsedArgs.tasks;
+  if (!Array.isArray(tasks)) return null;
+  const items: TaskItemData[] = [];
+  for (const t of tasks) {
+    if (!t || typeof t !== "object") continue;
+    const taskRecord = t as Record<string, unknown>;
+    if (typeof taskRecord.id === "string" && typeof taskRecord.content === "string") {
+      items.push({
+        id: taskRecord.id,
+        content: taskRecord.content,
+        status: (taskRecord.status === "pending" || taskRecord.status === "in_progress" || taskRecord.status === "completed")
+          ? taskRecord.status
+          : "pending",
+        activeForm: typeof taskRecord.activeForm === "string" ? taskRecord.activeForm : undefined,
+      });
+    }
+  }
+  return items.length > 0 ? items : null;
+}
+
+function describeTaskUpdate(parsedArgs: Record<string, unknown> | null): string | null {
+  if (!parsedArgs || typeof parsedArgs !== "object") return null;
+  const id = typeof parsedArgs.id === "string" ? parsedArgs.id : null;
+  if (!id) return null;
+  const content = typeof parsedArgs.content === "string" ? parsedArgs.content : null;
+  const status = typeof parsedArgs.status === "string" ? parsedArgs.status : null;
+  const activeForm = typeof parsedArgs.activeForm === "string" ? parsedArgs.activeForm : null;
+
+  const parts: string[] = [`Task ${id}`];
+  if (status) {
+    const label = status === "in_progress" ? "In Progress" : status === "completed" ? "Completed" : status === "pending" ? "Pending" : status;
+    parts.push(`→ ${label}`);
+  }
+  if (content) {
+    parts.push(`: ${content}`);
+  } else if (activeForm) {
+    parts.push(`: ${activeForm}`);
+  }
+  return parts.join(" ");
+}
+
+function describeTaskComplete(parsedArgs: Record<string, unknown> | null): string | null {
+  if (!parsedArgs || typeof parsedArgs !== "object") return null;
+  const id = typeof parsedArgs.id === "string" ? parsedArgs.id : null;
+  return id ? `Completed task ${id}` : null;
 }
 
 function extractDiffText(result: string | null | undefined): string | null {
@@ -199,6 +253,9 @@ export function ToolExecution({
   const outputText = diffText && rawOutputText?.includes(diffText) ? null : rawOutputText;
 
   const toolArgs = args ? JSON.parse(args) : null;
+  const tasks = isTaskTool(name) ? parseTaskArgs(toolArgs) : null;
+  const taskUpdateText = /task_update/.test(localName(name)) ? describeTaskUpdate(toolArgs) : null;
+  const taskCompleteText = /task_complete/.test(localName(name)) ? describeTaskComplete(toolArgs) : null;
   const startLine = result && isEditTool(name) ? parseLineRangesFromResult(result)?.[0] : undefined;
   const previewData = generateArgsPreview(name, toolArgs, workspaceRoot, startLine);
 
@@ -225,8 +282,36 @@ export function ToolExecution({
             />
           </CollapsibleSection>
         )}
+        {/* Task tools: compact inline indicator (full list in Plan tab) */}
+        {isTaskTool(name) && tasks && (
+          <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+            <ListChecks className="size-3.5 text-blue-400" />
+            <span>Task list · {tasks.length} item{tasks.length !== 1 ? "s" : ""}</span>
+          </div>
+        )}
+        {/* task_write with parse failure: generic indicator */}
+        {isTaskTool(name) && !tasks && /task_write/.test(localName(name)) && (
+          <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+            <ListChecks className="size-3.5 text-blue-400" />
+            <span>Task list updated</span>
+          </div>
+        )}
+        {/* task_update: compact inline message */}
+        {taskUpdateText && (
+          <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin text-blue-400" />
+            <span>{taskUpdateText}</span>
+          </div>
+        )}
+        {/* task_complete: compact completion message */}
+        {taskCompleteText && (
+          <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+            <CheckCircle2 className="size-3.5 text-green-400" />
+            <span>{taskCompleteText}</span>
+          </div>
+        )}
         {/* Non-edit tools: show args via ToolInput (has "Parameters" label) */}
-        {!previewData && toolArgs && (
+        {!previewData && toolArgs && !isTaskTool(name) && (
           <ToolInput input={toolArgs} />
         )}
         {/* Result / error output */}

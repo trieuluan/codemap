@@ -1,10 +1,5 @@
 import type { HarnessThread } from "@mastra/core/harness";
-
-export interface AgentTokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
+import type { TokenUsage } from "../types.ts";
 
 export interface SessionMessage {
   id?: string;
@@ -27,6 +22,15 @@ export interface ThreadSummary {
 export interface ThreadSessionData {
   threadId: string;
   messages: SessionMessage[];
+  tokenUsage?: TokenUsage;
+}
+
+export interface ThreadChangePayload {
+  threadId: string;
+  messages: SessionMessage[];
+  tokenUsage?: TokenUsage;
+  /** Raw system prompt text — used by UI to estimate System token bucket. */
+  systemPrompt?: string;
 }
 
 export interface ToolCallState {
@@ -74,9 +78,12 @@ export interface SessionSnapshot {
   tools: ToolCallState[];
   pendingApproval: ApprovalRequest | null;
   pendingQuestion: QuestionRequest | null;
-  usage: AgentTokenUsage;
+  usage: TokenUsage;
+  threadUsage: TokenUsage | null;
   model: string | null;
   error: string | null;
+  /** System prompt text preserved for token attribution estimation. */
+  systemPrompt?: string;
 }
 
 export interface SendMessageInput {
@@ -133,8 +140,8 @@ export type AgentSessionEvent =
       requestId: string;
       questionId: string;
     }
-  | { type: "usage"; requestId?: string; usage: AgentTokenUsage }
-  | { type: "thread_change"; threadId: string; messages: SessionMessage[] }
+  | { type: "usage"; requestId?: string; usage: TokenUsage }
+  | ({ type: "thread_change" } & ThreadChangePayload)
   | { type: "error"; requestId?: string; message: string };
 
 export type AgentSessionCommand =

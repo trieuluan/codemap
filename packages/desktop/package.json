@@ -10,7 +10,7 @@
     "build": "electron-vite build",
     "build:tsc": "tsc -p tsconfig.json --noEmit",
     "preview": "electron-vite preview",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "node --import tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
     "package:mac": "pnpm run build && electron-builder --mac"
   },
   "dependencies": {
@@ -39,6 +39,7 @@
     "cmdk": "^1.1.1",
     "diff": "^8.0.4",
     "gitdiff-parser": "^0.3.1",
+    "gpt-tokenizer": "^3.4.0",
     "mastracode": "^0.22.3",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
@@ -46,6 +47,7 @@
     "sharp": "^0.34.2",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
     "use-stick-to-bottom": "^1.1.6"
   },
   "devDependencies": {

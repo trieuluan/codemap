@@ -22,6 +22,7 @@ export function createInitialSessionSnapshot(
     pendingApproval: null,
     pendingQuestion: null,
     usage: EMPTY_USAGE,
+    threadUsage: null,
     model: null,
     error: null,
     ...input,
@@ -89,6 +90,8 @@ export function reduceAgentSessionEvent(
         threadId: event.threadId,
         messages: event.messages,
         model: state.model,
+        threadUsage: event.tokenUsage ?? null,
+        systemPrompt: event.systemPrompt,
       };
     case "error":
       return { ...state, status: "error", error: event.message };

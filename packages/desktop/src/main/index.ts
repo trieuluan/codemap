@@ -6,6 +6,7 @@ import {
   shell,
 } from "electron";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
 import {
   DESKTOP_IPC,
   desktopCommandSchema,
@@ -82,6 +83,38 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
   }
   if (command.type === "read_settings") {
     return runtime.readSettings(command.requestId);
+  }
+  if (command.type === "get_working_diff") {
+    return new Promise<string>((resolve, reject) => {
+      execFile(
+        "git",
+        ["diff", "HEAD", "--", ".", ":(exclude)package-lock.json", ":(exclude)*.lock", ":(exclude)pnpm-lock.yaml"],
+        { cwd: runtime.workspacePath, maxBuffer: 5 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          if (err && !stdout) {
+            reject(new Error(stderr || err.message));
+          } else {
+            resolve(stdout);
+          }
+        },
+      );
+    });
+  }
+  if (command.type === "get_branch_name") {
+    return new Promise<string>((resolve, reject) => {
+      execFile(
+        "git",
+        ["branch", "--show-current"],
+        { cwd: runtime.workspacePath },
+        (err, stdout, stderr) => {
+          if (err && !stdout) {
+            reject(new Error(stderr || err.message));
+          } else {
+            resolve(stdout.trim());
+          }
+        },
+      );
+    });
   }
   await runtime.restart();
 });

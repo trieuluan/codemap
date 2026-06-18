@@ -66,7 +66,7 @@ test("settings metadata redacts raw credentials", () => {
       provider: "9router",
       baseUrl: "http://localhost:4000/v1",
       defaultModel: "coder",
-      availableModels: ["coder", "planner"],
+      availableModels: [{ id: "coder" }, { id: "planner", ownedBy: "openai" }],
       apiKey: "secret",
       apiToken: "secret-token",
     }),
@@ -74,10 +74,30 @@ test("settings metadata redacts raw credentials", () => {
       provider: "9router",
       baseUrl: "http://localhost:4000/v1",
       defaultModel: "coder",
-      availableModels: ["coder", "planner"],
+      availableModels: [{ id: "coder" }, { id: "planner", ownedBy: "openai" }],
       hasApiKey: true,
       hasApiToken: true,
     },
+  );
+});
+
+test("desktop IPC accepts get_working_diff command", () => {
+  assert.equal(
+    desktopCommandSchema.parse({
+      type: "get_working_diff",
+      requestId: "req-diff",
+    }).type,
+    "get_working_diff",
+  );
+});
+
+test("desktop IPC accepts get_branch_name command", () => {
+  assert.equal(
+    desktopCommandSchema.parse({
+      type: "get_branch_name",
+      requestId: "req-branch",
+    }).type,
+    "get_branch_name",
   );
 });
 

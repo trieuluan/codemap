@@ -2,6 +2,10 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  raw?: unknown;
 }
 
 export type TaskType =
@@ -132,6 +136,7 @@ export interface ProviderHealth {
 
 export interface GatewayModel {
   id: string;
+  object?: string;
   ownedBy?: string;
 }
 

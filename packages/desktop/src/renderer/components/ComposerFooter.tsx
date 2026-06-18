@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { CircleStop, ImagePlus, Send } from "lucide-react";
+import { useState, useMemo } from "react";
+import { CircleStop, Send } from "lucide-react";
 import type { RuntimeStatus } from "../types.js";
+import type { ModelInfo } from "../../shared/ipc.js";
+import { SelectGroup, SelectLabel } from "./ui/select.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -12,6 +14,11 @@ import {
   PromptInputBody,
   PromptInputFooter,
   type PromptInputMessage,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
@@ -21,11 +28,25 @@ interface ComposerFooterProps {
   runtimeStatus: RuntimeStatus;
   isBusy: boolean;
   mode: "plan" | "build";
+  selectedModel: string;
+  availableModels: ModelInfo[];
+  onModelChange: (model: string) => void;
   onSubmit: (
     content: string,
     images: Array<{ data: string; mimeType: string; filename?: string }>,
   ) => void;
   onStop: () => void;
+}
+
+function groupLabel(model: ModelInfo): string {
+  if (model.ownedBy) {
+    // Capitalize first letter of ownedBy (e.g., "anthropic" → "Anthropic")
+    return model.ownedBy.charAt(0).toUpperCase() + model.ownedBy.slice(1);
+  }
+  // Fallback: extract prefix from model id
+  const prefix = model.id.split(/[/:.-]/)[0]?.trim();
+  if (!prefix) return "Other";
+  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
 }
 
 function toRuntimeImages(files: PromptInputMessage["files"]) {
@@ -45,11 +66,26 @@ export function ComposerFooter({
   runtimeStatus,
   isBusy,
   mode,
+  selectedModel,
+  availableModels,
+  onModelChange,
   onSubmit,
   onStop,
 }: ComposerFooterProps) {
   const [draft, setDraft] = useState("");
   const isReady = runtimeStatus === "ready";
+
+  const groupedModels = useMemo(() => {
+    const models = availableModels.length > 0 ? availableModels : [{ id: selectedModel }];
+    const groups = new Map<string, ModelInfo[]>();
+    for (const model of models) {
+      const label = groupLabel(model);
+      const current = groups.get(label) ?? [];
+      current.push(model);
+      groups.set(label, current);
+    }
+    return [...groups.entries()];
+  }, [availableModels, selectedModel]);
 
   function submit(message: PromptInputMessage) {
     const content = message.text.trim();
@@ -57,7 +93,6 @@ export function ComposerFooter({
     onSubmit(content, toRuntimeImages(message.files));
     setDraft("");
   }
-
   return (
     <footer className="composer-wrap">
       <div className="composer-header-row">
@@ -96,14 +131,32 @@ export function ComposerFooter({
         <PromptInputFooter className="composer-actions">
           <PromptInputTools className="composer-actions-left">
             <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger className="secondary-button" disabled={!isReady}>
-                <ImagePlus size={14} />
-                <span>Attach image</span>
-              </PromptInputActionMenuTrigger>
+              <PromptInputActionMenuTrigger disabled={!isReady} />
               <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments label="Add images" />
+                <PromptInputActionAddAttachments />
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
+            <PromptInputSelect
+              disabled={!isReady}
+              onValueChange={onModelChange}
+              value={selectedModel}
+            >
+              <PromptInputSelectTrigger>
+                <PromptInputSelectValue />
+              </PromptInputSelectTrigger>
+              <PromptInputSelectContent>
+                {groupedModels.map(([label, groupModels]) => (
+                  <SelectGroup key={label}>
+                    <SelectLabel>{label}</SelectLabel>
+                    {groupModels.map((model) => (
+                      <PromptInputSelectItem key={model.id} value={model.id}>
+                        {model.id}
+                      </PromptInputSelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </PromptInputSelectContent>
+            </PromptInputSelect>
           </PromptInputTools>
 
           {isBusy ? (

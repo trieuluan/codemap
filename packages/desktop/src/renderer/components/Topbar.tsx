@@ -8,21 +8,17 @@ import {
   Waypoints,
 } from "lucide-react";
 import type { RuntimeStatus } from "../types.js";
-import type { SettingsMetadata } from "../../shared/ipc.js";
-import { ModelSelector } from "./ModelSelector.js";
 import type { RecentWorkspace } from "./Launcher.js";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher.js";
 
 interface TopbarProps {
   runtimeStatus: RuntimeStatus;
-  settings: SettingsMetadata | null;
   workspace: string;
   recents: RecentWorkspace[];
   inspectorOpen: boolean;
   mode: "plan" | "build";
   view: "chat" | "map";
   onToggleSidebar: () => void;
-  onModelChange: (model: string) => void;
   onModeChange: (mode: "plan" | "build") => void;
   onToggleInspector: () => void;
   onViewChange: (view: "chat" | "map") => void;
@@ -34,14 +30,12 @@ interface TopbarProps {
 
 export function Topbar({
   runtimeStatus,
-  settings,
   workspace,
   recents,
   inspectorOpen,
   mode,
   view,
   onToggleSidebar,
-  onModelChange,
   onModeChange,
   onToggleInspector,
   onViewChange,
@@ -50,10 +44,6 @@ export function Topbar({
   onOpenWorkspace,
   onOpenLauncher,
 }: TopbarProps) {
-  const selectedModel = settings?.defaultModel ?? "coder";
-  const availableModels =
-    settings?.availableModels.length ? settings.availableModels : [selectedModel];
-
   const segmentedControlClass =
     "inline-flex items-center gap-0.5 rounded-[10px] border border-[var(--border)] bg-[var(--card)] p-[3px]";
   const segmentedButtonClass = (active: boolean) =>
@@ -124,13 +114,6 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-3">
-        <ModelSelector
-          models={availableModels}
-          selectedModel={selectedModel}
-          disabled={runtimeStatus !== "ready"}
-          onSelect={onModelChange}
-        />
-
         <button
           className={inspectorOpen ? "icon-button active" : "icon-button"}
           onClick={onToggleInspector}

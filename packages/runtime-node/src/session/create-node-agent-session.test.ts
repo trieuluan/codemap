@@ -28,7 +28,7 @@ test("switchThread expands tool_call/tool_result content parts into synthetic Se
       },
       abort() {},
       async listThreads() { return []; },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages() {
         return [
@@ -83,7 +83,7 @@ test("switchThread preserves text-only assistant messages without synthetic tool
       },
       abort() {},
       async listThreads() { return []; },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages() {
         return [
@@ -133,7 +133,7 @@ test("node session maps runtime callbacks to shared session events", async () =>
       async listThreads() {
         return [];
       },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages() {
         return [];
@@ -183,7 +183,7 @@ test("node session resolves approvals without exposing callbacks as events", asy
       async listThreads() {
         return [];
       },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages() {
         return [];
@@ -216,7 +216,7 @@ test("switchThread reuses cached messages on second load — only calls listThre
       },
       abort() {},
       async listThreads() { return []; },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages(threadId) {
         callCount++;
@@ -264,7 +264,7 @@ test("sending a message invalidates thread cache so next switchThread reloads", 
       },
       abort() {},
       async listThreads() { return []; },
-      async switchThread() {},
+      async switchThread() { return { ok: true }; },
       async deleteThread() {},
       async listThreadMessages() {
         callCount++;

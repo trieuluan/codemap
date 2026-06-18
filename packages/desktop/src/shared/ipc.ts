@@ -41,6 +41,18 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
       requestId: requestIdSchema,
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("get_working_diff"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_branch_name"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
 ]);
 
 export const utilityCommandSchema = z.discriminatedUnion("type", [
@@ -65,12 +77,24 @@ export const utilityCommandSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 
+export interface ModelInfo {
+  id: string;
+  object?: string;
+  ownedBy?: string;
+}
+
+const modelInfoSchema = z.object({
+  id: z.string(),
+  object: z.string().optional(),
+  ownedBy: z.string().optional(),
+}).strict();
+
 const settingsMetadataSchema = z
   .object({
     provider: z.string(),
     baseUrl: z.string(),
     defaultModel: z.string(),
-    availableModels: z.array(z.string()),
+    availableModels: z.array(modelInfoSchema),
     hasApiKey: z.boolean(),
     hasApiToken: z.boolean(),
   })
@@ -121,7 +145,7 @@ export interface SettingsMetadataInput {
   provider?: string;
   baseUrl?: string;
   defaultModel?: string;
-  availableModels?: string[];
+  availableModels?: ModelInfo[];
   apiKey?: string;
   apiToken?: string;
 }
@@ -130,7 +154,7 @@ export interface SettingsMetadata {
   provider: string;
   baseUrl: string;
   defaultModel: string;
-  availableModels: string[];
+  availableModels: ModelInfo[];
   hasApiKey: boolean;
   hasApiToken: boolean;
 }
@@ -138,12 +162,13 @@ export interface SettingsMetadata {
 export function redactSettingsMetadata(
   settings: SettingsMetadataInput,
 ): SettingsMetadata {
+  const fallbackModel = settings.defaultModel ?? "coder";
   return {
     provider: settings.provider ?? "9router",
     baseUrl: settings.baseUrl ?? "http://localhost:4000/v1",
-    defaultModel: settings.defaultModel ?? "coder",
+    defaultModel: fallbackModel,
     availableModels: settings.availableModels ?? [
-      settings.defaultModel ?? "coder",
+      { id: fallbackModel },
     ],
     hasApiKey: Boolean(settings.apiKey),
     hasApiToken: Boolean(settings.apiToken),
@@ -174,6 +199,8 @@ export interface DesktopApi {
   ): Promise<void>;
   readSettings(): Promise<SettingsMetadata>;
   restartRuntime(): Promise<void>;
+  getWorkingDiff(): Promise<string>;
+  getBranchName(): Promise<string>;
   onAgentEvent(listener: (event: AgentSessionEvent) => void): () => void;
   onRuntimeStatus(
     listener: (status: "starting" | "ready" | "disconnected") => void,

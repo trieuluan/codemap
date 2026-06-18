@@ -11,9 +11,11 @@ import {
 export function DiffPreview({
   diff,
   language: _language,
+  onFileClick,
 }: {
   diff: string;
   language?: string;
+  onFileClick?: (filePath: string) => void;
 }) {
   const files = useMemo(() => parseDiff(diff), [diff]);
 
@@ -30,13 +32,17 @@ export function DiffPreview({
       {files.map((file, i) => {
         const filePath = file.newPath || file.oldPath || "";
         return (
-          <CollapsibleCard key={i} defaultOpen>
+          <CollapsibleCard key={i} defaultOpen id={`diff-file-${encodeURIComponent(filePath)}`}>
             <CollapsibleCardHeader>
-              <CollapsibleCardTitle title={filePath} className="font-mono text-xs">
+              <CollapsibleCardTitle
+                title={filePath}
+                className="font-mono text-xs cursor-pointer hover:underline"
+                onClick={() => onFileClick?.(filePath)}
+              >
                 {filePath}
               </CollapsibleCardTitle>
             </CollapsibleCardHeader>
-            <CollapsibleCardContent className="pt-14 pb-0 overflow-x-auto">
+            <CollapsibleCardContent className="pb-0 overflow-y-auto">
               <Diff
                 fileName={filePath || undefined}
                 hunks={file.hunks}

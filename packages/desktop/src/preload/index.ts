@@ -99,6 +99,16 @@ const api: DesktopApi = {
       type: "restart_runtime",
       requestId: crypto.randomUUID(),
     }),
+  getWorkingDiff: () =>
+    invoke({
+      type: "get_working_diff",
+      requestId: crypto.randomUUID(),
+    }),
+  getBranchName: () =>
+    invoke({
+      type: "get_branch_name",
+      requestId: crypto.randomUUID(),
+    }),
   onAgentEvent(listener) {
     return subscribe((message) => {
       if (message.type === "agent_event") listener(message.event);

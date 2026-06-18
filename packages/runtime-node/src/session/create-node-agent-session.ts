@@ -69,6 +69,9 @@ export function createNodeAgentSession(
   let currentThreadId: string | null = null;
 
   const driver: AgentSessionDriver = {
+    getSystemPrompt() {
+      return options.agentInstructions;
+    },
     async send(input, emit) {
       activeAbortController = new AbortController();
       try {
@@ -170,18 +173,30 @@ export function createNodeAgentSession(
     async switchThread(threadId) {
       const cached = messagesCache.get(threadId);
       if (cached) {
-        await runtime.switchThread(threadId);
+        const result = await runtime.switchThread(threadId);
+        if (result && typeof result === "object" && "ok" in result && !(result as { ok: boolean }).ok) {
+          throw new Error(
+            (result as { ok: false; message?: string }).message ??
+              "Failed to switch thread",
+          );
+        }
         currentThreadId = threadId;
-        return { threadId, messages: cached };
+        const tokenUsage = (result as any)?.tokenUsage;
+        return { threadId, messages: cached, tokenUsage };
       }
-      const [, messages] = await Promise.all([
-        runtime.switchThread(threadId),
-        runtime.listThreadMessages(threadId),
-      ]);
+      const result = await runtime.switchThread(threadId);
+      if (result && typeof result === "object" && "ok" in result && !(result as { ok: boolean }).ok) {
+        throw new Error(
+          (result as { ok: false; message?: string }).message ??
+            "Failed to switch thread",
+        );
+      }
       currentThreadId = threadId;
+      const tokenUsage = (result as any)?.tokenUsage;
+      const messages = await runtime.listThreadMessages(threadId);
       const expanded = messages.flatMap(expandMessage);
       messagesCache.set(threadId, expanded);
-      return { threadId, messages: expanded };
+      return { threadId, messages: expanded, tokenUsage };
     },
     async deleteThread(threadId) {
       messagesCache.delete(threadId);
@@ -217,7 +232,7 @@ function mapThread(thread: HarnessThread): ThreadSummary {
     title: thread.title,
     createdAt: toIsoString(thread.createdAt),
     updatedAt: toIsoString(thread.updatedAt),
-    tokenUsage: thread.tokenUsage,
+    tokenUsage: (thread.metadata as any)?.tokenUsage,
     metadata:
       thread.metadata && typeof thread.metadata === "object"
         ? (thread.metadata as Record<string, unknown>)

@@ -214,14 +214,12 @@ export function App() {
       <section className="main-panel">
         <Topbar
           runtimeStatus={runtimeStatus}
-          settings={settings}
           workspace={workspace}
           recents={recents}
           inspectorOpen={inspectorOpen}
           mode={mode}
           view={view}
           onToggleSidebar={toggleSidebar}
-          onModelChange={changeModel}
           onModeChange={setMode}
           onToggleInspector={toggleInspector}
           onViewChange={setView}
@@ -251,6 +249,9 @@ export function App() {
                 runtimeStatus={runtimeStatus}
                 isBusy={isBusy}
                 mode={mode}
+                selectedModel={settings?.defaultModel ?? "coder"}
+                availableModels={settings?.availableModels ?? []}
+                onModelChange={changeModel}
                 onSubmit={submit}
                 onStop={() => window.codemap.abort()}
               />
@@ -267,6 +268,7 @@ export function App() {
             settings={settings}
             open={inspectorOpen}
             tab={inspectorTab}
+            selectedModel={settings?.defaultModel ?? "coder"}
             onTabChange={setInspectorTab}
             onToggle={toggleInspector}
           />
