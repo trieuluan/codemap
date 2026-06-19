@@ -19,6 +19,7 @@ function createSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapsh
     tools: [],
     pendingApproval: null,
     pendingQuestion: null,
+    pendingPlanReview: null,
     usage: {
       promptTokens: 0,
       completionTokens: 0,

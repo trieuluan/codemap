@@ -53,6 +53,7 @@ test("agent session schemas accept browser-safe commands and events", () => {
         tools: [],
         pendingApproval: null,
         pendingQuestion: null,
+        pendingPlanReview: null,
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         threadUsage: null,
         model: null,
@@ -70,6 +71,34 @@ test("agent session schemas accept browser-safe commands and events", () => {
     }).type,
     "delete_thread",
   );
+
+  assert.equal(
+    agentSessionEventSchema.parse({
+      type: "plan_review",
+      requestId: "req-3",
+      planReview: {
+        planReviewId: "plan-1",
+        toolCallId: "tool-1",
+        title: "Implementation plan",
+        plan: "# Plan\nDo the thing",
+      },
+    }).type,
+    "plan_review",
+  );
+
+  assert.equal(
+    agentSessionCommandSchema.parse({
+      type: "respond_plan_review",
+      requestId: "req-4",
+      response: {
+        requestId: "req-4",
+        planReviewId: "plan-1",
+        action: "revise",
+        feedback: "Add tests",
+      },
+    }).type,
+    "respond_plan_review",
+  );
 });
 
 test("agent session schemas reject secrets and malformed payloads", () => {
@@ -86,6 +115,18 @@ test("agent session schemas reject secrets and malformed payloads", () => {
       type: "usage",
       requestId: "req-1",
       usage: { promptTokens: -1, completionTokens: 0, totalTokens: 0 },
+    }),
+  );
+
+  assert.throws(() =>
+    agentSessionCommandSchema.parse({
+      type: "respond_plan_review",
+      requestId: "req-1",
+      response: {
+        requestId: "req-1",
+        planReviewId: "plan-1",
+        action: "approve",
+      },
     }),
   );
 });

@@ -122,6 +122,20 @@ export function App() {
     content: string,
     images: Array<{ data: string; mimeType: string; filename?: string }>,
   ) {
+    if (snapshot.pendingPlanReview && content.trim() && images.length === 0) {
+      setError(null);
+      appendUserMessage(content);
+      try {
+        await window.codemap.respondToPlanReview(
+          snapshot.pendingPlanReview.planReviewId,
+          "revise",
+          content.trim(),
+        );
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      }
+      return;
+    }
     if ((!content && images.length === 0) || !workspace || isBusy) return;
     setError(null);
     appendUserMessage(content, images);
@@ -172,6 +186,20 @@ export function App() {
 
   function changeModel(model: string) {
     setSettings((current) => (current ? { ...current, defaultModel: model } : current));
+  }
+
+  async function respondToPlanReview(
+    planReviewId: string,
+    action: "apply" | "reject" | "revise",
+    feedback?: string,
+  ) {
+    setError(null);
+    if (action === "apply") setMode("build");
+    try {
+      await window.codemap.respondToPlanReview(planReviewId, action, feedback);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
   if (!workspace) {
@@ -253,6 +281,7 @@ export function App() {
               <ComposerFooter
                 runtimeStatus={runtimeStatus}
                 isBusy={isBusy}
+                allowSubmitWhileBusy={Boolean(snapshot.pendingPlanReview)}
                 mode={mode}
                 selectedModel={settings?.defaultModel ?? "coder"}
                 availableModels={settings?.availableModels ?? []}
@@ -278,6 +307,7 @@ export function App() {
             onTabChange={setInspectorTab}
             onToggle={toggleInspector}
             onStartResize={startInspectorResize}
+            onRespondToPlanReview={respondToPlanReview}
           />
         </div>
       </section>

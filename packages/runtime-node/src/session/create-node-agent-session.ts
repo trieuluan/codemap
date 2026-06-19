@@ -1,10 +1,12 @@
 import {
   type AgentSessionController,
   type ApprovalResponse,
+  type PlanReviewResponse,
   type QuestionResponse,
   type SessionMessage,
   type ThreadSummary,
 } from "@codemap-ai/core/agent/contracts";
+import { randomUUID } from "node:crypto";
 import {
   createAgentSessionController,
   type AgentSessionDriver,
@@ -65,15 +67,23 @@ export function createNodeAgentSession(
     string,
     (answer: string | string[]) => void
   >();
+  const planReviewResponders = new Map<
+    string,
+    (response: PlanReviewResponse) => void
+  >();
   const messagesCache = new Map<string, SessionMessage[]>();
   let currentThreadId: string | null = null;
+  let pendingPlanReview:
+    | { planReviewId: string; toolCallId: string; title?: string; plan: string }
+    | null = null;
 
   const driver: AgentSessionDriver = {
     getSystemPrompt() {
       return options.agentInstructions;
     },
     async send(input, emit) {
-      activeAbortController = new AbortController();
+      const abortController = new AbortController();
+      activeAbortController = abortController;
       try {
         await runtime.run({
           provider: options.provider,
@@ -85,8 +95,7 @@ export function createNodeAgentSession(
           agentInstructions: options.agentInstructions,
           userMessage: { role: "user", content: input.content },
           toolClient: options.toolClient,
-          signal: activeAbortController.signal,
-          effort: input.effort,
+          signal: abortController.signal,
           planMode: input.planMode,
           imageFiles: input.images,
           onToken: (text) =>
@@ -115,6 +124,47 @@ export function createNodeAgentSession(
           toolPreviewBuilder: options.toolPreviewBuilder,
           onUsage: (usage) =>
             emit({ type: "usage", requestId: input.requestId, usage }),
+          onPlanReady: (plan, toolCallId, title) => {
+            const id = toolCallId || `plan-${randomUUID()}`;
+            pendingPlanReview = {
+              planReviewId: id,
+              toolCallId: id,
+              title,
+              plan,
+            };
+          },
+          onPlanWait: () => {
+            const fallbackId = `plan-${randomUUID()}`;
+            const planReview = pendingPlanReview ?? {
+              planReviewId: fallbackId,
+              toolCallId: fallbackId,
+              title: "Plan ready",
+              plan: "",
+            };
+            pendingPlanReview = planReview;
+            return new Promise<string>((resolve) => {
+              planReviewResponders.set(planReview.planReviewId, (response) => {
+                planReviewResponders.delete(planReview.planReviewId);
+                pendingPlanReview = null;
+                if (response.action === "apply") {
+                  resolve("apply");
+                  return;
+                }
+                const feedback = response.feedback?.trim();
+                resolve(
+                  feedback ||
+                    (response.action === "reject"
+                      ? "Plan rejected by user."
+                      : "Revise the plan."),
+                );
+              });
+              emit({
+                type: "plan_review",
+                requestId: input.requestId,
+                planReview,
+              });
+            });
+          },
           onToolApproval: (approval, respond) => {
             approvalResponders.set(approval.toolCallId, respond);
             emit({
@@ -158,7 +208,9 @@ export function createNodeAgentSession(
           },
         });
       } finally {
-        activeAbortController = null;
+        if (activeAbortController === abortController) {
+          activeAbortController = null;
+        }
       }
       // Invalidate cached messages for this thread — new messages were added
       if (currentThreadId) messagesCache.delete(currentThreadId);
@@ -209,6 +261,9 @@ export function createNodeAgentSession(
     respondToQuestion(input: QuestionResponse) {
       questionResponders.get(input.questionId)?.(input.answer);
       questionResponders.delete(input.questionId);
+    },
+    respondToPlanReview(input: PlanReviewResponse) {
+      planReviewResponders.get(input.planReviewId)?.(input);
     },
   };
 

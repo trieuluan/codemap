@@ -512,7 +512,6 @@ export async function startPiTuiApp(
     shellMode = false;
     void chatTerminal.handleSubmitWithContent(
       trimmed,
-      false,
       imageFiles.length > 0 ? imageFiles : undefined,
     );
   };

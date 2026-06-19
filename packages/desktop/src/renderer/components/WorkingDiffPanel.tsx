@@ -83,7 +83,9 @@ function getFileIcon(filename: string): React.ReactNode {
 }
 
 type DiffStatus = "idle" | "loading" | "error";
-const FILE_SELECTOR_DEFAULT_WIDTH = 220;
+const FILE_SELECTOR_MIN_WIDTH = 180;
+const FILE_SELECTOR_MAX_WIDTH = 420;
+const FILE_SELECTOR_DEFAULT_WIDTH = 260;
 
 interface FileNode {
   name: string;
@@ -244,7 +246,9 @@ export function WorkingDiffPanel() {
   const [search, setSearch] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [fileSelectorVisible, setFileSelectorVisible] = useState(true);
+  const [fileTreeWidth, setFileTreeWidth] = useState(FILE_SELECTOR_DEFAULT_WIDTH);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const treeResizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const filesRef = useRef<typeof files>(null);
 
@@ -288,6 +292,27 @@ export function WorkingDiffPanel() {
     };
   }, [fetchDiff]);
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      if (!treeResizeStateRef.current) return;
+      const next = treeResizeStateRef.current.startWidth + (treeResizeStateRef.current.startX - event.clientX);
+      setFileTreeWidth(Math.max(FILE_SELECTOR_MIN_WIDTH, Math.min(next, FILE_SELECTOR_MAX_WIDTH)));
+    }
+
+    function handlePointerUp() {
+      treeResizeStateRef.current = null;
+      document.body.classList.remove("diff-panel-resizing");
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.classList.remove("diff-panel-resizing");
+    };
+  }, []);
+
   const stats = useMemo(
     () =>
       files?.reduce(
@@ -311,6 +336,13 @@ export function WorkingDiffPanel() {
   const handleFileClick = useCallback((filePath: string) => {
     setSelectedPath(filePath);
   }, []);
+
+  const startTreeResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    treeResizeStateRef.current = { startX: event.clientX, startWidth: fileTreeWidth };
+    document.body.classList.add("diff-panel-resizing");
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }, [fileTreeWidth]);
 
   const isEmpty = files !== null && files.length === 0;
   const hasDiff = !error && files !== null && files.length > 0;
@@ -370,50 +402,61 @@ export function WorkingDiffPanel() {
 
         {!error && files && !isEmpty && (
           <div className={`diff-panel-split ${fileSelectorVisible ? "" : "diff-panel-split-files-hidden"}`}>
-            <div className="diff-panel-content">
-              <MonacoDiffViewer
-                className="monaco-diff-viewer"
-                files={files}
-                selectedPath={selectedPath}
-              />
-            </div>
+            <div className="diff-panel-frame">
+              <div className="diff-panel-content">
+                <MonacoDiffViewer
+                  className="monaco-diff-viewer"
+                  files={files}
+                  selectedPath={selectedPath}
+                />
+              </div>
 
-            {fileSelectorVisible && (
-              <aside
-                className="diff-panel-tree"
-                style={{ width: FILE_SELECTOR_DEFAULT_WIDTH }}
-              >
-                  <div className="diff-panel-search">
-                    <Search size={13} className="text-muted-foreground shrink-0" />
-                    <input
-                      type="text"
-                      className="diff-filter-input"
-                      placeholder="Filter files..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                  </div>
-                  <div className="diff-panel-tree-header">
-                    <FolderTree size={13} />
-                    <span>
-                      {filteredTree.visibleCount} file
-                      {filteredTree.visibleCount !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="diff-panel-tree-body">
-                    {filteredTree.nodes.map((node, i) => (
-                      <FileTreeItem
-                        key={i}
-                        node={node}
-                        depth={0}
-                        onFileClick={handleFileClick}
-                        defaultExpanded
-                        selectedPath={selectedPath}
+              {fileSelectorVisible && (
+                <>
+                  <div
+                    className="diff-panel-divider"
+                    onPointerDown={startTreeResize}
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize file tree"
+                  />
+                  <aside
+                    className="diff-panel-tree"
+                    style={{ width: fileTreeWidth }}
+                  >
+                    <div className="diff-panel-search">
+                      <Search size={13} className="text-muted-foreground shrink-0" />
+                      <input
+                        type="text"
+                        className="diff-filter-input"
+                        placeholder="Filter files..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
                       />
-                    ))}
-                  </div>
-              </aside>
-            )}
+                    </div>
+                    <div className="diff-panel-tree-header">
+                      <FolderTree size={13} />
+                      <span>
+                        {filteredTree.visibleCount} file
+                        {filteredTree.visibleCount !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="diff-panel-tree-body">
+                      {filteredTree.nodes.map((node, i) => (
+                        <FileTreeItem
+                          key={i}
+                          node={node}
+                          depth={0}
+                          onFileClick={handleFileClick}
+                          defaultExpanded
+                          selectedPath={selectedPath}
+                        />
+                      ))}
+                    </div>
+                  </aside>
+                </>
+              )}
+            </div>
           </div>
         )}
 

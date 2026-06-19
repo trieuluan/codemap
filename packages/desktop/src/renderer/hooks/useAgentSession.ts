@@ -18,13 +18,21 @@ export type LocalMessage = {
   images?: Array<{ data: string; mimeType: string; filename?: string }>;
 };
 
+export type LocalReasoning = {
+  localId: string;
+  content: string;
+  isStreaming: boolean;
+};
+
 export type ConversationItem =
   | { kind: "message"; message: LocalMessage }
-  | { kind: "tool"; tool: ToolCallState };
+  | { kind: "tool"; tool: ToolCallState }
+  | { kind: "reasoning"; reasoning: LocalReasoning };
 
 type LiveFeedItem =
   | { kind: "tool"; tool: ToolCallState }
-  | { kind: "text"; id: string; content: string };
+  | { kind: "text"; id: string; content: string }
+  | { kind: "reasoning"; id: string; content: string; isStreaming: boolean };
 
 function extractTaskContent(raw: string): string {
   // Strip "## Current Task" markdown header if present
@@ -84,6 +92,17 @@ function extractTextContent(content: unknown): string {
       .trim();
   }
   return "";
+}
+
+function extractReasoningContent(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part): part is { type: "thinking"; thinking: string } =>
+      part?.type === "thinking" && typeof part.thinking === "string",
+    )
+    .map((part) => part.thinking)
+    .join("\n")
+    .trim();
 }
 
 function extractMessageImages(
@@ -197,15 +216,30 @@ export function normalizeThreadMessages(messages: SessionMessage[]): Conversatio
     const content = message.role === "user" ? extractTaskContent(textContent) : textContent;
 
     if (message.role === "assistant") {
-      if (!content) continue;
-      normalized.push({
-        kind: "message",
-        message: {
-          localId: message.id ?? `thread-${index}`,
-          role: "assistant",
-          content,
-        },
-      });
+      const reasoningContent = extractReasoningContent(message.content);
+      if (reasoningContent) {
+        normalized.push({
+          kind: "reasoning",
+          reasoning: {
+            localId: `${message.id ?? `thread-${index}`}-reasoning`,
+            content: reasoningContent,
+            isStreaming: false,
+          },
+        });
+      }
+      if (content) {
+        normalized.push({
+          kind: "message",
+          message: {
+            localId: message.id ?? `thread-${index}`,
+            role: "assistant",
+            content,
+          },
+        });
+      }
+      if (reasoningContent || content) {
+        continue;
+      }
       continue;
     }
 
@@ -231,6 +265,20 @@ function liveFeedToConversationItems(feed: LiveFeedItem[]): ConversationItem[] {
   return feed.flatMap((item): ConversationItem[] => {
     if (item.kind === "tool") {
       return [{ kind: "tool", tool: item.tool }];
+    }
+    if (item.kind === "reasoning") {
+      // Keep streaming reasoning even when content is empty (placeholder
+      // injected on status:"running" shows "Thinking..." shimmer).
+      // Filter empty non-streaming reasoning — the model never produced content.
+      if (!item.isStreaming && !item.content) return [];
+      return [{
+        kind: "reasoning",
+        reasoning: {
+          localId: item.id,
+          content: item.content,
+          isStreaming: item.isStreaming,
+        },
+      }];
     }
     if (!item.content) return [];
     return [{
@@ -266,10 +314,39 @@ export function useAgentSession(onError: (message: string | null) => void) {
   }, []);
 
   function handleEvent(event: AgentSessionEvent) {
+    if (event.type === "thinking") {
+      const feed = liveFeedRef.current;
+      if (feed.length > 0 && feed[feed.length - 1]!.kind === "reasoning") {
+        const last = feed[feed.length - 1]! as Extract<LiveFeedItem, { kind: "reasoning" }>;
+        feed[feed.length - 1] = {
+          ...last,
+          content: last.content + event.text,
+          isStreaming: true,
+        };
+      } else {
+        feed.push({
+          kind: "reasoning",
+          id: crypto.randomUUID(),
+          content: event.text,
+          isStreaming: true,
+        });
+      }
+      setLiveFeed([...feed]);
+      return;
+    }
     if (event.type === "token") {
       streamingRef.current += event.text;
       // Maintain unified chronological live feed
-      const feed = liveFeedRef.current;
+      let feed = liveFeedRef.current;
+
+      // If there's an empty reasoning placeholder (model isn't reasoning),
+      // remove it before adding text — the placeholder was injected on
+      // status:"running" and never got filled by a thinking event.
+      if (feed.some((item) => item.kind === "reasoning" && !item.content)) {
+        feed = feed.filter((item) => !(item.kind === "reasoning" && !item.content));
+        liveFeedRef.current = feed;
+      }
+
       if (feed.length > 0 && feed[feed.length - 1]!.kind === "text") {
         const last = feed[feed.length - 1]! as Extract<LiveFeedItem, { kind: "text" }>;
         feed[feed.length - 1] = {
@@ -324,6 +401,39 @@ export function useAgentSession(onError: (message: string | null) => void) {
       }
       return;
     }
+    if (event.type === "plan_review_resolved") {
+      const result = "Plan reviewed";
+      pendingToolsRef.current = pendingToolsRef.current.map((t) =>
+        t.toolCallId === event.planReviewId || t.name === "submit_plan"
+          ? { ...t, result, isError: false }
+          : t,
+      );
+      const feed = liveFeedRef.current;
+      // Mark ALL pending submit_plan tools as resolved, not just the first one
+      let modified = false;
+      for (let i = 0; i < feed.length; i++) {
+        const item = feed[i];
+        if (
+          item.kind === "tool" &&
+          (item.tool.toolCallId === event.planReviewId || item.tool.name === "submit_plan") &&
+          item.tool.result === undefined
+        ) {
+          feed[i] = {
+            kind: "tool",
+            tool: {
+              ...item.tool,
+              result,
+              isError: false,
+            },
+          };
+          modified = true;
+        }
+      }
+      if (modified) {
+        setLiveFeed([...feed]);
+      }
+      return;
+    }
     if (event.type === "thread_change") {
       streamingRef.current = "";
       pendingToolsRef.current = [];
@@ -333,6 +443,18 @@ export function useAgentSession(onError: (message: string | null) => void) {
       setItems(normalizeThreadMessages(event.messages));
       return;
     }
+    if (event.type === "status" && event.status === "running") {
+      // Inject a placeholder reasoning item so the user sees "Thinking..."
+      // immediately, even before the model streams its first thinking block.
+      liveFeedRef.current.push({
+        kind: "reasoning",
+        id: crypto.randomUUID(),
+        content: "",
+        isStreaming: true,
+      });
+      setLiveFeed([...liveFeedRef.current]);
+      return;
+    }
     if (event.type === "status" && event.status === "idle") {
       const feed = liveFeedRef.current;
       streamingRef.current = "";
@@ -340,7 +462,11 @@ export function useAgentSession(onError: (message: string | null) => void) {
       liveFeedRef.current = [];
       setLiveFeed([]);
 
-      const finishedItems = liveFeedToConversationItems(feed);
+      const finishedItems = liveFeedToConversationItems(
+        feed.map((item) =>
+          item.kind === "reasoning" ? { ...item, isStreaming: false } : item,
+        ),
+      );
       if (finishedItems.length > 0) {
         setItems((current) => [...current, ...finishedItems]);
       }
@@ -366,6 +492,8 @@ export function useAgentSession(onError: (message: string | null) => void) {
       setLoadingMessages(true);
       streamingRef.current = "";
       pendingToolsRef.current = [];
+      liveFeedRef.current = [];
+      setLiveFeed([]);
       try {
         await window.codemap.switchThread(threadId);
         // Clear any previous error when switch succeeds
@@ -385,6 +513,9 @@ export function useAgentSession(onError: (message: string | null) => void) {
 
   function resetSession() {
     streamingRef.current = "";
+    pendingToolsRef.current = [];
+    liveFeedRef.current = [];
+    setLiveFeed([]);
     setItems([]);
     setSnapshot(createInitialSessionSnapshot());
   }
@@ -407,6 +538,8 @@ export function useAgentSession(onError: (message: string | null) => void) {
   function resetSnapshotForSubmit() {
     streamingRef.current = "";
     pendingToolsRef.current = [];
+    liveFeedRef.current = [];
+    setLiveFeed([]);
     setSnapshot((current) => ({
       ...current,
       streamingText: "",

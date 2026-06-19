@@ -105,3 +105,27 @@ test("session reducer clears resolved prompts", () => {
 
   assert.equal(state.pendingApproval, null);
 });
+
+test("session reducer stores and clears pending plan review", () => {
+  let state = reduceAgentSessionEvent(createInitialSessionSnapshot(), {
+    type: "plan_review",
+    requestId: "req-1",
+    planReview: {
+      planReviewId: "plan-1",
+      toolCallId: "tool-1",
+      title: "Test plan",
+      plan: "# Plan\nDo the thing",
+    },
+  });
+
+  assert.equal(state.pendingPlanReview?.planReviewId, "plan-1");
+  assert.equal(state.pendingPlanReview?.plan, "# Plan\nDo the thing");
+
+  state = reduceAgentSessionEvent(state, {
+    type: "plan_review_resolved",
+    requestId: "req-1",
+    planReviewId: "plan-1",
+  });
+
+  assert.equal(state.pendingPlanReview, null);
+});

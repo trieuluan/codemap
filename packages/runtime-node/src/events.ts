@@ -72,7 +72,7 @@ export interface BridgeCallbacks {
       resumeSchema?: string;
       suspendType?: "approval" | "question";
     },
-    respond: (result: string) => void,
+    respond: (result: unknown) => Promise<void>,
   ) => void;
   onEnd: (
     usage:
@@ -286,9 +286,14 @@ export function bridgeCommonEvent(
             resumeSchema: event.resumeSchema,
             suspendType: "question",
           },
-          (result) => {
-            cb.harness.respondToToolSuspension({
-              resumeData: result,
+          async (result) => {
+            let resumeData = result;
+            if (typeof result === "string") {
+              try { resumeData = JSON.parse(result); } catch { /* pass string as-is */ }
+            }
+            await cb.harness.respondToToolSuspension({
+              resumeData,
+              toolCallId: event.toolCallId,
             });
           },
         );
@@ -306,9 +311,10 @@ export function bridgeCommonEvent(
           resumeSchema: event.resumeSchema,
           suspendType: "approval",
         },
-        (result) => {
-          cb.harness.respondToToolSuspension({
+        async (result) => {
+          await cb.harness.respondToToolSuspension({
             resumeData: result,
+            toolCallId: event.toolCallId,
           });
         },
       );

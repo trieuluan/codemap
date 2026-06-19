@@ -20,7 +20,7 @@ type RunHarnessCallbacks = Omit<
   | "onEnd"
   | "onError"
 > & {
-  onPlanReady?: (plan: string) => void;
+  onPlanReady?: (plan: string, toolCallId?: string, title?: string) => void;
   onPlanWait?: () => Promise<PlanReviewAction>;
   onPhaseStart?: (phase: AgentPhase, model: string) => void;
 };
@@ -92,7 +92,10 @@ export function runHarness(
       { toolName: string; argsKey: string }
     >();
     const failedToolCounts = new Map<string, number>();
-    let awaitingBuildPhase = false;
+    let planSeen = false;
+    let awaitingApprovedPlanBuild = false;
+    let approvedPlanBuildSignalSent = false;
+    let approvedPlanBuildStarted = false;
     let pendingToolCalls = 0;
     let staleDisplayCount = 0;
     let lastDisplayStreamLength = -1;
@@ -117,7 +120,6 @@ export function runHarness(
         usage,
       });
     };
-
     const unsubscribe = harness.subscribe((event) => {
       try {
         handleHarnessEvent(event as HarnessEvent);
@@ -156,6 +158,17 @@ export function runHarness(
       if (event.type === "tool_start") pendingToolCalls++;
       if (event.type === "tool_end") pendingToolCalls = Math.max(0, pendingToolCalls - 1);
 
+      if (
+        awaitingApprovedPlanBuild &&
+        approvedPlanBuildSignalSent &&
+        (event.type === "agent_start" ||
+          event.type === "message_start" ||
+          event.type === "message_update" ||
+          event.type === "tool_start")
+      ) {
+        approvedPlanBuildStarted = true;
+      }
+
       if (event.type === "display_state_changed") {
         const curLen = currentStreamText.length;
         if (curLen > 0 && curLen === lastDisplayStreamLength && pendingToolCalls === 0) {
@@ -181,8 +194,10 @@ export function runHarness(
         const modelId = harness.getCurrentModelId?.() ?? "";
         if (ev.modeId === "plan") callbacks.onPhaseStart?.("planning", modelId);
         else if (ev.modeId === "build") {
+          if (awaitingApprovedPlanBuild && approvedPlanBuildSignalSent) {
+            approvedPlanBuildStarted = true;
+          }
           callbacks.onPhaseStart?.("executing", modelId);
-          awaitingBuildPhase = true;
         }
         return;
       }
@@ -212,13 +227,28 @@ export function runHarness(
           get: () => usedTools,
           set: (v) => { usedTools = v; },
         },
-        onToolSuspended: (toolSuspended, respond) => {
+        onToolSuspended: async (toolSuspended, respond) => {
           if (toolSuspended.toolName !== "submit_plan") return;
-          const plan =
-            (toolSuspended.suspendPayload as { plan?: string } | undefined)?.plan ?? "";
-          callbacks.onPlanReady?.(plan);
+          if (planSeen) return;
+          const currentModeId = getCurrentHarnessModeId(harness);
+          if (currentModeId !== "plan") {
+            await respond({
+              action: "rejected",
+              feedback:
+                "submit_plan is only available in Plan mode. Switch to Plan mode and submit the plan again.",
+            });
+            return;
+          }
+          planSeen = true;
+          const payload =
+            (toolSuspended.suspendPayload as
+              | { title?: string; plan?: string }
+              | undefined) ?? {};
+          const title = payload.title ?? "Plan ready";
+          const plan = payload.plan ?? "";
+          callbacks.onPlanReady?.(plan, toolSuspended.toolCallId, title);
           if (!callbacks.onPlanWait) {
-            respond(JSON.stringify({ action: "approved" }));
+            await approveSubmittedPlan(harness, respond, title, plan);
             return;
           }
           callbacks
@@ -237,24 +267,16 @@ export function runHarness(
               }
 
               if (action === "apply" || action === "implement") {
-                respond(JSON.stringify({ action: "approved" }));
-                try {
-                  const reminder = harness.sendSignal?.({
-                    type: "system-reminder",
-                    contents: "The user has approved the plan, begin executing.",
-                  });
-                  if (reminder) await reminder.accepted;
-                } catch {
-                  /* non-fatal */
-                }
+                await approveSubmittedPlan(harness, respond, title, plan);
               } else {
-                respond(JSON.stringify({ action: "rejected", feedback: action }));
+                await respond({ action: "rejected", feedback: action });
+                planSeen = false;
               }
             })
             .catch(fail);
         },
         onEnd: () => {
-          if (awaitingBuildPhase) return;
+          if (awaitingApprovedPlanBuild && !approvedPlanBuildStarted) return;
           finishWithCurrentText();
         },
         onError: (err) => {
@@ -290,11 +312,8 @@ export function runHarness(
           }
         }
       }
-      if (event.type === "message_start" && awaitingBuildPhase) {
-        awaitingBuildPhase = false;
-      }
       if (event.type === "message_end" && finalText.trim()) {
-        if (awaitingBuildPhase) {
+        if (awaitingApprovedPlanBuild && !approvedPlanBuildStarted) {
           finalText = "";
           return;
         }
@@ -305,6 +324,35 @@ export function runHarness(
         });
         finishWithCurrentText();
       }
+    }
+
+    async function approveSubmittedPlan(
+      targetHarness: MastraHarness,
+      respond: (result: unknown) => Promise<void>,
+      title: string,
+      plan: string,
+    ): Promise<void> {
+      awaitingApprovedPlanBuild = true;
+      approvedPlanBuildSignalSent = false;
+      approvedPlanBuildStarted = false;
+      await targetHarness.setState?.({
+        activePlan: {
+          title,
+          plan,
+          approvedAt: new Date().toISOString(),
+        },
+      });
+      await respond({ action: "approved" });
+      await denySubmitPlanForBuildMode(targetHarness);
+      approvedPlanBuildSignalSent = true;
+      const continuation = targetHarness.sendSignal?.({
+        type: "system-reminder",
+        contents: "The user has approved the plan, begin executing.",
+      });
+      if (!continuation) {
+        throw new Error("Harness does not support plan approval continuation.");
+      }
+      await continuation.accepted;
     }
 
     const onAbort = () => {
@@ -376,4 +424,36 @@ function createAbortError(): Error {
   const err = new Error("Aborted");
   err.name = "AbortError";
   return err;
+}
+
+function getCurrentHarnessModeId(harness: MastraHarness): string | undefined {
+  const withMode = harness as unknown as {
+    getCurrentMode?: () => { id?: string } | undefined;
+    getCurrentModeId?: () => string | undefined;
+  };
+  return withMode.getCurrentMode?.()?.id ?? withMode.getCurrentModeId?.();
+}
+
+async function denySubmitPlanForBuildMode(harness: MastraHarness): Promise<void> {
+  const withState = harness as unknown as {
+    getState?: () => {
+      permissionRules?: {
+        categories?: Record<string, "allow" | "ask" | "deny">;
+        tools?: Record<string, "allow" | "ask" | "deny">;
+      };
+    };
+    setState?: (updates: unknown) => Promise<void> | void;
+  };
+  const state = withState.getState?.() ?? {};
+  const permissionRules = state.permissionRules ?? { categories: {}, tools: {} };
+  await withState.setState?.({
+    permissionRules: {
+      ...permissionRules,
+      categories: permissionRules.categories ?? {},
+      tools: {
+        ...(permissionRules.tools ?? {}),
+        submit_plan: "deny",
+      },
+    },
+  });
 }

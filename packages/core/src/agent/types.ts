@@ -109,7 +109,6 @@ export interface CompletionRequest {
     | "auto"
     | "none"
     | { type: "function"; function: { name: string } };
-  effort?: "low" | "medium" | "high";
 }
 
 export interface CompletionResponse {

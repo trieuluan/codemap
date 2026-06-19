@@ -199,7 +199,6 @@ export interface DesktopApi {
   openWorkspacePath(workspacePath: string): Promise<string>;
   send(content: string, options?: {
     model?: string;
-    effort?: "low" | "medium" | "high";
     planMode?: boolean;
     images?: Array<{ data: string; mimeType: string; filename?: string }>;
   }): Promise<void>;
@@ -215,6 +214,11 @@ export interface DesktopApi {
   respondToQuestion(
     questionId: string,
     answer: string | string[],
+  ): Promise<void>;
+  respondToPlanReview(
+    planReviewId: string,
+    action: "apply" | "reject" | "revise",
+    feedback?: string,
   ): Promise<void>;
   readSettings(): Promise<SettingsMetadata>;
   restartRuntime(): Promise<void>;

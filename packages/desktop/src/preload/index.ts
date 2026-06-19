@@ -89,6 +89,17 @@ const api: DesktopApi = {
       },
     });
   },
+  respondToPlanReview: (planReviewId, action, feedback) => {
+    const requestId = crypto.randomUUID();
+    return invoke({
+      type: "agent",
+      command: {
+        type: "respond_plan_review",
+        requestId,
+        response: { requestId, planReviewId, action, feedback },
+      },
+    });
+  },
   readSettings: () =>
     invoke({
       type: "read_settings",

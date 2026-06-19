@@ -33,6 +33,7 @@ import {
 interface ComposerFooterProps {
   runtimeStatus: RuntimeStatus;
   isBusy: boolean;
+  allowSubmitWhileBusy?: boolean;
   mode: "plan" | "build";
   selectedModel: string;
   availableModels: ModelInfo[];
@@ -71,6 +72,7 @@ function toRuntimeImages(files: PromptInputMessage["files"]) {
 export function ComposerFooter({
   runtimeStatus,
   isBusy,
+  allowSubmitWhileBusy = false,
   mode,
   selectedModel,
   availableModels,
@@ -96,7 +98,7 @@ export function ComposerFooter({
   async function submit(message: PromptInputMessage) {
     const content = message.text.trim();
     const images = toRuntimeImages(message.files);
-    if ((!content && images.length === 0) || !isReady || isBusy) return;
+    if ((!content && images.length === 0) || !isReady || (isBusy && !allowSubmitWhileBusy)) return;
     setDraft("");
     await onSubmit(content, images);
   }
@@ -173,7 +175,7 @@ export function ComposerFooter({
             </ModelSelector>
           </PromptInputTools>
 
-          {isBusy ? (
+          {isBusy && !allowSubmitWhileBusy ? (
             <button className="stop-button" onClick={onStop} type="button">
               <CircleStop size={15} />
               Stop

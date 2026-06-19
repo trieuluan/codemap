@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as monaco from "monaco-editor";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -17,6 +17,7 @@ export interface MonacoDiffFile {
 interface MonacoDiffViewerProps {
   files: MonacoDiffFile[];
   selectedPath?: string | null;
+  height?: number | string;
   className?: string;
 }
 
@@ -90,9 +91,14 @@ function modelUri(instanceId: string, kind: "original" | "modified", path: strin
   );
 }
 
+function viewerClassName(className?: string) {
+  return className ? `monaco-diff-viewer ${className}` : "monaco-diff-viewer";
+}
+
 export function MonacoDiffViewer({
   files,
   selectedPath,
+  height = "100%",
   className,
 }: MonacoDiffViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -100,7 +106,6 @@ export function MonacoDiffViewer({
   const modelsRef = useRef<monaco.editor.ITextModel[]>([]);
   const frameRef = useRef<number | null>(null);
   const instanceIdRef = useRef(`viewer-${++nextViewerId}`);
-  const [contentHeight, setContentHeight] = useState<number>(200);
 
   const selectedFile = useMemo(() => {
     if (files.length === 0) return null;
@@ -134,12 +139,7 @@ export function MonacoDiffViewer({
     function syncHeight() {
       const host = hostRef.current;
       if (!host) return;
-      const modH = editor.getModifiedEditor().getContentHeight();
-      const origH = editor.getOriginalEditor().getContentHeight();
-      const h = Math.max(modH, origH, 60);
-      setContentHeight(h);
-      // Tell Monaco the container dimensions so it renders correctly
-      editor.layout({ width: host.clientWidth, height: h });
+      editor.layout({ width: host.clientWidth, height: host.clientHeight });
     }
 
     const d1 = editor.getModifiedEditor().onDidContentSizeChange(syncHeight);
@@ -150,10 +150,7 @@ export function MonacoDiffViewer({
     const ro = new ResizeObserver(() => {
       const host = hostRef.current;
       if (!host) return;
-      const modH = editor.getModifiedEditor().getContentHeight();
-      const origH = editor.getOriginalEditor().getContentHeight();
-      const h = Math.max(modH, origH, 60);
-      editor.layout({ width: host.clientWidth, height: h });
+      editor.layout({ width: host.clientWidth, height: host.clientHeight });
     });
     ro.observe(hostRef.current);
 
@@ -215,20 +212,20 @@ export function MonacoDiffViewer({
 
   if (!selectedFile) {
     return (
-      <div className={className}>
+      <div className={viewerClassName(className)} style={{ height }}>
         <div className="monaco-diff-empty">No diff selected</div>
       </div>
     );
   }
 
   return (
-    <div className={className}>
+    <div className={viewerClassName(className)} style={{ height }}>
       <div className="monaco-diff-file-label">
         {selectedFile.oldPath && selectedFile.oldPath !== selectedFile.path
           ? `${selectedFile.oldPath} → ${selectedFile.path}`
           : selectedFile.path}
       </div>
-      <div className="monaco-diff-host" ref={hostRef} style={{ height: contentHeight }} />
+      <div className="monaco-diff-host" ref={hostRef} />
     </div>
   );
 }

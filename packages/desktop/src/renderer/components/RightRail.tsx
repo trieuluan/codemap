@@ -20,6 +20,11 @@ interface RightRailProps {
   mode: "plan" | "build";
   onTabChange: (tab: InspectorTab) => void;
   onStartResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onRespondToPlanReview: (
+    planReviewId: string,
+    action: "apply" | "reject" | "revise",
+    feedback?: string,
+  ) => void;
   onToggle: () => void;
   open: boolean;
   settings: SettingsMetadata | null;
@@ -38,6 +43,7 @@ const tabs = [
 
 export function RightRail({
   mode,
+  onRespondToPlanReview,
   onStartResize,
   onTabChange,
   onToggle,
@@ -95,7 +101,13 @@ export function RightRail({
           </button>
         </header>
         <div className="inspector-body">
-          {tab === "plan" && <PlanTimelinePanel mode={mode} snapshot={snapshot} />}
+          {tab === "plan" && (
+            <PlanTimelinePanel
+              mode={mode}
+              snapshot={snapshot}
+              onRespondToPlanReview={onRespondToPlanReview}
+            />
+          )}
           {tab === "context" && <TokenObservabilityPanel snapshot={snapshot} contextLimit={modelContextLimit(snapshot.model ?? selectedModel)} />}
           {tab === "diff" && <WorkingDiffPanel />}
           {tab === "settings" && (

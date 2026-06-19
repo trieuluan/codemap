@@ -76,28 +76,21 @@ export class ChatTerminal {
 
   async handleSubmitWithContent(
     text: string,
-    forceMultiPhase = false,
     imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>,
   ): Promise<void> {
     const state = this.store.getState();
     if (state.input.busy) return;
 
     // /plan — toggle plan mode on/off
-    // /plan <message> — force multi-phase for this single message
-    if (/^\/plan(\s|$)/i.test(text)) {
-      const taskText = text.replace(/^\/plan\s*/i, "").trim();
-      if (taskText) {
-        await this.handleSubmitWithContent(taskText, true);
-      } else {
-        const current = this.store.getState().planMode;
-        this.store.dispatch({ planMode: !current });
-        this.appendMessage({
-          role: "system",
-          content: !current
-            ? "Plan mode ON — all messages will go through planner → coder → reviewer.\nType /plan again to exit."
-            : "Plan mode OFF — back to normal routing.",
-        });
-      }
+    if (/^\/plan$/i.test(text)) {
+      const current = this.store.getState().planMode;
+      this.store.dispatch({ planMode: !current });
+      this.appendMessage({
+        role: "system",
+        content: !current
+          ? "Plan mode ON — all messages will go through planner → coder → reviewer.\nType /plan again to exit."
+          : "Plan mode OFF — back to normal routing.",
+      });
       return;
     }
 
@@ -128,7 +121,6 @@ export class ChatTerminal {
     }));
 
     await handleSubmitWithContent(this.createSubmitContext(), text, {
-      forceMultiPhase,
       imageFiles,
     });
   }

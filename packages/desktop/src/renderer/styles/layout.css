@@ -118,7 +118,6 @@ body.inspector-resizing {
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
-  border-left: 1px solid var(--border);
   background: linear-gradient(180deg, #101012 0%, #0f0f11 100%);
 }
 
@@ -147,8 +146,9 @@ body.inspector-resizing .inspector-resize-handle::after {
 }
 
 .inspector-rail.collapsed {
-  width: 56px;
+  width: 50px;
   flex-shrink: 0;
+  border-left: 1px solid var(--border);
   gap: 6px;
   justify-items: center;
   padding: 12px 0;
@@ -210,6 +210,7 @@ body.inspector-resizing .inspector-resize-handle::after {
 }
 
 .inspector-body {
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;

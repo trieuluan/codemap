@@ -1,4 +1,4 @@
-import type { TaskPhase, UsageStats } from "@codemap-ai/core/agent";
+import type { TaskPhase, TokenUsage } from "@codemap-ai/core/agent";
 import type { GatewayModel } from "@codemap-ai/core/agent";
 import type { TaskItemSnapshot, HarnessDisplayState } from "@codemap-ai/runtime-node";
 
@@ -93,13 +93,12 @@ export interface UIState {
   task: {
     phase: TaskPhase;
     model?: string;
-    effort?: "low" | "medium" | "high";
     toolName?: string;
     toolArgs?: string;
     startTime?: number;
     endTime?: number;
     toolsCalled: number;
-    usage?: UsageStats;
+    usage?: TokenUsage;
   };
   sessionTokens: number;
   streaming: {

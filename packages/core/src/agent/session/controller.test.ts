@@ -32,6 +32,7 @@ test("controller emits snapshot before driver events and serializes sends", asyn
     async deleteThread() {},
     respondToApproval() {},
     respondToQuestion() {},
+    respondToPlanReview() {},
   };
   const controller = createAgentSessionController(driver);
   const events: AgentSessionEvent[] = [];
@@ -76,6 +77,7 @@ test("controller propagates thread token usage on switch", async () => {
     async deleteThread() {},
     respondToApproval() {},
     respondToQuestion() {},
+    respondToPlanReview() {},
   };
 
   const controller = createAgentSessionController(driver);
@@ -133,6 +135,9 @@ test("controller forwards abort and prompt responses to the driver", () => {
     respondToQuestion(input) {
       calls.push(String(input.answer));
     },
+    respondToPlanReview(input) {
+      calls.push(`${input.action}:${input.feedback ?? ""}`);
+    },
   };
   const controller = createAgentSessionController(driver);
 
@@ -148,6 +153,12 @@ test("controller forwards abort and prompt responses to the driver", () => {
     questionId: "question-1",
     answer: "yes",
   });
+  controller.respondToPlanReview({
+    requestId: "req-1",
+    planReviewId: "plan-1",
+    action: "revise",
+    feedback: "Add tests",
+  });
 
-  assert.deepEqual(calls, ["abort", "delete", "approve", "yes"]);
+  assert.deepEqual(calls, ["abort", "delete", "approve", "yes", "revise:Add tests"]);
 });

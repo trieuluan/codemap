@@ -241,6 +241,9 @@ async function handleAgentCommand(
     case "respond_question":
       session.respondToQuestion(command.response);
       return;
+    case "respond_plan_review":
+      session.respondToPlanReview(command.response);
+      return;
   }
 }
 

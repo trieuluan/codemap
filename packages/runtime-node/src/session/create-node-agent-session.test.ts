@@ -201,6 +201,82 @@ test("node session resolves approvals without exposing callbacks as events", asy
   assert.equal(decision, "approve");
 });
 
+test("node session resolves submit_plan review responses", async () => {
+  async function runPlanReview(
+    respond: (session: ReturnType<typeof createNodeAgentSession>, id: string) => void,
+  ) {
+    const actions: string[] = [];
+    const session = createNodeAgentSession({
+      provider: { baseUrl: "http://localhost", apiKey: undefined },
+      model: "coder",
+      toolClient: {
+        getServerConfig: () => ({ command: "node" }),
+        getExtraServerConfigs: () => ({}),
+      },
+      runtime: {
+        async run(input) {
+          input.onPlanReady?.("# Plan\nDo it", "plan-1", "Test plan");
+          const action = await input.onPlanWait?.();
+          actions.push(String(action));
+          return {
+            text: "",
+            messages: [],
+            usedTools: false,
+            unsupportedToolCalling: false,
+          };
+        },
+        abort() {},
+        async listThreads() { return []; },
+        async switchThread() { return { ok: true }; },
+        async deleteThread() {},
+        async listThreadMessages() {
+          return [];
+        },
+      },
+    });
+
+    const planReady = new Promise<string>((resolve) => {
+      session.subscribe((event) => {
+        if (event.type === "plan_review") {
+          resolve(event.planReview.planReviewId);
+        }
+      });
+    });
+    const send = session.send({ requestId: "req-1", content: "plan" });
+    respond(session, await planReady);
+    await send;
+    return actions;
+  }
+
+  assert.deepEqual(
+    await runPlanReview((session, id) =>
+      session.respondToPlanReview({ requestId: "req-1", planReviewId: id, action: "apply" }),
+    ),
+    ["apply"],
+  );
+  assert.deepEqual(
+    await runPlanReview((session, id) =>
+      session.respondToPlanReview({
+        requestId: "req-1",
+        planReviewId: id,
+        action: "revise",
+        feedback: "Add tests",
+      }),
+    ),
+    ["Add tests"],
+  );
+  assert.deepEqual(
+    await runPlanReview((session, id) =>
+      session.respondToPlanReview({
+        requestId: "req-1",
+        planReviewId: id,
+        action: "reject",
+      }),
+    ),
+    ["Plan rejected by user."],
+  );
+});
+
 test("switchThread reuses cached messages on second load — only calls listThreadMessages once per thread", async () => {
   let callCount = 0;
   const session = createNodeAgentSession({

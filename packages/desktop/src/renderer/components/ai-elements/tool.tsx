@@ -2,6 +2,7 @@
 
 import { CodeBlock } from "streamdown";
 import { Badge } from "../ui/badge.js";
+import { JsonCodeBlock } from "./json-code-block.js";
 import {
   Collapsible,
   CollapsibleContent,
@@ -107,11 +108,11 @@ export type ToolInputProps = ComponentProps<"div"> & {
 };
 
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
+  <div className={cn("tool-code-section tool-input-code space-y-2 overflow-hidden p-4", className)} {...props}>
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
-    <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+    <JsonCodeBlock code={JSON.stringify(input, null, 2)} />
   </div>
 );
 
@@ -135,15 +136,21 @@ export const ToolOutput = ({
   if (isValidElement(output)) {
     Output = output;
   } else if (typeof output === "object" && output !== null) {
-    Output = <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />;
+    Output = <JsonCodeBlock code={JSON.stringify(output, null, 2)} />;
   } else if (typeof output === "string") {
     let isJson = false;
-    try { JSON.parse(output); isJson = true; } catch { /* plain text */ }
-    Output = <CodeBlock code={output} language={isJson ? "json" : "text"} />;
+    let formatted = output;
+    try {
+      formatted = JSON.stringify(JSON.parse(output), null, 2);
+      isJson = true;
+    } catch { /* plain text */ }
+    Output = isJson
+      ? <JsonCodeBlock code={formatted} />
+      : <CodeBlock code={output} language="text" />;
   }
 
   return (
-    <div className={cn("space-y-2 p-4", className)} {...props}>
+    <div className={cn("tool-code-section tool-output-code space-y-2 p-4", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>

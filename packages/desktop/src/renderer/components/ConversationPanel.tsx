@@ -33,7 +33,13 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "./ai-elements/reasoning.js";
+import { Shimmer } from "./ai-elements/shimmer.js";
 import { ToolExecution } from "./ToolExecution.js";
+
+const reasoningThinkingMessage = (streaming: boolean, duration?: number) =>
+  streaming
+    ? <Shimmer as="span" duration={1}>Reasoning...</Shimmer>
+    : `Reasoned for ${duration ?? "a few"} seconds`;
 
 interface ConversationPanelProps {
   displayItems: ConversationItem[];
@@ -152,6 +158,28 @@ export function ConversationPanel({
               );
             }
 
+            if (item.kind === "reasoning") {
+              const reasoning = item.reasoning;
+              return (
+                <div className="turn-activity thinking-row" key={`reasoning-${reasoning.localId}-${index}`}>
+                  <Reasoning
+                    className="codemap-reasoning"
+                    defaultOpen={reasoning.isStreaming || !!reasoning.content}
+                    isStreaming={reasoning.isStreaming}
+                  >
+                    <ReasoningTrigger
+                      getThinkingMessage={reasoningThinkingMessage}
+                    />
+                    {reasoning.content && (
+                      <ReasoningContent className="codemap-reasoning-content">
+                        {reasoning.content}
+                      </ReasoningContent>
+                    )}
+                  </Reasoning>
+                </div>
+              );
+            }
+
             const message = item.message;
             const id = messageId(message);
             const previousUserMessage = displayItems
@@ -218,24 +246,7 @@ export function ConversationPanel({
           </div>
         )}
 
-        {snapshot.thinkingText && (
-          <div className="turn-activity thinking-row">
-            <Reasoning className="codemap-reasoning" defaultOpen={isBusy} isStreaming={isBusy}>
-              <ReasoningTrigger
-                getThinkingMessage={(streaming, duration) =>
-                  streaming
-                    ? "Reasoning..."
-                    : `Reasoned for ${duration ?? "a few"} seconds`
-                }
-              />
-              <ReasoningContent className="codemap-reasoning-content">
-                {snapshot.thinkingText}
-              </ReasoningContent>
-            </Reasoning>
-          </div>
-        )}
-
-        {snapshot.pendingApproval && (
+        {snapshot.pendingApproval && snapshot.pendingApproval.toolName !== "submit_plan" && (
         <section className="prompt-card approval-card">
           <div className="prompt-card-header">
             <ShieldCheck size={16} />

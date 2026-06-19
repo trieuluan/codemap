@@ -138,7 +138,6 @@ export async function runHeadless(opts: HeadlessOptions): Promise<void> {
       },
       toolClient,
       signal,
-      effort: opts.mode === "plan" ? "high" : "medium",
       planMode: opts.mode === "plan" || undefined,
       onToken:
         opts.format === "text" || !opts.format

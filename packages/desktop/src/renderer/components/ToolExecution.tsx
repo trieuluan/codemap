@@ -257,6 +257,7 @@ export function ToolExecution({
             <MonacoDiffViewer
               className="tool-monaco-diff"
               files={[previewData.diff]}
+              height={280}
             />
           </CollapsibleSection>
         )}

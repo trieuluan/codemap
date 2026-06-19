@@ -48,6 +48,14 @@ const questionSchema = z
     selectionMode: z.enum(["single_select", "multi_select"]).optional(),
   })
   .strict();
+const planReviewSchema = z
+  .object({
+    planReviewId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    title: z.string().optional(),
+    plan: z.string(),
+  })
+  .strict();
 const toolCallSchema = z
   .object({
     toolCallId: z.string(),
@@ -62,7 +70,6 @@ const sendInputSchema = z
   .object({
     content: z.string(),
     model: z.string().optional(),
-    effort: z.enum(["low", "medium", "high"]).optional(),
     planMode: z.boolean().optional(),
     images: z
       .array(
@@ -135,6 +142,20 @@ export const agentSessionCommandSchema = z.discriminatedUnion("type", [
         .strict(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("respond_plan_review"),
+      requestId: requestIdSchema,
+      response: z
+        .object({
+          requestId: requestIdSchema,
+          planReviewId: z.string().min(1),
+          action: z.enum(["apply", "reject", "revise"]),
+          feedback: z.string().optional(),
+        })
+        .strict(),
+    })
+    .strict(),
 ]);
 
 const statusSchema = z.enum([
@@ -162,6 +183,7 @@ const sessionSnapshotSchema = z
     tools: z.array(toolCallSchema),
     pendingApproval: approvalSchema.nullable(),
     pendingQuestion: questionSchema.nullable(),
+    pendingPlanReview: planReviewSchema.nullable(),
     usage: usageSchema,
     threadUsage: usageSchema.nullable(),
     model: z.string().nullable(),
@@ -201,6 +223,8 @@ export const agentSessionEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approval_resolved"), requestId: requestIdSchema, approvalId: z.string() }).strict(),
   z.object({ type: z.literal("question"), requestId: requestIdSchema, question: questionSchema }).strict(),
   z.object({ type: z.literal("question_resolved"), requestId: requestIdSchema, questionId: z.string() }).strict(),
+  z.object({ type: z.literal("plan_review"), requestId: requestIdSchema, planReview: planReviewSchema }).strict(),
+  z.object({ type: z.literal("plan_review_resolved"), requestId: requestIdSchema, planReviewId: z.string() }).strict(),
   z.object({ type: z.literal("usage"), requestId: requestIdSchema.optional(), usage: usageSchema }).strict(),
   threadChangeSchema.extend({ type: z.literal("thread_change") }),
   z.object({ type: z.literal("error"), requestId: requestIdSchema.optional(), message: z.string() }).strict(),

@@ -7,7 +7,6 @@ import {
   buildCurrentTaskContent,
 } from "@codemap-ai/core/agent";
 import { runSingleAgentRuntime } from "../../../agent/runtime/cli-runtime.js";
-import { classifyTask } from "@codemap-ai/core/agent";
 import {
   getMastraCurrentModelId,
   getMastraThreadTokenUsage,
@@ -25,12 +24,10 @@ export async function handleSubmitWithContent(
   ctx: SubmitHandlerContext,
   text: string,
   options?: {
-    forceMultiPhase?: boolean;
     imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>;
   },
 ): Promise<void> {
   const { store, bus, logger } = ctx;
-  const forceMultiPhase = options?.forceMultiPhase;
   const imageFiles = options?.imageFiles;
 
   store.dispatch((prev) => ({ input: { ...prev.input, busy: true } }));
@@ -45,7 +42,6 @@ export async function handleSubmitWithContent(
       startTime: Date.now(),
       toolsCalled: 0,
       model: store.getState().config.model,
-      effort: undefined,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     },
   });
@@ -65,66 +61,6 @@ export async function handleSubmitWithContent(
     if (!ctx.isActiveTask(taskId, taskAbort)) return;
     for (const warning of mentionContext.warnings) {
       ctx.appendMessage({ role: "system", content: `⚠ ${warning}` });
-    }
-
-    const currentModel = store.getState().config.model;
-    let classification: Awaited<ReturnType<typeof classifyTask>> = {
-      phase: "single",
-      taskType: "general",
-      reason: "",
-      effort: "medium",
-      executionMode: "single",
-    };
-
-    const planMode = store.getState().planMode;
-
-    if (!forceMultiPhase && !planMode) {
-      store.dispatch({
-        task: {
-          ...store.getState().task,
-          phase: "classifying",
-          model: currentModel,
-        },
-      });
-      bus.scheduleRefresh();
-
-      classification = await classifyTask(
-        text,
-        ctx.options.provider,
-        currentModel,
-        taskAbort.signal,
-      );
-      if (!ctx.isActiveTask(taskId, taskAbort)) return;
-      store.dispatch({
-        task: {
-          ...store.getState().task,
-          phase: "thinking",
-          effort: classification.effort,
-        },
-      });
-      bus.scheduleRefresh();
-    }
-
-    const useMultiPhase =
-      forceMultiPhase || planMode || classification.phase === "multi";
-
-    const runtimeMode = forceMultiPhase
-      ? "multi_execute"
-      : planMode
-      ? "plan_only"
-      : classification.executionMode;
-
-    if (useMultiPhase) {
-      store.dispatch({
-        task: { ...store.getState().task, effort: "high" },
-      });
-    } else {
-      store.dispatch({
-        task: {
-          ...store.getState().task,
-          effort: classification.effort,
-        },
-      });
     }
 
     const [sessionResourceCtx, sessionProjectCtx] = await Promise.all([
@@ -164,23 +100,22 @@ export async function handleSubmitWithContent(
       },
       toolClient: ctx.options.toolClient,
       signal: taskAbort.signal,
-      effort: useMultiPhase ? "high" : classification.effort,
-      planMode: useMultiPhase || undefined,
-      onPhaseStart: useMultiPhase
-        ? (phase: string, model: string) => {
-            if (!ctx.isActiveTask(taskId, taskAbort)) return;
-            runtimeCallbacks.resetStreaming();
-            store.dispatch({
-              task: {
-                ...store.getState().task,
-                phase: phase as TaskPhase,
-                model,
-                effort: "high",
-              },
-            });
-            bus.scheduleRefresh();
-          }
-        : undefined,
+      planMode: store.getState().planMode || undefined,
+      onPhaseStart: (phase: string, model: string) => {
+        if (!ctx.isActiveTask(taskId, taskAbort)) return;
+        runtimeCallbacks.resetStreaming();
+        if (phase === "executing" && store.getState().planMode) {
+          store.dispatch({ planMode: false });
+        }
+        store.dispatch({
+          task: {
+            ...store.getState().task,
+            phase: phase as TaskPhase,
+            model,
+          },
+        });
+        bus.scheduleRefresh();
+      },
       onPlanReady: handlePlanReady,
       onPlanWait: () =>
         import("../ui/plan-review.js").then(({ waitForPlanReview }) =>
@@ -202,10 +137,6 @@ export async function handleSubmitWithContent(
         endTime: Date.now(),
       },
     });
-
-    if (useMultiPhase && planMode && !forceMultiPhase) {
-      store.dispatch({ planMode: false });
-    }
 
     if (logger) {
       const toolCallsList = result.messages
@@ -232,13 +163,6 @@ export async function handleSubmitWithContent(
       ctx.appendMessage({
         role: "system",
         content: `⚠ Model "${cs.model}" does not support tool calling — the coder generated text instead of using tools.\nCheck your coder profile in config and switch to a tool-capable model.`,
-      });
-    }
-
-    if (runtimeMode === "multi_execute" && !result.usedTools && !result.unsupportedToolCalling) {
-      ctx.appendMessage({
-        role: "system",
-        content: `⚠ Execute phase completed without any tool calls — the model may not be routing to a tool-capable backend.\nCheck your coder profile configuration or start a new session with /new.`,
       });
     }
 

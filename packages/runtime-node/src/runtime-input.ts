@@ -56,7 +56,7 @@ export interface SingleAgentRuntimeInput {
   onMessageStart?: (createdAt: number) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDebug?: (info: Record<string, unknown>) => void;
-  onPlanReady?: (plan: string) => void;
+  onPlanReady?: (plan: string, toolCallId?: string, title?: string) => void;
   onPlanWait?: () => Promise<PlanReviewAction>;
   onOMObservation?: (tokensObserved: number, observationTokens: number) => void;
   onOMReflection?: (compressedTokens: number) => void;
@@ -67,7 +67,6 @@ export interface SingleAgentRuntimeInput {
   planMode?: boolean;
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>;
-  effort?: "low" | "medium" | "high";
   /** Injectable host-specific dependencies for the harness lifecycle. */
   deps?: HarnessDeps;
 }

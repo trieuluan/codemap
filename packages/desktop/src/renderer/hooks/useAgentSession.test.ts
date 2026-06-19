@@ -49,6 +49,51 @@ test("normalizeThreadMessages keeps tool-only assistant activity as a tool item"
   assert.equal(normalized[1].tool.result, "found foo at line 5");
 });
 
+test("normalizeThreadMessages emits assistant reasoning before assistant text", () => {
+  const messages: SessionMessage[] = [
+    {
+      id: "a1",
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "I should inspect the file first." },
+        { type: "text", text: "I will inspect the file." },
+      ] as unknown,
+      createdAt: "",
+    },
+  ];
+
+  const normalized = normalizeThreadMessages(messages);
+
+  assert.equal(normalized.length, 2);
+  assert.equal(normalized[0].kind, "reasoning");
+  assert.equal(normalized[0].reasoning.content, "I should inspect the file first.");
+  assert.equal(normalized[0].reasoning.isStreaming, false);
+  assert.equal(normalized[1].kind, "message");
+  assert.equal(normalized[1].message.role, "assistant");
+  assert.equal(normalized[1].message.content, "I will inspect the file.");
+});
+
+test("normalizeThreadMessages keeps assistant reasoning without assistant text", () => {
+  const messages: SessionMessage[] = [
+    {
+      id: "a1",
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "Only reasoning was persisted." },
+      ] as unknown,
+      createdAt: "",
+    },
+  ];
+
+  const normalized = normalizeThreadMessages(messages);
+
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0].kind, "reasoning");
+  assert.equal(normalized[0].reasoning.localId, "a1-reasoning");
+  assert.equal(normalized[0].reasoning.content, "Only reasoning was persisted.");
+  assert.equal(normalized[0].reasoning.isStreaming, false);
+});
+
 test("normalizeThreadMessages keeps file parts on user messages", () => {
   const messages = [
     {

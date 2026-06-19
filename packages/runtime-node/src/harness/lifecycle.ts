@@ -33,6 +33,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLVector, LibSQLStore } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
+import type { PermissionPolicy } from "@mastra/core/harness";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ResolvedCustomTool } from "../tools/custom/index.ts";
@@ -280,6 +281,54 @@ export function warmupHarness(opts: CreateHarnessOptions): Promise<void> {
   }).then(() => {});
 }
 
+export async function syncHarnessModeForRun(
+  harness: Pick<
+    MastraHarness,
+    "getCurrentModelId" | "getState" | "setState" | "switchMode"
+  >,
+  planMode: boolean | undefined,
+  callbacks: {
+    onModel?: (model: string) => void;
+    onPhaseStart?: SingleAgentRuntimeInput["onPhaseStart"];
+  } = {},
+): Promise<string | undefined> {
+  const modeId = planMode ? "plan" : "build";
+  await harness.switchMode?.({ modeId });
+  await syncSubmitPlanPermissionForMode(harness, modeId);
+  const modelId = harness.getCurrentModelId?.();
+  if (modelId) callbacks.onModel?.(modelId);
+  callbacks.onPhaseStart?.(planMode ? "planning" : "executing", modelId ?? "");
+  return modelId;
+}
+
+async function syncSubmitPlanPermissionForMode(
+  harness: Pick<MastraHarness, "getState" | "setState">,
+  modeId: "build" | "plan",
+): Promise<void> {
+  const state = (harness.getState?.() ?? {}) as {
+    permissionRules?: {
+      categories?: Record<string, PermissionPolicy>;
+      tools?: Record<string, PermissionPolicy>;
+    };
+  };
+  const permissionRules = state.permissionRules ?? { categories: {}, tools: {} };
+  const tools = { ...(permissionRules.tools ?? {}) };
+
+  if (modeId === "build") {
+    tools.submit_plan = "deny";
+  } else if (tools.submit_plan === "deny") {
+    delete tools.submit_plan;
+  }
+
+  await harness.setState?.({
+    permissionRules: {
+      ...permissionRules,
+      categories: permissionRules.categories ?? {},
+      tools,
+    },
+  });
+}
+
 /**
  * Run a single-turn agent through the Mastra Harness.
  */
@@ -303,8 +352,10 @@ export async function runWithMastraHarness(
   await ensureMastraThread();
   startDrainTracking(harness);
 
-  const modelId = harness.getCurrentModelId?.();
-  if (modelId) input.onModel?.(modelId);
+  const modelId = await syncHarnessModeForRun(harness, input.planMode, {
+    onModel: input.onModel,
+    onPhaseStart: input.onPhaseStart,
+  });
   input.onDebug?.({
     event: "mastra_model_resolved",
     requested: input.model,
@@ -312,10 +363,6 @@ export async function runWithMastraHarness(
     availableCount: input.availableModels?.length ?? 0,
   });
   applyAgentInstructions(harness, input.agentInstructions);
-
-  if (input.planMode) {
-    await harness.switchMode?.({ modeId: "plan" });
-  }
 
   const callbacks = {
     onToken: input.onToken,

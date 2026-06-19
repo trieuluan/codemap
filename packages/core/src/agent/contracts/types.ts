@@ -62,6 +62,13 @@ export interface QuestionRequest {
   selectionMode?: "single_select" | "multi_select";
 }
 
+export interface PlanReviewRequest {
+  planReviewId: string;
+  toolCallId: string;
+  title?: string;
+  plan: string;
+}
+
 export type SessionStatus =
   | "idle"
   | "running"
@@ -78,6 +85,7 @@ export interface SessionSnapshot {
   tools: ToolCallState[];
   pendingApproval: ApprovalRequest | null;
   pendingQuestion: QuestionRequest | null;
+  pendingPlanReview: PlanReviewRequest | null;
   usage: TokenUsage;
   threadUsage: TokenUsage | null;
   model: string | null;
@@ -90,7 +98,6 @@ export interface SendMessageInput {
   requestId: string;
   content: string;
   model?: string;
-  effort?: "low" | "medium" | "high";
   planMode?: boolean;
   images?: Array<{ data: string; mimeType: string; filename?: string }>;
 }
@@ -105,6 +112,15 @@ export interface QuestionResponse {
   requestId: string;
   questionId: string;
   answer: string | string[];
+}
+
+export type PlanReviewAction = "apply" | "reject" | "revise";
+
+export interface PlanReviewResponse {
+  requestId: string;
+  planReviewId: string;
+  action: PlanReviewAction;
+  feedback?: string;
 }
 
 export type AgentSessionEvent =
@@ -140,6 +156,16 @@ export type AgentSessionEvent =
       requestId: string;
       questionId: string;
     }
+  | {
+      type: "plan_review";
+      requestId: string;
+      planReview: PlanReviewRequest;
+    }
+  | {
+      type: "plan_review_resolved";
+      requestId: string;
+      planReviewId: string;
+    }
   | { type: "usage"; requestId?: string; usage: TokenUsage }
   | ({ type: "thread_change" } & ThreadChangePayload)
   | { type: "error"; requestId?: string; message: string };
@@ -152,7 +178,8 @@ export type AgentSessionCommand =
   | { type: "new_thread"; requestId: string }
   | { type: "delete_thread"; requestId: string; threadId: string }
   | { type: "respond_approval"; requestId: string; response: ApprovalResponse }
-  | { type: "respond_question"; requestId: string; response: QuestionResponse };
+  | { type: "respond_question"; requestId: string; response: QuestionResponse }
+  | { type: "respond_plan_review"; requestId: string; response: PlanReviewResponse };
 
 export interface AgentSessionController {
   send(input: SendMessageInput): Promise<void>;
@@ -162,5 +189,6 @@ export interface AgentSessionController {
   deleteThread(threadId: string): Promise<void>;
   respondToApproval(input: ApprovalResponse): void;
   respondToQuestion(input: QuestionResponse): void;
+  respondToPlanReview(input: PlanReviewResponse): void;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;
 }

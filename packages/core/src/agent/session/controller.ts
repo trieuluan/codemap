@@ -2,6 +2,7 @@ import type {
   AgentSessionController,
   AgentSessionEvent,
   ApprovalResponse,
+  PlanReviewResponse,
   QuestionResponse,
   SendMessageInput,
   SessionSnapshot,
@@ -24,6 +25,7 @@ export interface AgentSessionDriver {
   deleteThread(threadId: string): Promise<void>;
   respondToApproval(input: ApprovalResponse): void;
   respondToQuestion(input: QuestionResponse): void;
+  respondToPlanReview(input: PlanReviewResponse): void;
   /** Returns the current system prompt text for token attribution. */
   getSystemPrompt?(): string | undefined;
 }
@@ -100,6 +102,14 @@ export function createAgentSessionController(
         type: "question_resolved",
         requestId: input.requestId,
         questionId: input.questionId,
+      });
+    },
+    respondToPlanReview(input) {
+      driver.respondToPlanReview(input);
+      emit({
+        type: "plan_review_resolved",
+        requestId: input.requestId,
+        planReviewId: input.planReviewId,
       });
     },
     subscribe(listener) {

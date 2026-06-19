@@ -38,7 +38,6 @@ export function isActiveTaskPhase(phase: UIState["task"]["phase"]): boolean {
     phase === "thinking" ||
     phase === "tool" ||
     phase === "streaming" ||
-    phase === "classifying" ||
     phase === "planning" ||
     phase === "executing" ||
     phase === "reviewing"
@@ -440,11 +439,7 @@ export function buildPanel(
     const model = displayModel
       ? ` ${C_GRAY}${truncate(displayModel, 28)}${RESET}`
       : "";
-    const effort = state.task.effort
-      ? ` ${C_MUTED}· ${state.task.effort}${RESET}`
-      : "";
     const phaseLabel: Record<string, string> = {
-      classifying: "classifying...",
       planning: "planning...",
       executing: "executing...",
       reviewing: "reviewing...",
@@ -457,8 +452,7 @@ export function buildPanel(
     const phaseColor =
       state.task.phase === "done"
         ? C_SUCCESS
-        : state.task.phase === "classifying" ||
-            state.task.phase === "planning" ||
+        : state.task.phase === "planning" ||
             state.task.phase === "reviewing" ||
             state.task.phase === "thinking"
           ? C_AI
@@ -469,7 +463,7 @@ export function buildPanel(
         : `${phaseColor}${SPINNER[frame]}${RESET}`;
     out.push(
       fitLine(
-        ` ${marker} ${phaseColor}${label}${RESET}${model}${effort}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`,
+        ` ${marker} ${phaseColor}${label}${RESET}${model}${tool} ${C_MUTED}· ${elapsed}${usage}${RESET}`,
         w,
       ),
     );

@@ -21,6 +21,7 @@ export function createInitialSessionSnapshot(
     tools: [],
     pendingApproval: null,
     pendingQuestion: null,
+    pendingPlanReview: null,
     usage: EMPTY_USAGE,
     threadUsage: null,
     model: null,
@@ -81,6 +82,12 @@ export function reduceAgentSessionEvent(
     case "question_resolved":
       return state.pendingQuestion?.questionId === event.questionId
         ? { ...state, pendingQuestion: null }
+        : state;
+    case "plan_review":
+      return { ...state, pendingPlanReview: event.planReview };
+    case "plan_review_resolved":
+      return state.pendingPlanReview?.planReviewId === event.planReviewId
+        ? { ...state, pendingPlanReview: null }
         : state;
     case "usage":
       return { ...state, usage: event.usage };
