@@ -394,7 +394,7 @@ export async function resetHarnessSingleton(): Promise<void> {
   const old = singleton;
   singleton = null;
   cachedMemoryInstance = null;
-  pendingNewThread = false;
+  pendingNewThread = true;
   pendingThreadPromise = null;
 
   // Clean up empty threads (threads with no user messages)

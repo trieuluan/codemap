@@ -222,11 +222,10 @@ export function bridgeCommonEvent(
 
   if (event.type === "tool_start") {
     cb.usedToolsRef.set(true);
-    const displayName = formatToolDisplayName(event.toolName, cb.mcpServerIds);
     const args = normalizeToolArgs(event.args);
     const preview = cb.toolPreviewBuilder?.(event.toolName, args);
     cb.onToolStart?.(
-      displayName,
+      event.toolName,
       event.args != null ? JSON.stringify(event.args) : "{}",
       event.toolCallId ?? "",
       preview,
@@ -352,21 +351,6 @@ export function bridgeCommonEvent(
     });
     cb.onEnd(usage);
   }
-}
-
-function formatToolDisplayName(
-  name: string,
-  mcpServerIds?: Set<string>,
-): string {
-  if (!name) return name ?? "";
-  if (!mcpServerIds) return name;
-  const underscoreIdx = name.indexOf("_");
-  if (underscoreIdx > 0) {
-    const server = name.slice(0, underscoreIdx);
-    if (mcpServerIds.has(server))
-      return `${server} · ${name.slice(underscoreIdx + 1)}`;
-  }
-  return name;
 }
 
 function describeMessageContent(

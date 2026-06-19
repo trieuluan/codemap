@@ -9,8 +9,7 @@ import {
   ToolOutput,
 } from "./ai-elements/tool.js";
 import type { TaskItemData } from "./ai-elements/task.js";
-import { buildUnifiedDiff } from "./ui/diff/utils/build-unified-diff.js";
-import { DiffPreview } from "./ui/diff/preview.js";
+import { MonacoDiffViewer, type MonacoDiffFile, languageFromPath } from "./MonacoDiffViewer.js";
 
 interface ToolExecutionProps {
   toolCallId: string;
@@ -153,38 +152,9 @@ function extractDiffText(result: string | null | undefined): string | null {
   return null;
 }
 
-/**
- * Parse line range from tool result string.
- * Matches patterns like "(lines 47)", "(lines 47-49)", "(lines 10, 47-49)".
- * Returns [start, end] (1-based inclusive) or null.
- */
-function parseLineRangesFromResult(result: string): [number, number] | null {
-  const match = result.match(/\(lines?\s+(\d+)(?:-(\d+))?(?:,\s*\d+(?:-\d+)?)*\)/);
-  if (!match) return null;
-  const start = parseInt(match[1]!, 10);
-  const end = match[2] ? parseInt(match[2]!, 10) : start;
-  return [start, end];
-}
-
-const EXT_LANG: Record<string, string> = {
-  ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".jsx": "jsx",
-  ".py": "python", ".rb": "ruby", ".go": "go", ".rs": "rust",
-  ".java": "java", ".kt": "kotlin", ".swift": "swift",
-  ".css": "css", ".scss": "scss", ".html": "html", ".htm": "html",
-  ".json": "json", ".yaml": "yaml", ".yml": "yaml", ".toml": "toml",
-  ".md": "markdown", ".sh": "shell", ".bash": "shell", ".zsh": "shell",
-  ".sql": "sql", ".xml": "xml", ".graphql": "graphql", ".gql": "graphql",
-  ".vue": "vue", ".svelte": "svelte",
-};
-
-function languageFromPath(filePath: string): string {
-  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
-  return EXT_LANG[ext] ?? "plaintext";
-}
-
 interface ArgsPreview {
   filePath: string;
-  diff?: string;
+  diff?: MonacoDiffFile;
   content?: string;
   language?: string;
 }
@@ -193,7 +163,6 @@ function generateArgsPreview(
   toolName: string,
   parsedArgs: Record<string, unknown> | null,
   workspaceRoot?: string | null,
-  startLine?: number,
 ): ArgsPreview | null {
   if (!parsedArgs || typeof parsedArgs !== "object") return null;
 
@@ -208,7 +177,15 @@ function generateArgsPreview(
     const oldStr = typeof parsedArgs.old_string === "string" ? parsedArgs.old_string : null;
     const newStr = typeof parsedArgs.new_string === "string" ? parsedArgs.new_string : null;
     if (oldStr === null || newStr === null) return null;
-    return { filePath: path, diff: buildUnifiedDiff(path, oldStr.split("\n"), newStr.split("\n"), { startLine }) };
+    return {
+      filePath: path,
+      diff: {
+        path,
+        original: oldStr,
+        modified: newStr,
+        language: languageFromPath(path),
+      },
+    };
   }
 
   // ast_smart_edit → show pattern → replacement as diff
@@ -216,7 +193,15 @@ function generateArgsPreview(
     const pattern = typeof parsedArgs.pattern === "string" ? parsedArgs.pattern : null;
     const replacement = typeof parsedArgs.replacement === "string" ? parsedArgs.replacement : null;
     if (pattern === null || replacement === null) return null;
-    return { filePath: path, diff: buildUnifiedDiff(path, pattern.split("\n"), replacement.split("\n"), { startLine }) };
+    return {
+      filePath: path,
+      diff: {
+        path,
+        original: pattern,
+        modified: replacement,
+        language: languageFromPath(path),
+      },
+    };
   }
 
   // write_file → show content as code block
@@ -256,8 +241,7 @@ export function ToolExecution({
   const tasks = isTaskTool(name) ? parseTaskArgs(toolArgs) : null;
   const taskUpdateText = /task_update/.test(localName(name)) ? describeTaskUpdate(toolArgs) : null;
   const taskCompleteText = /task_complete/.test(localName(name)) ? describeTaskComplete(toolArgs) : null;
-  const startLine = result && isEditTool(name) ? parseLineRangesFromResult(result)?.[0] : undefined;
-  const previewData = generateArgsPreview(name, toolArgs, workspaceRoot, startLine);
+  const previewData = generateArgsPreview(name, toolArgs, workspaceRoot);
 
   return (
     <Tool>
@@ -270,7 +254,10 @@ export function ToolExecution({
         {/* Edit tools: show diff (string_replace_lsp / ast_smart_edit) */}
         {previewData?.diff && (
           <CollapsibleSection label="Diff">
-            <DiffPreview diff={previewData.diff} language={languageFromPath(previewData.filePath)} />
+            <MonacoDiffViewer
+              className="tool-monaco-diff"
+              files={[previewData.diff]}
+            />
           </CollapsibleSection>
         )}
         {/* write_file: show file content as code */}

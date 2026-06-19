@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { CircleStop, Send } from "lucide-react";
 import type { RuntimeStatus } from "../types.js";
 import type { ModelInfo } from "../../shared/ipc.js";
-import { SelectGroup, SelectLabel } from "./ui/select.js";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -14,15 +13,22 @@ import {
   PromptInputBody,
   PromptInputFooter,
   type PromptInputMessage,
-  PromptInputSelect,
-  PromptInputSelectContent,
-  PromptInputSelectItem,
-  PromptInputSelectTrigger,
-  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "./ai-elements/prompt-input.js";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorEmpty,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from "./ai-elements/model-selector.js";
 
 interface ComposerFooterProps {
   runtimeStatus: RuntimeStatus;
@@ -34,7 +40,7 @@ interface ComposerFooterProps {
   onSubmit: (
     content: string,
     images: Array<{ data: string; mimeType: string; filename?: string }>,
-  ) => void;
+  ) => void | Promise<void>;
   onStop: () => void;
 }
 
@@ -87,11 +93,12 @@ export function ComposerFooter({
     return [...groups.entries()];
   }, [availableModels, selectedModel]);
 
-  function submit(message: PromptInputMessage) {
+  async function submit(message: PromptInputMessage) {
     const content = message.text.trim();
-    if (!content || !isReady || isBusy) return;
-    onSubmit(content, toRuntimeImages(message.files));
+    const images = toRuntimeImages(message.files);
+    if ((!content && images.length === 0) || !isReady || isBusy) return;
     setDraft("");
+    await onSubmit(content, images);
   }
   return (
     <footer className="composer-wrap">
@@ -136,27 +143,34 @@ export function ComposerFooter({
                 <PromptInputActionAddAttachments />
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
-            <PromptInputSelect
-              disabled={!isReady}
+            <ModelSelector
               onValueChange={onModelChange}
               value={selectedModel}
             >
-              <PromptInputSelectTrigger>
-                <PromptInputSelectValue />
-              </PromptInputSelectTrigger>
-              <PromptInputSelectContent>
-                {groupedModels.map(([label, groupModels]) => (
-                  <SelectGroup key={label}>
-                    <SelectLabel>{label}</SelectLabel>
-                    {groupModels.map((model) => (
-                      <PromptInputSelectItem key={model.id} value={model.id}>
-                        {model.id}
-                      </PromptInputSelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </PromptInputSelectContent>
-            </PromptInputSelect>
+              <ModelSelectorTrigger disabled={!isReady} />
+              <ModelSelectorContent>
+                <ModelSelectorInput placeholder="Search models..." />
+                <ModelSelectorList>
+                  <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+                  {groupedModels.map(([label, groupModels]) => (
+                    <ModelSelectorGroup heading={label} key={label}>
+                      {groupModels.map((model) => (
+                        <ModelSelectorItem
+                          key={model.id}
+                          onSelect={() => onModelChange(model.id)}
+                          value={model.id}
+                        >
+                          <ModelSelectorLogo
+                            provider={model.ownedBy ?? model.id.split(/[/:.-]/)[0] ?? "unknown"}
+                          />
+                          <ModelSelectorName>{model.id}</ModelSelectorName>
+                        </ModelSelectorItem>
+                      ))}
+                    </ModelSelectorGroup>
+                  ))}
+                </ModelSelectorList>
+              </ModelSelectorContent>
+            </ModelSelector>
           </PromptInputTools>
 
           {isBusy ? (

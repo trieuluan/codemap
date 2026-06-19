@@ -16,6 +16,7 @@ import {
   type RecentWorkspace,
 } from "./components/Launcher.js";
 import { useAgentSession } from "./hooks/useAgentSession.js";
+import { useInspectorResize } from "./hooks/useInspectorResize.js";
 import { useSidebarResize } from "./hooks/useSidebarResize.js";
 import { useThreadSelection } from "./hooks/useThreadSelection.js";
 
@@ -44,7 +45,7 @@ export function App() {
 
   const {
     snapshot,
-    displayMessages,
+    displayItems,
     loadingMessages,
     switchThread,
     resetSession,
@@ -52,6 +53,10 @@ export function App() {
     resetSnapshotForSubmit,
   } = useAgentSession(setError);
   const { clampedWidth, startResize } = useSidebarResize(sidebarOpen);
+  const {
+    clampedWidth: inspectorWidth,
+    startResize: startInspectorResize,
+  } = useInspectorResize(inspectorOpen);
   const threadSelection = useThreadSelection(threads, removeThreads);
 
   const isBusy = snapshot.status === "running" || snapshot.status === "aborting";
@@ -117,7 +122,7 @@ export function App() {
     content: string,
     images: Array<{ data: string; mimeType: string; filename?: string }>,
   ) {
-    if (!content || !workspace || isBusy) return;
+    if ((!content && images.length === 0) || !workspace || isBusy) return;
     setError(null);
     appendUserMessage(content, images);
     resetSnapshotForSubmit();
@@ -233,7 +238,7 @@ export function App() {
           {view === "chat" ? (
             <div className="conversation-column">
               <ConversationPanel
-                displayMessages={displayMessages}
+                displayItems={displayItems}
                 snapshot={snapshot}
                 error={error}
                 isBusy={isBusy}
@@ -267,10 +272,12 @@ export function App() {
             snapshot={snapshot}
             settings={settings}
             open={inspectorOpen}
+            width={inspectorWidth}
             tab={inspectorTab}
             selectedModel={settings?.defaultModel ?? "coder"}
             onTabChange={setInspectorTab}
             onToggle={toggleInspector}
+            onStartResize={startInspectorResize}
           />
         </div>
       </section>

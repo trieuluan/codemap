@@ -80,46 +80,74 @@
   max-width: 72ch;
 }
 
+/* When tool-stack-live is inside a streaming turn-group, the turn-group's
+   flex gap handles spacing — don't double up with margin. */
+.turn-group > .tool-stack-live {
+  margin-top: 0;
+}
+
 /* Message row layout */
 .message-row {
   align-items: start;
+  width: 100%;
   max-width: 72ch;
 }
 
 .message-row-user {
-  max-width: 80%;
   margin-left: auto;
   align-self: flex-end;
   text-align: left;
 }
 
-
-/* Strip Message/MessageContent defaults — we control layout from here */
-.codemap-message {
-  display: block;
-  width: fit-content;
-  max-width: none;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+.message-shell {
+  width: 100%;
+  min-width: 0;
 }
 
-.codemap-message-content {
-  gap: 6px;
+.message-shell-user {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+/* Keep AI Elements message roles intact; only theme them for CodeMap. */
+.conversation .codemap-message {
+  display: flex;
+  gap: 8px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
+  max-width: 100%;
+}
+
+.conversation .codemap-message.is-assistant {
+  width: 100%;
+}
+
+.conversation .codemap-message.is-user {
+  width: fit-content;
+  margin-left: auto;
+}
+
+.conversation .codemap-message-content {
   color: #dededf;
   font-size: 13px;
   line-height: 1.55;
-  box-shadow: none;
   overflow-wrap: anywhere;
 }
 
+.conversation .codemap-message.is-assistant .codemap-message-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Streamdown prose overrides — keep minimal, prose handles typography */
-.codemap-message-content .prose {
+.conversation .codemap-message-content .prose {
   --tw-prose-body: #dededf;
   --tw-prose-headings: #ededee;
   --tw-prose-links: var(--primary);
@@ -132,18 +160,22 @@
 }
 
 /* Softer link hover — prose default is too bright against dim body text */
-.codemap-message-content .prose a,
+.conversation .codemap-message-content .prose a,
 .codemap-reasoning-content a {
   transition: opacity 120ms ease;
 }
 
-.codemap-message-content .prose a:hover,
+.conversation .codemap-message-content .prose a:hover,
 .codemap-reasoning-content a:hover {
   opacity: 0.7;
 }
 
+.message-toolbar {
+  margin-top: 8px;
+  justify-content: flex-start;
+}
+
 .message-actions {
-  margin-top: 6px;
   opacity: 0.35;
   transition: opacity 120ms ease;
 }
@@ -297,6 +329,15 @@
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.tool-monaco-diff {
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
 }
 
 /* Thinking/reasoning */

@@ -10,7 +10,16 @@ test("agent session schemas accept browser-safe commands and events", () => {
     agentSessionCommandSchema.parse({
       type: "send",
       requestId: "req-1",
-      input: { content: "Explain this repository" },
+      input: {
+        content: "Explain this repository",
+        images: [
+          {
+            data: "base64-image",
+            mimeType: "image/png",
+            filename: "diagram.png",
+          },
+        ],
+      },
     }).type,
     "send",
   );
@@ -29,7 +38,15 @@ test("agent session schemas accept browser-safe commands and events", () => {
       type: "snapshot",
       snapshot: {
         threadId: null,
-        messages: [],
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "hello" },
+              { type: "file", mimeType: "image/png", data: "base64-image" },
+            ],
+          },
+        ],
         status: "idle",
         streamingText: "",
         thinkingText: "",

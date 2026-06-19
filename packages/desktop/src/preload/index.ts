@@ -104,6 +104,11 @@ const api: DesktopApi = {
       type: "get_working_diff",
       requestId: crypto.randomUUID(),
     }),
+  getWorkingDiffFiles: () =>
+    invoke({
+      type: "get_working_diff_files",
+      requestId: crypto.randomUUID(),
+    }),
   getBranchName: () =>
     invoke({
       type: "get_branch_name",

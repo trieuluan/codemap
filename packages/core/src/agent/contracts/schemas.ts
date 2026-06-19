@@ -16,7 +16,7 @@ const sessionMessageSchema = z
   .object({
     id: z.string().optional(),
     role: z.enum(["system", "user", "assistant", "tool", "tool_call"]),
-    content: z.string(),
+    content: z.unknown(),
     createdAt: z.string().optional(),
     toolCallId: z.string().optional(),
     name: z.string().optional(),
@@ -60,7 +60,7 @@ const toolCallSchema = z
   .strict();
 const sendInputSchema = z
   .object({
-    content: z.string().min(1),
+    content: z.string(),
     model: z.string().optional(),
     effort: z.enum(["low", "medium", "high"]).optional(),
     planMode: z.boolean().optional(),
@@ -70,6 +70,7 @@ const sendInputSchema = z
           .object({
             data: z.string().min(1),
             mimeType: z.string().min(1),
+            filename: z.string().min(1).optional(),
           })
           .strict(),
       )

@@ -4,7 +4,7 @@ import type { TokenUsage } from "../types.ts";
 export interface SessionMessage {
   id?: string;
   role: "system" | "user" | "assistant" | "tool" | "tool_call";
-  content: string;
+  content: unknown;
   createdAt?: string;
   toolCallId?: string;
   name?: string;

@@ -16,9 +16,15 @@ export type LocalMessage = {
   content: string;
   /** Images attached to a user message */
   images?: Array<{ data: string; mimeType: string; filename?: string }>;
-  /** Tool calls that ran during this assistant turn */
-  tools?: ToolCallState[];
 };
+
+export type ConversationItem =
+  | { kind: "message"; message: LocalMessage }
+  | { kind: "tool"; tool: ToolCallState };
+
+type LiveFeedItem =
+  | { kind: "tool"; tool: ToolCallState }
+  | { kind: "text"; id: string; content: string };
 
 function extractTaskContent(raw: string): string {
   // Strip "## Current Task" markdown header if present
@@ -80,6 +86,41 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+function extractMessageImages(
+  content: unknown,
+): Array<{ data: string; mimeType: string; filename?: string }> {
+  if (typeof content === "string") {
+    return extractInlineImages(content);
+  }
+
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  return content.flatMap((part) => {
+    if (part?.type !== "file" || typeof part.data !== "string") {
+      return [];
+    }
+
+    const mimeType =
+      typeof part.mimeType === "string"
+        ? part.mimeType
+        : typeof part.mediaType === "string"
+          ? part.mediaType
+          : undefined;
+
+    if (!mimeType?.startsWith("image/")) {
+      return [];
+    }
+
+    return [{
+      data: part.data,
+      mimeType,
+      ...(typeof part.filename === "string" && part.filename ? { filename: part.filename } : {}),
+    }];
+  });
+}
+
 function compactToolState(tool: ToolCallState): ToolCallState {
   return {
     toolCallId: tool.toolCallId,
@@ -116,10 +157,10 @@ function createToolState(message: SessionMessage): ToolCallState | null {
   return null;
 }
 
-export function normalizeThreadMessages(messages: SessionMessage[]): LocalMessage[] {
-  const normalized: LocalMessage[] = [];
+export function normalizeThreadMessages(messages: SessionMessage[]): ConversationItem[] {
+  const normalized: ConversationItem[] = [];
   const toolById = new Map<string, ToolCallState>();
-  let lastAssistantMessage: LocalMessage | null = null;
+  const toolItemIndexById = new Map<string, number>();
 
   for (const [index, message] of messages.entries()) {
     if (message.role === "tool_call" || message.role === "tool") {
@@ -140,14 +181,12 @@ export function normalizeThreadMessages(messages: SessionMessage[]): LocalMessag
 
       toolById.set(nextTool.toolCallId, mergedTool);
 
-      if (lastAssistantMessage) {
-        const currentTools = lastAssistantMessage.tools ?? [];
-        const nextTools = currentTools.some((tool) => tool.toolCallId === mergedTool.toolCallId)
-          ? currentTools.map((tool) =>
-              tool.toolCallId === mergedTool.toolCallId ? mergedTool : tool,
-            )
-          : [...currentTools, mergedTool];
-        lastAssistantMessage.tools = nextTools;
+      const existingIndex = toolItemIndexById.get(mergedTool.toolCallId);
+      if (existingIndex !== undefined) {
+        normalized[existingIndex] = { kind: "tool", tool: mergedTool };
+      } else {
+        toolItemIndexById.set(mergedTool.toolCallId, normalized.length);
+        normalized.push({ kind: "tool", tool: mergedTool });
       }
       continue;
     }
@@ -158,60 +197,65 @@ export function normalizeThreadMessages(messages: SessionMessage[]): LocalMessag
     const content = message.role === "user" ? extractTaskContent(textContent) : textContent;
 
     if (message.role === "assistant") {
-      const assistantMessage: LocalMessage = {
-        localId: message.id ?? `thread-${index}`,
-        role: "assistant",
-        content,
-      };
-      normalized.push(assistantMessage);
-      lastAssistantMessage = assistantMessage;
+      if (!content) continue;
+      normalized.push({
+        kind: "message",
+        message: {
+          localId: message.id ?? `thread-${index}`,
+          role: "assistant",
+          content,
+        },
+      });
       continue;
     }
 
-    if (!content && textContent === "") continue;
+    const images = extractMessageImages(message.content);
 
-    // For user messages: extract any embedded image data URIs from the raw text
-    // (harness may store images as ![image](data:...) in the content string)
-    const inlineImages = extractInlineImages(textContent);
-
-    if (!content && inlineImages.length === 0) continue;
+    if (!content && images.length === 0) continue;
 
     normalized.push({
-      localId: message.id ?? `thread-${index}`,
-      role: "user",
-      content,
-      ...(inlineImages.length > 0 ? { images: inlineImages } : {}),
+      kind: "message",
+      message: {
+        localId: message.id ?? `thread-${index}`,
+        role: "user",
+        content,
+        ...(images.length > 0 ? { images } : {}),
+      },
     });
-    lastAssistantMessage = null;
   }
 
-  return normalized.filter(
-    (message) => message.role === "user" || message.content || (message.tools?.length ?? 0) > 0,
-  );
+  return normalized;
 }
 
-function finalizeAssistantTurn(content: string, tools: ToolCallState[]): LocalMessage | null {
-  if (!content && tools.length === 0) {
-    return null;
-  }
-
-  return {
-    localId: crypto.randomUUID(),
-    role: "assistant",
-    content,
-    tools: tools.length > 0 ? tools : undefined,
-  };
+function liveFeedToConversationItems(feed: LiveFeedItem[]): ConversationItem[] {
+  return feed.flatMap((item): ConversationItem[] => {
+    if (item.kind === "tool") {
+      return [{ kind: "tool", tool: item.tool }];
+    }
+    if (!item.content) return [];
+    return [{
+      kind: "message",
+      message: {
+        localId: item.id,
+        role: "assistant",
+        content: item.content,
+      },
+    }];
+  });
 }
 
 export function useAgentSession(onError: (message: string | null) => void) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(
     createInitialSessionSnapshot(),
   );
-  const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const [items, setItems] = useState<ConversationItem[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const streamingRef = useRef("");
   // Accumulate tool calls for the current running turn
   const pendingToolsRef = useRef<ToolCallState[]>([]);
+  // Unified chronological feed: interleaves tools and text by event order
+  const liveFeedRef = useRef<LiveFeedItem[]>([]);
+  const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
 
   useEffect(() => {
     const off = window.codemap.onAgentEvent((event) => {
@@ -224,18 +268,35 @@ export function useAgentSession(onError: (message: string | null) => void) {
   function handleEvent(event: AgentSessionEvent) {
     if (event.type === "token") {
       streamingRef.current += event.text;
+      // Maintain unified chronological live feed
+      const feed = liveFeedRef.current;
+      if (feed.length > 0 && feed[feed.length - 1]!.kind === "text") {
+        const last = feed[feed.length - 1]! as Extract<LiveFeedItem, { kind: "text" }>;
+        feed[feed.length - 1] = {
+          ...last,
+          content: last.content + event.text,
+        };
+      } else {
+        feed.push({ kind: "text", id: crypto.randomUUID(), content: event.text });
+      }
+      setLiveFeed([...feed]);
       return;
     }
     if (event.type === "tool_start") {
+      const tool: ToolCallState = {
+        toolCallId: event.toolCallId,
+        name: event.name,
+        args: event.args,
+        preview: event.preview,
+      };
       pendingToolsRef.current = [
         ...pendingToolsRef.current,
-        {
-          toolCallId: event.toolCallId,
-          name: event.name,
-          args: event.args,
-          preview: event.preview,
-        },
+        tool,
       ];
+      // Push tool to live feed (chronological order, after any prior text/tools)
+      const feed = liveFeedRef.current;
+      feed.push({ kind: "tool", tool });
+      setLiveFeed([...feed]);
       return;
     }
     if (event.type === "tool_result") {
@@ -244,24 +305,44 @@ export function useAgentSession(onError: (message: string | null) => void) {
           ? { ...t, result: event.result, isError: event.isError }
           : t,
       );
+      // Update tool in live feed in-place (result fills into the existing tool entry)
+      const feed = liveFeedRef.current;
+      const idx = feed.findIndex(
+        (item) => item.kind === "tool" && item.tool.toolCallId === event.toolCallId,
+      );
+      if (idx >= 0) {
+        const existing = feed[idx]! as Extract<LiveFeedItem, { kind: "tool" }>;
+        feed[idx] = {
+          kind: "tool",
+          tool: {
+            ...existing.tool,
+            result: event.result,
+            isError: event.isError,
+          },
+        };
+        setLiveFeed([...feed]);
+      }
       return;
     }
     if (event.type === "thread_change") {
       streamingRef.current = "";
       pendingToolsRef.current = [];
+      liveFeedRef.current = [];
+      setLiveFeed([]);
       setLoadingMessages(false);
-      setMessages(normalizeThreadMessages(event.messages));
+      setItems(normalizeThreadMessages(event.messages));
       return;
     }
     if (event.type === "status" && event.status === "idle") {
-      const content = streamingRef.current;
-      const tools = pendingToolsRef.current;
+      const feed = liveFeedRef.current;
       streamingRef.current = "";
       pendingToolsRef.current = [];
+      liveFeedRef.current = [];
+      setLiveFeed([]);
 
-      const assistantMessage = finalizeAssistantTurn(content, tools);
-      if (assistantMessage) {
-        setMessages((current) => [...current, assistantMessage]);
+      const finishedItems = liveFeedToConversationItems(feed);
+      if (finishedItems.length > 0) {
+        setItems((current) => [...current, ...finishedItems]);
       }
 
       setSnapshot((current) => ({ ...current, streamingText: "", tools: [] }));
@@ -269,25 +350,17 @@ export function useAgentSession(onError: (message: string | null) => void) {
     if (event.type === "error") onError(event.message);
   }
 
-  const displayMessages = useMemo(
+  const displayItems = useMemo(
     () => [
-      ...messages,
-      ...(snapshot.streamingText
-        ? [
-            {
-              localId: "streaming",
-              role: "assistant" as const,
-              content: snapshot.streamingText,
-            },
-          ]
-        : []),
+      ...items,
+      ...liveFeedToConversationItems(liveFeed),
     ],
-    [messages, snapshot.streamingText],
+    [items, liveFeed],
   );
 
   const switchThread = useCallback(
     async (threadId: string) => {
-      // Don't clear messages — keep the current conversation visible during
+      // Don't clear items — keep the current conversation visible during
       // the switch. thread_change event replaces them on success; on failure
       // they stay untouched (no scroll jump to restore).
       setLoadingMessages(true);
@@ -312,18 +385,21 @@ export function useAgentSession(onError: (message: string | null) => void) {
 
   function resetSession() {
     streamingRef.current = "";
-    setMessages([]);
+    setItems([]);
     setSnapshot(createInitialSessionSnapshot());
   }
 
   function appendUserMessage(content: string, images?: Array<{ data: string; mimeType: string; filename?: string }>) {
-    setMessages((current) => [
+    setItems((current) => [
       ...current,
       {
-        localId: crypto.randomUUID(),
-        role: "user",
-        content: extractTaskContent(content),
-        ...(images && images.length > 0 ? { images } : {}),
+        kind: "message",
+        message: {
+          localId: crypto.randomUUID(),
+          role: "user",
+          content: extractTaskContent(content),
+          ...(images && images.length > 0 ? { images } : {}),
+        },
       },
     ]);
   }
@@ -342,8 +418,8 @@ export function useAgentSession(onError: (message: string | null) => void) {
 
   return {
     snapshot,
-    messages,
-    displayMessages,
+    items,
+    displayItems,
     loadingMessages,
     switchThread,
     resetSession,

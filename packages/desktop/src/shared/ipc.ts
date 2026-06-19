@@ -9,6 +9,18 @@ import {
 
 const requestIdSchema = z.string().min(1);
 
+const workingDiffFileSchema = z
+  .object({
+    path: z.string(),
+    oldPath: z.string().optional(),
+    status: z.enum(["added", "modified", "deleted", "renamed"]),
+    original: z.string(),
+    modified: z.string(),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+  })
+  .strict();
+
 export const desktopCommandSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -44,6 +56,12 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("get_working_diff"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_working_diff_files"),
       requestId: requestIdSchema,
     })
     .strict(),
@@ -140,6 +158,7 @@ export const runtimeMessageSchema = z.discriminatedUnion("type", [
 export type DesktopCommand = z.infer<typeof desktopCommandSchema>;
 export type RuntimeMessage = z.infer<typeof runtimeMessageSchema>;
 export type UtilityCommand = z.infer<typeof utilityCommandSchema>;
+export type WorkingDiffFile = z.infer<typeof workingDiffFileSchema>;
 
 export interface SettingsMetadataInput {
   provider?: string;
@@ -200,6 +219,7 @@ export interface DesktopApi {
   readSettings(): Promise<SettingsMetadata>;
   restartRuntime(): Promise<void>;
   getWorkingDiff(): Promise<string>;
+  getWorkingDiffFiles(): Promise<WorkingDiffFile[]>;
   getBranchName(): Promise<string>;
   onAgentEvent(listener: (event: AgentSessionEvent) => void): () => void;
   onRuntimeStatus(

@@ -19,12 +19,14 @@ function modelContextLimit(modelId: string): number {
 interface RightRailProps {
   mode: "plan" | "build";
   onTabChange: (tab: InspectorTab) => void;
+  onStartResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onToggle: () => void;
   open: boolean;
   settings: SettingsMetadata | null;
   snapshot: SessionSnapshot;
   tab: InspectorTab;
   selectedModel: string;
+  width: number;
 }
 
 const tabs = [
@@ -34,7 +36,18 @@ const tabs = [
   { id: "settings" as const, label: "Settings", icon: Settings2 },
 ];
 
-export function RightRail({ mode, onTabChange, onToggle, open, settings, snapshot, tab, selectedModel }: RightRailProps) {
+export function RightRail({
+  mode,
+  onStartResize,
+  onTabChange,
+  onToggle,
+  open,
+  settings,
+  snapshot,
+  tab,
+  selectedModel,
+  width,
+}: RightRailProps) {
   if (!open) {
     return (
       <aside className="inspector-rail collapsed" aria-label="Inspector">
@@ -60,29 +73,38 @@ export function RightRail({ mode, onTabChange, onToggle, open, settings, snapsho
   }
 
   return (
-    <aside className="inspector-rail" aria-label="Inspector">
-      <header className="inspector-head">
-        <div className="inspector-tabs">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button className={`inspector-tab${tab === id ? " active" : ""}`} key={id} onClick={() => onTabChange(id)} type="button">
-              <Icon size={14} />{label}
-            </button>
-          ))}
-        </div>
-        <button className="icon-button" onClick={onToggle} title="Collapse inspector" type="button">
-          <PanelRightClose size={17} />
-        </button>
-      </header>
-      <div className="inspector-body">
-        {tab === "plan" && <PlanTimelinePanel mode={mode} snapshot={snapshot} />}
-        {tab === "context" && <TokenObservabilityPanel snapshot={snapshot} contextLimit={modelContextLimit(snapshot.model ?? selectedModel)} />}
-        {tab === "diff" && <WorkingDiffPanel />}
-        {tab === "settings" && (
-          <div className="inspector-settings">
-            <SettingsContent settings={settings} />
+    <>
+      <div
+        className="inspector-resize-handle"
+        onPointerDown={onStartResize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize inspector"
+      />
+      <aside className="inspector-rail" aria-label="Inspector" style={{ width }}>
+        <header className="inspector-head">
+          <div className="inspector-tabs">
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button className={`inspector-tab${tab === id ? " active" : ""}`} key={id} onClick={() => onTabChange(id)} type="button">
+                <Icon size={14} />{label}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
-    </aside>
+          <button className="icon-button" onClick={onToggle} title="Collapse inspector" type="button">
+            <PanelRightClose size={17} />
+          </button>
+        </header>
+        <div className="inspector-body">
+          {tab === "plan" && <PlanTimelinePanel mode={mode} snapshot={snapshot} />}
+          {tab === "context" && <TokenObservabilityPanel snapshot={snapshot} contextLimit={modelContextLimit(snapshot.model ?? selectedModel)} />}
+          {tab === "diff" && <WorkingDiffPanel />}
+          {tab === "settings" && (
+            <div className="inspector-settings">
+              <SettingsContent settings={settings} />
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

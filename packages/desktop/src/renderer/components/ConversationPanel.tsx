@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Check,
   CircleHelp,
@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type { SessionSnapshot } from "@codemap-ai/core/agent/contracts";
-import type { LocalMessage } from "../hooks/useAgentSession.js";
+import type { ConversationItem, LocalMessage } from "../hooks/useAgentSession.js";
 import {
   Conversation,
   ConversationContent,
@@ -26,6 +26,7 @@ import {
   MessageAttachments,
   MessageContent,
   MessageResponse,
+  MessageToolbar,
 } from "./ai-elements/message.js";
 import {
   Reasoning,
@@ -35,7 +36,7 @@ import {
 import { ToolExecution } from "./ToolExecution.js";
 
 interface ConversationPanelProps {
-  displayMessages: LocalMessage[];
+  displayItems: ConversationItem[];
   snapshot: SessionSnapshot;
   error: string | null;
   isBusy: boolean;
@@ -53,8 +54,14 @@ const suggestions = [
   "Add a request tracker",
 ];
 
+function isUserMessageItem(
+  item: ConversationItem,
+): item is Extract<ConversationItem, { kind: "message" }> {
+  return item.kind === "message" && item.message.role === "user";
+}
+
 export function ConversationPanel({
-  displayMessages,
+  displayItems,
   snapshot,
   error,
   isBusy,
@@ -67,10 +74,8 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const [questionAnswer, setQuestionAnswer] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | undefined>(undefined);
-
-  const orderedTools = useMemo(() => [...snapshot.tools], [snapshot.tools]);
-  const latestAssistantIndex = displayMessages.findLastIndex(
-    (message) => message.role === "assistant",
+  const latestAssistantIndex = displayItems.findLastIndex(
+    (item) => item.kind === "message" && item.message.role === "assistant",
   );
 
   function messageId(message: LocalMessage) {
@@ -87,7 +92,7 @@ export function ConversationPanel({
   return (
     <Conversation key={snapshot.threadId ?? "empty"} className="conversation">
       <ConversationContent className="conversation-content">
-        {displayMessages.length === 0 ? (
+        {displayItems.length === 0 ? (
           loadingMessages ? (
             <div className="empty-chat">
               <ConversationEmptyState
@@ -129,60 +134,62 @@ export function ConversationPanel({
           )
         ) : (
           <div className="message-stack">
-          {displayMessages.map((message, index) => {
+          {displayItems.map((item, index) => {
+            if (item.kind === "tool") {
+              const tool = item.tool;
+              return (
+                <section className="tool-stack" key={`tool-${tool.toolCallId}-${index}`}>
+                  <ToolExecution
+                    toolCallId={tool.toolCallId}
+                    name={tool.name}
+                    args={tool.args}
+                    preview={tool.preview}
+                    result={tool.result}
+                    isError={tool.isError}
+                    workspaceRoot={workspaceRoot}
+                  />
+                </section>
+              );
+            }
+
+            const message = item.message;
             const id = messageId(message);
-            const previousUserMessage = displayMessages
+            const previousUserMessage = displayItems
               .slice(0, index)
-              .findLast((candidate) => candidate.role === "user");
+              .findLast(isUserMessageItem)?.message;
             const isLatestAssistant =
               message.role === "assistant" && index === latestAssistantIndex;
 
             const isUser = message.role === "user";
 
             return (
-              <div key={id} className="turn-group">
-                {/* Tool calls that ran during this assistant turn (before the response) */}
-                {!isUser && message.tools && message.tools.length > 0 && (
-                  <section className="tool-stack">
-                    {message.tools.map((tool) => (
-                      <ToolExecution
-                        key={tool.toolCallId}
-                        toolCallId={tool.toolCallId}
-                        name={tool.name}
-                        args={tool.args}
-                        preview={tool.preview}
-                        result={tool.result}
-                        isError={tool.isError}
-                        workspaceRoot={workspaceRoot}
-                      />
-                    ))}
-                  </section>
-                )}
-                {(isUser || message.content) && <article
-                  className={`message-row ${isUser ? "message-row-user" : ""}`}
-                  data-role={message.role}
-                >
-                  <div className="min-w-0">
-                    <Message
-                      className="codemap-message"
-                      from={isUser ? "user" : "assistant"}
-                    >
-                      <MessageContent className="codemap-message-content message-body">
-                        {isUser && message.images && message.images.length > 0 && (
-                          <MessageAttachments
-                            files={message.images.map((img, i) => ({
-                              type: "file" as const,
-                              url: `data:${img.mimeType};base64,${img.data}`,
-                              mediaType: img.mimeType,
-                              filename: img.filename,
-                              id: String(i),
-                            }))}
-                          />
-                        )}
-                        <MessageResponse isStreaming={isBusy && !isUser}>{message.content}</MessageResponse>
-                      </MessageContent>
-                    </Message>
-                    {isLatestAssistant && message.content && !isBusy && (
+              <article
+                className={`message-row ${isUser ? "message-row-user" : ""}`}
+                data-role={message.role}
+                key={`message-${id}-${index}`}
+              >
+                <div className={`message-shell ${isUser ? "message-shell-user" : ""}`}>
+                  <Message
+                    className="codemap-message"
+                    from={isUser ? "user" : "assistant"}
+                  >
+                    <MessageContent className="codemap-message-content message-body">
+                      {isUser && message.images && message.images.length > 0 && (
+                        <MessageAttachments
+                          files={message.images.map((img, i) => ({
+                            type: "file" as const,
+                            url: `data:${img.mimeType};base64,${img.data}`,
+                            mediaType: img.mimeType,
+                            filename: img.filename,
+                            id: String(i),
+                          }))}
+                        />
+                      )}
+                      <MessageResponse isStreaming={isBusy && isLatestAssistant && !isUser}>{message.content}</MessageResponse>
+                    </MessageContent>
+                  </Message>
+                  {isLatestAssistant && message.content && !isBusy && (
+                    <MessageToolbar className="message-toolbar">
                       <MessageActions className="message-actions">
                         <MessageAction
                           label="Copy response"
@@ -202,30 +209,12 @@ export function ConversationPanel({
                           <RefreshCw size={14} />
                         </MessageAction>
                       </MessageActions>
-                    )}
-                  </div>
-                </article>}
-              </div>
+                    </MessageToolbar>
+                  )}
+                </div>
+              </article>
             );
           })}
-
-          {/* Live tool calls for the current in-progress turn */}
-          {isBusy && orderedTools.length > 0 && (
-            <section className="tool-stack tool-stack-live">
-              {orderedTools.map((tool) => (
-                <ToolExecution
-                  key={tool.toolCallId}
-                  toolCallId={tool.toolCallId}
-                  name={tool.name}
-                  args={tool.args}
-                  preview={tool.preview}
-                  result={tool.result}
-                  isError={tool.isError}
-                  workspaceRoot={workspaceRoot}
-                />
-              ))}
-            </section>
-          )}
           </div>
         )}
 

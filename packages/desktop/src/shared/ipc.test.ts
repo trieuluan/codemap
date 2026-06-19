@@ -30,7 +30,16 @@ test("desktop IPC accepts workspace and agent commands", () => {
       command: {
         type: "send",
         requestId: "req-2",
-        input: { content: "Explain this project" },
+        input: {
+          content: "Explain this project",
+          images: [
+            {
+              data: "base64-image",
+              mimeType: "image/png",
+              filename: "diagram.png",
+            },
+          ],
+        },
       },
     }).type,
     "agent",
@@ -88,6 +97,16 @@ test("desktop IPC accepts get_working_diff command", () => {
       requestId: "req-diff",
     }).type,
     "get_working_diff",
+  );
+});
+
+test("desktop IPC accepts get_working_diff_files command", () => {
+  assert.equal(
+    desktopCommandSchema.parse({
+      type: "get_working_diff_files",
+      requestId: "req-diff-files",
+    }).type,
+    "get_working_diff_files",
   );
 });
 

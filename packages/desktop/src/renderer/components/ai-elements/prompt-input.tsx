@@ -80,13 +80,15 @@ import {
 // ============================================================================
 
 export type AttachmentsContext = {
-  files: (FileUIPart & { id: string })[];
+  files: PromptInputAttachmentFile[];
   add: (files: File[] | FileList) => void;
   remove: (id: string) => void;
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
+
+type PromptInputAttachmentFile = FileUIPart & { id: string; file?: File };
 
 export type TextInputContext = {
   value: string;
@@ -156,7 +158,7 @@ export function PromptInputProvider({
 
   // ----- attachments state (global when wrapped)
   const [attachmentFiles, setAttachmentFiles] = useState<
-    (FileUIPart & { id: string })[]
+    PromptInputAttachmentFile[]
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const openRef = useRef<() => void>(() => {});
@@ -172,6 +174,7 @@ export function PromptInputProvider({
         incoming.map((file) => ({
           id: nanoid(),
           type: "file" as const,
+          file,
           url: URL.createObjectURL(file),
           mediaType: file.type,
           filename: file.name,
@@ -448,7 +451,7 @@ export const PromptInput = ({
   const formRef = useRef<HTMLFormElement | null>(null);
 
   // ----- Local attachments (only used when no provider)
-  const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [items, setItems] = useState<PromptInputAttachmentFile[]>([]);
   const files = usingProvider ? controller.attachments.files : items;
 
   // Keep a ref to files for cleanup on unmount (avoids stale closure)
@@ -516,11 +519,12 @@ export const PromptInput = ({
             message: "Too many files. Some were not added.",
           });
         }
-        const next: (FileUIPart & { id: string })[] = [];
+        const next: PromptInputAttachmentFile[] = [];
         for (const file of capped) {
           next.push({
             id: nanoid(),
             type: "file",
+            file,
             url: URL.createObjectURL(file),
             mediaType: file.type,
             filename: file.name,
@@ -649,21 +653,14 @@ export const PromptInput = ({
     event.currentTarget.value = "";
   };
 
-  const convertBlobUrlToDataUrl = async (
-    url: string
-  ): Promise<string | null> => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
+  const readFileAsDataUrl = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () =>
+        resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
   };
 
   const ctx = useMemo<AttachmentsContext>(
@@ -690,17 +687,16 @@ export const PromptInput = ({
         })();
 
     // Reset form immediately after capturing text to avoid race condition
-    // where user input during async blob conversion would be lost
+    // where user input during async file conversion would be lost
     if (!usingProvider) {
       form.reset();
     }
 
-    // Convert blob URLs to data URLs asynchronously
+    // Convert selected File objects to data URLs asynchronously
     Promise.all(
-      files.map(async ({ id, ...item }) => {
-        if (item.url && item.url.startsWith("blob:")) {
-          const dataUrl = await convertBlobUrlToDataUrl(item.url);
-          // If conversion failed, keep the original blob URL
+      files.map(async ({ id, file, ...item }) => {
+        if (file) {
+          const dataUrl = await readFileAsDataUrl(file);
           return {
             ...item,
             url: dataUrl ?? item.url,
@@ -711,26 +707,11 @@ export const PromptInput = ({
     )
       .then((convertedFiles: FileUIPart[]) => {
         try {
-          const result = onSubmit({ text, files: convertedFiles }, event);
+          void onSubmit({ text, files: convertedFiles }, event);
 
-          // Handle both sync and async onSubmit
-          if (result instanceof Promise) {
-            result
-              .then(() => {
-                clear();
-                if (usingProvider) {
-                  controller.textInput.clear();
-                }
-              })
-              .catch(() => {
-                // Don't clear on error - user may want to retry
-              });
-          } else {
-            // Sync function completed without throwing, clear attachments
-            clear();
-            if (usingProvider) {
-              controller.textInput.clear();
-            }
+          clear();
+          if (usingProvider) {
+            controller.textInput.clear();
           }
         } catch {
           // Don't clear on error - user may want to retry
