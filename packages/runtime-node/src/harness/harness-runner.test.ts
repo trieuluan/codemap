@@ -113,7 +113,8 @@ test("runHarness continues into build after plan-mode submit_plan approval", asy
   assert.deepEqual(mock.sendSignalCalls, [
     {
       type: "system-reminder",
-      contents: "The user has approved the plan, begin executing.",
+      contents:
+        "The user has approved the plan. You are now in Build mode. Do not call or discuss submit_plan again; use the approved plan from activePlan and execute it. If the approved plan is only testing the plan-approval flow, briefly confirm that approval was received and stop.",
     },
   ]);
 

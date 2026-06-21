@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Brain,
   Check,
   CircleHelp,
   Copy,
@@ -48,6 +49,7 @@ interface ConversationPanelProps {
   isBusy: boolean;
   loadingMessages?: boolean;
   workspaceRoot?: string | null;
+  pendingPlanReview?: SessionSnapshot["pendingPlanReview"];
   onApprove: (approvalId: string) => void;
   onDecline: (approvalId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => void;
@@ -66,6 +68,44 @@ function isUserMessageItem(
   return item.kind === "message" && item.message.role === "user";
 }
 
+type Phase = "idle" | "thinking" | "planning" | "executing" | "streaming";
+
+function derivePhase(
+  isBusy: boolean,
+  displayItems: ConversationItem[],
+  streamingText: string,
+  pendingPlanReview: unknown | null,
+): Phase {
+  if (!isBusy) return "idle";
+  if (pendingPlanReview) return "planning";
+  const lastReasoning = displayItems.findLast((item) => item.kind === "reasoning");
+  if (lastReasoning?.kind === "reasoning" && lastReasoning.reasoning.isStreaming) return "thinking";
+  if (streamingText) return "streaming";
+  return "executing";
+}
+
+function PhaseIndicator({ phase }: { phase: Phase }) {
+  if (phase === "idle") return null;
+
+  const label = phase === "thinking" ? "Thinking…"
+    : phase === "planning" ? "Planning…"
+    : phase === "streaming" ? "Streaming…"
+    : "Executing…";
+
+  const Icon = phase === "thinking" ? Brain
+    : phase === "planning" ? FileCode2
+    : Loader2;
+
+  const iconClass = phase === "executing" ? "animate-spin" : "";
+
+  return (
+    <div className="phase-indicator">
+      <Icon size={13} className={iconClass} />
+      <Shimmer as="span" duration={0.8}>{label}</Shimmer>
+    </div>
+  );
+}
+
 export function ConversationPanel({
   displayItems,
   snapshot,
@@ -73,6 +113,7 @@ export function ConversationPanel({
   isBusy,
   loadingMessages = false,
   workspaceRoot,
+  pendingPlanReview,
   onApprove,
   onDecline,
   onAnswerQuestion,
@@ -332,6 +373,10 @@ export function ConversationPanel({
           <X size={15} />
         </div>
         )}
+
+        <PhaseIndicator
+          phase={derivePhase(isBusy, displayItems, snapshot.streamingText, pendingPlanReview ?? null)}
+        />
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>

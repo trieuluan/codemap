@@ -92,6 +92,58 @@ export class WorkspaceRuntime {
     });
   }
 
+  getMcpStatus(): Promise<unknown> {
+    return this.request({
+      type: "get_mcp_status",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  runSlashCommand(name: string, args: string): Promise<unknown> {
+    return this.request({
+      type: "run_slash_command",
+      requestId: crypto.randomUUID(),
+      name,
+      args,
+    });
+  }
+
+  getAccountInfo(): Promise<unknown> {
+    return this.request({
+      type: "get_account_info",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  accountLogin(): Promise<unknown> {
+    return this.request({
+      type: "account_login",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  accountLogout(): Promise<unknown> {
+    return this.request({
+      type: "account_logout",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  listProjects(): Promise<unknown> {
+    return this.request({
+      type: "list_projects",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  linkProject(projectId: string): Promise<unknown> {
+    return this.request({
+      type: "link_project",
+      requestId: crypto.randomUUID(),
+      projectId,
+    });
+  }
+
   private request<T>(command: UtilityCommand): Promise<T> {
     const requestId =
       command.type === "agent" ? command.command.requestId : command.requestId;

@@ -125,6 +125,56 @@ const api: DesktopApi = {
       type: "get_branch_name",
       requestId: crypto.randomUUID(),
     }),
+  getMcpStatus: () =>
+    invoke({
+      type: "get_mcp_status",
+      requestId: crypto.randomUUID(),
+    }),
+  readFilePreview: (filePath) =>
+    invoke({
+      type: "read_file_preview",
+      requestId: crypto.randomUUID(),
+      filePath,
+    }),
+  runSlashCommand: (name, args) =>
+    invoke({
+      type: "run_slash_command",
+      requestId: crypto.randomUUID(),
+      name,
+      args,
+    }),
+  getAccountInfo: () =>
+    invoke({
+      type: "get_account_info",
+      requestId: crypto.randomUUID(),
+    }),
+  accountLogin: () =>
+    invoke({
+      type: "account_login",
+      requestId: crypto.randomUUID(),
+    }),
+  accountLogout: () =>
+    invoke({
+      type: "account_logout",
+      requestId: crypto.randomUUID(),
+    }),
+  listProjects: () =>
+    invoke({
+      type: "list_projects",
+      requestId: crypto.randomUUID(),
+    }),
+  linkProject: (projectId) =>
+    invoke({
+      type: "link_project",
+      requestId: crypto.randomUUID(),
+      projectId,
+    }),
+  openUrl: (url) =>
+    invoke({
+      type: "open_url",
+      requestId: crypto.randomUUID(),
+      url,
+    }),
   onAgentEvent(listener) {
     return subscribe((message) => {
       if (message.type === "agent_event") listener(message.event);

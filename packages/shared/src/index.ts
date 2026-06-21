@@ -14,3 +14,14 @@ export * from "./project-entities.js";
 export * from "./project-file.js";
 export * from "./project-map.js";
 export * from "./project-mcp.js";
+
+// Slash commands exports
+export * from "./slash-commands/types/index.js";
+export * from "./slash-commands/helpers.js";
+export * from "./slash-commands/index.js";
+export * from "./slash-commands/universal/help.js";
+export * from "./slash-commands/universal/status.js";
+export * from "./slash-commands/universal/tools.js";
+export * from "./slash-commands/universal/models.js";
+export * from "./slash-commands/universal/mcp.js";
+

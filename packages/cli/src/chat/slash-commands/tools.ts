@@ -8,6 +8,8 @@ import { getLoadedCustomTools } from "../../agent/runtime/introspection/tools.js
 import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
+import { toolsCommand as sharedTools } from "@codemap-ai/shared";
+import { executeSharedCommand } from "./shared-bridge.js";
 
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
@@ -59,8 +61,8 @@ export const toolsCommand: Command = {
       return reloadTools(ctx);
     }
 
-    // Default: list tools
-    return listTools(ctx);
+    // Default: delegate to shared for markdown-formatted tool list
+    return executeSharedCommand(sharedTools, args, ctx);
   },
 };
 
@@ -230,124 +232,6 @@ async function addTool(args: string[], ctx: Parameters<Command["execute"]>[1]) {
   }
 }
 
-async function listTools(ctx: Parameters<Command["execute"]>[1]) {
-  ctx.setBusy(true);
-  try {
-    const allTools = await ctx.toolClient.listAllowedTools();
-    const disabledSet = new Set(MASTRA_DISABLED_TOOLS.map((n) => n.replace(/^codemap_/, "")));
-    const tools = allTools.filter((t) => !disabledSet.has(t.name));
-    const disabledTools = allTools.filter((t) => disabledSet.has(t.name));
-
-    const nameW = Math.min(32, Math.max(6, ...allTools.map((t) => t.name.length)));
-    const descW = 58;
-
-    const grouped: Record<ToolCategory, typeof tools> = { local: [], auth: [], cloud: [] };
-    for (const t of tools) {
-      const cat: ToolCategory = TOOL_CATEGORIES[t.name] ?? "cloud";
-      grouped[cat].push(t);
-    }
-
-    // Get Mastra MCP server statuses to collect external tools
-    const mastraStatus = await getMastraMcpStatusSummary();
-    const externalTools: { server: string; tools: { name: string; description?: string }[] }[] = [];
-    if (mastraStatus?.statuses) {
-      for (const server of mastraStatus.statuses) {
-        if (server.toolNames.length === 0) continue;
-        if (server.name === "codemap") continue; // CodeMap tools already shown in LOCAL/AUTH/CLOUD
-        const serverTools = server.toolNames.map((name) => ({ name }));
-        externalTools.push({ server: server.name, tools: serverTools });
-      }
-    }
-
-    const lines: string[] = [
-      `${BOLD}Available tools${RESET}  ${C_GRAY}${tools.length} MCP active, ${disabledTools.length} disabled${RESET}`,
-      "",
-    ];
-
-    for (const cat of ["local", "auth", "cloud"] as ToolCategory[]) {
-      const group = grouped[cat];
-      if (group.length === 0) continue;
-      const { label, color, note } = SECTION[cat];
-      lines.push("");
-      lines.push(
-        `${color}${BOLD}${label}${RESET}  ${C_GRAY}${note}  ·  ${group.length} tools${RESET}`,
-      );
-      lines.push(`${C_GRAY}${"─".repeat(nameW + descW + 4)}${RESET}`);
-      for (const t of group) {
-        const name = t.name.padEnd(nameW).slice(0, nameW);
-        const raw = (t.description ?? "").replace(/\n.*/s, "").trim();
-        const desc = raw.length > descW ? raw.slice(0, descW - 1) + "…" : raw;
-        lines.push(`${color}${name}${RESET}  ${C_GRAY}${desc}${RESET}`);
-      }
-      lines.push("");
-    }
-
-    // Show external tools from Mastra MCP servers
-    if (externalTools.length > 0) {
-      const { label, color, note } = EXTERNAL_SECTION;
-      const totalExternal = externalTools.reduce((sum, e) => sum + e.tools.length, 0);
-      lines.push("");
-      lines.push(
-        `${color}${BOLD}${label}${RESET}  ${C_GRAY}${note}  ·  ${totalExternal} tools from ${externalTools.length} server(s)${RESET}`,
-      );
-      lines.push(`${C_GRAY}${"─".repeat(nameW + descW + 4)}${RESET}`);
-      for (const { server, tools: serverTools } of externalTools) {
-        lines.push(`${C_GRAY}${" ".repeat(nameW + 2)}${color}[${server}]${RESET}`);
-        for (const t of serverTools) {
-          const name = t.name.padEnd(nameW).slice(0, nameW);
-          lines.push(`${color}${name}${RESET}`);
-        }
-      }
-      lines.push("");
-    }
-
-    // Show custom tools from .codemap/tools/
-    const customTools = getLoadedCustomTools();
-    if (customTools.length > 0) {
-      const { label, color, note } = CUSTOM_SECTION;
-      lines.push("");
-      lines.push(
-        `${color}${BOLD}${label}${RESET}  ${C_GRAY}${note}  ·  ${customTools.length} tools${RESET}`,
-      );
-      lines.push(`${C_GRAY}${"─".repeat(nameW + descW + 4)}${RESET}`);
-      for (const t of customTools) {
-        const name = t.name.padEnd(nameW).slice(0, nameW);
-        const raw = t.description.replace(/\n.*/s, "").trim();
-        const desc = raw.length > descW - 4 ? raw.slice(0, descW - 5) + "…" : raw;
-        const source = t.source === "project" ? "project" : "global";
-        lines.push(`${color}${name}${RESET}  ${C_GRAY}${desc}  [${source}]${RESET}`);
-      }
-      lines.push("");
-    }
-
-    // Show disabled tools (handled by CLI /commands or internal)
-    if (disabledTools.length > 0) {
-      lines.push("");
-      lines.push(
-        `${C_GRAY}${BOLD}DISABLED${RESET}  ${C_GRAY}handled by CLI /commands or internal  ·  ${disabledTools.length} tools${RESET}`,
-      );
-      lines.push(`${C_GRAY}${"─".repeat(nameW + descW + 4)}${RESET}`);
-      for (const t of disabledTools) {
-        const name = t.name.padEnd(nameW).slice(0, nameW);
-        const raw = (t.description ?? "").replace(/\n.*/s, "").trim();
-        const desc = raw.length > descW ? raw.slice(0, descW - 1) + "…" : raw;
-        lines.push(`${C_GRAY}${name}  ${desc}${RESET}`);
-      }
-      lines.push("");
-    }
-
-    ctx.setMessages((prev) => [
-      ...prev,
-      { role: "system", content: lines.join("\n") },
-    ]);
-  } catch (err) {
-    ctx.setMessages((prev) => [
-      ...prev,
-      { role: "system", content: `Error listing tools: ${err}` },
-    ]);
-  }
-  ctx.setBusy(false);
-}
 
 async function reloadTools(ctx: Parameters<Command["execute"]>[1]) {
   if (!ctx.reinitHarness) {

@@ -71,6 +71,65 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
       requestId: requestIdSchema,
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("get_mcp_status"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("read_file_preview"),
+      requestId: requestIdSchema,
+      filePath: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("run_slash_command"),
+      requestId: requestIdSchema,
+      name: z.string().min(1),
+      args: z.string().default(""),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_account_info"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("account_login"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("account_logout"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("list_projects"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("link_project"),
+      requestId: requestIdSchema,
+      projectId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("open_url"),
+      requestId: requestIdSchema,
+      url: z.string().url(),
+    })
+    .strict(),
 ]);
 
 export const utilityCommandSchema = z.discriminatedUnion("type", [
@@ -91,6 +150,58 @@ export const utilityCommandSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("read_settings"),
       requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_mcp_status"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("read_file_preview"),
+      requestId: requestIdSchema,
+      filePath: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("run_slash_command"),
+      requestId: requestIdSchema,
+      name: z.string().min(1),
+      args: z.string().default(""),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_account_info"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("account_login"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("account_logout"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("list_projects"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("link_project"),
+      requestId: requestIdSchema,
+      projectId: z.string().min(1),
     })
     .strict(),
 ]);
@@ -194,6 +305,75 @@ export function redactSettingsMetadata(
   };
 }
 
+export interface ReadFilePreviewResult {
+  content: string;
+  language: string;
+  lines: number;
+  truncated: boolean;
+}
+
+export interface McpServerStatus {
+  name: string;
+  connected: boolean;
+  connecting?: boolean;
+  toolCount: number;
+  toolNames: string[];
+  transport: "stdio" | "http";
+  error?: string;
+}
+
+export interface McpSkippedServer {
+  name: string;
+  reason: string;
+}
+
+export interface McpStatusResult {
+  hasServers: boolean;
+  statuses: McpServerStatus[];
+  skipped: McpSkippedServer[];
+}
+
+export interface SlashCommandResult {
+  output: string;
+  action?: "clear" | "plan" | "build" | "mcp";
+}
+
+export interface AccountUser {
+  email?: string;
+  name?: string;
+}
+
+export interface AccountInfo {
+  loggedIn: boolean;
+  user?: AccountUser;
+  apiUrl?: string;
+}
+
+export interface CloudProject {
+  id: string;
+  name: string;
+  status: string;
+  repoUrl?: string;
+}
+
+export interface AccountLoginResult {
+  success: boolean;
+  user?: AccountUser;
+  error?: string;
+  authorizeUrl?: string;
+}
+
+export interface ListProjectsResult {
+  projects: CloudProject[];
+  error?: string;
+}
+
+export interface LinkProjectResult {
+  success: boolean;
+  projectName?: string;
+  error?: string;
+}
+
 export interface DesktopApi {
   openWorkspace(): Promise<string | null>;
   openWorkspacePath(workspacePath: string): Promise<string>;
@@ -225,6 +405,15 @@ export interface DesktopApi {
   getWorkingDiff(): Promise<string>;
   getWorkingDiffFiles(): Promise<WorkingDiffFile[]>;
   getBranchName(): Promise<string>;
+  getMcpStatus(): Promise<McpStatusResult | null>;
+  readFilePreview(filePath: string): Promise<ReadFilePreviewResult | null>;
+  runSlashCommand(name: string, args: string): Promise<SlashCommandResult>;
+  getAccountInfo(): Promise<AccountInfo | null>;
+  accountLogin(): Promise<AccountLoginResult | null>;
+  accountLogout(): Promise<{ success: boolean; error?: string } | null>;
+  listProjects(): Promise<ListProjectsResult | null>;
+  linkProject(projectId: string): Promise<LinkProjectResult | null>;
+  openUrl(url: string): Promise<void>;
   onAgentEvent(listener: (event: AgentSessionEvent) => void): () => void;
   onRuntimeStatus(
     listener: (status: "starting" | "ready" | "disconnected") => void,

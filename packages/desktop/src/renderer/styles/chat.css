@@ -436,6 +436,18 @@
   }
 }
 
+/* Phase indicator */
+.phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 0 60px;
+  font-size: 12px;
+  color: var(--text-dim);
+  height: 28px;
+  flex-shrink: 0;
+}
+
 /* Prompt card */
 .prompt-card {
   display: grid;
@@ -642,4 +654,178 @@
 .codemap-tool-section {
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════
+   File hover preview
+   ═══════════════════════════════════════════════ */
+
+.tool-title-with-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.tool-title-sep {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.tool-title-preview {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-trigger {
+  color: var(--muted);
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.file-preview-trigger:hover {
+  color: var(--foreground);
+  border-bottom-color: var(--border-strong);
+}
+
+.file-preview-card {
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.file-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card-soft);
+}
+
+.file-preview-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-preview-meta {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.file-preview-body {
+  max-height: 340px;
+  overflow: auto;
+}
+
+.file-preview-loading,
+.file-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+  color: var(--muted);
+  font-size: 12px;
+  gap: 6px;
+}
+
+.file-preview-body [data-streamdown="code-block"] pre {
+  margin: 0;
+  max-height: 340px;
+  overflow: auto;
+  padding: 10px 14px;
+}
+
+.file-preview-body [data-streamdown="code-block"] code {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ── Slash command popup ──────────────────────────────────────────────── */
+
+.slash-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-elevated, #1c1c1e);
+  border: 1px solid var(--border-muted, #3a3a3c);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  z-index: 150;
+  padding: 6px 0;
+}
+
+.slash-group {
+  padding: 0;
+}
+
+.slash-group + .slash-group {
+  border-top: 1px solid var(--border-subtle, #2c2c2e);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.slash-group-label {
+  padding: 5px 14px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim, #8e8e93);
+}
+
+.slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text, #e5e5ea);
+  transition: background 0.1s;
+}
+
+.slash-item:hover,
+.slash-item-active {
+  background: var(--bg-hover, #2c2c2e);
+}
+
+.slash-item-name {
+  font-weight: 600;
+  font-family: var(--mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 12px;
+  color: var(--accent, #3b82f6);
+  min-width: 90px;
+}
+
+.slash-item-desc {
+  font-size: 12px;
+  color: var(--text-dim, #8e8e93);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

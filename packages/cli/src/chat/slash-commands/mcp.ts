@@ -5,6 +5,8 @@ import {
   removeMcpServerEntry,
 } from "@codemap-ai/core/lib/workspace-project.js";
 import { getMastraMcpStatusSummary } from "@codemap-ai/runtime-node";
+import { mcpCommand as sharedMcp } from "@codemap-ai/shared";
+import { executeSharedCommand } from "./shared-bridge.js";
 
 export const mcpCommand: Command = {
   name: "mcp",
@@ -13,8 +15,9 @@ export const mcpCommand: Command = {
     const parts = args.trim().split(/\s+/);
     const sub = parts[0];
 
+    // Default (no subcommand): delegate to shared for markdown-rendered list
     if (!sub) {
-      return showStatus(ctx);
+      return executeSharedCommand(sharedMcp, args, ctx);
     }
 
     if (sub === "add") {
@@ -54,7 +57,7 @@ export const mcpCommand: Command = {
         return;
       }
 
-      // Wait for MCP connections to settle (reinitHarness resolves before MCP init completes)
+      // Wait for MCP connections to settle
       const summary = await getMastraMcpStatusSummary();
       ctx.setBusy(false);
 
@@ -72,7 +75,6 @@ export const mcpCommand: Command = {
           ...prev,
           { role: "system", content: `Failed to connect MCP server "${name}": ${errMsg.split("\n")[0]}${hint}` },
         ]);
-        // Reinit harness in background to purge the failed server from Mastra's internal MCP state
         ctx.reinitHarness?.().catch(() => {});
       } else {
         ctx.setMessages((prev) => [
@@ -132,61 +134,3 @@ export const mcpCommand: Command = {
     ]);
   },
 };
-
-async function showStatus(ctx: Parameters<Command["execute"]>[1]) {
-  const summary = await getMastraMcpStatusSummary();
-  const lines = ["MCP Servers:", ""];
-
-  if (!summary) {
-    lines.push("  Mastra harness is not initialized yet.");
-    lines.push("  Send a chat message first, then run /mcp again.");
-    lines.push("");
-    lines.push("Add external servers: /mcp add <name> <command> [args...]");
-    lines.push("Or configure in .codemap/settings.json → mcpServers");
-    ctx.setMessages((prev) => [
-      ...prev,
-      { role: "system", content: lines.join("\n") },
-    ]);
-    return;
-  }
-
-  const { statuses, skipped } = summary;
-
-  if (!summary.hasServers) {
-    lines.push("  No MCP servers configured in Mastra.");
-  }
-
-  for (const s of statuses) {
-    const icon = s.connected ? "●" : s.connecting ? "◐" : "✗";
-    const state = s.connected
-      ? `connected via ${s.transport}`
-      : s.connecting
-        ? `connecting via ${s.transport}`
-        : `error: ${s.error ?? "unknown"}`;
-    const toolCount = s.toolCount > 0 ? ` (${s.toolCount} tools)` : "";
-    const toolNames = s.toolNames.length > 0
-      ? `\n      ${s.toolNames.slice(0, 8).join(", ")}${s.toolNames.length > 8 ? ", …" : ""}`
-      : "";
-    lines.push(`  ${icon} ${s.name} — ${state}${toolCount}${toolNames}`);
-  }
-
-  for (const s of skipped) {
-    lines.push(`  - ${s.name} — skipped: ${s.reason}`);
-  }
-
-  if (summary.hasServers && statuses.length === 0 && skipped.length === 0) {
-    lines.push("  Mastra MCP manager has configured servers, but no runtime status yet.");
-    lines.push("  Try sending one chat message or restart the chat if this persists.");
-  }
-
-  if (statuses.length + skipped.length <= 1) {
-    lines.push("");
-    lines.push("Add external servers: /mcp add <name> <command> [args...]");
-    lines.push("Or configure in .codemap/settings.json → mcpServers");
-  }
-
-  ctx.setMessages((prev) => [
-    ...prev,
-    { role: "system", content: lines.join("\n") },
-  ]);
-}

@@ -137,6 +137,28 @@ test("desktop IPC accepts get_branch_name command", () => {
   );
 });
 
+test("desktop IPC accepts get_mcp_status command", () => {
+  assert.equal(
+    desktopCommandSchema.parse({
+      type: "get_mcp_status",
+      requestId: "req-mcp",
+    }).type,
+    "get_mcp_status",
+  );
+});
+
+test("desktop IPC accepts run_slash_command command", () => {
+  const parsed = desktopCommandSchema.parse({
+    type: "run_slash_command",
+    requestId: "req-slash",
+    name: "help",
+    args: "",
+  });
+  assert.equal(parsed.type, "run_slash_command");
+  assert.equal(parsed.name, "help");
+  assert.equal(parsed.args, "");
+});
+
 test("runtime messages require request correlation for failures", () => {
   assert.throws(() =>
     runtimeMessageSchema.parse({

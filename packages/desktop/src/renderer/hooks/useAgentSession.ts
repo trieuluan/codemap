@@ -29,11 +29,6 @@ export type ConversationItem =
   | { kind: "tool"; tool: ToolCallState }
   | { kind: "reasoning"; reasoning: LocalReasoning };
 
-type LiveFeedItem =
-  | { kind: "tool"; tool: ToolCallState }
-  | { kind: "text"; id: string; content: string }
-  | { kind: "reasoning"; id: string; content: string; isStreaming: boolean };
-
 function extractTaskContent(raw: string): string {
   // Strip "## Current Task" markdown header if present
   let content = raw.replace(/^## Current Task\s*\n/, "").trim();
@@ -261,37 +256,6 @@ export function normalizeThreadMessages(messages: SessionMessage[]): Conversatio
   return normalized;
 }
 
-function liveFeedToConversationItems(feed: LiveFeedItem[]): ConversationItem[] {
-  return feed.flatMap((item): ConversationItem[] => {
-    if (item.kind === "tool") {
-      return [{ kind: "tool", tool: item.tool }];
-    }
-    if (item.kind === "reasoning") {
-      // Keep streaming reasoning even when content is empty (placeholder
-      // injected on status:"running" shows "Thinking..." shimmer).
-      // Filter empty non-streaming reasoning — the model never produced content.
-      if (!item.isStreaming && !item.content) return [];
-      return [{
-        kind: "reasoning",
-        reasoning: {
-          localId: item.id,
-          content: item.content,
-          isStreaming: item.isStreaming,
-        },
-      }];
-    }
-    if (!item.content) return [];
-    return [{
-      kind: "message",
-      message: {
-        localId: item.id,
-        role: "assistant",
-        content: item.content,
-      },
-    }];
-  });
-}
-
 export function useAgentSession(onError: (message: string | null) => void) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(
     createInitialSessionSnapshot(),
@@ -301,9 +265,10 @@ export function useAgentSession(onError: (message: string | null) => void) {
   const streamingRef = useRef("");
   // Accumulate tool calls for the current running turn
   const pendingToolsRef = useRef<ToolCallState[]>([]);
-  // Unified chronological feed: interleaves tools and text by event order
-  const liveFeedRef = useRef<LiveFeedItem[]>([]);
-  const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
+  // Mutable mirror of items for fast mutation during streaming
+  const itemsRef = useRef<ConversationItem[]>([]);
+  // Index in items where the current streaming turn began (-1 when idle)
+  const streamingStartRef = useRef<number>(-1);
 
   useEffect(() => {
     const off = window.codemap.onAgentEvent((event) => {
@@ -315,48 +280,65 @@ export function useAgentSession(onError: (message: string | null) => void) {
 
   function handleEvent(event: AgentSessionEvent) {
     if (event.type === "thinking") {
-      const feed = liveFeedRef.current;
-      if (feed.length > 0 && feed[feed.length - 1]!.kind === "reasoning") {
-        const last = feed[feed.length - 1]! as Extract<LiveFeedItem, { kind: "reasoning" }>;
-        feed[feed.length - 1] = {
-          ...last,
-          content: last.content + event.text,
-          isStreaming: true,
+      const items = itemsRef.current;
+      if (items.length > 0 && items[items.length - 1]!.kind === "reasoning") {
+        const last = items[items.length - 1]! as Extract<ConversationItem, { kind: "reasoning" }>;
+        items[items.length - 1] = {
+          kind: "reasoning",
+          reasoning: {
+            ...last.reasoning,
+            content: last.reasoning.content + event.text,
+            isStreaming: true,
+          },
         };
       } else {
-        feed.push({
+        items.push({
           kind: "reasoning",
-          id: crypto.randomUUID(),
-          content: event.text,
-          isStreaming: true,
+          reasoning: {
+            localId: crypto.randomUUID(),
+            content: event.text,
+            isStreaming: true,
+          },
         });
       }
-      setLiveFeed([...feed]);
+      setItems([...items]);
       return;
     }
     if (event.type === "token") {
       streamingRef.current += event.text;
-      // Maintain unified chronological live feed
-      let feed = liveFeedRef.current;
+      let items = itemsRef.current;
 
       // If there's an empty reasoning placeholder (model isn't reasoning),
       // remove it before adding text — the placeholder was injected on
       // status:"running" and never got filled by a thinking event.
-      if (feed.some((item) => item.kind === "reasoning" && !item.content)) {
-        feed = feed.filter((item) => !(item.kind === "reasoning" && !item.content));
-        liveFeedRef.current = feed;
+      if (items.some((item) => item.kind === "reasoning" && item.reasoning && !item.reasoning.content)) {
+        items = items.filter((item) => !(item.kind === "reasoning" && item.reasoning && !item.reasoning.content));
+        itemsRef.current = items;
       }
 
-      if (feed.length > 0 && feed[feed.length - 1]!.kind === "text") {
-        const last = feed[feed.length - 1]! as Extract<LiveFeedItem, { kind: "text" }>;
-        feed[feed.length - 1] = {
-          ...last,
-          content: last.content + event.text,
-        };
+      if (items.length > 0) {
+        const lastItem = items[items.length - 1]!;
+        if (lastItem.kind === "message" && lastItem.message.role === "assistant") {
+          items[items.length - 1] = {
+            kind: "message",
+            message: {
+              ...lastItem.message,
+              content: (lastItem.message.content ?? "") + event.text,
+            },
+          };
+        } else {
+          items.push({
+            kind: "message",
+            message: { localId: crypto.randomUUID(), role: "assistant", content: event.text },
+          });
+        }
       } else {
-        feed.push({ kind: "text", id: crypto.randomUUID(), content: event.text });
+        items.push({
+          kind: "message",
+          message: { localId: crypto.randomUUID(), role: "assistant", content: event.text },
+        });
       }
-      setLiveFeed([...feed]);
+      setItems([...items]);
       return;
     }
     if (event.type === "tool_start") {
@@ -370,10 +352,10 @@ export function useAgentSession(onError: (message: string | null) => void) {
         ...pendingToolsRef.current,
         tool,
       ];
-      // Push tool to live feed (chronological order, after any prior text/tools)
-      const feed = liveFeedRef.current;
-      feed.push({ kind: "tool", tool });
-      setLiveFeed([...feed]);
+      // Push tool to items (chronological order, after any prior text/tools)
+      const items = itemsRef.current;
+      items.push({ kind: "tool", tool });
+      setItems([...items]);
       return;
     }
     if (event.type === "tool_result") {
@@ -382,14 +364,14 @@ export function useAgentSession(onError: (message: string | null) => void) {
           ? { ...t, result: event.result, isError: event.isError }
           : t,
       );
-      // Update tool in live feed in-place (result fills into the existing tool entry)
-      const feed = liveFeedRef.current;
-      const idx = feed.findIndex(
+      // Update tool in items in-place (result fills into the existing tool entry)
+      const items = itemsRef.current;
+      const idx = items.findIndex(
         (item) => item.kind === "tool" && item.tool.toolCallId === event.toolCallId,
       );
       if (idx >= 0) {
-        const existing = feed[idx]! as Extract<LiveFeedItem, { kind: "tool" }>;
-        feed[idx] = {
+        const existing = items[idx]! as Extract<ConversationItem, { kind: "tool" }>;
+        items[idx] = {
           kind: "tool",
           tool: {
             ...existing.tool,
@@ -397,7 +379,7 @@ export function useAgentSession(onError: (message: string | null) => void) {
             isError: event.isError,
           },
         };
-        setLiveFeed([...feed]);
+        setItems([...items]);
       }
       return;
     }
@@ -408,17 +390,17 @@ export function useAgentSession(onError: (message: string | null) => void) {
           ? { ...t, result, isError: false }
           : t,
       );
-      const feed = liveFeedRef.current;
+      const items = itemsRef.current;
       // Mark ALL pending submit_plan tools as resolved, not just the first one
       let modified = false;
-      for (let i = 0; i < feed.length; i++) {
-        const item = feed[i];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         if (
           item.kind === "tool" &&
           (item.tool.toolCallId === event.planReviewId || item.tool.name === "submit_plan") &&
           item.tool.result === undefined
         ) {
-          feed[i] = {
+          items[i] = {
             kind: "tool",
             tool: {
               ...item.tool,
@@ -430,59 +412,65 @@ export function useAgentSession(onError: (message: string | null) => void) {
         }
       }
       if (modified) {
-        setLiveFeed([...feed]);
+        setItems([...items]);
       }
       return;
     }
     if (event.type === "thread_change") {
       streamingRef.current = "";
       pendingToolsRef.current = [];
-      liveFeedRef.current = [];
-      setLiveFeed([]);
+      streamingStartRef.current = -1;
+      const newItems = normalizeThreadMessages(event.messages);
+      itemsRef.current = newItems;
+      setItems(newItems);
       setLoadingMessages(false);
-      setItems(normalizeThreadMessages(event.messages));
       return;
     }
     if (event.type === "status" && event.status === "running") {
       // Inject a placeholder reasoning item so the user sees "Thinking..."
       // immediately, even before the model streams its first thinking block.
-      liveFeedRef.current.push({
+      // Mark the streaming start index if this is the first item of a new turn
+      if (streamingStartRef.current === -1) {
+        streamingStartRef.current = itemsRef.current.length;
+      }
+      itemsRef.current.push({
         kind: "reasoning",
-        id: crypto.randomUUID(),
-        content: "",
-        isStreaming: true,
+        reasoning: {
+          localId: crypto.randomUUID(),
+          content: "",
+          isStreaming: true,
+        },
       });
-      setLiveFeed([...liveFeedRef.current]);
+      setItems([...itemsRef.current]);
       return;
     }
     if (event.type === "status" && event.status === "idle") {
-      const feed = liveFeedRef.current;
+      const items = itemsRef.current;
       streamingRef.current = "";
       pendingToolsRef.current = [];
-      liveFeedRef.current = [];
-      setLiveFeed([]);
+      streamingStartRef.current = -1;
 
-      const finishedItems = liveFeedToConversationItems(
-        feed.map((item) =>
-          item.kind === "reasoning" ? { ...item, isStreaming: false } : item,
-        ),
-      );
-      if (finishedItems.length > 0) {
-        setItems((current) => [...current, ...finishedItems]);
+      // Mark all reasoning items as non-streaming
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "reasoning") {
+          items[i] = {
+            kind: "reasoning",
+            reasoning: {
+              ...item.reasoning,
+              isStreaming: false,
+            },
+          };
+        }
       }
+      setItems([...items]);
 
-      setSnapshot((current) => ({ ...current, streamingText: "", tools: [] }));
+      setSnapshot((current) => ({ ...current, streamingText: "" }));
     }
     if (event.type === "error") onError(event.message);
   }
 
-  const displayItems = useMemo(
-    () => [
-      ...items,
-      ...liveFeedToConversationItems(liveFeed),
-    ],
-    [items, liveFeed],
-  );
+  const displayItems = useMemo(() => items, [items]);
 
   const switchThread = useCallback(
     async (threadId: string) => {
@@ -492,8 +480,7 @@ export function useAgentSession(onError: (message: string | null) => void) {
       setLoadingMessages(true);
       streamingRef.current = "";
       pendingToolsRef.current = [];
-      liveFeedRef.current = [];
-      setLiveFeed([]);
+      streamingStartRef.current = -1;
       try {
         await window.codemap.switchThread(threadId);
         // Clear any previous error when switch succeeds
@@ -514,8 +501,8 @@ export function useAgentSession(onError: (message: string | null) => void) {
   function resetSession() {
     streamingRef.current = "";
     pendingToolsRef.current = [];
-    liveFeedRef.current = [];
-    setLiveFeed([]);
+    streamingStartRef.current = -1;
+    itemsRef.current = [];
     setItems([]);
     setSnapshot(createInitialSessionSnapshot());
   }
@@ -538,15 +525,29 @@ export function useAgentSession(onError: (message: string | null) => void) {
   function resetSnapshotForSubmit() {
     streamingRef.current = "";
     pendingToolsRef.current = [];
-    liveFeedRef.current = [];
-    setLiveFeed([]);
+    streamingStartRef.current = -1;
+    // Note: items are preserved — aborted turns stay visible in the conversation,
+    // and only streaming state is reset for the next submission.
     setSnapshot((current) => ({
       ...current,
       streamingText: "",
       thinkingText: "",
-      tools: [],
       error: null,
     }));
+  }
+
+  function appendSystemMessage(content: string) {
+    setItems((current) => [
+      ...current,
+      {
+        kind: "message",
+        message: {
+          localId: crypto.randomUUID(),
+          role: "assistant",
+          content,
+        },
+      },
+    ]);
   }
 
   return {
@@ -557,6 +558,7 @@ export function useAgentSession(onError: (message: string | null) => void) {
     switchThread,
     resetSession,
     appendUserMessage,
+    appendSystemMessage,
     resetSnapshotForSubmit,
   };
 }

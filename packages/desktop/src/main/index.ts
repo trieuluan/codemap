@@ -19,6 +19,24 @@ import { WorkspaceRuntime } from "./workspace-runtime.js";
 
 const runtimes = new Map<number, WorkspaceRuntime>();
 const execFileAsync = promisify(execFile);
+
+const EXT_LANGUAGE: Record<string, string> = {
+  ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
+  mjs: "javascript", cjs: "javascript", mts: "typescript", cts: "typescript",
+  json: "json", json5: "json",
+  css: "css", scss: "scss", sass: "sass", less: "less",
+  html: "html", htm: "html", xml: "xml", svg: "xml",
+  md: "markdown", mdx: "markdown",
+  py: "python", rb: "ruby", go: "go", rs: "rust", java: "java",
+  kt: "kotlin", swift: "swift", c: "c", cpp: "cpp", cs: "csharp",
+  sh: "shell", bash: "shell", zsh: "shell", fish: "shell",
+  yaml: "yaml", yml: "yaml", toml: "toml", ini: "ini", env: "shell",
+  sql: "sql", graphql: "graphql", gql: "graphql",
+};
+
+function extToLanguage(ext: string): string {
+  return EXT_LANGUAGE[ext] ?? "plaintext";
+}
 const DIFF_EXCLUDES = [
   ".",
   ":(exclude)package-lock.json",
@@ -186,6 +204,13 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
     return command.workspacePath;
   }
 
+  if (command.type === "open_url") {
+    if (command.url.startsWith("https://") || command.url.startsWith("http://")) {
+      void shell.openExternal(command.url);
+    }
+    return undefined;
+  }
+
   const runtime = runtimes.get(window.id);
   if (!runtime) throw new Error("Open a workspace before starting the agent");
 
@@ -229,6 +254,43 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
         },
       );
     });
+  }
+  if (command.type === "get_mcp_status") {
+    return runtime.getMcpStatus();
+  }
+  if (command.type === "run_slash_command") {
+    return runtime.runSlashCommand(command.name, command.args);
+  }
+  if (command.type === "get_account_info") {
+    return runtime.getAccountInfo();
+  }
+  if (command.type === "account_login") {
+    return runtime.accountLogin();
+  }
+  if (command.type === "account_logout") {
+    return runtime.accountLogout();
+  }
+  if (command.type === "list_projects") {
+    return runtime.listProjects();
+  }
+  if (command.type === "link_project") {
+    return runtime.linkProject(command.projectId);
+  }
+  if (command.type === "read_file_preview") {
+    const absPath = command.filePath.startsWith("/")
+      ? command.filePath
+      : join(runtime.workspacePath, command.filePath);
+    try {
+      const raw = await readFile(absPath, "utf8");
+      const allLines = raw.split("\n");
+      const MAX_LINES = 60;
+      const truncated = allLines.length > MAX_LINES;
+      const content = truncated ? allLines.slice(0, MAX_LINES).join("\n") : raw;
+      const ext = absPath.split(".").pop()?.toLowerCase() ?? "";
+      return { content, language: extToLanguage(ext), lines: allLines.length, truncated };
+    } catch {
+      return null;
+    }
   }
   await runtime.restart();
 });

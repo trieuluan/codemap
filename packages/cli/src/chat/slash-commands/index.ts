@@ -1,8 +1,11 @@
-import { helpCommand } from "./help.js";
+import { executeSharedCommand } from "./shared-bridge.js";
+import {
+  helpCommand as sharedHelp,
+  statusCommand as sharedStatus,
+  modelsCommand as sharedModels,
+} from "@codemap-ai/shared";
 import { clearCommand } from "./clear.js";
 import { exitCommand } from "./exit.js";
-import { statusCommand } from "./status.js";
-import { modelsCommand } from "./models.js";
 import { toolsCommand } from "./tools.js";
 import { diffCommand } from "./diff.js";
 import { historyCommand } from "./history.js";
@@ -24,16 +27,27 @@ import { configCommand } from "./config.js";
 import { memoryCommand } from "./memory.js";
 import type { CommandContext, Command } from "./types.js";
 
+/** Wrap a shared command as a CLI Command. */
+function wrapShared(name: string, description: string, shared: typeof sharedHelp): Command {
+  return {
+    name,
+    description,
+    execute: async (args, ctx) => {
+      await executeSharedCommand(shared, args, ctx);
+    },
+  };
+}
+
 const commands: Command[] = [
-  helpCommand,
-  statusCommand,
+  wrapShared("help", "Show this help", sharedHelp),
+  wrapShared("status", "Show model, session, and workspace status", sharedStatus),
+  wrapShared("models", "Switch the active model", sharedModels),
   loginCommand,
   logoutCommand,
   projectsCommand,
   linkCommand,
   createCommand,
   importCommand,
-  modelsCommand,
   toolsCommand,
   diffCommand,
   gitCommitCommand,

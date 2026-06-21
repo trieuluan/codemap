@@ -10,5 +10,8 @@
     "jsxImportSource": "react",
     "skipLibCheck": true
   },
+  "references": [
+    { "path": "../shared" }
+  ],
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

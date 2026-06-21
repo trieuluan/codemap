@@ -10,6 +10,68 @@ import {
 } from "./ai-elements/tool.js";
 import type { TaskItemData } from "./ai-elements/task.js";
 import { MonacoDiffViewer, type MonacoDiffFile, languageFromPath } from "./MonacoDiffViewer.js";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "./ui/hover-card.js";
+
+const FILE_PREVIEW_MAX_LINES = 60;
+
+function FileHoverPreview({ filePath }: { filePath: string }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [language, setLanguage] = useState("plaintext");
+  const [lines, setLines] = useState(0);
+  const [truncated, setTruncated] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  function handleOpen(open: boolean) {
+    if (!open || loaded) return;
+    void window.codemap.readFilePreview(filePath).then((result) => {
+      setLoaded(true);
+      if (!result) return;
+      setContent(result.content);
+      setLanguage(result.language);
+      setLines(result.lines);
+      setTruncated(result.truncated);
+    });
+  }
+
+  return (
+    <HoverCard openDelay={400} closeDelay={100} onOpenChange={handleOpen}>
+      <HoverCardTrigger asChild>
+        <span className="file-preview-trigger">{filePath}</span>
+      </HoverCardTrigger>
+      <HoverCardContent
+        align="start"
+        side="bottom"
+        className="file-preview-card w-[520px] max-w-[80vw] p-0"
+      >
+        <div className="file-preview-header">
+          <span className="file-preview-path">{filePath}</span>
+          {loaded && content && (
+            <span className="file-preview-meta">
+              {truncated ? `${FILE_PREVIEW_MAX_LINES} / ${lines} lines` : `${lines} lines`}
+            </span>
+          )}
+        </div>
+        <div className="file-preview-body">
+          {!loaded && (
+            <div className="file-preview-loading">
+              <Loader2 size={14} className="animate-spin" />
+            </div>
+          )}
+          {loaded && !content && (
+            <div className="file-preview-empty">File not found</div>
+          )}
+          {loaded && content && (
+            <CodeBlock language={language} code={content} />
+          )}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
 
 interface ToolExecutionProps {
   toolCallId: string;
@@ -232,7 +294,6 @@ export function ToolExecution({
         : ("input-streaming" as const);
 
   const title = friendlyTitle(name);
-  const titleWithPreview = preview ? `${title} · ${preview}` : title;
   const diffText = isEditTool(name) ? extractDiffText(result) : null;
   const rawOutputText = truncateResult(result);
   const outputText = diffText && rawOutputText?.includes(diffText) ? null : rawOutputText;
@@ -243,10 +304,24 @@ export function ToolExecution({
   const taskCompleteText = /task_complete/.test(localName(name)) ? describeTaskComplete(toolArgs) : null;
   const previewData = generateArgsPreview(name, toolArgs, workspaceRoot);
 
+  // Build title node — if there's a file path preview, wrap it in a hover card
+  const filePreviewPath = previewData?.filePath ?? null;
+  const titleNode = preview ? (
+    <span className="tool-title-with-preview">
+      {title}
+      <span className="tool-title-sep"> · </span>
+      {filePreviewPath ? (
+        <FileHoverPreview filePath={filePreviewPath} />
+      ) : (
+        <span className="tool-title-preview">{preview}</span>
+      )}
+    </span>
+  ) : title;
+
   return (
     <Tool>
       <ToolHeader
-        title={titleWithPreview}
+        title={titleNode}
         type={`tool-${name}`}
         state={state}
       />

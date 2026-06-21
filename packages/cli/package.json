@@ -31,6 +31,7 @@
     "@codemap-ai/core": "workspace:*",
     "@codemap-ai/mcp": "workspace:*",
     "@codemap-ai/runtime-node": "workspace:*",
+    "@codemap-ai/shared": "workspace:*",
     "@earendil-works/pi-tui": "^0.74.0",
     "cfonts": "^3.3.1",
     "diff": "^8.0.4",
