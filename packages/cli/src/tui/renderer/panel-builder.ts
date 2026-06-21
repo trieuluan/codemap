@@ -1,5 +1,5 @@
 import type { Editor } from "@earendil-works/pi-tui";
-import type { UIState, TaskListItem } from "../../chat/state/types.js";
+import type { UIState, TaskItemSnapshot } from "../../chat/state/types.js";
 import type { PlanReviewAction } from "@codemap-ai/runtime-node";
 import { formatElapsed, formatTokenCount, truncate } from "./ink-utils.js";
 import { getCommandList } from "../../chat/slash-commands/index.js";
@@ -73,7 +73,7 @@ export function buildStatusBar(
     : "";
   const right = statusMessage
     ? `${C_WARNING}${statusMessage}${RESET}`
-    : state.planMode
+    : state.mode === "plan"
       ? `${C_AI}◈ PLAN MODE${RESET}${C_MUTED} · /plan to exit${RESET}`
       : debugMode
         ? `${C_ERROR}⏺ DEBUG${RESET}${C_MUTED} · /debug to stop${RESET}`
@@ -104,7 +104,7 @@ export function buildStatusBar(
   return fitLine(clippedLeft + " ".repeat(paddingWidth) + reimportHint, w);
 }
 
-function formatTaskStatusIcon(status: TaskListItem["status"]): string {
+function formatTaskStatusIcon(status: TaskItemSnapshot["status"]): string {
   switch (status) {
     case "completed":
       return `${C_SUCCESS}✓${RESET}`;
@@ -329,7 +329,7 @@ function renderPlanReviewOption(opt: PlanReviewOption, idx: number, selected: bo
   return fitLine(`    ${prefix} ${num} ${label}  ${C_GRAY}${opt.desc}${RESET}`, w);
 }
 
-function renderTaskList(tasks: TaskListItem[], w: number): string[] {
+function renderTaskList(tasks: TaskItemSnapshot[], w: number): string[] {
   const lines: string[] = [];
   const completed = tasks.filter((t) => t.status === "completed").length;
   const total = tasks.length;

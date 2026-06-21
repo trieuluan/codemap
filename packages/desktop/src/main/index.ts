@@ -258,6 +258,9 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
   if (command.type === "get_mcp_status") {
     return runtime.getMcpStatus();
   }
+  if (command.type === "get_tools_list") {
+    return runtime.getToolsList();
+  }
   if (command.type === "run_slash_command") {
     return runtime.runSlashCommand(command.name, command.args);
   }

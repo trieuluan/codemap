@@ -7,20 +7,28 @@ import {
   RefreshCw,
   User,
   Waypoints,
+  Zap,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import type { RuntimeStatus } from "../types.js";
 import type { RecentWorkspace } from "./Launcher.js";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher.js";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "./ui/dropdown-menu.js";
 
 interface TopbarProps {
   runtimeStatus: RuntimeStatus;
   workspace: string;
   recents: RecentWorkspace[];
   inspectorOpen: boolean;
-  mode: "plan" | "build";
+  mode: "build" | "plan" | "fast";
+  onModeChange: (mode: "build" | "plan" | "fast") => void;
   onToggleSidebar: () => void;
-  onModeChange: (mode: "plan" | "build") => void;
   onToggleInspector: () => void;
   onRestart: () => void;
   onSwitchWorkspace: (path: string) => void;
@@ -34,8 +42,8 @@ export function Topbar({
   recents,
   inspectorOpen,
   mode,
-  onToggleSidebar,
   onModeChange,
+  onToggleSidebar,
   onToggleInspector,
   onRestart,
   onSwitchWorkspace,
@@ -99,27 +107,39 @@ export function Topbar({
                 Map
               </button>
             </div>
-            <div
-              className={segmentedControlClass}
-              title="Plan = read-only · Build = full tool access"
-            >
-              <button
-                className={segmentedButtonClass(mode === "plan")}
-                onClick={() => onModeChange("plan")}
-                type="button"
-              >
-                <Map size={13} />
-                Plan
-              </button>
-              <button
-                className={segmentedButtonClass(mode === "build")}
-                onClick={() => onModeChange("build")}
-                type="button"
-              >
-                <Hammer size={13} />
-                Build
-              </button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-[7px] text-[11px] text-[var(--muted)] hover:bg-[var(--hover)]"
+                  title={`Mode: ${mode.charAt(0).toUpperCase() + mode.slice(1)} — click to switch`}
+                  type="button"
+                >
+                  {mode === "build" && <Hammer size={12} />}
+                  {mode === "plan" && <Map size={12} />}
+                  {mode === "fast" && <Zap size={12} />}
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={4}>
+                <DropdownMenuRadioGroup
+                  value={mode}
+                  onValueChange={(v) => onModeChange(v as "build" | "plan" | "fast")}
+                >
+                  <DropdownMenuRadioItem value="build">
+                    <Hammer size={13} className="mr-1.5 opacity-70" />
+                    Build
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="plan">
+                    <Map size={13} className="mr-1.5 opacity-70" />
+                    Plan
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="fast">
+                    <Zap size={13} className="mr-1.5 opacity-70" />
+                    Fast
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
       </div>

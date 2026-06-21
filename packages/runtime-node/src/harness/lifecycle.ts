@@ -286,18 +286,21 @@ export async function syncHarnessModeForRun(
     MastraHarness,
     "getCurrentModelId" | "getState" | "setState" | "switchMode"
   >,
-  planMode: boolean | undefined,
   callbacks: {
     onModel?: (model: string) => void;
     onPhaseStart?: SingleAgentRuntimeInput["onPhaseStart"];
+    mode?: "build" | "plan" | "fast";
   } = {},
 ): Promise<string | undefined> {
-  const modeId = planMode ? "plan" : "build";
+  const modeId: "build" | "plan" | "fast" = callbacks.mode ?? "build";
   await harness.switchMode?.({ modeId });
-  await syncSubmitPlanPermissionForMode(harness, modeId);
+  if (modeId !== "fast") {
+    await syncSubmitPlanPermissionForMode(harness, modeId);
+  }
   const modelId = harness.getCurrentModelId?.();
   if (modelId) callbacks.onModel?.(modelId);
-  callbacks.onPhaseStart?.(planMode ? "planning" : "executing", modelId ?? "");
+  const phase: "planning" | "executing" = modeId === "plan" ? "planning" : "executing";
+  callbacks.onPhaseStart?.(phase, modelId ?? "");
   return modelId;
 }
 
@@ -352,9 +355,10 @@ export async function runWithMastraHarness(
   await ensureMastraThread();
   startDrainTracking(harness);
 
-  const modelId = await syncHarnessModeForRun(harness, input.planMode, {
+  const modelId = await syncHarnessModeForRun(harness, {
     onModel: input.onModel,
     onPhaseStart: input.onPhaseStart,
+    mode: input.mode,
   });
   input.onDebug?.({
     event: "mastra_model_resolved",

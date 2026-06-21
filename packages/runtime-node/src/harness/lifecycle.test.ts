@@ -32,7 +32,8 @@ test("syncHarnessModeForRun switches to plan mode and reports planning phase", a
     getCurrentModelId: () => "plan-model",
   };
 
-  const model = await syncHarnessModeForRun(harness as any, true, {
+  const model = await syncHarnessModeForRun(harness as any, {
+    mode: "plan",
     onModel: (value) => models.push(value),
     onPhaseStart: (phase, value) => phases.push({ phase, model: value }),
   });
@@ -73,8 +74,9 @@ test("syncHarnessModeForRun switches to build mode by default and reports execut
     getCurrentModelId: () => "build-model",
   };
 
-  const model = await syncHarnessModeForRun(harness as any, false, {
-    onPhaseStart: (phase, value) => phases.push({ phase, model: value }),
+  const model = await syncHarnessModeForRun(harness as any, {
+    mode: "build",
+    onPhaseStart: (phase: string, value: string) => phases.push({ phase, model: value }),
   });
 
   assert.equal(model, "build-model");

@@ -98,7 +98,8 @@ export interface SendMessageInput {
   requestId: string;
   content: string;
   model?: string;
-  planMode?: boolean;
+  /** Tri-state mode: "build" (default), "plan" (read-only), "fast" (speed). */
+  mode?: "build" | "plan" | "fast";
   images?: Array<{ data: string; mimeType: string; filename?: string }>;
 }
 

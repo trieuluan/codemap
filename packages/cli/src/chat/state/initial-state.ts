@@ -54,7 +54,7 @@ export function createInitialState(opts: {
       assumptions: [],
     },
     synthRunning: false,
-    planMode: false,
+    mode: "build",
     planReview: { active: false, selection: 0, reviseMode: false },
     planContent: null,
     askQuestion: null,

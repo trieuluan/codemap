@@ -79,6 +79,12 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("get_tools_list"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("read_file_preview"),
       requestId: requestIdSchema,
       filePath: z.string().min(1),
@@ -155,6 +161,12 @@ export const utilityCommandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("get_mcp_status"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_tools_list"),
       requestId: requestIdSchema,
     })
     .strict(),
@@ -333,6 +345,16 @@ export interface McpStatusResult {
   skipped: McpSkippedServer[];
 }
 
+export interface ToolInfo {
+  name: string;
+  description?: string;
+}
+
+export interface ToolsListResult {
+  tools: ToolInfo[];
+  groupedByServer: Record<string, ToolInfo[]>;
+}
+
 export interface SlashCommandResult {
   output: string;
   action?: "clear" | "plan" | "build" | "mcp";
@@ -379,7 +401,7 @@ export interface DesktopApi {
   openWorkspacePath(workspacePath: string): Promise<string>;
   send(content: string, options?: {
     model?: string;
-    planMode?: boolean;
+    mode?: "build" | "plan" | "fast";
     images?: Array<{ data: string; mimeType: string; filename?: string }>;
   }): Promise<void>;
   abort(): Promise<void>;
@@ -406,6 +428,7 @@ export interface DesktopApi {
   getWorkingDiffFiles(): Promise<WorkingDiffFile[]>;
   getBranchName(): Promise<string>;
   getMcpStatus(): Promise<McpStatusResult | null>;
+  getToolsList(): Promise<ToolsListResult | null>;
   readFilePreview(filePath: string): Promise<ReadFilePreviewResult | null>;
   runSlashCommand(name: string, args: string): Promise<SlashCommandResult>;
   getAccountInfo(): Promise<AccountInfo | null>;

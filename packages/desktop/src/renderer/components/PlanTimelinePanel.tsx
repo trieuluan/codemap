@@ -24,7 +24,7 @@ import { MessageResponse } from "./ai-elements/message.js";
 import { Shimmer } from "./ai-elements/shimmer.js";
 
 interface PlanTimelinePanelProps {
-  mode: "plan" | "build";
+  mode: "build" | "plan" | "fast";
   onRespondToPlanReview: (
     planReviewId: string,
     action: "apply" | "reject" | "revise",

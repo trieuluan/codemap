@@ -119,6 +119,9 @@ async function handleCommand(command: UtilityCommand): Promise<unknown> {
   if (command.type === "get_mcp_status") {
     return getMastraMcpStatusSummary();
   }
+  if (command.type === "get_tools_list") {
+    return getToolsList();
+  }
   if (command.type === "run_slash_command") {
     return runSlashCommandInUtility(command.name, command.args);
   }
@@ -372,6 +375,30 @@ async function linkProject(projectId: string): Promise<LinkProjectResult> {
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function getToolsList() {
+  if (!toolClient) {
+    return { tools: [], groupedByServer: {} };
+  }
+  try {
+    const rawTools = await toolClient.listAllowedTools();
+    const tools = rawTools.map((t) => ({
+      name: t.name,
+      description: (t as { description?: string }).description ?? "",
+    }));
+    // Group by server prefix (e.g. "codemap_explore_task" → "codemap")
+    const groupedByServer: Record<string, typeof tools> = {};
+    for (const tool of tools) {
+      const underscoreIdx = tool.name.indexOf("_");
+      const server = underscoreIdx > 0 ? tool.name.slice(0, underscoreIdx) : "other";
+      if (!groupedByServer[server]) groupedByServer[server] = [];
+      groupedByServer[server].push(tool);
+    }
+    return { tools, groupedByServer };
+  } catch {
+    return { tools: [], groupedByServer: {} };
   }
 }
 

@@ -99,6 +99,13 @@ export class WorkspaceRuntime {
     });
   }
 
+  getToolsList(): Promise<unknown> {
+    return this.request({
+      type: "get_tools_list",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
   runSlashCommand(name: string, args: string): Promise<unknown> {
     return this.request({
       type: "run_slash_command",

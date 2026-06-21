@@ -23,6 +23,7 @@ import type {
   AccountInfo,
   SettingsMetadata,
   McpStatusResult,
+  ToolsListResult,
 } from "../../shared/ipc.js";
 
 type AccountSection = "identity" | "projects" | "mcp" | "memory" | "settings";
@@ -53,6 +54,7 @@ export function AccountPage() {
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [projects, setProjects] = useState<{ id: string; name: string; repoUrl?: string }[]>([]);
   const [mcpStatus, setMcpStatus] = useState<McpStatusResult | null>(null);
+  const [toolsList, setToolsList] = useState<ToolsListResult | null>(null);
   const [settings, setSettings] = useState<SettingsMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -62,15 +64,17 @@ export function AccountPage() {
     setLoading(true);
     setError(null);
     try {
-      const [info, proj, mcp, cfg] = await Promise.all([
+      const [info, proj, mcp, tools, cfg] = await Promise.all([
         window.codemap.getAccountInfo().catch(() => null),
         window.codemap.listProjects().catch(() => null),
         window.codemap.getMcpStatus().catch(() => null),
+        window.codemap.getToolsList().catch(() => null),
         window.codemap.readSettings().catch(() => null),
       ]);
       setAccountInfo(info);
       setProjects(proj?.projects ?? []);
       setMcpStatus(mcp);
+      setToolsList(tools);
       setSettings(cfg);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -197,7 +201,7 @@ export function AccountPage() {
                 onLink={() => void handleLinkProject()}
               />
             )}
-            {activeSection === "mcp" && <McpSection mcp={mcpStatus} onRefresh={() => void loadAll()} />}
+            {activeSection === "mcp" && <McpSection mcp={mcpStatus} tools={toolsList} onRefresh={() => void loadAll()} />}
             {activeSection === "memory" && <MemorySection />}
             {activeSection === "settings" && <SettingsSection settings={settings} onSaved={() => void loadAll()} />}
           </>
@@ -318,7 +322,21 @@ function ProjectsSection({
 }
 
 /* ─── Section: MCP ─── */
-function McpSection({ mcp, onRefresh }: { mcp: McpStatusResult | null; onRefresh: () => void }) {
+function McpSection({
+  mcp,
+  tools,
+  onRefresh,
+}: {
+  mcp: McpStatusResult | null;
+  tools: ToolsListResult | null;
+  onRefresh: () => void;
+}) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  function toggleServer(name: string) {
+    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
+
   return (
     <div className="account-section">
       <div className="account-section-toprow">
@@ -338,27 +356,63 @@ function McpSection({ mcp, onRefresh }: { mcp: McpStatusResult | null; onRefresh
         </div>
       ) : (
         <ul className="account-list">
-          {mcp.statuses.map((s) => (
-            <li key={s.name} className="account-list-item">
-              {s.connected ? (
-                <CheckCircle size={15} className="text-success" />
-              ) : s.connecting ? (
-                <Loader size={15} className="spin muted" />
-              ) : (
-                <XCircle size={15} className="text-error" />
-              )}
-              <div className="account-list-item-info">
-                <span className="account-list-item-name">{s.name}</span>
-                <span className="account-list-item-sub">
-                  {s.transport} · {s.toolCount} tool{s.toolCount !== 1 ? "s" : ""}
-                  {s.error ? ` · ${s.error}` : ""}
-                </span>
-              </div>
-              <span className={`account-badge ${s.connected ? "badge-ok" : "badge-err"}`}>
-                {s.connected ? "Connected" : s.connecting ? "Connecting" : "Disconnected"}
-              </span>
-            </li>
-          ))}
+          {mcp.statuses.map((s) => {
+            const serverTools = tools?.groupedByServer[s.name] ?? [];
+            const isExpanded = expanded[s.name] ?? false;
+            return (
+              <li key={s.name} className="account-list-item account-server-row">
+                <div className="account-server-header">
+                  {s.connected ? (
+                    <CheckCircle size={15} className="text-success" />
+                  ) : s.connecting ? (
+                    <Loader size={15} className="spin muted" />
+                  ) : (
+                    <XCircle size={15} className="text-error" />
+                  )}
+                  <div className="account-list-item-info">
+                    <span className="account-list-item-name">{s.name}</span>
+                    <span className="account-list-item-sub">
+                      {s.transport} · {s.toolCount} tool{s.toolCount !== 1 ? "s" : ""}
+                      {s.error ? ` · ${s.error}` : ""}
+                    </span>
+                  </div>
+                  <span className={`account-badge ${s.connected ? "badge-ok" : "badge-err"}`}>
+                    {s.connected ? "Connected" : s.connecting ? "Connecting" : "Disconnected"}
+                  </span>
+                  {s.connected && serverTools.length > 0 && (
+                    <button
+                      className="account-server-tools-toggle"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleServer(s.name);
+                      }}
+                      type="button"
+                      title={isExpanded ? "Hide tools" : "Show tools"}
+                    >
+                      <ChevronRight
+                        size={13}
+                        style={{ transform: isExpanded ? "rotate(90deg)" : undefined, transition: "transform 0.15s" }}
+                      />
+                    </button>
+                  )}
+                </div>
+                {s.connected && isExpanded && (
+                  <div className="account-server-tools">
+                    {serverTools.length === 0 ? (
+                      <span className="account-tool-empty">No tools loaded</span>
+                    ) : (
+                      serverTools.map((t) => (
+                        <div key={t.name} className="account-tool-item">
+                          <span className="account-tool-name">{t.name}</span>
+                          {t.description && <span className="account-tool-desc">{t.description}</span>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
           {mcp.skipped.length > 0 && (
             <>
               <li className="account-list-divider">Skipped</li>

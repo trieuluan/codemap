@@ -63,8 +63,8 @@ export interface SingleAgentRuntimeInput {
   onAskQuestion?: (questionId: string, question: string, options: AskQuestionOption[] | undefined, respond: (answer: HarnessQuestionAnswer) => void, selectionMode?: HarnessQuestionSelectionMode) => void;
   onToolApproval?: (pendingApproval: NonNullable<HarnessDisplayState["pendingApproval"]>, respond: (decision: "approve" | "decline" | "always_allow_category") => void) => void;
   onPhaseStart?: (phase: AgentPhase, model: string) => void;
-  /** When true, switch harness to "plan" mode before sending. */
-  planMode?: boolean;
+  /** Tri-state mode: "build" (default), "plan" (read-only), "fast" (speed). */
+  mode?: "build" | "plan" | "fast";
   signal?: AbortSignal;
   imageFiles?: Array<{ data: string; mimeType: string; filename?: string }>;
   /** Injectable host-specific dependencies for the harness lifecycle. */

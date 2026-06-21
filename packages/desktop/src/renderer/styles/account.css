@@ -328,6 +328,76 @@
   color: var(--destructive, #ef4444);
 }
 
+/* ── Server tools ── */
+.account-server-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.account-server-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.account-server-tools-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.account-server-tools-toggle:hover {
+  background: var(--accent-bg, rgba(255, 255, 255, 0.06));
+  color: var(--fg, #e4e4e7);
+}
+
+.account-server-tools {
+  padding: 6px 0 2px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-tool-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.account-tool-name {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 12px;
+  color: var(--fg, #e4e4e7);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.account-tool-desc {
+  font-size: 12px;
+  color: var(--muted, #71717a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.account-tool-empty {
+  font-size: 12px;
+  color: var(--muted, #71717a);
+  font-style: italic;
+}
+
 /* ── Empty state ── */
 .account-empty-state {
   display: flex;

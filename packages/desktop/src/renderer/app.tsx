@@ -20,7 +20,7 @@ export function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [mode, setMode] = useState<"plan" | "build">("build");
+  const [mode, setMode] = useState<"build" | "plan" | "fast">("build");
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("disconnected");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
@@ -147,7 +147,7 @@ export function App() {
     try {
       await window.codemap.send(content, {
         model: settings?.defaultModel,
-        planMode: mode === "plan",
+        mode: mode,
         images: images.length > 0 ? images : undefined,
       });
       await refreshMetadata();
@@ -213,14 +213,6 @@ export function App() {
       }
       if (name === "mcp") {
         await openMcpPanel();
-        return;
-      }
-      if (name === "plan") {
-        setMode("plan");
-        return;
-      }
-      if (name === "build") {
-        setMode("build");
         return;
       }
       if (name === "diff") {
@@ -306,9 +298,8 @@ export function App() {
           recents={recents}
           inspectorOpen={inspectorOpen}
           mode={mode}
-
-          onToggleSidebar={toggleSidebar}
           onModeChange={setMode}
+          onToggleSidebar={toggleSidebar}
           onToggleInspector={toggleInspector}
           onRestart={() => window.codemap.restartRuntime()}
           onSwitchWorkspace={(path) => void openWorkspace(path)}

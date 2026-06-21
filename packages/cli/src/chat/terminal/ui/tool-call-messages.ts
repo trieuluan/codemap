@@ -1,4 +1,4 @@
-import type { Message, TaskListItem, ToolResult } from "../../state/types.js";
+import type { Message, TaskItemSnapshot, ToolResult } from "../../state/types.js";
 import type { Store } from "../../state/store-class.js";
 import { C_SUCCESS, C_ERROR, C_MUTED, RESET } from "../../../tui/theme.js";
 
@@ -319,7 +319,7 @@ export function syncTaskListFromTool(
 
 function extractTasksFromResult(
   result: Record<string, unknown> | null,
-): TaskListItem[] | null {
+): TaskItemSnapshot[] | null {
   if (!result) return null;
 
   // Try structuredContent.data.tasks first (nested MCP result)
@@ -335,7 +335,7 @@ function extractTasksFromResult(
       const tasks = (data as Record<string, unknown>).tasks;
       if (Array.isArray(tasks)) {
         const filtered = tasks.filter(
-          (t): t is TaskListItem =>
+          (t): t is TaskItemSnapshot =>
             typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
         );
         if (filtered.length > 0) return filtered;
@@ -347,7 +347,7 @@ function extractTasksFromResult(
   const topLevelTasks = result.tasks;
   if (Array.isArray(topLevelTasks)) {
     const filtered = topLevelTasks.filter(
-      (t): t is TaskListItem =>
+      (t): t is TaskItemSnapshot =>
         typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).id === "string",
     );
     if (filtered.length > 0) return filtered;
@@ -359,7 +359,7 @@ function extractTasksFromResult(
 function handleTaskWrite(
   store: Store,
   args: Record<string, unknown>,
-  resultTasks: TaskListItem[] | null,
+  resultTasks: TaskItemSnapshot[] | null,
 ): void {
   const inputTasks = extractInputTasks(args);
   if (!inputTasks && !resultTasks) return;
@@ -377,14 +377,14 @@ function handleTaskWrite(
     // Build new list from incoming tasks only (replace, not merge).
     // Preserve status/activeForm from existing tasks with same ID.
     const source = resultTasks ?? inputTasks ?? [];
-    const next: TaskListItem[] = [];
+    const next: TaskItemSnapshot[] = [];
     for (const t of source) {
       if (!t.id) continue;
       const prev = prevById.get(t.id);
       next.push({
         id: t.id,
         content: t.content ?? prev?.content ?? "",
-        status: (t.status ?? prev?.status ?? "pending") as TaskListItem["status"],
+        status: (t.status ?? prev?.status ?? "pending") as TaskItemSnapshot["status"],
         activeForm: t.activeForm ?? prev?.activeForm ?? "",
       });
     }
@@ -396,7 +396,7 @@ function handleTaskWrite(
 function handleTaskUpdate(
   store: Store,
   args: Record<string, unknown>,
-  resultTasks: TaskListItem[] | null,
+  resultTasks: TaskItemSnapshot[] | null,
 ): void {
   // If tool result returns full task list, use it as authoritative source
   if (resultTasks && resultTasks.length > 0) {
@@ -417,7 +417,7 @@ function handleTaskUpdate(
         ? {
             ...t,
             ...(content !== undefined && { content }),
-            ...(status !== undefined && { status: status as TaskListItem["status"] }),
+            ...(status !== undefined && { status: status as TaskItemSnapshot["status"] }),
             ...(activeForm !== undefined && { activeForm }),
           }
         : t,
@@ -428,7 +428,7 @@ function handleTaskUpdate(
 function handleTaskComplete(
   store: Store,
   args: Record<string, unknown>,
-  resultTasks: TaskListItem[] | null,
+  resultTasks: TaskItemSnapshot[] | null,
 ): void {
   // If tool result returns full task list, use it as authoritative source
   if (resultTasks && resultTasks.length > 0) {
@@ -448,7 +448,7 @@ function handleTaskComplete(
 
 function handleTaskCheck(
   store: Store,
-  resultTasks: TaskListItem[] | null,
+  resultTasks: TaskItemSnapshot[] | null,
 ): void {
   if (!resultTasks) return;
   store.dispatch({ taskList: resultTasks });

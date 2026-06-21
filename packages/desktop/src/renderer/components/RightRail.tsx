@@ -17,7 +17,7 @@ function modelContextLimit(modelId: string): number {
 }
 
 interface RightRailProps {
-  mode: "plan" | "build";
+  mode: "build" | "plan" | "fast";
   onTabChange: (tab: InspectorTab) => void;
   onStartResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onRespondToPlanReview: (

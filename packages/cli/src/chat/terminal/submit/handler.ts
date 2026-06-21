@@ -100,12 +100,12 @@ export async function handleSubmitWithContent(
       },
       toolClient: ctx.options.toolClient,
       signal: taskAbort.signal,
-      planMode: store.getState().planMode || undefined,
+      mode: store.getState().mode,
       onPhaseStart: (phase: string, model: string) => {
         if (!ctx.isActiveTask(taskId, taskAbort)) return;
         runtimeCallbacks.resetStreaming();
-        if (phase === "executing" && store.getState().planMode) {
-          store.dispatch({ planMode: false });
+        if (phase === "executing" && store.getState().mode === "plan") {
+          store.dispatch({ mode: "build" });
         }
         store.dispatch({
           task: {

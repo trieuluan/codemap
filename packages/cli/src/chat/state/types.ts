@@ -1,9 +1,7 @@
 import type { TaskPhase, TokenUsage } from "@codemap-ai/core/agent";
 import type { GatewayModel } from "@codemap-ai/core/agent";
 import type { TaskItemSnapshot, HarnessDisplayState } from "@codemap-ai/runtime-node";
-
-/** @deprecated Use TaskItemSnapshot from @mastra/core/harness directly */
-export type TaskListItem = TaskItemSnapshot;
+export type { TaskItemSnapshot };
 
 export interface ToolResult {
   name: string;
@@ -88,7 +86,7 @@ export interface ChatContextState {
 export interface UIState {
   screen: Screen;
   messages: Message[];
-  taskList: TaskListItem[];
+  taskList: TaskItemSnapshot[];
   taskListVisible: boolean;
   task: {
     phase: TaskPhase;
@@ -131,7 +129,7 @@ export interface UIState {
   workspaceState: ChatWorkspaceState;
   contextState: ChatContextState;
   synthRunning: boolean;
-  planMode: boolean;
+  mode: "build" | "plan" | "fast";
   planReview: { active: boolean; selection: number; reviseMode?: boolean };
   planContent: string | null;
   askQuestion:

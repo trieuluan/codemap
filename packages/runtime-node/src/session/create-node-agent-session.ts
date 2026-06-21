@@ -96,7 +96,7 @@ export function createNodeAgentSession(
           userMessage: { role: "user", content: input.content },
           toolClient: options.toolClient,
           signal: abortController.signal,
-          planMode: input.planMode,
+          mode: input.mode,
           imageFiles: input.images,
           onToken: (text) =>
             emit({ type: "token", requestId: input.requestId, text }),

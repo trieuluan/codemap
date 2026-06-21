@@ -130,6 +130,11 @@ const api: DesktopApi = {
       type: "get_mcp_status",
       requestId: crypto.randomUUID(),
     }),
+  getToolsList: () =>
+    invoke({
+      type: "get_tools_list",
+      requestId: crypto.randomUUID(),
+    }),
   readFilePreview: (filePath) =>
     invoke({
       type: "read_file_preview",

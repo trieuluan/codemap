@@ -1,7 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { CircleStop, Send, Server } from "lucide-react";
 import type { RuntimeStatus } from "../types.js";
-import type { McpStatusResult, ModelInfo } from "../../shared/ipc.js";
+import type {
+  McpStatusResult,
+  ModelInfo,
+} from "../../shared/ipc.js";
 import { PromptInputActionMenuItem } from "./ai-elements/prompt-input.js";
 import {
   PromptInput,
@@ -44,7 +47,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { name: "clear",    description: "Clear conversation",            group: "General" },
   { name: "status",   description: "Show connection status",        group: "General" },
   { name: "mcp",      description: "Show MCP servers",              group: "Tools"   },
-  { name: "tools",    description: "List available agent tools",    group: "Tools"   },
+  { name: "diff",     description: "Show working diff",             group: "Tools"   },
   { name: "login",    description: "Log in to CodeMap",             group: "Account" },
   { name: "logout",   description: "Log out",                       group: "Account" },
   { name: "projects", description: "List cloud projects",           group: "Cloud"   },
@@ -57,7 +60,7 @@ interface ComposerFooterProps {
   runtimeStatus: RuntimeStatus;
   isBusy: boolean;
   allowSubmitWhileBusy?: boolean;
-  mode: "plan" | "build";
+  mode: "build" | "plan" | "fast";
   selectedModel: string;
   availableModels: ModelInfo[];
   onModelChange: (model: string) => void;

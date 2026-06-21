@@ -83,11 +83,12 @@ export class ChatTerminal {
 
     // /plan — toggle plan mode on/off
     if (/^\/plan$/i.test(text)) {
-      const current = this.store.getState().planMode;
-      this.store.dispatch({ planMode: !current });
+      const current = this.store.getState().mode;
+      const newMode = current === "plan" ? "build" : "plan";
+      this.store.dispatch({ mode: newMode });
       this.appendMessage({
         role: "system",
-        content: !current
+        content: newMode === "plan"
           ? "Plan mode ON — all messages will go through planner → coder → reviewer.\nType /plan again to exit."
           : "Plan mode OFF — back to normal routing.",
       });

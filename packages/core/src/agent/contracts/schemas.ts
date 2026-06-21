@@ -70,7 +70,7 @@ const sendInputSchema = z
   .object({
     content: z.string(),
     model: z.string().optional(),
-    planMode: z.boolean().optional(),
+    mode: z.enum(["build", "plan", "fast"]).optional(),
     images: z
       .array(
         z

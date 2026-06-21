@@ -164,7 +164,7 @@ export async function startPiTuiApp(
   let stopped = false;
   let shellMode = false;
   let debugMode = false;
-  let planMode = false;
+  let mode: "build" | "plan" | "fast" = "build";
   let frame = 0;
   let lastExitConfirmAt = 0;
   let exitConfirmTimer: NodeJS.Timeout | undefined;
@@ -310,7 +310,7 @@ export async function startPiTuiApp(
   const editorTheme: EditorTheme = {
     borderColor: (str) => {
       if (shellMode) return `${C_GREEN}${str}${RESET}`;
-      if (planMode) return `${C_PURPLE}${str}${RESET}`;
+      if (mode === "plan") return `${C_PURPLE}${str}${RESET}`;
       if (debugMode) return `${C_RED}${str}${RESET}`;
       return `${C_GRAY}${str}${RESET}`;
     },
@@ -532,7 +532,7 @@ export async function startPiTuiApp(
     render(width: number): string[] {
       const state = chatTerminal.store.getState();
       debugMode = state.debug;
-      planMode = state.planMode;
+      mode = state.mode;
       const result = buildPanel(state, width, {
         editor,
         frame,
@@ -579,8 +579,8 @@ export async function startPiTuiApp(
       tui.requestRender();
       return;
     }
-    if (state.planMode) {
-      chatTerminal.store.dispatch({ planMode: false });
+    if (state.mode === "plan") {
+      chatTerminal.store.dispatch({ mode: "build" });
       clearExitConfirm();
       tui.requestRender();
       return;
