@@ -1,10 +1,14 @@
 import {
+  Brain,
+  Cloud,
   Hammer,
+  Link2,
   Map,
   MessagesSquare,
   PanelLeft,
   PanelRight,
   RefreshCw,
+  Server,
   Settings,
   User,
   Waypoints,
@@ -20,6 +24,7 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
 } from "./ui/dropdown-menu.js";
 
 interface TopbarProps {
@@ -57,6 +62,16 @@ export function Topbar({
   const isChat = location.pathname === "/chat" || location.pathname === "/";
   const isMap = location.pathname === "/map";
   const isAccount = location.pathname.startsWith("/account");
+  const activeAccountSection = (() => {
+    const p = location.pathname;
+    if (p === "/account" || p === "/account/identity") return "identity";
+    if (p === "/account/all-projects") return "projects";
+    if (p === "/account/projects") return "linked";
+    if (p.startsWith("/account/mcp")) return "mcp";
+    if (p === "/account/memory") return "memory";
+    if (p === "/account/settings") return "settings";
+    return "";
+  })();
 
   const segmentedControlClass =
     "inline-flex items-center gap-0.5 rounded-[10px] border border-[var(--border)] bg-[var(--card)] p-[3px]";
@@ -146,22 +161,40 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          className={location.pathname === "/settings" ? "icon-button active" : "icon-button"}
-          onClick={() => navigate(location.pathname === "/settings" ? "/chat" : "/settings")}
-          type="button"
-          title="Settings"
-        >
-          <Settings size={17} />
-        </button>
-        <button
-          className={isAccount ? "icon-button active" : "icon-button"}
-          onClick={() => navigate(isAccount ? "/chat" : "/account/identity")}
-          type="button"
-          title="Account"
-        >
-          <User size={17} />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={isAccount ? "icon-button active" : "icon-button"}
+              type="button"
+              title="Account"
+            >
+              <User size={17} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[180px]">
+            <DropdownMenuRadioGroup value={activeAccountSection}>
+              <DropdownMenuRadioItem className="pl-2" value="identity" onSelect={() => navigate("/account/identity")}>
+                <span className="flex items-center gap-2"><User size={14} />Identity</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem className="pl-2" value="projects" onSelect={() => navigate("/account/all-projects")}>
+                <span className="flex items-center gap-2"><Cloud size={14} />Projects</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem className="pl-2" value="linked" onSelect={() => navigate("/account/projects")}>
+                <span className="flex items-center gap-2"><Link2 size={14} />Linked Project</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem className="pl-2" value="mcp" onSelect={() => navigate("/account/mcp")}>
+                <span className="flex items-center gap-2"><Server size={14} />MCP Servers</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem className="pl-2" value="memory" onSelect={() => navigate("/account/memory")}>
+                <span className="flex items-center gap-2"><Brain size={14} />Memory</span>
+              </DropdownMenuRadioItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioItem className="pl-2" value="settings" onSelect={() => navigate("/account/settings")}>
+                <span className="flex items-center gap-2"><Settings size={14} />Settings</span>
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {!isAccount && (
           <button

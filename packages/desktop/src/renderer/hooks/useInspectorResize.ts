@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-const MIN_WIDTH = 360;
+const MIN_WIDTH = 400;
 const MAX_WIDTH = 760;
-const DEFAULT_WIDTH = 500;
+const DEFAULT_WIDTH = 620;
 
 export function useInspectorResize(inspectorOpen: boolean) {
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_WIDTH);

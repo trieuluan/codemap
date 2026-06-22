@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -17,6 +17,7 @@ export interface MonacoDiffFile {
 interface MonacoDiffViewerProps {
   files: MonacoDiffFile[];
   selectedPath?: string | null;
+  onFileVisible?: (filePath: string) => void;
   height?: number | string;
   className?: string;
 }
@@ -95,28 +96,48 @@ function viewerClassName(className?: string) {
   return className ? `monaco-diff-viewer ${className}` : "monaco-diff-viewer";
 }
 
-export function MonacoDiffViewer({
-  files,
-  selectedPath,
-  height = "100%",
-  className,
-}: MonacoDiffViewerProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+/** Escape a string for use in a CSS attribute selector value. */
+function cssEscape(value: string): string {
+  try {
+    return CSS.escape(value);
+  } catch {
+    // Fallback for environments without CSS.escape
+    return value.replace(/["\\]/g, "\\$&");
+  }
+}
+
+/** A single-file diff section with its own Monaco editor. */
+function DiffSection({
+  file,
+  instanceId,
+}: {
+  file: MonacoDiffFile;
+  instanceId: string;
+}) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const modelsRef = useRef<monaco.editor.ITextModel[]>([]);
-  const frameRef = useRef<number | null>(null);
-  const instanceIdRef = useRef(`viewer-${++nextViewerId}`);
-
-  const selectedFile = useMemo(() => {
-    if (files.length === 0) return null;
-    return files.find((file) => file.path === selectedPath) ?? files[0] ?? null;
-  }, [files, selectedPath]);
 
   useEffect(() => {
-    ensureMonacoEnvironment();
-    if (!hostRef.current || editorRef.current) return;
+    const host = hostRef.current;
+    const body = bodyRef.current;
+    if (!host || !body) return;
 
-    const editor = monaco.editor.createDiffEditor(hostRef.current, {
+    const language = file.language ?? languageFromPath(file.path);
+    const originalModel = monaco.editor.createModel(
+      file.original,
+      language,
+      modelUri(instanceId, "original", file.oldPath ?? file.path),
+    );
+    const modifiedModel = monaco.editor.createModel(
+      file.modified,
+      language,
+      modelUri(instanceId, "modified", file.path),
+    );
+    modelsRef.current = [originalModel, modifiedModel];
+
+    const editor = monaco.editor.createDiffEditor(host, {
       automaticLayout: false,
       readOnly: true,
       renderSideBySide: true,
@@ -130,87 +151,157 @@ export function MonacoDiffViewer({
       padding: { top: 8, bottom: 8 },
       theme: "vs-dark",
       wordWrap: "off",
-      hideUnchangedRegions: { enabled: true, minimumLineCount: 3, contextLineCount: 3 },
-      scrollbar: { vertical: "hidden", horizontal: "auto", alwaysConsumeMouseWheel: false },
+      hideUnchangedRegions: {
+        enabled: true,
+        minimumLineCount: 3,
+        contextLineCount: 3,
+      },
+      scrollbar: {
+        vertical: "hidden",
+        horizontal: "auto",
+        alwaysConsumeMouseWheel: false,
+      },
       overviewRulerLanes: 0,
     });
+    editor.setModel({ original: originalModel, modified: modifiedModel });
     editorRef.current = editor;
 
     function syncHeight() {
-      const host = hostRef.current;
-      if (!host) return;
-      editor.layout({ width: host.clientWidth, height: host.clientHeight });
+      const mh = editor.getModifiedEditor().getContentHeight();
+      const oh = editor.getOriginalEditor().getContentHeight();
+      const h = Math.max(mh, oh);
+      body!.style.height = `${h}px`;
+      editor.layout({ width: host!.clientWidth, height: h });
     }
 
-    const d1 = editor.getModifiedEditor().onDidContentSizeChange(syncHeight);
-    const d2 = editor.getOriginalEditor().onDidContentSizeChange(syncHeight);
-    const d3 = editor.onDidUpdateDiff(syncHeight);
+    const d1 = editor.onDidUpdateDiff(syncHeight);
+    const d2 = editor.getModifiedEditor().onDidContentSizeChange(syncHeight);
+    const d3 = editor.getOriginalEditor().onDidContentSizeChange(syncHeight);
+    syncHeight();
 
-    // Re-layout when container width changes (e.g. inspector resize)
     const ro = new ResizeObserver(() => {
-      const host = hostRef.current;
-      if (!host) return;
-      editor.layout({ width: host.clientWidth, height: host.clientHeight });
+      const h = hostRef.current;
+      const b = bodyRef.current;
+      if (!h || !b || !editorRef.current) return;
+      editorRef.current.layout({ width: h.clientWidth, height: b.clientHeight });
     });
-    ro.observe(hostRef.current);
+    ro.observe(host);
 
     return () => {
-      ro.disconnect();
       d1.dispose();
       d2.dispose();
       d3.dispose();
-      if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-      editorRef.current?.setModel(null);
+      ro.disconnect();
       editorRef.current?.dispose();
       editorRef.current = null;
-      for (const model of modelsRef.current) model.dispose();
+      for (const m of modelsRef.current) m.dispose();
       modelsRef.current = [];
     };
-  }, []);
+  }, [file.path, instanceId]);
 
+  return (
+    <div className="diff-section" data-file-path={file.path}>
+      <div className="diff-section-header">
+        <span className="diff-section-path">
+          {file.oldPath && file.oldPath !== file.path
+            ? `${file.oldPath} → ${file.path}`
+            : file.path}
+        </span>
+      </div>
+      <div className="diff-section-body" ref={bodyRef} style={{ height: "200px" }}>
+        <div className="diff-section-host" ref={hostRef} />
+      </div>
+    </div>
+  );
+}
+
+export function MonacoDiffViewer({
+  files,
+  selectedPath,
+  onFileVisible,
+  height = "100%",
+  className,
+}: MonacoDiffViewerProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const instanceIdRef = useRef(`viewer-${++nextViewerId}`);
+  const scrollingByClickRef = useRef(false);
+  const ioTriggeredPathRef = useRef<string | null>(null);
+
+  ensureMonacoEnvironment();
+
+  // IntersectionObserver — highlight file in tree based on scroll position
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || !selectedFile) return;
+    const scroll = scrollRef.current;
+    if (!scroll || !onFileVisible) return;
 
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
+    const ratios = new Map<string, number>();
+    let currentVisible = "";
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Skip IO callbacks triggered by programmatic scroll-to
+        if (scrollingByClickRef.current) return;
+
+        for (const entry of entries) {
+          const path = (entry.target as HTMLElement).dataset.filePath ?? "";
+          ratios.set(path, entry.intersectionRatio);
+        }
+
+        let maxR = 0;
+        let maxP = "";
+        for (const [p, r] of ratios) {
+          if (r > maxR) {
+            maxR = r;
+            maxP = p;
+          }
+        }
+
+        if (maxP && maxP !== currentVisible && maxR >= 0.1) {
+          currentVisible = maxP;
+          ioTriggeredPathRef.current = maxP;
+          onFileVisible(maxP);
+        }
+      },
+      {
+        root: scroll,
+        threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      },
+    );
+
+    const sections = scroll.querySelectorAll<HTMLElement>("[data-file-path]");
+    sections.forEach((s) => observer.observe(s));
+
+    return () => observer.disconnect();
+  }, [files, onFileVisible]);
+
+  // Scroll to file when tree click changes selectedPath (not from IO)
+  useEffect(() => {
+    if (!selectedPath || !scrollRef.current) return;
+
+    // Skip if this selectedPath change came from IntersectionObserver
+    if (ioTriggeredPathRef.current === selectedPath) {
+      ioTriggeredPathRef.current = null;
+      return;
     }
-    editor.setModel(null);
-    for (const model of modelsRef.current) model.dispose();
-    modelsRef.current = [];
+    ioTriggeredPathRef.current = null;
 
-    const language = selectedFile.language ?? languageFromPath(selectedFile.path);
-    const originalModel = monaco.editor.createModel(
-      selectedFile.original,
-      language,
-      modelUri(instanceIdRef.current, "original", selectedFile.oldPath ?? selectedFile.path),
+    const el = scrollRef.current.querySelector(
+      `[data-file-path="${cssEscape(selectedPath)}"]`,
     );
-    const modifiedModel = monaco.editor.createModel(
-      selectedFile.modified,
-      language,
-      modelUri(instanceIdRef.current, "modified", selectedFile.path),
-    );
-    modelsRef.current = [originalModel, modifiedModel];
+    if (!el) return;
 
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      if (editorRef.current !== editor) return;
-      editor.setModel({ original: originalModel, modified: modifiedModel });
-    });
+    scrollingByClickRef.current = true;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
 
-    return () => {
-      if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-    };
-  }, [selectedFile]);
+    // Re-enable IO after smooth scroll completes (~500ms)
+    const timer = setTimeout(() => {
+      scrollingByClickRef.current = false;
+    }, 500);
 
-  if (!selectedFile) {
+    return () => clearTimeout(timer);
+  }, [selectedPath]);
+
+  if (files.length === 0) {
     return (
       <div className={viewerClassName(className)} style={{ height }}>
         <div className="monaco-diff-empty">No diff selected</div>
@@ -220,12 +311,15 @@ export function MonacoDiffViewer({
 
   return (
     <div className={viewerClassName(className)} style={{ height }}>
-      <div className="monaco-diff-file-label">
-        {selectedFile.oldPath && selectedFile.oldPath !== selectedFile.path
-          ? `${selectedFile.oldPath} → ${selectedFile.path}`
-          : selectedFile.path}
+      <div className="monaco-diff-scroll" ref={scrollRef}>
+        {files.map((file) => (
+          <DiffSection
+            key={file.path}
+            file={file}
+            instanceId={instanceIdRef.current}
+          />
+        ))}
       </div>
-      <div className="monaco-diff-host" ref={hostRef} />
     </div>
   );
 }

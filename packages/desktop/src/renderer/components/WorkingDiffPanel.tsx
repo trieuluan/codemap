@@ -94,6 +94,28 @@ interface FileNode {
   isFile: boolean;
 }
 
+function compactTree(nodes: FileNode[]): FileNode[] {
+  const result: FileNode[] = [];
+  for (const node of nodes) {
+    if (node.isFile) {
+      result.push(node);
+    } else {
+      const children = compactTree(node.children);
+      if (children.length === 1 && !children[0].isFile) {
+        // Collapse single-folder chain: "parent" + "child" → "parent/child"
+        const child = children[0];
+        result.push({
+          ...child,
+          name: node.name + "/" + child.name,
+        });
+      } else {
+        result.push({ ...node, children });
+      }
+    }
+  }
+  return result;
+}
+
 function buildFileTree(paths: string[]): FileNode[] {
   const root: FileNode[] = [];
 
@@ -124,7 +146,7 @@ function buildFileTree(paths: string[]): FileNode[] {
     }
   }
 
-  return root;
+  return compactTree(root);
 }
 
 function filterTree(
@@ -337,6 +359,10 @@ export function WorkingDiffPanel() {
     setSelectedPath(filePath);
   }, []);
 
+  const handleFileVisible = useCallback((filePath: string) => {
+    setSelectedPath(filePath);
+  }, []);
+
   const startTreeResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     treeResizeStateRef.current = { startX: event.clientX, startWidth: fileTreeWidth };
     document.body.classList.add("diff-panel-resizing");
@@ -408,6 +434,7 @@ export function WorkingDiffPanel() {
                   className="monaco-diff-viewer"
                   files={files}
                   selectedPath={selectedPath}
+                  onFileVisible={handleFileVisible}
                 />
               </div>
 

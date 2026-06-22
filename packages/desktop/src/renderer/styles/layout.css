@@ -242,6 +242,12 @@ body.inspector-resizing .inspector-resize-handle::after {
   padding: 14px;
 }
 
+.settings-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .settings-card {
   display: grid;
   gap: 12px;

@@ -16,6 +16,10 @@ Relevant skills live under `.claude/skills/codemap-*`:
 - `codemap-test-driven-development` — RED → GREEN → REFACTOR using CodeMap tools
 - `codemap-verification-before-completion` — final diff/build/index/reimport gate
 - `codemap-systematic-debugging` — Use when debugging: 4-phase root cause process with Iron Law
+- `codemap-symbol-level-debugging` — Use when a bug centers on a specific function/class/method
+- `codemap-feature-area-investigation` — Use when investigating a named product area (auth, billing, CLI, etc.)
+- `codemap-safe-edit-and-reimport` — Use before editing files: scoped edit + diff + index refresh pattern
+- `codemap-ponytail` — Use before writing or editing any code: 6-step decision ladder to avoid over-engineering
 - `codemap-receiving-code-review` — Use when receiving code review feedback on a PR or diff
 - `codemap-requesting-code-review` — Use when you want to dispatch a code reviewer subagent
 - `codemap-finishing-a-development-branch` — Use when ready to merge or close a development branch

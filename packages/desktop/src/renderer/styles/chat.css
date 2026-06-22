@@ -346,7 +346,7 @@
   background: var(--background);
 }
 
-.tool-monaco-diff .monaco-diff-host {
+.tool-monaco-diff .monaco-diff-scroll {
   flex: 1;
   min-height: 0;
 }

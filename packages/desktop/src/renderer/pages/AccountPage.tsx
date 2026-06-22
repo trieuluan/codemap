@@ -16,13 +16,24 @@ import {
   XCircle,
   Loader,
   ArrowLeft,
+  Settings,
+  Database,
+  Sparkles,
+  KeyRound,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import type {
   AccountInfo,
   McpStatusResult,
+  SettingsMetadata,
 } from "../../shared/ipc.js";
 
-type AccountSection = "identity" | "all-projects" | "projects" | "mcp" | "memory";
+function settingValue(value: string | undefined, fallback: string) {
+  return value && value.trim() ? value : fallback;
+}
+
+type AccountSection = "identity" | "all-projects" | "projects" | "mcp" | "memory" | "settings";
 
 const NAV_ITEMS: { id: AccountSection; label: string; icon: React.ReactNode }[] = [
   { id: "identity",     label: "Identity",       icon: <User size={15} /> },
@@ -30,6 +41,7 @@ const NAV_ITEMS: { id: AccountSection; label: string; icon: React.ReactNode }[] 
   { id: "projects",     label: "Linked Project",  icon: <Link2 size={15} /> },
   { id: "mcp",          label: "MCP Servers",     icon: <Server size={15} /> },
   { id: "memory",       label: "Memory",          icon: <Brain size={15} /> },
+  { id: "settings",     label: "Settings",        icon: <Settings size={15} /> },
 ];
 
 const SECTION_FROM_HASH: Record<string, AccountSection> = {
@@ -38,6 +50,7 @@ const SECTION_FROM_HASH: Record<string, AccountSection> = {
   "#/account/projects":     "projects",
   "#/account/mcp":          "mcp",
   "#/account/memory":       "memory",
+  "#/account/settings":     "settings",
 };
 
 export function AccountPage() {
@@ -56,6 +69,14 @@ export function AccountPage() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Settings state
+  const [settingsData, setSettingsData] = useState<SettingsMetadata | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [indexingActive, setIndexingActive] = useState(false);
+  const [indexingLoading, setIndexingLoading] = useState(false);
+  const [indexingToggling, setIndexingToggling] = useState(false);
+  const [indexingStatus, setIndexingStatus] = useState<{ text: string; ok: boolean } | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -122,6 +143,52 @@ export function AccountPage() {
       setActionLoading(null);
     }
   }
+
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    setIndexingLoading(true);
+    const [s, idx] = await Promise.all([
+      window.codemap.readSettings().catch(() => null),
+      window.codemap.getAutoIndexStatus().catch(() => null),
+    ]);
+    setSettingsData(s);
+    setSettingsLoading(false);
+    if (idx) setIndexingActive(idx.isActive);
+    setIndexingLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === "settings") void loadSettings();
+  }, [activeSection, loadSettings]);
+
+  const toggleIndexing = useCallback(async () => {
+    setIndexingToggling(true);
+    setIndexingStatus(null);
+    try {
+      if (indexingActive) {
+        const result = await window.codemap.disableAutoIndexing();
+        if (result?.success !== false) {
+          setIndexingActive(false);
+          setIndexingStatus({ text: "Auto-indexing disabled", ok: true });
+        } else {
+          setIndexingStatus({ text: result?.error ?? "Failed to disable", ok: false });
+        }
+      } else {
+        const result = await window.codemap.enableAutoIndexing();
+        if (result?.success !== false) {
+          setIndexingActive(true);
+          setIndexingStatus({ text: "Auto-indexing enabled", ok: true });
+        } else {
+          setIndexingStatus({ text: result?.error ?? "Failed to enable", ok: false });
+        }
+      }
+    } catch (e) {
+      setIndexingStatus({ text: (e as Error)?.message ?? "Toggle failed", ok: false });
+    } finally {
+      setIndexingToggling(false);
+      setTimeout(() => setIndexingStatus(null), 3000);
+    }
+  }, [indexingActive]);
 
   return (
     <div className="account-page">
@@ -210,6 +277,17 @@ export function AccountPage() {
             )}
             {activeSection === "mcp" && <McpSection mcp={mcpStatus} onRefresh={() => void loadAll()} />}
             {activeSection === "memory" && <MemorySection />}
+            {activeSection === "settings" && (
+              <SettingsSection
+                settings={settingsData}
+                loading={settingsLoading}
+                indexingActive={indexingActive}
+                indexingLoading={indexingLoading}
+                indexingToggling={indexingToggling}
+                indexingStatus={indexingStatus}
+                onToggleIndexing={() => void toggleIndexing()}
+              />
+            )}
           </>
         )}
       </main>
@@ -470,6 +548,127 @@ function McpSection({
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Section: Settings ─── */
+function SettingsSection({
+  settings,
+  loading,
+  indexingActive,
+  indexingLoading,
+  indexingToggling,
+  indexingStatus,
+  onToggleIndexing,
+}: {
+  settings: SettingsMetadata | null;
+  loading: boolean;
+  indexingActive: boolean;
+  indexingLoading: boolean;
+  indexingToggling: boolean;
+  indexingStatus: { text: string; ok: boolean } | null;
+  onToggleIndexing: () => void;
+}) {
+  return (
+    <div className="account-section">
+      <h2 className="account-section-heading">Settings</h2>
+      <p className="account-section-desc">Workspace configuration and preferences.</p>
+
+      {loading ? (
+        <div className="account-loading"><RefreshCw size={16} className="spin" /></div>
+      ) : (
+        <div className="settings-cards">
+          {/* Gateway */}
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <Server size={16} />
+              <strong>Gateway</strong>
+            </div>
+            <dl className="settings-card-list">
+              <div className="settings-card-row">
+                <dt>Provider</dt>
+                <dd>{settingValue(settings?.provider, "9router")}</dd>
+              </div>
+              <div className="settings-card-row">
+                <dt>Base URL</dt>
+                <dd><code>{settingValue(settings?.baseUrl, "http://localhost:4000/v1")}</code></dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* Model defaults */}
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <Sparkles size={16} />
+              <strong>Model defaults</strong>
+            </div>
+            <dl className="settings-card-list">
+              <div className="settings-card-row">
+                <dt>Selected model</dt>
+                <dd><code>{settingValue(settings?.defaultModel, "coder")}</code></dd>
+              </div>
+              <div className="settings-card-row">
+                <dt>Available models</dt>
+                <dd>{settings?.availableModels.length ?? 0}</dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* Indexing */}
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <Database size={16} />
+              <strong>Indexing</strong>
+            </div>
+            <div className="settings-toggle-row">
+              <div className="settings-toggle-info">
+                <span className="settings-toggle-label">Auto-index files</span>
+                <span className="settings-toggle-desc">Watch workspace files and update the index automatically when they change.</span>
+              </div>
+              <button
+                className="settings-toggle"
+                onClick={onToggleIndexing}
+                disabled={indexingLoading || indexingToggling}
+                type="button"
+                aria-pressed={indexingActive}
+              >
+                {indexingLoading || indexingToggling ? (
+                  <Loader2 size={14} className="spin" />
+                ) : indexingActive ? (
+                  <span className="toggle-dot toggle-dot--on" />
+                ) : (
+                  <span className="toggle-dot toggle-dot--off" />
+                )}
+              </button>
+            </div>
+            {indexingStatus && (
+              <p className={`settings-status ${indexingStatus.ok ? "settings-status--ok" : "settings-status--err"}`}>
+                {indexingStatus.text}
+              </p>
+            )}
+          </section>
+
+          {/* Credentials */}
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <KeyRound size={16} />
+              <strong>Credentials</strong>
+            </div>
+            <div className="settings-credential-list">
+              <div className={`credential-state ${settings?.hasApiKey ? "ok" : "missing"}`}>
+                <CheckCircle2 size={14} />
+                Gateway API key {settings?.hasApiKey ? "configured" : "missing"}
+              </div>
+              <div className={`credential-state ${settings?.hasApiToken ? "ok" : "missing"}`}>
+                <CheckCircle2 size={14} />
+                CodeMap API token {settings?.hasApiToken ? "configured" : "missing"}
+              </div>
+            </div>
+            <p className="muted settings-note">Secrets stay in your local config. This panel only shows whether they are present.</p>
+          </section>
         </div>
       )}
     </div>
