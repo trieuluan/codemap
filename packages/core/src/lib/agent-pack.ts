@@ -30,6 +30,7 @@ export const AGENT_PACK_SKILLS = [
   "requesting-code-review",
   "finishing-a-development-branch",
   "subagent-driven-development",
+  "ponytail",
 ] as const;
 
 export type AgentPackSkillName = (typeof AGENT_PACK_SKILLS)[number];

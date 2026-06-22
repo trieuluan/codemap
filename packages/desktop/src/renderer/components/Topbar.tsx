@@ -5,6 +5,7 @@ import {
   PanelLeft,
   PanelRight,
   RefreshCw,
+  Settings,
   User,
   Waypoints,
   Zap,
@@ -145,6 +146,14 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          className={location.pathname === "/settings" ? "icon-button active" : "icon-button"}
+          onClick={() => navigate(location.pathname === "/settings" ? "/chat" : "/settings")}
+          type="button"
+          title="Settings"
+        >
+          <Settings size={17} />
+        </button>
         <button
           className={isAccount ? "icon-button active" : "icon-button"}
           onClick={() => navigate(isAccount ? "/chat" : "/account/identity")}

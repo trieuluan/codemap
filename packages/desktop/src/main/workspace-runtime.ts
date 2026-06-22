@@ -1,4 +1,6 @@
-import { utilityProcess, type BrowserWindow, type UtilityProcess } from "electron";
+import { fork } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import type { BrowserWindow } from "electron";
 import { join, resolve } from "node:path";
 import {
   DESKTOP_IPC,
@@ -11,7 +13,7 @@ import {
 import { RequestTracker } from "./request-tracker.js";
 
 export class WorkspaceRuntime {
-  private child: UtilityProcess | null = null;
+  private child: ChildProcess | null = null;
   private pending = new RequestTracker();
   private settings: SettingsMetadata | null = null;
   private readyPromise: Promise<void> | null = null;
@@ -24,8 +26,7 @@ export class WorkspaceRuntime {
   async start(): Promise<void> {
     if (this.child) return this.readyPromise ?? Promise.resolve();
     this.emitStatus("starting");
-    const child = utilityProcess.fork(join(__dirname, "utility.cjs"), [], {
-      serviceName: `CodeMap Agent: ${this.workspacePath}`,
+    const child = fork(join(__dirname, "utility.cjs"), [], {
       stdio: "pipe",
       env: {
         ...process.env,
@@ -49,6 +50,9 @@ export class WorkspaceRuntime {
       const error = new Error(`Agent runtime exited with code ${code ?? "unknown"}`);
       this.pending.rejectAll(error);
       this.emitStatus("disconnected");
+    });
+    child.stdout?.on("data", (chunk) => {
+      console.log(`[desktop utility] ${String(chunk).trim()}`);
     });
     child.stderr?.on("data", (chunk) => {
       console.error(`[desktop utility] ${String(chunk).trim()}`);
@@ -151,6 +155,27 @@ export class WorkspaceRuntime {
     });
   }
 
+  getAutoIndexStatus(): Promise<unknown> {
+    return this.request({
+      type: "get_auto_index_status",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  enableAutoIndexing(): Promise<unknown> {
+    return this.request({
+      type: "enable_auto_indexing",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
+  disableAutoIndexing(): Promise<unknown> {
+    return this.request({
+      type: "disable_auto_indexing",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
   private request<T>(command: UtilityCommand): Promise<T> {
     const requestId =
       command.type === "agent" ? command.command.requestId : command.requestId;
@@ -158,7 +183,7 @@ export class WorkspaceRuntime {
       return Promise.reject(new Error("Agent runtime is not running"));
     }
     const pending = this.pending.add<T>(requestId);
-    this.child.postMessage(command);
+    this.child.send(command);
     return pending;
   }
 

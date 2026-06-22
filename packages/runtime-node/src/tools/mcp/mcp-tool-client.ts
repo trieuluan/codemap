@@ -45,7 +45,7 @@ export class CodeMapMcpToolClient {
           command: codemapServer.command,
           args: codemapServer.args,
           env: { ...process.env as Record<string, string>, CODEMAP_TOOL_MODE: "full" },
-          stderr: "pipe",
+          stderr: "inherit",
         },
       },
     });
@@ -109,6 +109,22 @@ export class CodeMapMcpToolClient {
     }));
   }
 
+  /** Returns tools from ALL connected MCP servers grouped by server name.
+   *  Each tool has { name, description } — no inputSchema to keep payloads small. */
+  async listAllToolsGroupedByServer(): Promise<Record<string, { name: string; description: string }[]>> {
+    const toolsets = await this._mcpClient.listToolsets();
+    const result: Record<string, { name: string; description: string }[]> = {};
+    for (const [serverName, serverTools] of Object.entries(toolsets)) {
+      result[serverName] = Object.entries(serverTools as Record<string, { description?: string }>).map(
+        ([name, tool]) => ({
+          name,
+          description: tool.description ?? "",
+        }),
+      );
+    }
+    return result;
+  }
+
   /** Returns Mastra tool definitions for sharing with the harness (avoids a second child process).
    * Keys are prefixed with the server name (e.g. "codemap_explore_task") so that
    * formatToolDisplayName can strip the prefix and show "codemap · explore_task" in the UI.
@@ -168,7 +184,7 @@ export class CodeMapMcpToolClient {
           command: this._serverConfig.command,
           args: this._serverConfig.args,
           env: { ...process.env as Record<string, string>, CODEMAP_TOOL_MODE: "full" },
-          stderr: "pipe",
+          stderr: "inherit",
         },
       },
     });

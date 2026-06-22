@@ -2,6 +2,7 @@ import {
   NineRouterProvider,
   buildCodeMapAgentInstructions,
 } from "@codemap-ai/core/agent";
+import { loadConfig } from "@codemap-ai/core/config.js";
 import type {
   AgentSessionCommand,
   AgentSessionController,
@@ -28,12 +29,12 @@ import {
   type UtilityCommand,
   type AccountInfo,
   type AccountLoginResult,
+  type AutoIndexStatusResult,
   type ListProjectsResult,
   type LinkProjectResult,
 } from "../shared/ipc.js";
 
-const parentPort = process.parentPort;
-if (!parentPort) throw new Error("Desktop utility requires an Electron parent port");
+if (!process.send) throw new Error("Desktop utility requires a parent IPC channel");
 
 let workspacePath = "";
 let session: AgentSessionController | null = null;
@@ -47,8 +48,20 @@ let availableModels: GatewayModel[] = [];
 /** Resolves when background warmup (MCP connect, context load, harness init) is complete. */
 let warmupPromise: Promise<void> | null = null;
 
-parentPort.on("message", (event) => {
-  void handleRawCommand(event.data);
+/** Wait for MCP warmup so toolClient is available. Returns true if toolClient is ready. */
+async function awaitWarmup(): Promise<boolean> {
+  if (toolClient) return true;
+  if (warmupPromise) {
+    await Promise.race([
+      warmupPromise,
+      new Promise<void>((r) => setTimeout(r, 8_000)),
+    ]);
+  }
+  return toolClient !== null;
+}
+
+process.on("message", (event) => {
+  void handleRawCommand(event);
 });
 
 post({ type: "runtime_status", status: "starting" });
@@ -117,7 +130,32 @@ async function handleCommand(command: UtilityCommand): Promise<unknown> {
     return readSettingsMetadata();
   }
   if (command.type === "get_mcp_status") {
-    return getMastraMcpStatusSummary();
+    await awaitWarmup();
+    const summary = await getMastraMcpStatusSummary();
+    if (!summary) return null;
+    // Enrich statuses with tool names + descriptions from toolClient
+    if (toolClient) {
+      try {
+        const toolsByServer = await toolClient.listAllToolsGroupedByServer();
+        summary.statuses = summary.statuses.map((s) => ({
+          ...s,
+          toolNames: toolsByServer[s.name]?.map((t) => t.name) ?? s.toolNames ?? [],
+          toolDetails: toolsByServer[s.name] ?? [],
+        }));
+      } catch {
+        summary.statuses = summary.statuses.map((s) => ({
+          ...s,
+          toolDetails: (s.toolNames ?? []).map((n) => ({ name: n, description: "" })),
+        }));
+      }
+    } else {
+      // toolClient not ready — construct basic toolDetails from manager's toolNames
+      summary.statuses = summary.statuses.map((s) => ({
+        ...s,
+        toolDetails: (s.toolNames ?? []).map((n) => ({ name: n, description: "" })),
+      }));
+    }
+    return summary;
   }
   if (command.type === "get_tools_list") {
     return getToolsList();
@@ -143,6 +181,15 @@ async function handleCommand(command: UtilityCommand): Promise<unknown> {
   }
   if (command.type === "link_project") {
     return linkProject(command.projectId);
+  }
+  if (command.type === "get_auto_index_status") {
+    return getAutoIndexStatus();
+  }
+  if (command.type === "enable_auto_indexing") {
+    return enableAutoIndexing();
+  }
+  if (command.type === "disable_auto_indexing") {
+    return disableAutoIndexing();
   }
   if (!session) throw new Error("Agent session is not initialized");
   return handleAgentCommand(command.command);
@@ -325,41 +372,117 @@ async function runSlashCommandInUtility(name: string, args: string): Promise<{ o
 }
 
 async function getAccountInfo(): Promise<AccountInfo> {
-  const settings = await loadSettings(workspacePath || process.cwd());
-  const apiToken = settings.codemap?.apiToken;
-  if (!apiToken) {
-    return { loggedIn: false };
+  if (!(await awaitWarmup()) || !toolClient) {
+    // Fallback: use loadConfig if MCP not available
+    const config = await loadConfig(workspacePath || process.cwd());
+    if (!config.apiToken) return { loggedIn: false };
+    return {
+      loggedIn: true,
+      apiUrl: config.apiUrl || "https://api.codemap.codes",
+      user: config.user
+        ? { email: config.user.email ?? undefined, name: config.user.name ?? undefined }
+        : undefined,
+    };
   }
-  // Could fetch user info from API here, but for now just return logged in status
-  return {
-    loggedIn: true,
-    apiUrl: settings.gateway?.baseUrl ?? "https://api.codemap.codes",
-  };
+  try {
+    const result = await toolClient.callTool("check_auth_status", {});
+    const sc = result.structuredContent as Record<string, unknown> | undefined;
+    if (result.isError || !sc) return { loggedIn: false };
+    const data = (sc.data ?? sc) as Record<string, unknown>;
+    const user = data.user as Record<string, unknown> | null | undefined;
+    return {
+      loggedIn: Boolean(data.authenticated),
+      apiUrl: (data.apiUrl as string) || undefined,
+      user: user
+        ? { email: (user.email as string) ?? undefined, name: (user.name as string) ?? undefined }
+        : undefined,
+    };
+  } catch {
+    const config = await loadConfig(workspacePath || process.cwd());
+    if (!config.apiToken) return { loggedIn: false };
+    return { loggedIn: true, apiUrl: config.apiUrl || "https://api.codemap.codes" };
+  }
 }
 
 async function accountLogin(): Promise<AccountLoginResult> {
-  // This would trigger the OAuth flow - for now return authorize URL
-  // Actual browser opening handled in main process or via IPC to renderer
-  return {
-    success: false,
-    error: "Login flow not yet implemented in utility process",
-  };
+  // Quick check: already logged in via local config
+  const config = await loadConfig(workspacePath || process.cwd());
+  if (config.apiToken) {
+    return {
+      success: true,
+      user: config.user
+        ? { email: config.user.email ?? undefined, name: config.user.name ?? undefined }
+        : undefined,
+    };
+  }
+  if (!(await awaitWarmup()) || !toolClient) {
+    return { success: false, error: "MCP tool client not initialized. Please restart the app." };
+  }
+  try {
+    const result = await toolClient.callTool("login", {});
+    const sc = result.structuredContent as Record<string, unknown> | undefined;
+    if (result.isError || !sc) {
+      return { success: false, error: result.content || "Login failed" };
+    }
+    const data = (sc.data ?? sc) as Record<string, unknown>;
+    const user = data.user as Record<string, unknown> | null | undefined;
+    if (data.status === "authorized") {
+      return {
+        success: true,
+        user: user
+          ? { email: (user.email as string) ?? undefined, name: (user.name as string) ?? undefined }
+          : undefined,
+      };
+    }
+    return {
+      success: false,
+      error: (data.message as string) || `Login ${data.status}`,
+      authorizeUrl: data.authorizeUrl as string | undefined,
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function accountLogout(): Promise<{ success: boolean; error?: string }> {
-  // Logout would clear the config - for now just return success
-  // Actual config clearing handled via core library
-  return { success: true };
+  if (!(await awaitWarmup()) || !toolClient) {
+    return { success: false, error: "MCP tool client not initialized. Please restart the app." };
+  }
+  try {
+    const result = await toolClient.callTool("logout", {});
+    if (result.isError) {
+      return { success: false, error: result.content || "Logout failed" };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function listProjects(): Promise<ListProjectsResult> {
-  // Delegate to toolClient if available
-  if (!toolClient) {
-    return { projects: [], error: "MCP tool client not initialized" };
+  if (!(await awaitWarmup()) || !toolClient) {
+    return { projects: [], error: "MCP tool client not initialized. Please restart the app." };
   }
   try {
     const result = await toolClient.callTool("list_projects", {});
-    const projects = JSON.parse(result.content);
+    if (result.isError) {
+      return { projects: [], error: result.content || "Failed to list projects" };
+    }
+    const sc = result.structuredContent as Record<string, unknown> | undefined;
+    if (!sc) return { projects: [], error: "No data returned" };
+    const data = (sc.data ?? sc) as Record<string, unknown>;
+    const items = (data.items ?? []) as Array<{
+      id: string;
+      name: string;
+      status: string;
+      repositoryUrl?: string | null;
+    }>;
+    const projects = items.map((p) => ({
+      id: p.id,
+      name: p.name,
+      status: p.status ?? "unknown",
+      repoUrl: p.repositoryUrl ?? undefined,
+    }));
     return { projects };
   } catch (error) {
     return { projects: [], error: error instanceof Error ? error.message : String(error) };
@@ -378,24 +501,86 @@ async function linkProject(projectId: string): Promise<LinkProjectResult> {
   }
 }
 
+async function getAutoIndexStatus(): Promise<AutoIndexStatusResult> {
+  // Retry up to 3 times with backoff — toolClient may take a few seconds after warmup
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt === 0) {
+      await awaitWarmup();
+    } else {
+      await new Promise((r) => setTimeout(r, 1_500));
+    }
+    if (toolClient) break;
+  }
+  if (!toolClient) {
+    return { isActive: false };
+  }
+  try {
+    const result = await toolClient.callTool("check_auto_index_status", {});
+    const sc = result.structuredContent as Record<string, unknown> | undefined;
+    if (result.isError || !sc) {
+      return { isActive: false };
+    }
+    const data = (sc.data ?? sc) as Record<string, unknown>;
+    return { isActive: Boolean(data.isActive) };
+  } catch {
+    return { isActive: false };
+  }
+}
+
+async function enableAutoIndexing(): Promise<{ success: boolean; error?: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt === 0) {
+      await awaitWarmup();
+    } else {
+      await new Promise((r) => setTimeout(r, 1_500));
+    }
+    if (toolClient) break;
+  }
+  if (!toolClient) {
+    return { success: false, error: "MCP tool client not initialized. Please restart the app." };
+  }
+  try {
+    const result = await toolClient.callTool("enable_auto_indexing", {});
+    if (result.isError) {
+      return { success: false, error: result.content || "Failed to enable auto-indexing" };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function disableAutoIndexing(): Promise<{ success: boolean; error?: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt === 0) {
+      await awaitWarmup();
+    } else {
+      await new Promise((r) => setTimeout(r, 1_500));
+    }
+    if (toolClient) break;
+  }
+  if (!toolClient) {
+    return { success: false, error: "MCP tool client not initialized. Please restart the app." };
+  }
+  try {
+    const result = await toolClient.callTool("disable_auto_indexing", {});
+    if (result.isError) {
+      return { success: false, error: result.content || "Failed to disable auto-indexing" };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 async function getToolsList() {
+  await awaitWarmup();
   if (!toolClient) {
     return { tools: [], groupedByServer: {} };
   }
   try {
-    const rawTools = await toolClient.listAllowedTools();
-    const tools = rawTools.map((t) => ({
-      name: t.name,
-      description: (t as { description?: string }).description ?? "",
-    }));
-    // Group by server prefix (e.g. "codemap_explore_task" → "codemap")
-    const groupedByServer: Record<string, typeof tools> = {};
-    for (const tool of tools) {
-      const underscoreIdx = tool.name.indexOf("_");
-      const server = underscoreIdx > 0 ? tool.name.slice(0, underscoreIdx) : "other";
-      if (!groupedByServer[server]) groupedByServer[server] = [];
-      groupedByServer[server].push(tool);
-    }
+    const groupedByServer = await toolClient.listAllToolsGroupedByServer();
+    const tools = Object.values(groupedByServer).flat();
     return { tools, groupedByServer };
   } catch {
     return { tools: [], groupedByServer: {} };
@@ -403,7 +588,7 @@ async function getToolsList() {
 }
 
 function post(message: RuntimeMessage): void {
-  parentPort?.postMessage(message);
+  process.send?.(message);
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

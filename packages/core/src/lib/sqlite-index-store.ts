@@ -315,7 +315,7 @@ export class SQLiteIndexStore {
   private constructor(dbPath: string) {
     this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath);
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
     this.db.exec(SCHEMA_SQL);
     this.db.exec(FTS_SCHEMA_SQL);
     this.migrateFts();

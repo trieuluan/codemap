@@ -1,6 +1,6 @@
 ---
 name: codemap-verification-before-completion
-description: "CodeMap skill: codemap-verification-before-completion"
+description: "Use before declaring any task complete — diff + build/test + index refresh + reimport checklist"
 ---
 
 # Verification Before Completion

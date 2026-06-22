@@ -1,6 +1,6 @@
 ---
 name: codemap-test-driven-development
-description: "CodeMap skill: codemap-test-driven-development"
+description: "Use when adding new functionality or fixing bugs — RED (failing test) → GREEN (pass) → REFACTOR cycle"
 ---
 
 # Test-Driven Development

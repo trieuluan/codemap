@@ -1,6 +1,6 @@
 ---
 name: codemap-mcp-first-exploration
-description: "CodeMap skill: codemap-mcp-first-exploration"
+description: "Use for broad read-only exploration — choose the narrowest CodeMap tool before reading any raw file"
 ---
 
 # MCP-First Exploration

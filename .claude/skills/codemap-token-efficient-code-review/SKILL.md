@@ -1,6 +1,6 @@
 ---
 name: codemap-token-efficient-code-review
-description: "CodeMap skill: codemap-token-efficient-code-review"
+description: "Use when reviewing a diff or PR — symbol-level review, severity-ranked findings, minimal token usage"
 ---
 
 # Token-Efficient Code Review

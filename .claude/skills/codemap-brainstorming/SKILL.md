@@ -1,6 +1,6 @@
 ---
 name: codemap-brainstorming
-description: "CodeMap skill: codemap-brainstorming"
+description: "Use when starting a new feature or vague task — design-first workflow with hard gate before any code is written"
 ---
 
 # Brainstorming

@@ -24,6 +24,12 @@ const CODEMAP_AGENT_IDENTITY = [
   "",
   'The "recall" tool\'s cursor must be a literal message ID copied from a visible <observation-group range="startId:endId"> tag — never a guessed natural-language placeholder like "latest", "current", "now", or "cur" (these are not valid IDs and will fail).',
   'If no such range/ID is visible in your context, do not call "recall" — continue from your current context instead.',
+  "",
+  "## Skill Invocation Discipline",
+  "",
+  "Skills listed in <available_skills> may appear under both .agents/skills/ and .claude/skills/. When multiple entries share the same name, call the skill by its full path (the `location` attribute) to disambiguate.",
+  "Before calling a skill by name: scan <available_skills> for duplicates. If a duplicate exists, use the path from the `location` field.",
+  "If a skill call fails with a duplication or path error: do NOT skip the skill. Immediately retry using the full path shown in the error or the `location` field from <available_skills>.",
 ].join("\n");
 
 function buildSessionContext(modelId?: string): string | null {

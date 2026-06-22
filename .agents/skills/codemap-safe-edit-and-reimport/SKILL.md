@@ -1,6 +1,6 @@
 ---
 name: codemap-safe-edit-and-reimport
-description: "CodeMap skill: codemap-safe-edit-and-reimport"
+description: "Use before editing files — scoped edit + diff inspection + local index refresh pattern"
 ---
 
 # Safe Edit And Reimport

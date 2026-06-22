@@ -58,9 +58,6 @@ export async function autoInjectRules(server: McpServer, cwd: string): Promise<v
   const clientName = clientInfo?.name ?? "(unknown)";
 
   if (!editor) {
-    process.stderr.write(
-      `[CodeMap] Client detected: "${clientName}" — no matching editor target, skipping auto-inject.\n`,
-    );
     return;
   }
 

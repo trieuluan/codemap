@@ -1,6 +1,6 @@
 ---
 name: codemap-feature-area-investigation
-description: "CodeMap skill: codemap-feature-area-investigation"
+description: "Use when investigating a named product area (auth, billing, CLI, MCP, etc.) — multi-signal file ranking before editing"
 ---
 
 # Feature Area Investigation

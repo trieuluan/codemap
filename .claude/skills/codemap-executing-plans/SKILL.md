@@ -1,6 +1,6 @@
 ---
 name: codemap-executing-plans
-description: "CodeMap skill: codemap-executing-plans"
+description: "Use when implementing an approved plan — execute steps in order, one at a time, with verification after each"
 ---
 
 # Executing Plans

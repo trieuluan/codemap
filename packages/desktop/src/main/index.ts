@@ -279,6 +279,15 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
   if (command.type === "link_project") {
     return runtime.linkProject(command.projectId);
   }
+  if (command.type === "get_auto_index_status") {
+    return runtime.getAutoIndexStatus();
+  }
+  if (command.type === "enable_auto_indexing") {
+    return runtime.enableAutoIndexing();
+  }
+  if (command.type === "disable_auto_indexing") {
+    return runtime.disableAutoIndexing();
+  }
   if (command.type === "read_file_preview") {
     const absPath = command.filePath.startsWith("/")
       ? command.filePath

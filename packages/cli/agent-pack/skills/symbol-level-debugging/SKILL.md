@@ -1,6 +1,6 @@
 ---
 name: codemap-symbol-level-debugging
-description: "CodeMap skill: codemap-symbol-level-debugging"
+description: "Use when a bug or unexpected behavior centers on a specific function, class, or method"
 ---
 
 # Symbol-Level Debugging

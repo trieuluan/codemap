@@ -1,12 +1,10 @@
-import { Gauge, GitBranch, ListChecks, PanelRightClose, PanelRightOpen, Settings2 } from "lucide-react";
+import { Gauge, GitBranch, ListChecks, PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { SessionSnapshot } from "@codemap-ai/core/agent/contracts";
-import type { SettingsMetadata } from "../../shared/ipc.js";
 import { PlanTimelinePanel } from "./PlanTimelinePanel.js";
-import { SettingsContent } from "./SettingsPanel.js";
 import { TokenObservabilityPanel } from "./TokenObservabilityPanel.js";
 import { WorkingDiffPanel } from "./WorkingDiffPanel.js";
 
-export type InspectorTab = "plan" | "context" | "diff" | "settings";
+export type InspectorTab = "plan" | "context" | "diff";
 
 function modelContextLimit(modelId: string): number {
   if (/gpt-4|o1|o3/i.test(modelId)) return 128_000;
@@ -27,7 +25,6 @@ interface RightRailProps {
   ) => void;
   onToggle: () => void;
   open: boolean;
-  settings: SettingsMetadata | null;
   snapshot: SessionSnapshot;
   tab: InspectorTab;
   selectedModel: string;
@@ -38,7 +35,6 @@ const tabs = [
   { id: "plan" as const, label: "Plan", icon: ListChecks },
   { id: "context" as const, label: "Context", icon: Gauge },
   { id: "diff" as const, label: "Diff", icon: GitBranch },
-  { id: "settings" as const, label: "Settings", icon: Settings2 },
 ];
 
 export function RightRail({
@@ -48,7 +44,6 @@ export function RightRail({
   onTabChange,
   onToggle,
   open,
-  settings,
   snapshot,
   tab,
   selectedModel,
@@ -110,11 +105,6 @@ export function RightRail({
           )}
           {tab === "context" && <TokenObservabilityPanel snapshot={snapshot} contextLimit={modelContextLimit(snapshot.model ?? selectedModel)} />}
           {tab === "diff" && <WorkingDiffPanel />}
-          {tab === "settings" && (
-            <div className="inspector-settings">
-              <SettingsContent settings={settings} />
-            </div>
-          )}
         </div>
       </aside>
     </>

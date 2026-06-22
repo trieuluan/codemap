@@ -9,7 +9,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { loadConfig } from "@codemap-ai/core/config.js";
 import { buildServerInstructions } from "@codemap-ai/core/lib/server-instructions.js";
-import { buildSessionContext } from "@codemap-ai/core/lib/session-context.js";
 import { autoInjectRules } from "@codemap-ai/core/lib/auto-inject.js";
 import { ensureLocalIndex } from "@codemap-ai/core/lib/local-index.js";
 import { enableAutoIndexing } from "@codemap-ai/core/lib/auto-indexing.js";
@@ -103,16 +102,17 @@ async function runMcpServer() {
   ensureLocalIndex({ force: false })
     .then((store) => {
       const workspaceRootPath = store.getMeta()?.workspaceRootPath;
-      if (workspaceRootPath) return enableAutoIndexing(store, workspaceRootPath);
+      if (!workspaceRootPath) return;
+      return enableAutoIndexing(store, workspaceRootPath);
     })
-    .catch(() => {});
+    .catch(() => {
+      // Auto-start failure is non-fatal — watcher can be enabled manually
+    });
 
   // Auto-inject after connect — clientInfo is available now from MCP initialize handshake
   await autoInjectRules(server, process.cwd());
 
-  // Push session context to stderr — Claude Code hooks and other agents read this
-  const sessionCtx = await buildSessionContext(process.cwd()).catch(() => null);
-  if (sessionCtx) process.stderr.write(sessionCtx + "\n");
+
 
   // Graceful shutdown handlers to avoid native mutex lock errors
   const shutdown = () => {

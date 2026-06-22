@@ -15,6 +15,8 @@ import { useSidebarResize } from "./hooks/useSidebarResize.js";
 import { useThreadSelection } from "./hooks/useThreadSelection.js";
 import { MapPage } from "./pages/MapPage.js";
 import { AccountPage } from "./pages/AccountPage.js";
+import McpDetailPage from "./pages/McpDetailPage.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 
 export function App() {
   const navigate = useNavigate();
@@ -63,6 +65,7 @@ export function App() {
 
   // Derive active top-level view from route
   const isAccountRoute = location.pathname.startsWith("/account");
+  const isSettingsRoute = location.pathname === "/settings";
 
   useEffect(() => {
     return window.codemap.onRuntimeStatus((status) => {
@@ -262,15 +265,15 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${sidebarOpen ? "" : "sidebar-closed"} ${inspectorOpen && !isAccountRoute ? "inspector-open" : "inspector-closed"}`}
+      className={`app-shell ${sidebarOpen ? "" : "sidebar-closed"} ${inspectorOpen && !isAccountRoute && !isSettingsRoute ? "inspector-open" : "inspector-closed"}`}
       style={
         sidebarOpen
           ? { gridTemplateColumns: `${clampedWidth}px 6px minmax(0, 1fr)` }
           : undefined
       }
     >
-      {/* Sidebar: hide on account page (full-width) */}
-      {!isAccountRoute && (
+      {/* Sidebar: hide on account/settings page (full-width) */}
+      {!isAccountRoute && !isSettingsRoute && (
         <ThreadSidebar
           workspace={workspace}
           threads={threads}
@@ -291,7 +294,7 @@ export function App() {
         />
       )}
 
-      <section className={`main-panel ${isAccountRoute ? "main-panel-full" : ""}`}>
+      <section className={`main-panel ${isAccountRoute || isSettingsRoute ? "main-panel-full" : ""}`}>
         <Topbar
           runtimeStatus={runtimeStatus}
           workspace={workspace}
@@ -307,11 +310,13 @@ export function App() {
           onOpenLauncher={() => setWorkspace(null)}
         />
 
-        {/* Account page: full-width, no RightRail */}
-        {isAccountRoute ? (
+        {/* Account / Settings page: full-width, no RightRail */}
+        {isAccountRoute || isSettingsRoute ? (
           <div className="workspace-body workspace-body-account">
             <Routes>
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/account" element={<Navigate to="/account/identity" replace />} />
+              <Route path="/account/mcp/:server" element={<McpDetailPage />} />
               <Route path="/account/:section" element={<AccountPage />} />
             </Routes>
           </div>
@@ -364,7 +369,6 @@ export function App() {
             <RightRail
               mode={mode}
               snapshot={snapshot}
-              settings={settings}
               open={inspectorOpen}
               width={inspectorWidth}
               tab={inspectorTab}

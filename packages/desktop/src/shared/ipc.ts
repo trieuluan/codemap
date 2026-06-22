@@ -136,6 +136,24 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
       url: z.string().url(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("get_auto_index_status"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("enable_auto_indexing"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("disable_auto_indexing"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
 ]);
 
 export const utilityCommandSchema = z.discriminatedUnion("type", [
@@ -214,6 +232,24 @@ export const utilityCommandSchema = z.discriminatedUnion("type", [
       type: z.literal("link_project"),
       requestId: requestIdSchema,
       projectId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_auto_index_status"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("enable_auto_indexing"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("disable_auto_indexing"),
+      requestId: requestIdSchema,
     })
     .strict(),
 ]);
@@ -330,6 +366,7 @@ export interface McpServerStatus {
   connecting?: boolean;
   toolCount: number;
   toolNames: string[];
+  toolDetails: { name: string; description: string }[];
   transport: "stdio" | "http";
   error?: string;
 }
@@ -396,6 +433,10 @@ export interface LinkProjectResult {
   error?: string;
 }
 
+export interface AutoIndexStatusResult {
+  isActive: boolean;
+}
+
 export interface DesktopApi {
   openWorkspace(): Promise<string | null>;
   openWorkspacePath(workspacePath: string): Promise<string>;
@@ -437,6 +478,9 @@ export interface DesktopApi {
   listProjects(): Promise<ListProjectsResult | null>;
   linkProject(projectId: string): Promise<LinkProjectResult | null>;
   openUrl(url: string): Promise<void>;
+  getAutoIndexStatus(): Promise<AutoIndexStatusResult | null>;
+  enableAutoIndexing(): Promise<{ success: boolean; error?: string } | null>;
+  disableAutoIndexing(): Promise<{ success: boolean; error?: string } | null>;
   onAgentEvent(listener: (event: AgentSessionEvent) => void): () => void;
   onRuntimeStatus(
     listener: (status: "starting" | "ready" | "disconnected") => void,

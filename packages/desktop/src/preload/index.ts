@@ -174,6 +174,21 @@ const api: DesktopApi = {
       requestId: crypto.randomUUID(),
       projectId,
     }),
+  getAutoIndexStatus: () =>
+    invoke({
+      type: "get_auto_index_status",
+      requestId: crypto.randomUUID(),
+    }),
+  enableAutoIndexing: () =>
+    invoke({
+      type: "enable_auto_indexing",
+      requestId: crypto.randomUUID(),
+    }),
+  disableAutoIndexing: () =>
+    invoke({
+      type: "disable_auto_indexing",
+      requestId: crypto.randomUUID(),
+    }),
   openUrl: (url) =>
     invoke({
       type: "open_url",

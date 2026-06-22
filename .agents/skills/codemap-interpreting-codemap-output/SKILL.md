@@ -1,6 +1,6 @@
 ---
 name: codemap-interpreting-codemap-output
-description: "CodeMap skill: codemap-interpreting-codemap-output"
+description: "Use when CodeMap MCP tools return ranked files or symbols — read summary and signals before expanding to raw files"
 ---
 
 # Interpreting CodeMap Output

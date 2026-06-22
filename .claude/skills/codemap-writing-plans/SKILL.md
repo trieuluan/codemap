@@ -1,6 +1,6 @@
 ---
 name: codemap-writing-plans
-description: "CodeMap skill: codemap-writing-plans"
+description: "Use after a design is approved — write a decision-complete implementation plan before touching any file"
 ---
 
 # Writing Plans

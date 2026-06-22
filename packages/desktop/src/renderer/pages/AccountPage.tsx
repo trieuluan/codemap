@@ -5,7 +5,6 @@ import {
   Link2,
   Server,
   Brain,
-  Settings,
   RefreshCw,
   LogIn,
   LogOut,
@@ -14,34 +13,31 @@ import {
   GitBranch,
   ExternalLink,
   ChevronRight,
-  CheckCircle,
   XCircle,
   Loader,
   ArrowLeft,
 } from "lucide-react";
 import type {
   AccountInfo,
-  SettingsMetadata,
   McpStatusResult,
-  ToolsListResult,
 } from "../../shared/ipc.js";
 
-type AccountSection = "identity" | "projects" | "mcp" | "memory" | "settings";
+type AccountSection = "identity" | "all-projects" | "projects" | "mcp" | "memory";
 
 const NAV_ITEMS: { id: AccountSection; label: string; icon: React.ReactNode }[] = [
-  { id: "identity", label: "Identity", icon: <User size={15} /> },
-  { id: "projects", label: "Linked Projects", icon: <Link2 size={15} /> },
-  { id: "mcp", label: "MCP Servers", icon: <Server size={15} /> },
-  { id: "memory", label: "Memory", icon: <Brain size={15} /> },
-  { id: "settings", label: "Settings", icon: <Settings size={15} /> },
+  { id: "identity",     label: "Identity",       icon: <User size={15} /> },
+  { id: "all-projects", label: "Projects",        icon: <Cloud size={15} /> },
+  { id: "projects",     label: "Linked Project",  icon: <Link2 size={15} /> },
+  { id: "mcp",          label: "MCP Servers",     icon: <Server size={15} /> },
+  { id: "memory",       label: "Memory",          icon: <Brain size={15} /> },
 ];
 
 const SECTION_FROM_HASH: Record<string, AccountSection> = {
-  "#/account/identity": "identity",
-  "#/account/projects": "projects",
-  "#/account/mcp": "mcp",
-  "#/account/memory": "memory",
-  "#/account/settings": "settings",
+  "#/account/identity":     "identity",
+  "#/account/all-projects": "all-projects",
+  "#/account/projects":     "projects",
+  "#/account/mcp":          "mcp",
+  "#/account/memory":       "memory",
 };
 
 export function AccountPage() {
@@ -52,10 +48,11 @@ export function AccountPage() {
   const activeSection: AccountSection = SECTION_FROM_HASH[sectionKey] ?? "identity";
 
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
+  const [allProjects, setAllProjects] = useState<{ id: string; name: string; status: string; repoUrl?: string }[]>([]);
+  const [allProjectsError, setAllProjectsError] = useState<string | null>(null);
   const [projects, setProjects] = useState<{ id: string; name: string; repoUrl?: string }[]>([]);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [mcpStatus, setMcpStatus] = useState<McpStatusResult | null>(null);
-  const [toolsList, setToolsList] = useState<ToolsListResult | null>(null);
-  const [settings, setSettings] = useState<SettingsMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,19 +60,20 @@ export function AccountPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setProjectError(null);
+    setAllProjectsError(null);
     try {
-      const [info, proj, mcp, tools, cfg] = await Promise.all([
+      const [info, proj, mcp] = await Promise.all([
         window.codemap.getAccountInfo().catch(() => null),
         window.codemap.listProjects().catch(() => null),
         window.codemap.getMcpStatus().catch(() => null),
-        window.codemap.getToolsList().catch(() => null),
-        window.codemap.readSettings().catch(() => null),
       ]);
       setAccountInfo(info);
+      setAllProjects(proj?.projects ?? []);
+      if (proj?.error) setAllProjectsError(proj.error);
       setProjects(proj?.projects ?? []);
+      if (proj?.error) setProjectError(proj.error);
       setMcpStatus(mcp);
-      setToolsList(tools);
-      setSettings(cfg);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -194,16 +192,24 @@ export function AccountPage() {
                 onLogout={() => void handleLogout()}
               />
             )}
-            {activeSection === "projects" && (
-              <ProjectsSection
-                projects={projects}
+            {activeSection === "all-projects" && (
+              <AllProjectsSection
+                projects={allProjects}
+                error={allProjectsError}
                 actionLoading={actionLoading}
                 onLink={() => void handleLinkProject()}
               />
             )}
-            {activeSection === "mcp" && <McpSection mcp={mcpStatus} tools={toolsList} onRefresh={() => void loadAll()} />}
+            {activeSection === "projects" && (
+              <ProjectsSection
+                projects={projects}
+                error={projectError}
+                actionLoading={actionLoading}
+                onLink={() => void handleLinkProject()}
+              />
+            )}
+            {activeSection === "mcp" && <McpSection mcp={mcpStatus} onRefresh={() => void loadAll()} />}
             {activeSection === "memory" && <MemorySection />}
-            {activeSection === "settings" && <SettingsSection settings={settings} onSaved={() => void loadAll()} />}
           </>
         )}
       </main>
@@ -270,13 +276,15 @@ function IdentitySection({
   );
 }
 
-/* ─── Section: Projects ─── */
-function ProjectsSection({
+/* ─── Section: All Projects ─── */
+function AllProjectsSection({
   projects,
+  error,
   actionLoading,
   onLink,
 }: {
-  projects: { id: string; name: string; repoUrl?: string }[];
+  projects: { id: string; name: string; status: string; repoUrl?: string }[];
+  error?: string | null;
   actionLoading: string | null;
   onLink: () => void;
 }) {
@@ -284,8 +292,8 @@ function ProjectsSection({
     <div className="account-section">
       <div className="account-section-toprow">
         <div>
-          <h2 className="account-section-heading">Linked Projects</h2>
-          <p className="account-section-desc">Cloud projects linked to this workspace.</p>
+          <h2 className="account-section-heading">Projects</h2>
+          <p className="account-section-desc">All cloud projects in your CodeMap account.</p>
         </div>
         <button
           className="secondary-button"
@@ -298,12 +306,86 @@ function ProjectsSection({
         </button>
       </div>
 
-      {projects.length === 0 ? (
+      {error && <div className="account-error">{error}</div>}
+
+      {!error && projects.length === 0 ? (
+        <div className="account-empty-state">
+          <Cloud size={28} />
+          <p>No projects yet</p>
+          <p className="account-empty-hint">
+            Create a project at{" "}
+            <a
+              href="#"
+              className="account-ext-link-inline"
+              onClick={(e) => {
+                e.preventDefault();
+                void window.codemap.openUrl("https://codemap.ai/projects");
+              }}
+            >
+              codemap.ai/projects
+            </a>
+          </p>
+        </div>
+      ) : !error ? (
+        <ul className="account-list">
+          {projects.map((p) => (
+            <li key={p.id} className="account-list-item">
+              <Cloud size={15} className="muted" />
+              <div className="account-list-item-info">
+                <span className="account-list-item-name">{p.name}</span>
+                {p.repoUrl && <span className="account-list-item-sub">{p.repoUrl}</span>}
+              </div>
+              <span className={`account-project-badge account-project-badge--${p.status}`}>
+                {p.status}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─── Section: Projects ─── */
+function ProjectsSection({
+  projects,
+  error,
+  actionLoading,
+  onLink,
+}: {
+  projects: { id: string; name: string; repoUrl?: string }[];
+  error?: string | null;
+  actionLoading: string | null;
+  onLink: () => void;
+}) {
+  return (
+    <div className="account-section">
+      <div className="account-section-toprow">
+        <div>
+          <h2 className="account-section-heading">Linked Project</h2>
+          <p className="account-section-desc">Cloud project linked to this workspace.</p>
+        </div>
+        <button
+          className="secondary-button"
+          onClick={onLink}
+          disabled={actionLoading === "link"}
+          type="button"
+        >
+          {actionLoading === "link" ? <Loader size={13} className="spin" /> : <Link2 size={13} />}
+          Link project
+        </button>
+      </div>
+
+      {error && (
+        <div className="account-error">{error}</div>
+      )}
+
+      {!error && projects.length === 0 ? (
         <div className="account-empty-state">
           <GitBranch size={28} />
           <p>No linked projects yet</p>
         </div>
-      ) : (
+      ) : !error ? (
         <ul className="account-list">
           {projects.map((p) => (
             <li key={p.id} className="account-list-item">
@@ -316,7 +398,7 @@ function ProjectsSection({
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -324,25 +406,21 @@ function ProjectsSection({
 /* ─── Section: MCP ─── */
 function McpSection({
   mcp,
-  tools,
   onRefresh,
 }: {
   mcp: McpStatusResult | null;
-  tools: ToolsListResult | null;
   onRefresh: () => void;
 }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  function toggleServer(name: string) {
-    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
-  }
+  const navigate = useNavigate();
 
   return (
-    <div className="account-section">
+    <div className="account-section mcp-section">
       <div className="account-section-toprow">
         <div>
           <h2 className="account-section-heading">MCP Servers</h2>
-          <p className="account-section-desc">Model Context Protocol server connections.</p>
+          <p className="account-section-desc">
+            {mcp?.statuses?.length ?? 0} server{(mcp?.statuses?.length ?? 0) !== 1 ? "s" : ""} connected · {mcp?.statuses?.reduce((n, s) => n + (s.toolCount ?? 0), 0) ?? 0} tools available
+          </p>
         </div>
         <button className="icon-button" onClick={onRefresh} type="button" title="Refresh">
           <RefreshCw size={14} />
@@ -353,81 +431,46 @@ function McpSection({
         <div className="account-empty-state">
           <Server size={28} />
           <p>No MCP servers configured</p>
+          <p className="account-empty-hint">Add MCP servers in your .codemap/settings.json</p>
         </div>
       ) : (
-        <ul className="account-list">
-          {mcp.statuses.map((s) => {
-            const serverTools = tools?.groupedByServer[s.name] ?? [];
-            const isExpanded = expanded[s.name] ?? false;
-            return (
-              <li key={s.name} className="account-list-item account-server-row">
-                <div className="account-server-header">
-                  {s.connected ? (
-                    <CheckCircle size={15} className="text-success" />
-                  ) : s.connecting ? (
-                    <Loader size={15} className="spin muted" />
-                  ) : (
-                    <XCircle size={15} className="text-error" />
-                  )}
-                  <div className="account-list-item-info">
-                    <span className="account-list-item-name">{s.name}</span>
-                    <span className="account-list-item-sub">
-                      {s.transport} · {s.toolCount} tool{s.toolCount !== 1 ? "s" : ""}
-                      {s.error ? ` · ${s.error}` : ""}
-                    </span>
-                  </div>
-                  <span className={`account-badge ${s.connected ? "badge-ok" : "badge-err"}`}>
-                    {s.connected ? "Connected" : s.connecting ? "Connecting" : "Disconnected"}
-                  </span>
-                  {s.connected && serverTools.length > 0 && (
-                    <button
-                      className="account-server-tools-toggle"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleServer(s.name);
-                      }}
-                      type="button"
-                      title={isExpanded ? "Hide tools" : "Show tools"}
-                    >
-                      <ChevronRight
-                        size={13}
-                        style={{ transform: isExpanded ? "rotate(90deg)" : undefined, transition: "transform 0.15s" }}
-                      />
-                    </button>
-                  )}
-                </div>
-                {s.connected && isExpanded && (
-                  <div className="account-server-tools">
-                    {serverTools.length === 0 ? (
-                      <span className="account-tool-empty">No tools loaded</span>
-                    ) : (
-                      serverTools.map((t) => (
-                        <div key={t.name} className="account-tool-item">
-                          <span className="account-tool-name">{t.name}</span>
-                          {t.description && <span className="account-tool-desc">{t.description}</span>}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
+        <div className="mcp-servers">
+          {mcp.statuses.map((s) => (
+            <button
+              key={s.name}
+              className="mcp-server-card mcp-server-card-clickable"
+              onClick={() => navigate(`/account/mcp/${s.name}`)}
+              type="button"
+            >
+              <div className="mcp-server-status-dot" data-status={s.connected ? "connected" : s.connecting ? "connecting" : "error"} />
+              <div className="mcp-server-info">
+                <span className="mcp-server-name">{s.name}</span>
+                <span className="mcp-server-meta">
+                  {s.transport === "stdio" ? "⚙" : "🌐"} {s.transport}
+                  <span className="mcp-sep">·</span>
+                  <span className="mcp-tool-count">{s.toolCount} tool{s.toolCount !== 1 ? "s" : ""}</span>
+                  {s.error && <><span className="mcp-sep">·</span><span className="text-error">{s.error}</span></>}
+                </span>
+              </div>
+              <span className={`mcp-badge ${s.connected ? "mcp-badge-ok" : s.connecting ? "mcp-badge-warn" : "mcp-badge-err"}`}>
+                {s.connected ? "Connected" : s.connecting ? "Connecting…" : "Disconnected"}
+              </span>
+              <ChevronRight size={14} className="mcp-chevron" />
+            </button>
+          ))}
           {mcp.skipped.length > 0 && (
-            <>
-              <li className="account-list-divider">Skipped</li>
+            <div className="mcp-skipped-section">
+              <span className="mcp-skipped-label">Skipped</span>
               {mcp.skipped.map((s) => (
-                <li key={s.name} className="account-list-item muted">
-                  <XCircle size={15} />
-                  <div className="account-list-item-info">
-                    <span className="account-list-item-name">{s.name}</span>
-                    <span className="account-list-item-sub">{s.reason}</span>
-                  </div>
-                </li>
+                <div key={s.name} className="mcp-skipped-item">
+                  <XCircle size={13} className="text-error" />
+                  <span className="mcp-skipped-name">{s.name}</span>
+                  <span className="mcp-skipped-reason">{s.reason}</span>
+                </div>
               ))}
-            </>
+            </div>
           )}
-        </ul>
+        </div>
       )}
     </div>
   );
@@ -464,49 +507,4 @@ function MemorySection() {
   );
 }
 
-/* ─── Section: Settings ─── */
-function SettingsSection({
-  settings,
-  onSaved,
-}: {
-  settings: SettingsMetadata | null;
-  onSaved: () => void;
-}) {
-  return (
-    <div className="account-section">
-      <h2 className="account-section-heading">Settings</h2>
-      <p className="account-section-desc">Model, gateway, and agent configuration.</p>
 
-      <div className="account-settings-group">
-        <div className="account-settings-row">
-          <label className="account-settings-label">Default model</label>
-          <span className="account-settings-value">{settings?.defaultModel ?? "—"}</span>
-        </div>
-        <div className="account-settings-row">
-          <label className="account-settings-label">Gateway</label>
-          <span className="account-settings-value">{settings?.baseUrl ?? "—"}</span>
-        </div>
-        <div className="account-settings-row">
-          <label className="account-settings-label">API key</label>
-          <span className={`account-settings-value ${settings?.hasApiKey ? "text-success" : "muted"}`}>
-            {settings?.hasApiKey ? "✓ Set" : "Not configured"}
-          </span>
-        </div>
-        <div className="account-settings-row">
-          <label className="account-settings-label">API token</label>
-          <span className={`account-settings-value ${settings?.hasApiToken ? "text-success" : "muted"}`}>
-            {settings?.hasApiToken ? "✓ Set" : "Not configured"}
-          </span>
-        </div>
-        <div className="account-settings-row">
-          <label className="account-settings-label">Provider</label>
-          <span className="account-settings-value">{settings?.provider ?? "—"}</span>
-        </div>
-      </div>
-
-      <p className="account-settings-hint">
-        Edit <code>.codemap/settings.json</code> in your workspace to change these values.
-      </p>
-    </div>
-  );
-}
