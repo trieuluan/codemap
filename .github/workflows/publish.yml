@@ -32,6 +32,7 @@ jobs:
           pnpm --filter @codemap-ai/code-index run build
           pnpm --filter @codemap-ai/tool-types run build
           pnpm --filter @codemap-ai/core run build
+          pnpm --filter @codemap-ai/runtime-node run build
           pnpm --filter @codemap-ai/mcp run build
           pnpm --filter @codemap-ai/cli run build
 
@@ -43,6 +44,7 @@ jobs:
           pnpm --filter @codemap-ai/shared publish --access public --no-git-checks --no-otp
           pnpm --filter @codemap-ai/code-index publish --access public --no-git-checks --no-otp
           pnpm --filter @codemap-ai/core publish --access public --no-git-checks --no-otp
+          pnpm --filter @codemap-ai/runtime-node publish --access public --no-git-checks --no-otp
           pnpm --filter @codemap-ai/tool-types publish --access public --no-git-checks --no-otp
           pnpm --filter @codemap-ai/mcp publish --access public --no-git-checks --no-otp
           pnpm --filter @codemap-ai/cli publish --access public --no-git-checks --no-otp
