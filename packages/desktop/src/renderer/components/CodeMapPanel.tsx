@@ -6,7 +6,10 @@ import {
   Handle,
   Position,
   MarkerType,
+  BaseEdge,
+  getBezierPath,
   applyNodeChanges,
+  type EdgeProps,
   type Node,
   type Edge,
   type OnNodesChange,
@@ -539,7 +542,8 @@ export function CodeMapPanel() {
       if (isCycle) return { stroke: "#ef4444", strokeWidth: 1.5, opacity: 0.7 };
       const color = isRel ? (directionOut ? "#a78bfa" : "#60a5fa") : "var(--border-strong)";
       const extra = isFocus && directionOut ? { strokeDasharray: "8 4" } : {};
-      return { stroke: color, strokeWidth: isRel ? 1.5 : 0.5, opacity: isRel ? 0.7 : 0.18, ...extra };
+      const w = isFocus && !directionOut ? 0.5 : isRel ? 1.5 : 0.5;
+      return { stroke: color, strokeWidth: w, opacity: isRel ? 0.7 : 0.18, ...extra };
     };
 
     const mapEdge = (id: string, source: string, target: string): Edge => {
@@ -552,8 +556,12 @@ export function CodeMapPanel() {
       const directionOut = source === focusId;
       const markerColor = isCycleEdge ? "#ef4444" : isRelated ? (directionOut ? "#a78bfa" : "#60a5fa") : "var(--muted)";
       return {
-        id, source, target, type: "default",
-        animated: isFocus && !isFaded,
+        id,
+        source,
+        target,
+        type: isFocus ? "focus" : "default",
+        animated: isFocus && !isFaded && !directionOut,
+        data: isFocus ? { flow: directionOut ? "outgoing" : "incoming", active: selectedId !== null } : undefined,
         markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: markerColor },
         style: edgeStyle(isCycleEdge, isRelated, isFaded, directionOut),
       };
@@ -562,13 +570,57 @@ export function CodeMapPanel() {
     const regular = displayEdges.map(({ id, source, target }) => mapEdge(id, source, target));
     const cluster = focusClusterEdges.map(({ id, source, target }) => mapEdge(id, source, target));
     return [...regular, ...cluster];
-  }, [displayEdges, focusClusterEdges, related, displayNodes, currentNav, activeId]);
+  }, [displayEdges, focusClusterEdges, related, displayNodes, currentNav, activeId, selectedId]);
+
+  const FocusEdge = ({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    style,
+    markerEnd,
+    data,
+  }: EdgeProps<Edge<{ flow?: "incoming" | "outgoing"; active?: boolean }>>) => {
+    const [edgePath] = getBezierPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    });
+    const isIncoming = data?.flow === "incoming";
+    const isActive = data?.active === true;
+
+    return (
+      <>
+        <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
+        {isIncoming ? (
+          isActive ? (
+            <circle r="5" fill="#3b82f6">
+              <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
+            </circle>
+          ) : (
+            <circle r="3" fill="#3b82f6" opacity={0.4} />
+          )
+        ) : null}
+      </>
+    );
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes = useMemo(() => ({
     dependency: DependencyNode as any,
     folder: FolderNode as any,
     cluster: ClusterNode as any,
+  }), []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const edgeTypes = useMemo(() => ({
+    focus: FocusEdge as any,
   }), []);
 
   // Reset expanded clusters when leaving focus mode
@@ -664,6 +716,7 @@ export function CodeMapPanel() {
             edges={rfEdges}
             onNodesChange={onNodesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onNodeClick={handleNodeClick}
             onPaneClick={() => setSelectedId(null)}
             fitView
