@@ -453,14 +453,43 @@ export interface GraphNode {
   id: string;
   label: string;
   path: string;
+  language?: string;
+  dirPath?: string;
+  isInCycle?: boolean;
   inboundCount: number;
   outboundCount: number;
   category: "entry" | "core" | "shared" | "other";
 }
 
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  importKind: string;
+  isResolved: boolean;
+}
+
+export interface GraphFolderNode {
+  id: string;
+  folder: string;
+  fileCount: number;
+  incomingCount: number;
+  outgoingCount: number;
+}
+
+export interface GraphFolderEdge {
+  id: string;
+  source: string;
+  target: string;
+  edgeCount: number;
+}
+
 export interface GraphData {
   nodes: GraphNode[];
-  edges: Array<[string, string]>;
+  edges: GraphEdge[];
+  folderNodes?: GraphFolderNode[];
+  folderEdges?: GraphFolderEdge[];
+  cycles?: Array<{ nodeIds: string[] }>;
   timestamp: number;
   error?: string;
 }

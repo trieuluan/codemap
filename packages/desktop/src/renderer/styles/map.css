@@ -280,34 +280,14 @@
   text-transform: none;
 }
 
-.codemap-view-switch {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
+.codemap-view-label {
+  padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-}
-
-.codemap-view-switch button {
-  flex: 1;
-  padding: 6px 12px;
-  border: 0;
   border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.codemap-view-switch button:hover {
-  color: var(--text-dim);
-}
-
-.codemap-view-switch button.active {
   background: var(--hover);
   color: var(--foreground);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* ── React Flow canvas ── */
@@ -325,39 +305,68 @@
   height: auto !important;
 }
 
+/* ── Edge labels (focus mode) ── */
+
+/* ── Edge labels (focus mode) ── */
+
+.react-flow__edge-text {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--card);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* ── Dependency node card ── */
 
 .codemap-dependency-node {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  font-size: 12px;
-  line-height: 1.4;
-  cursor: pointer;
-  white-space: nowrap;
-  min-width: 140px;
-  max-width: 260px;
+  width: 240px;
   height: auto;
+  min-height: 72px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+  cursor: pointer;
   box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.codemap-dependency-node-dot {
+.codemap-dependency-node.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.codemap-dependency-node.in-cycle {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.codemap-dependency-node-accent {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 4px;
+  background: var(--border-strong);
+  border-radius: 0;
 }
 
 .codemap-dependency-node-body {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding: 10px 12px;
   min-width: 0;
   overflow: hidden;
+  flex: 1;
+}
+
+.codemap-dependency-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .codemap-dependency-node-label {
@@ -367,6 +376,20 @@
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codemap-dependency-node-cycle {
+  flex-shrink: 0;
+  padding: 0px 6px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .codemap-dependency-node-path {
@@ -374,14 +397,144 @@
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  white-space: nowrap;
+  max-width: 200px;
 }
 
 .codemap-dependency-node-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.stat-in {
+  color: var(--success);
+}
+
+.stat-out {
+  color: var(--warning);
+}
+
+/* ── Folder node card ── */
+
+.codemap-folder-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 260px;
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.codemap-folder-node:hover {
+  border-color: var(--foreground);
+}
+
+.codemap-folder-node-icon {
   flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.codemap-folder-node-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.codemap-folder-node-label {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codemap-folder-node-files {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.codemap-folder-node-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+
+/* ── Cluster node (focus mode leaf grouping) ── */
+
+.codemap-cluster-node {
+  width: 220px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.codemap-cluster-node:hover {
+  border-color: var(--foreground);
+  background: var(--hover);
+}
+.codemap-cluster-node.direction-in {
+  border-color: #6a8ee8;
+}
+.codemap-cluster-node.direction-out {
+  border-color: #a276d4;
+}
+.codemap-cluster-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.codemap-cluster-icon {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.codemap-cluster-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.codemap-cluster-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.codemap-cluster-sample-file {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.codemap-cluster-more {
   font-size: 10px;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  font-style: italic;
 }
 
 /* ── Legend / detail (reused from before) ── */
@@ -1360,4 +1513,9 @@ body.diff-panel-resizing {
   opacity: 0.7;
   max-width: 280px;
   text-align: center;
+}
+
+/* React Flow attribution — keep hidden */
+.react-flow__attribution {
+  display: none;
 }

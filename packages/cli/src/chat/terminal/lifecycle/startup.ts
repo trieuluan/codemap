@@ -4,7 +4,6 @@ import {
   autoResumeLatestThread,
   listMastraThreadMessages,
   getMastraDisplayState,
-  maybeCleanupMastraDb,
 } from "@codemap-ai/runtime-node";
 import type { EventBus } from "@codemap-ai/core/agent";
 import type { Store } from "../../state/store-class.js";
@@ -78,8 +77,6 @@ export async function startChatTerminalRuntime({
       }
     })
     .catch(() => {});
-
-  maybeCleanupMastraDb();
 
   const { startPiTuiApp } = await import("../../../tui/app.js");
   await startPiTuiApp(terminal);

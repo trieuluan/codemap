@@ -243,9 +243,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      d3-force:
-        specifier: ^3.0.0
-        version: 3.0.0
+      elkjs:
+        specifier: ^0.11.1
+        version: 0.11.1
       gpt-tokenizer:
         specifier: ^3.4.0
         version: 3.4.0
@@ -292,9 +292,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.1.14
         version: 4.3.1(vite@7.3.5(@types/node@24.13.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
-      '@types/d3-force':
-        specifier: ^3.0.10
-        version: 3.0.10
       '@types/node':
         specifier: ^24.12.2
         version: 24.13.0
@@ -4058,6 +4055,9 @@ packages:
     resolution: {integrity: sha512-DdWRsHm4j5wH9TMcfnB2Dqx44G/6BgLKSG/oeRe9kS60pfqCUwzUkHk0ClwvZzBVXtJ1kcdkHVRrJsl1ooKp+g==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
+
+  elkjs@0.11.1:
+    resolution: {integrity: sha512-zxxR9k+rx5ktMwT/FwyLdPCrq7xN6e4VGGHH8hA01vVYKjTFik7nHOxBnAYtrgYUB1RpAiLvA1/U2YraWxyKKg==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -10717,6 +10717,8 @@ snapshots:
       '@types/node': 24.13.0
     transitivePeerDependencies:
       - supports-color
+
+  elkjs@0.11.1: {}
 
   emoji-regex@8.0.0: {}
 

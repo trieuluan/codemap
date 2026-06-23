@@ -379,14 +379,29 @@ function previewText(text: string): string {
   return compact.length > 160 ? `${compact.slice(0, 160)}…` : compact;
 }
 
+// Some models (DeepSeek, Qwen) embed reasoning inline as <think>...</think> in text blocks
+// rather than as separate reasoning-delta / thinking content parts.
+// extractLastText strips them from visible text; extractLastThinking also collects them.
+const THINK_TAG_RE = /<think>([\s\S]*?)<\/think>\s*/g;
+function stripThinkTags(text: string): string {
+  return text.replace(THINK_TAG_RE, "");
+}
+function extractInlineThinking(text: string): string {
+  const parts: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = new RegExp(THINK_TAG_RE.source, "g");
+  while ((m = re.exec(text)) !== null) parts.push(m[1]);
+  return parts.join("");
+}
+
 function extractLastText(
   content: HarnessMessageContent[] | string | undefined,
 ): string {
   if (!content) return "";
-  if (typeof content === "string") return content;
+  if (typeof content === "string") return stripThinkTags(content);
   for (let i = content.length - 1; i >= 0; i--) {
     if (content[i].type === "text") {
-      return (content[i] as { type: "text"; text: string }).text;
+      return stripThinkTags((content[i] as { type: "text"; text: string }).text);
     }
   }
   return "";
@@ -396,10 +411,15 @@ function extractLastThinking(
   content: HarnessMessageContent[] | string | undefined,
 ): string {
   if (!content) return "";
-  if (typeof content === "string") return "";
+  if (typeof content === "string") return extractInlineThinking(content);
   for (let i = content.length - 1; i >= 0; i--) {
     if (content[i].type === "thinking") {
       return (content[i] as { type: "thinking"; thinking: string }).thinking;
+    }
+    // Fallback: inline <think> tags embedded in a text block
+    if (content[i].type === "text") {
+      const inline = extractInlineThinking((content[i] as { type: "text"; text: string }).text);
+      if (inline) return inline;
     }
   }
   return "";

@@ -186,6 +186,7 @@ async function planCursor(root: string): Promise<PlannedWrite[]> {
   const mcpFirst = await readAgentPackFile("rules/mcp-first.md");
   const lifecycle = await readAgentPackFile("rules/task-lifecycle.md");
   const workflowSkills = await readAgentPackFile("rules/workflow-skills.md");
+  const ponytailGate = await readAgentPackFile("rules/ponytail-gate.md");
   return [
     {
       path: path.join(root, ".cursor", "rules", "codemap.mdc"),
@@ -200,6 +201,8 @@ async function planCursor(root: string): Promise<PlannedWrite[]> {
         lifecycle,
         "",
         workflowSkills,
+        "",
+        ponytailGate,
       ].join("\n"),
     },
   ];

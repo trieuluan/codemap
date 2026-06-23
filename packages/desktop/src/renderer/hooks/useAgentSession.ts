@@ -77,12 +77,14 @@ function extractInlineImages(content: string): Array<{ data: string; mimeType: s
   return images;
 }
 
+const INLINE_THINK_RE = /<think>[\s\S]*?<\/think>\s*/g;
+
 function extractTextContent(content: unknown): string {
-  if (typeof content === "string") return content;
+  if (typeof content === "string") return content.replace(INLINE_THINK_RE, "").trim();
   if (Array.isArray(content)) {
     return content
       .filter((part): part is { type: "text"; text: string } => part?.type === "text")
-      .map((part) => part.text)
+      .map((part) => part.text.replace(INLINE_THINK_RE, "").trim())
       .join("\n")
       .trim();
   }
@@ -90,14 +92,30 @@ function extractTextContent(content: unknown): string {
 }
 
 function extractReasoningContent(content: unknown): string {
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((part): part is { type: "thinking"; thinking: string } =>
-      part?.type === "thinking" && typeof part.thinking === "string",
-    )
-    .map((part) => part.thinking)
-    .join("\n")
-    .trim();
+  // Native thinking blocks (Claude extended thinking, etc.)
+  if (Array.isArray(content)) {
+    const native = content
+      .filter((part): part is { type: "thinking"; thinking: string } =>
+        part?.type === "thinking" && typeof part.thinking === "string",
+      )
+      .map((part) => part.thinking)
+      .join("\n")
+      .trim();
+    if (native) return native;
+
+    // Fallback: inline <think>...</think> in text blocks (DeepSeek, Qwen, etc.)
+    for (let i = content.length - 1; i >= 0; i--) {
+      if (content[i]?.type === "text" && typeof content[i].text === "string") {
+        const matches = [...content[i].text.matchAll(/<think>([\s\S]*?)<\/think>/g)];
+        if (matches.length) return matches.map((m) => m[1]).join("\n").trim();
+      }
+    }
+  }
+  if (typeof content === "string") {
+    const matches = [...content.matchAll(/<think>([\s\S]*?)<\/think>/g)];
+    if (matches.length) return matches.map((m) => m[1]).join("\n").trim();
+  }
+  return "";
 }
 
 function extractMessageImages(

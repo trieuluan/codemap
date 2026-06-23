@@ -2,6 +2,7 @@ import type { GatewayCommandContext } from ".././command-context.js";
 import {
   CodeMapMcpToolClient,
   resetHarnessSingleton,
+  maybeCleanupMastraDb,
 } from "@codemap-ai/runtime-node";
 import type { ChatUiMode } from "../../agent/runtime/cli-runtime.js";
 import { NineRouterProvider } from "@codemap-ai/core/agent";
@@ -35,6 +36,9 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
     childCleanupDone = true;
     await toolClient.close().catch(() => {});
     await resetHarnessSingleton().catch(() => {});
+    // Only safe to run once the harness above has stopped writing —
+    // otherwise this contends with the live session for the SQLite lock.
+    await maybeCleanupMastraDb().catch(() => {});
   };
   (process as NodeJS.Process).exit = ((code?: number | string) => {
     cleanupChildren().finally(() => originalProcessExit(code as number));

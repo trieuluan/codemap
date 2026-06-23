@@ -7,8 +7,19 @@ import { loadSettings, writeSettings } from "../settings.ts";
 
 const execFileAsync = promisify(execFile);
 
-const SPAN_RETENTION_DAYS = 30;
+const SPAN_RETENTION_DAYS = 14;
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
+// mastra_ai_spans has no index on createdAt, but rows are inserted in
+// chronological order, so a rowid + LIMIT scan finds old rows without
+// touching the whole table. Batching also keeps each write transaction short.
+const DELETE_BATCH_SIZE = 2000;
+// Callers only run this after the chat harness has shut down its storage
+// connection, but we still cap total time so process exit never hangs on a
+// large backlog — any remainder is picked up on a later exit. A single batch
+// can be unexpectedly slow on a multi-GB file with a cold page cache, so each
+// batch's own timeout is capped to whatever budget remains (see below).
+const CLEANUP_TIME_BUDGET_MS = 8_000;
+const MIN_BATCH_TIMEOUT_MS = 1_000;
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -34,52 +45,86 @@ function getMastraDbPath(): string {
   return path.join(getMastraAppDataDir(), "mastra.db");
 }
 
+/** Deletes one batch of old spans and returns how many rows were removed. */
+async function deleteSpanBatch(dbPath: string, cutoff: string, timeoutMs: number): Promise<number> {
+  const { stdout } = await execFileAsync(
+    "sqlite3",
+    [
+      dbPath,
+      `DELETE FROM mastra_ai_spans WHERE rowid IN (SELECT rowid FROM mastra_ai_spans WHERE createdAt < '${cutoff}' LIMIT ${DELETE_BATCH_SIZE}); SELECT changes();`,
+    ],
+    { timeout: timeoutMs },
+  );
+  return parseInt(stdout.trim(), 10) || 0;
+}
+
+function wasKilledByTimeout(err: unknown): boolean {
+  return Boolean(err && typeof err === "object" && "killed" in err && (err as { killed?: boolean }).killed);
+}
+
 /**
- * Fire-and-forget cleanup of old ai_spans from mastra.db.
- * Runs at most once per day. Stores last-run timestamp in ~/.codemap/settings.json.
- * Non-blocking — never awaits at the top level.
+ * Best-effort cleanup of old ai_spans from mastra.db.
+ *
+ * Callers must only invoke this once the chat harness has shut down its own
+ * storage connection — running it during an active session contends with
+ * the harness for the same SQLite write lock. Runs at most once per day and
+ * bails out after a short time budget so it never blocks process exit; a
+ * large backlog is drained incrementally across exits instead of in one go.
  */
-export function maybeCleanupMastraDb(): void {
+export async function maybeCleanupMastraDb(): Promise<void> {
   if (process.platform !== "darwin" && process.platform !== "linux") return;
 
-  (async () => {
-    const settings = await loadSettings();
-    const lastCleanup = settings.maintenance?.lastSpanCleanupAt ?? 0;
-    if (Date.now() - lastCleanup < CLEANUP_INTERVAL_MS) return;
+  const settings = await loadSettings();
+  const lastCleanup = settings.maintenance?.lastSpanCleanupAt ?? 0;
+  if (Date.now() - lastCleanup < CLEANUP_INTERVAL_MS) return;
 
-    const dbPath = getMastraDbPath();
-    if (!(await fileExists(dbPath))) return;
+  const dbPath = getMastraDbPath();
+  if (!(await fileExists(dbPath))) return;
 
-    const cutoff = new Date(Date.now() - SPAN_RETENTION_DAYS * 86400_000).toISOString();
+  const cutoff = new Date(Date.now() - SPAN_RETENTION_DAYS * 86400_000).toISOString();
+  const deadline = Date.now() + CLEANUP_TIME_BUDGET_MS;
 
-    try {
-      const { stdout: countOut } = await execFileAsync("sqlite3", [
-        dbPath,
-        `SELECT COUNT(*) FROM mastra_ai_spans WHERE datetime(createdAt) < datetime('${cutoff}');`,
-      ]);
-      const deleteCount = parseInt(countOut.trim(), 10);
-      if (deleteCount === 0) {
-        await writeSettings("global", { maintenance: { lastSpanCleanupAt: Date.now() } });
-        return;
+  try {
+    let totalDeleted = 0;
+    let drainedBacklog = false;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining < MIN_BATCH_TIMEOUT_MS) break;
+
+      let deleted: number;
+      try {
+        deleted = await deleteSpanBatch(dbPath, cutoff, remaining);
+      } catch (err) {
+        // Hit the time budget mid-batch — normal for a large backlog on a
+        // multi-GB file, not a real failure. Stop and resume next exit.
+        if (wasKilledByTimeout(err)) break;
+        throw err;
       }
 
-      console.debug(`[cleanup] deleting ${deleteCount} spans older than ${SPAN_RETENTION_DAYS} days…`);
-
-      await execFileAsync(
-        "sqlite3",
-        [
-          dbPath,
-          `DELETE FROM mastra_ai_spans WHERE datetime(createdAt) < datetime('${cutoff}'); PRAGMA wal_checkpoint(TRUNCATE);`,
-        ],
-        { timeout: 120_000 },
-      );
-
-      await writeSettings("global", { maintenance: { lastSpanCleanupAt: Date.now() } });
-      console.debug(`[cleanup] done, removed ${deleteCount} spans`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes("no such table: mastra_ai_spans")) return;
-      console.debug("[cleanup] mastra span cleanup failed:", err);
+      totalDeleted += deleted;
+      if (deleted < DELETE_BATCH_SIZE) {
+        drainedBacklog = true;
+        break;
+      }
     }
-  })();
+
+    if (totalDeleted > 0) {
+      await execFileAsync("sqlite3", [dbPath, "PRAGMA wal_checkpoint(PASSIVE);"], { timeout: 10_000 });
+      console.debug(`[cleanup] removed ${totalDeleted} spans older than ${SPAN_RETENTION_DAYS} days`);
+    }
+
+    // Only mark today's cleanup as done once the backlog is fully drained —
+    // otherwise the next exit retries sooner than 24h so a large backlog
+    // (e.g. right after lowering retention) clears over a few sessions.
+    if (drainedBacklog) {
+      await writeSettings("global", { maintenance: { lastSpanCleanupAt: Date.now() } });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("no such table: mastra_ai_spans")) {
+      await writeSettings("global", { maintenance: { lastSpanCleanupAt: Date.now() } });
+      return;
+    }
+    console.debug("[cleanup] mastra span cleanup failed:", err);
+  }
 }

@@ -3,6 +3,7 @@ import {
   buildCodeMapAgentInstructions,
 } from "@codemap-ai/core/agent";
 import { loadConfig } from "@codemap-ai/core/config.js";
+import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
 import type {
   AgentSessionCommand,
   AgentSessionController,
@@ -34,6 +35,7 @@ import {
   type LinkProjectResult,
   type GraphData,
   type GraphNode,
+  type GraphEdge,
 } from "../shared/ipc.js";
 
 if (!process.send) throw new Error("Desktop utility requires a parent IPC channel");
@@ -597,62 +599,100 @@ function post(message: RuntimeMessage): void {
 }
 
 async function getGraphData(): Promise<GraphData> {
-  await awaitWarmup();
-  if (!toolClient) return { nodes: [], edges: [], timestamp: Date.now(), error: "MCP server not connected" };
-
-  const result = await toolClient.callTool("get_project_insights", {});
-  if (result.isError) {
-    const errMsg = result.content?.replace(/^Error:?\s*/i, "").trim() || "Failed to fetch graph data";
-    return { nodes: [], edges: [], timestamp: Date.now(), error: errMsg };
+  const config = await loadConfig(workspacePath || process.cwd());
+  const wsProject = await readWorkspaceProjectConfig(workspacePath || process.cwd());
+  if (!config.apiToken) {
+    return { nodes: [], edges: [], timestamp: Date.now(), error: "Not logged in" };
+  }
+  if (!wsProject.projectId) {
+    return { nodes: [], edges: [], timestamp: Date.now(), error: "No project linked" };
   }
 
-  const data = (result.structuredContent as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined;
-  if (!data) return { nodes: [], edges: [], timestamp: Date.now(), error: "No data returned from graph API" };
+  const apiUrl = config.apiUrl || "https://api.codemap.codes";
+  const url = `${apiUrl}/projects/${wsProject.projectId}/map/graph`;
 
-  // Data is nested under data.insights (the success() wrapper puts payload under .data key)
-  type InsightFile = { path: string; incomingCount?: number; outgoingCount?: number };
-  type EntryFile = { path: string; incomingCount?: number; outgoingCount?: number };
+  type ApiNode = { id: string; path: string; language?: string; dirPath?: string; incomingCount: number; outgoingCount: number };
+  type ApiEdge = { id: string; source: string; target: string; importKind: string; isResolved: boolean };
+  type ApiCycle = { nodeIds: string[] };
 
-  const insights = data.insights as Record<string, unknown> | undefined;
-  if (!insights) return { nodes: [], edges: [], timestamp: Date.now() };
+  let apiNodes: ApiNode[] = [];
+  let apiEdges: ApiEdge[] = [];
+  let apiCycles: ApiCycle[] = [];
+  let apiFolderNodes: { id: string; folder: string; fileCount: number; incomingCount: number; outgoingCount: number }[] = [];
+  let apiFolderEdges: { id: string; source: string; target: string; edgeCount: number }[] = [];
+  try {
+    const res = await fetch(url, { headers: { "x-api-key": config.apiToken } });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const msg = (body.error as Record<string, unknown>)?.message ?? `HTTP ${res.status}`;
+      return { nodes: [], edges: [], timestamp: Date.now(), error: String(msg) };
+    }
+    const json = (await res.json()) as {
+      success: boolean;
+      data: {
+        nodes: ApiNode[]; edges: ApiEdge[]; cycles?: ApiCycle[];
+        folderNodes?: { id: string; folder: string; fileCount: number; incomingCount: number; outgoingCount: number }[];
+        folderEdges?: { id: string; source: string; target: string; edgeCount: number }[];
+      };
+    };
+    apiNodes = json.data.nodes ?? [];
+    apiEdges = json.data.edges ?? [];
+    apiCycles = json.data.cycles ?? [];
+    apiFolderNodes = json.data.folderNodes ?? [];
+    apiFolderEdges = json.data.folderEdges ?? [];
+  } catch (err) {
+    return { nodes: [], edges: [], timestamp: Date.now(), error: (err as Error).message };
+  }
 
-  const topByInbound: InsightFile[] = (insights.topFilesByInboundDependencyCount as InsightFile[] | undefined) ?? [];
-  const topByImports: InsightFile[] = (insights.topFilesByImportCount as InsightFile[] | undefined) ?? [];
-  const entryPoints: EntryFile[] = (insights.entryLikeFiles as EntryFile[] | undefined) ?? [];
+  // Build cycle node id set
+  const cycleNodeIds = new Set(apiCycles.flatMap((c) => c.nodeIds));
 
-  const entryPaths = new Set(entryPoints.map((e) => e.path));
-
-  // Collect unique files, cap at 30
-  const seen = new Map<string, GraphNode>();
-
-  const addNode = (f: InsightFile, category: GraphNode["category"]) => {
-    const path = f.path;
-    if (!path || seen.has(path)) return;
-    const label = path.split("/").pop() ?? path;
-    seen.set(path, {
-      id: path,
-      label,
-      path,
-      inboundCount: f.incomingCount ?? 0,
-      outboundCount: f.outgoingCount ?? 0,
-      category: entryPaths.has(path) ? "entry" : category,
-    });
+  const maxInbound = Math.max(1, ...apiNodes.map((n) => n.incomingCount));
+  const categorise = (n: ApiNode): GraphNode["category"] => {
+    if (n.incomingCount === 0 && n.outgoingCount > 3) return "entry";
+    if (n.incomingCount >= maxInbound * 0.4) return "core";
+    if (n.outgoingCount > 5) return "shared";
+    return "other";
   };
 
-  for (const f of topByInbound) addNode(f, "core");
-  for (const f of topByImports) addNode(f, "shared");
-  for (const e of entryPoints) {
-    if (!e.path || seen.has(e.path)) continue;
-    const label = e.path.split("/").pop() ?? e.path;
-    seen.set(e.path, { id: e.path, label, path: e.path, inboundCount: e.incomingCount ?? 0, outboundCount: e.outgoingCount ?? 0, category: "entry" });
-  }
+  const nodes: GraphNode[] = apiNodes.map((n) => ({
+    id: n.id,
+    label: n.path.split("/").pop() ?? n.path,
+    path: n.path,
+    language: n.language,
+    dirPath: n.dirPath,
+    isInCycle: cycleNodeIds.has(n.id),
+    inboundCount: n.incomingCount,
+    outboundCount: n.outgoingCount,
+    category: categorise(n),
+  }));
 
-  const nodes = [...seen.values()].slice(0, 30);
+  const edges: GraphEdge[] = apiEdges.map((e, i) => ({
+    id: e.id ?? `edge-${i}`,
+    source: e.source,
+    target: e.target,
+    importKind: e.importKind,
+    isResolved: e.isResolved,
+  }));
 
-  // Edges will come from a future API update — empty for now
-  const edges: Array<[string, string]> = [];
+  const folderNodes = apiFolderNodes.map((f) => ({
+    id: f.id,
+    folder: f.folder,
+    fileCount: f.fileCount,
+    incomingCount: f.incomingCount,
+    outgoingCount: f.outgoingCount,
+  }));
 
-  return { nodes, edges, timestamp: Date.now() };
+  const folderEdges = apiFolderEdges.map((e, i) => ({
+    id: e.id ?? `folder-edge-${i}`,
+    source: e.source,
+    target: e.target,
+    edgeCount: e.edgeCount,
+  }));
+
+  const cycles = apiCycles.length > 0 ? apiCycles : undefined;
+
+  return { nodes, edges, folderNodes, folderEdges, cycles, timestamp: Date.now() };
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
