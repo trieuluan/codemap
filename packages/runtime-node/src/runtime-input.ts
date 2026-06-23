@@ -6,7 +6,7 @@ import type {
   TokenUsage,
 } from "@codemap-ai/core/agent";
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.ts";
-import type { HarnessDeps } from "./harness/lifecycle.ts";
+import type { ResolvedCustomTool } from "./tools/custom/index.ts";
 
 export type ChatUiMode = "tui" | "electron" | string;
 
@@ -28,6 +28,39 @@ export interface ToolClientLike {
 export interface ProviderLike {
   readonly baseUrl: string;
   readonly apiKey: string | undefined;
+}
+
+/**
+ * Functions that must be provided by the host (CLI or desktop app).
+ * All fields are optional — missing deps are skipped gracefully.
+ */
+export interface HarnessDeps {
+  /** Load CLI/app settings (workingMemory toggle, etc.). */
+  loadSettings?: () => Promise<{ agent?: { workingMemory?: boolean } }>;
+  /** Load custom .tool.ts files from the workspace. */
+  loadCustomTools?: (
+    workspaceRoot: string,
+  ) => Promise<{
+    resolvedTools: ResolvedCustomTool[];
+    extraTools: Record<string, unknown>;
+  }>;
+  /** Sync CodeMap hooks to .mastracode/hooks.json. */
+  syncHooksToMastra?: (workspaceRoot: string) => void;
+  /** Build Mastra permission rules for the given MCP server IDs. */
+  buildMastraPermissionRules?: (
+    mcpServerIds: Set<string>,
+  ) => any;
+  /** Register a provider in Mastra's global registry. */
+  upsertGlobalMastraProvider?: (
+    config: {
+      baseUrl: string;
+      apiKey: string | undefined;
+      provider: GatewayProviderId;
+      availableModels?: string[];
+      modeDefaults?: { build?: string; plan?: string; fast?: string };
+    },
+    modelId: string,
+  ) => Promise<unknown> | unknown;
 }
 
 export interface SingleAgentRuntimeInput {
