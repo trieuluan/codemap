@@ -154,6 +154,12 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
       requestId: requestIdSchema,
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("get_graph_data"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
 ]);
 
 export const utilityCommandSchema = z.discriminatedUnion("type", [
@@ -249,6 +255,12 @@ export const utilityCommandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("disable_auto_indexing"),
+      requestId: requestIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("get_graph_data"),
       requestId: requestIdSchema,
     })
     .strict(),
@@ -437,6 +449,22 @@ export interface AutoIndexStatusResult {
   isActive: boolean;
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  path: string;
+  inboundCount: number;
+  outboundCount: number;
+  category: "entry" | "core" | "shared" | "other";
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: Array<[string, string]>;
+  timestamp: number;
+  error?: string;
+}
+
 export interface DesktopApi {
   openWorkspace(): Promise<string | null>;
   openWorkspacePath(workspacePath: string): Promise<string>;
@@ -481,6 +509,7 @@ export interface DesktopApi {
   getAutoIndexStatus(): Promise<AutoIndexStatusResult | null>;
   enableAutoIndexing(): Promise<{ success: boolean; error?: string } | null>;
   disableAutoIndexing(): Promise<{ success: boolean; error?: string } | null>;
+  getGraphData(): Promise<GraphData | null>;
   onAgentEvent(listener: (event: AgentSessionEvent) => void): () => void;
   onRuntimeStatus(
     listener: (status: "starting" | "ready" | "disconnected") => void,

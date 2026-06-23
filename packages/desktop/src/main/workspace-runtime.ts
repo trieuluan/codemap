@@ -176,6 +176,13 @@ export class WorkspaceRuntime {
     });
   }
 
+  getGraphData(): Promise<unknown> {
+    return this.request({
+      type: "get_graph_data",
+      requestId: crypto.randomUUID(),
+    });
+  }
+
   private request<T>(command: UtilityCommand): Promise<T> {
     const requestId =
       command.type === "agent" ? command.command.requestId : command.requestId;

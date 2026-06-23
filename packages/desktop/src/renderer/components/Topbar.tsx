@@ -6,7 +6,6 @@ import {
   Map,
   MessagesSquare,
   PanelLeft,
-  PanelRight,
   RefreshCw,
   Server,
   Settings,
@@ -31,11 +30,11 @@ interface TopbarProps {
   runtimeStatus: RuntimeStatus;
   workspace: string;
   recents: RecentWorkspace[];
-  inspectorOpen: boolean;
+
   mode: "build" | "plan" | "fast";
   onModeChange: (mode: "build" | "plan" | "fast") => void;
   onToggleSidebar: () => void;
-  onToggleInspector: () => void;
+
   onRestart: () => void;
   onSwitchWorkspace: (path: string) => void;
   onOpenWorkspace: () => void;
@@ -46,11 +45,9 @@ export function Topbar({
   runtimeStatus,
   workspace,
   recents,
-  inspectorOpen,
   mode,
   onModeChange,
   onToggleSidebar,
-  onToggleInspector,
   onRestart,
   onSwitchWorkspace,
   onOpenWorkspace,
@@ -195,17 +192,6 @@ export function Topbar({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {!isAccount && (
-          <button
-            className={inspectorOpen ? "icon-button active" : "icon-button"}
-            onClick={onToggleInspector}
-            type="button"
-            title="Toggle inspector"
-          >
-            <PanelRight size={17} />
-          </button>
-        )}
 
         {runtimeStatus === "disconnected" && (
           <button className="secondary-button" onClick={onRestart} type="button">

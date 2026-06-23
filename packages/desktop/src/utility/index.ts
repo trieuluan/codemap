@@ -32,6 +32,8 @@ import {
   type AutoIndexStatusResult,
   type ListProjectsResult,
   type LinkProjectResult,
+  type GraphData,
+  type GraphNode,
 } from "../shared/ipc.js";
 
 if (!process.send) throw new Error("Desktop utility requires a parent IPC channel");
@@ -190,6 +192,9 @@ async function handleCommand(command: UtilityCommand): Promise<unknown> {
   }
   if (command.type === "disable_auto_indexing") {
     return disableAutoIndexing();
+  }
+  if (command.type === "get_graph_data") {
+    return getGraphData();
   }
   if (!session) throw new Error("Agent session is not initialized");
   return handleAgentCommand(command.command);
@@ -589,6 +594,65 @@ async function getToolsList() {
 
 function post(message: RuntimeMessage): void {
   process.send?.(message);
+}
+
+async function getGraphData(): Promise<GraphData> {
+  await awaitWarmup();
+  if (!toolClient) return { nodes: [], edges: [], timestamp: Date.now(), error: "MCP server not connected" };
+
+  const result = await toolClient.callTool("get_project_insights", {});
+  if (result.isError) {
+    const errMsg = result.content?.replace(/^Error:?\s*/i, "").trim() || "Failed to fetch graph data";
+    return { nodes: [], edges: [], timestamp: Date.now(), error: errMsg };
+  }
+
+  const data = (result.structuredContent as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined;
+  if (!data) return { nodes: [], edges: [], timestamp: Date.now(), error: "No data returned from graph API" };
+
+  // Data is nested under data.insights (the success() wrapper puts payload under .data key)
+  type InsightFile = { path: string; incomingCount?: number; outgoingCount?: number };
+  type EntryFile = { path: string; incomingCount?: number; outgoingCount?: number };
+
+  const insights = data.insights as Record<string, unknown> | undefined;
+  if (!insights) return { nodes: [], edges: [], timestamp: Date.now() };
+
+  const topByInbound: InsightFile[] = (insights.topFilesByInboundDependencyCount as InsightFile[] | undefined) ?? [];
+  const topByImports: InsightFile[] = (insights.topFilesByImportCount as InsightFile[] | undefined) ?? [];
+  const entryPoints: EntryFile[] = (insights.entryLikeFiles as EntryFile[] | undefined) ?? [];
+
+  const entryPaths = new Set(entryPoints.map((e) => e.path));
+
+  // Collect unique files, cap at 30
+  const seen = new Map<string, GraphNode>();
+
+  const addNode = (f: InsightFile, category: GraphNode["category"]) => {
+    const path = f.path;
+    if (!path || seen.has(path)) return;
+    const label = path.split("/").pop() ?? path;
+    seen.set(path, {
+      id: path,
+      label,
+      path,
+      inboundCount: f.incomingCount ?? 0,
+      outboundCount: f.outgoingCount ?? 0,
+      category: entryPaths.has(path) ? "entry" : category,
+    });
+  };
+
+  for (const f of topByInbound) addNode(f, "core");
+  for (const f of topByImports) addNode(f, "shared");
+  for (const e of entryPoints) {
+    if (!e.path || seen.has(e.path)) continue;
+    const label = e.path.split("/").pop() ?? e.path;
+    seen.set(e.path, { id: e.path, label, path: e.path, inboundCount: e.incomingCount ?? 0, outboundCount: e.outgoingCount ?? 0, category: "entry" });
+  }
+
+  const nodes = [...seen.values()].slice(0, 30);
+
+  // Edges will come from a future API update — empty for now
+  const edges: Array<[string, string]> = [];
+
+  return { nodes, edges, timestamp: Date.now() };
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

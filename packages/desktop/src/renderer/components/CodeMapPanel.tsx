@@ -1,47 +1,50 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  type Node,
+  type Edge,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from "d3-force";
+import type { GraphNode, GraphData } from "../../shared/ipc.js";
 
-type CategoryKey = "entry" | "core" | "shared" | "ui";
-
-type MapNode = {
-  id: string;
-  label: string;
-  detail: string;
-  category: CategoryKey;
-  x: number;
-  y: number;
-  radius: number;
-  health: number;
-};
-
-const nodes: MapNode[] = [
-  { id: "app", label: "App", detail: "src/App.tsx", category: "entry", x: 470, y: 64, radius: 31, health: 92 },
-  { id: "router", label: "Router", detail: "src/router.ts", category: "core", x: 305, y: 150, radius: 28, health: 86 },
-  { id: "workspace", label: "Workspace", detail: "src/workspace/index.ts", category: "core", x: 470, y: 176, radius: 34, health: 78 },
-  { id: "session", label: "Session", detail: "src/session/store.ts", category: "shared", x: 635, y: 150, radius: 29, health: 81 },
-  { id: "chat", label: "Chat", detail: "src/chat/ChatView.tsx", category: "ui", x: 260, y: 292, radius: 31, health: 88 },
-  { id: "map", label: "Map", detail: "src/map/CodeMap.tsx", category: "ui", x: 430, y: 310, radius: 34, health: 74 },
-  { id: "tools", label: "Tools", detail: "src/tools/index.ts", category: "shared", x: 610, y: 288, radius: 31, health: 69 },
-  { id: "settings", label: "Settings", detail: "src/settings/Settings.tsx", category: "ui", x: 755, y: 268, radius: 28, health: 91 },
-  { id: "api", label: "API", detail: "src/api/client.ts", category: "shared", x: 560, y: 412, radius: 30, health: 83 },
-  { id: "storage", label: "Storage", detail: "src/storage/index.ts", category: "core", x: 730, y: 400, radius: 29, health: 72 },
-];
-
-const edges: Array<[string, string]> = [
-  ["app", "router"], ["app", "workspace"], ["app", "session"],
-  ["router", "chat"], ["router", "map"], ["workspace", "chat"],
-  ["workspace", "map"], ["workspace", "tools"], ["session", "tools"],
-  ["session", "settings"], ["map", "api"], ["tools", "api"],
-  ["tools", "storage"], ["settings", "storage"], ["api", "storage"],
-];
-
-const colors: Record<CategoryKey, string> = {
+const COLORS: Record<GraphNode["category"], string> = {
   entry: "#ef8a48",
   core: "#6a8ee8",
   shared: "#a276d4",
-  ui: "#4aaa88",
+  other: "#4aaa88",
 };
 
-function relatedNodeIds(selectedId: string) {
+function forceLayout(nodes: GraphNode[], edges: Array<[string, string]>): Array<GraphNode & { x: number; y: number; radius: number }> {
+  if (nodes.length === 0) return [];
+
+  const simNodes: Array<GraphNode & { id: string; x?: number; y?: number }> = nodes.map((n) => ({
+    ...n,
+    id: n.id,
+  }));
+
+  const simLinks = edges.map(([source, target]) => ({ source, target }));
+
+  const sim = forceSimulation(simNodes)
+    .force("link", forceLink(simLinks).id((d: any) => d.id).distance(220))
+    .force("charge", forceManyBody().strength(-500))
+    .force("center", forceCenter(0, 0))
+    .force("collide", forceCollide(80))
+    .stop();
+
+  sim.tick(300);
+
+  return simNodes.map((n: any) => ({
+    ...n,
+    x: n.x ?? 0,
+    y: n.y ?? 0,
+    radius: 30,
+  }));
+}
+
+function relatedNodeIds(selectedId: string, edges: Array<[string, string]>) {
   const related = new Set([selectedId]);
   for (const [from, to] of edges) {
     if (from === selectedId) related.add(to);
@@ -50,14 +53,101 @@ function relatedNodeIds(selectedId: string) {
   return related;
 }
 
+function DependencyNode({ data, selected }: { data: GraphNode; selected: boolean }) {
+  const color = COLORS[data?.category ?? "other"] ?? COLORS.other;
+  const label = data?.label ?? data?.path?.split("/").pop() ?? "?";
+  const path = data?.path ?? "";
+  return (
+    <div
+      className={`codemap-dependency-node${selected ? " selected" : ""}`}
+      style={{ minWidth: 140, minHeight: 40 }}
+    >
+      <span className="codemap-dependency-node-dot" style={{ background: color, width: 8, height: 8, flexShrink: 0, borderRadius: "50%" }} />
+      <div className="codemap-dependency-node-body" style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, overflow: "hidden" }}>
+        <strong className="codemap-dependency-node-label" style={{ fontWeight: 600, fontSize: 12, color: "var(--foreground)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</strong>
+        <span className="codemap-dependency-node-path" style={{ fontSize: 10, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{path}</span>
+      </div>
+      <span className="codemap-dependency-node-stats" style={{ flexShrink: 0, fontSize: 10, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }} title={`${data?.inboundCount ?? 0} inbound · ${data?.outboundCount ?? 0} outbound`}>
+        {data?.inboundCount ?? 0}↓ {data?.outboundCount ?? 0}↑
+      </span>
+    </div>
+  );
+}
+
 export function CodeMapPanel() {
-  const [selectedId, setSelectedId] = useState("map");
-  const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0];
-  const related = useMemo(() => relatedNodeIds(selectedId), [selectedId]);
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    window.codemap
+      .getGraphData()
+      .then((data) => {
+        setGraphData(data);
+        if (data?.error) {
+          setError(data.error);
+        } else if (data && data.nodes.length > 0) {
+          setSelectedId(data.nodes[0].id);
+        }
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to load graph");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const layoutNodes = useMemo(
+    () => forceLayout(graphData?.nodes ?? [], graphData?.edges ?? []),
+    [graphData],
+  );
+
+  const edgesData = graphData?.edges ?? [];
+  const activeId = selectedId ?? layoutNodes[0]?.id ?? null;
+  const related = useMemo(
+    () => (activeId ? relatedNodeIds(activeId, edgesData) : new Set<string>()),
+    [activeId, edgesData],
+  );
+
+  const rfNodes = useMemo<Node[]>(
+    () =>
+      layoutNodes.map((n) => ({
+        id: n.id,
+        type: "dependency",
+        position: { x: n.x, y: n.y },
+        data: n as unknown as Record<string, unknown>,
+        selected: n.id === activeId,
+      })),
+    [layoutNodes, activeId],
+  );
+
+  const rfEdges = useMemo<Edge[]>(
+    () =>
+      edgesData.map(([source, target]) => ({
+        id: `${source}-${target}`,
+        source,
+        target,
+        style: related.has(source) && related.has(target)
+          ? { stroke: "var(--foreground)", strokeWidth: 2, opacity: 0.6 }
+          : { stroke: "var(--border-strong)", strokeWidth: 1, opacity: 0.35 },
+      })),
+    [edgesData, related],
+  );
+
+  const nodeTypes = useMemo(() => ({ dependency: DependencyNode }), []);
+
+  const handleNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      setSelectedId(node.id);
+    },
+    [],
+  );
 
   return (
-    <section className="flex flex-col min-h-0 p-4 overflow-y-auto" aria-label="Code map">
-      <header className="flex items-start justify-between gap-3 mb-4">
+    <section className="flex-1 flex flex-col min-h-0 p-4 overflow-hidden" aria-label="Code map">
+      <header className="flex items-start justify-between gap-3 mb-4 shrink-0">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Code map</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Module relationships and change impact</p>
@@ -69,77 +159,43 @@ export function CodeMapPanel() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-3 h-full min-h-0">
-        <svg className="flex-1 min-h-[200px] border border-border rounded-[10px] bg-card" viewBox="150 10 700 470" role="img" aria-label="Dependency graph">
-          <defs>
-            <filter id="node-shadow" x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity=".12" />
-            </filter>
-          </defs>
-          {edges.map(([fromId, toId]) => {
-            const from = nodes.find((node) => node.id === fromId)!;
-            const to = nodes.find((node) => node.id === toId)!;
-            const highlighted = related.has(fromId) && related.has(toId);
-            return (
-              <line
-                className={highlighted ? "codemap-edge highlighted" : "codemap-edge"}
-                key={`${fromId}-${toId}`}
-                x1={from.x}
-                x2={to.x}
-                y1={from.y}
-                y2={to.y}
-              />
-            );
-          })}
-          {nodes.map((node) => {
-            const selectedNode = node.id === selectedId;
-            const dimmed = !related.has(node.id);
-            return (
-              <g
-                className={`codemap-node${selectedNode ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
-                key={node.id}
-                onClick={() => setSelectedId(node.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") setSelectedId(node.id);
-                }}
-              >
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  fill={colors[node.category]}
-                  filter="url(#node-shadow)"
-                  r={node.radius}
-                />
-                <text className="codemap-node-label" x={node.x} y={node.y + 4}>{node.label}</text>
-              </g>
-            );
-          })}
-        </svg>
-
-        <div className="codemap-legend" aria-label="Map legend">
-          {Object.entries(colors).map(([category, color]) => (
-            <span key={category}><i style={{ background: color }} />{category}</span>
-          ))}
-        </div>
+      <div className="flex-1 min-h-0 border border-border rounded-[10px] bg-card overflow-hidden">
+        {loading ? (
+          <div className="codemap-loading">
+            <span className="codemap-loading-spinner" aria-hidden="true" />
+            <span>Loading dependency graph…</span>
+          </div>
+        ) : error ? (
+          <div className="codemap-error">
+            <span>Failed to load graph</span>
+            <span className="codemap-error-detail">{error}</span>
+          </div>
+        ) : layoutNodes.length === 0 ? (
+          <div className="codemap-empty">
+            <span>No project linked</span>
+            <span className="codemap-empty-detail">Link a CodeMap project to see the dependency graph.</span>
+          </div>
+        ) : (
+          <ReactFlow
+            nodes={rfNodes}
+            edges={rfEdges}
+            nodeTypes={nodeTypes}
+            onNodeClick={handleNodeClick}
+            onPaneClick={() => setSelectedId(null)}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            nodeOrigin={[0.5, 0.5]}
+            panOnScroll
+            selectionOnDrag
+            deleteKeyCode={["Backspace", "Delete"]}
+            zoomOnDoubleClick={false}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="var(--border-strong)" gap={20} size={1} />
+            <Controls className="[&>button]:bg-card [&>button]:border-border [&>button]:text-muted-foreground [&>button]:rounded-md" />
+          </ReactFlow>
+        )}
       </div>
-
-      <footer className="codemap-detail">
-        <div className="codemap-detail-main">
-          <span className="codemap-detail-dot" style={{ background: colors[selected.category] }} />
-          <div><strong>{selected.label}</strong><span>{selected.detail}</span></div>
-        </div>
-        <div className="codemap-health">
-          <span>Health</span>
-          <strong>{selected.health}</strong>
-          <div><i style={{ width: `${selected.health}%` }} /></div>
-        </div>
-        <div className="codemap-impact">
-          <span>Blast radius</span>
-          <strong>{related.size - 1} direct modules</strong>
-        </div>
-      </footer>
     </section>
   );
 }

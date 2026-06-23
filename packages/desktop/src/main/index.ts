@@ -288,6 +288,9 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
   if (command.type === "disable_auto_indexing") {
     return runtime.disableAutoIndexing();
   }
+  if (command.type === "get_graph_data") {
+    return runtime.getGraphData();
+  }
   if (command.type === "read_file_preview") {
     const absPath = command.filePath.startsWith("/")
       ? command.filePath

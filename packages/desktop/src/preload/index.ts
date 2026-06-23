@@ -189,6 +189,11 @@ const api: DesktopApi = {
       type: "disable_auto_indexing",
       requestId: crypto.randomUUID(),
     }),
+  getGraphData: () =>
+    invoke({
+      type: "get_graph_data",
+      requestId: crypto.randomUUID(),
+    }),
   openUrl: (url) =>
     invoke({
       type: "open_url",

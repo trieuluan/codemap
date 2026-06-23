@@ -297,11 +297,11 @@ export function App() {
           runtimeStatus={runtimeStatus}
           workspace={workspace}
           recents={recents}
-          inspectorOpen={inspectorOpen}
+
           mode={mode}
           onModeChange={setMode}
           onToggleSidebar={toggleSidebar}
-          onToggleInspector={toggleInspector}
+
           onRestart={() => window.codemap.restartRuntime()}
           onSwitchWorkspace={(path) => void openWorkspace(path)}
           onOpenWorkspace={() => void openWorkspace()}
