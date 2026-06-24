@@ -1,9 +1,12 @@
+import { ReactFlowProvider } from "@xyflow/react";
 import { CodeMapPanel } from "../components/CodeMapPanel.js";
 
 export function MapPage() {
   return (
     <div className="map-column">
-      <CodeMapPanel />
+      <ReactFlowProvider>
+        <CodeMapPanel />
+      </ReactFlowProvider>
     </div>
   );
 }

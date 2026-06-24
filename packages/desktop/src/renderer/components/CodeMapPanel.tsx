@@ -1,19 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  Handle,
-  Position,
-  MarkerType,
-  BaseEdge,
-  getBezierPath,
-  applyNodeChanges,
-  type EdgeProps,
-  type Node,
-  type Edge,
-  type OnNodesChange,
-} from "@xyflow/react";
+import { ReactFlow, Background, Controls, Handle, Position, MarkerType, BaseEdge, getBezierPath, applyNodeChanges, useReactFlow, type EdgeProps, type Node, type Edge, type OnNodesChange } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import ElkConstructor from "elkjs/lib/elk.bundled.js";
 import type { GraphNode, GraphData } from "../../shared/ipc.js";
@@ -21,11 +7,10 @@ import type { GraphNode, GraphData } from "../../shared/ipc.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const elk = new (ElkConstructor as any)();
 
-const NODE_W = 240;
+const NODE_W = 280;
 const NODE_H = 72;
-const FOLDER_W = 260;
+const FOLDER_W = 300;
 const FOLDER_H = 96;
-const CLUSTER_THRESHOLD = 8;
 
 type GraphMode = "overview" | "structure" | "focus";
 
@@ -58,22 +43,36 @@ async function elkLayout(
   nodes: { id: string }[],
   edges: { id: string; source: string; target: string }[],
   dims: { w: number; h: number } = { w: NODE_W, h: NODE_H },
-): Promise<Map<string, { x: number; y: number }>> {
-  if (nodes.length === 0) return new Map();
+  forcedAlgo?: string,
+): Promise<{ positions: Map<string, { x: number; y: number }>; algo: string }> {
+  if (nodes.length === 0) return { positions: new Map(), algo: forcedAlgo ?? "layered" };
+
+  const algo = forcedAlgo ?? (nodes.length <= 20 ? "mrtree" : nodes.length <= 80 ? "layered" : "stress");
+
+  const algoOpts: Record<string, string> = algo === "layered" ? {
+    "elk.direction": "RIGHT",
+    "elk.edgeRouting": "SPLINES",
+    "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+    "elk.layered.thoroughness": "10",
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+  } : algo === "mrtree" ? {
+    "elk.direction": "DOWN",
+    "elk.edgeRouting": "ORTHOGONAL",
+    "elk.mrtree.edgeRoutingMode": "AVOID_OVERLAP",
+  } : {
+    "elk.direction": "RIGHT",
+    "elk.edgeRouting": "SPLINES",
+  };
 
   const elkGraph = {
     id: "root",
     layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": "RIGHT",
-      "elk.padding": "[top=0,left=0,bottom=0,right=0]",
-      "elk.spacing.nodeNode": "24",
-      "elk.spacing.componentComponent": "24",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.layered.compaction.postCompaction.strategy": "EDGE_LENGTH",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "48",
-      "elk.layered.thoroughness": "5",
-      "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+      "elk.algorithm": algo,
+      "elk.padding": "[top=20,left=20,bottom=20,right=20]",
+      "elk.spacing.nodeNode": "40",
+      "elk.spacing.componentComponent": "40",
+      ...algoOpts,
     },
     children: nodes.map((n) => ({
       id: n.id,
@@ -88,9 +87,12 @@ async function elkLayout(
   };
 
   const result = await elk.layout(elkGraph);
-  return new Map(
-    (result.children ?? []).map((c: { id: string; x?: number; y?: number }) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]),
-  );
+  return {
+    algo,
+    positions: new Map(
+      (result.children ?? []).map((c: { id: string; x?: number; y?: number }) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]),
+    ),
+  };
 }
 
 function relatedNodeIds(selectedId: string, edges: { source: string; target: string }[]) {
@@ -102,11 +104,14 @@ function relatedNodeIds(selectedId: string, edges: { source: string; target: str
   return related;
 }
 
-function FolderNode({ data }: { data: { label: string; fileCount?: number; inboundCount?: number; outgoingCount?: number } }) {
+function FolderNode({ data, selected }: { data: { label: string; fileCount?: number; inboundCount?: number; outgoingCount?: number; id?: string; path?: string; isInCycle?: boolean; treeMode?: boolean; expanded?: boolean; focusMode?: boolean }; selected: boolean }) {
+  const tgt = data?.treeMode ? Position.Top : Position.Left;
+  const src = data?.treeMode ? Position.Bottom : Position.Right;
+  const expanded = data?.expanded ?? false;
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/40 !rounded-full" />
-      <div className="codemap-folder-node">
+      <Handle type="target" position={tgt} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/40 !rounded-full" />
+      <div className={`codemap-folder-node${selected ? " selected" : ""}${expanded ? " expanded" : ""}`}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="codemap-folder-node-icon">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
@@ -118,20 +123,31 @@ function FolderNode({ data }: { data: { label: string; fileCount?: number; inbou
             <span className="stat-out" title="Outgoing">↑{data?.outgoingCount ?? 0}</span>
           </div>
         </div>
+        {data?.focusMode && (
+        <span
+          className="codemap-folder-chevron"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(new CustomEvent("codemap-folder-toggle", { detail: { id: data.id } }));
+          }}
+        >
+          {expanded ? "⌄" : "›"}
+        </span>
+        )}
       </div>
-      <Handle type="source" position={Position.Right} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/40 !rounded-full" />
+      <Handle type="source" position={src} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/40 !rounded-full" />
     </>
   );
 }
 
-function DependencyNode({ data, selected }: { data: GraphNode; selected: boolean }) {
+function DependencyNode({ data, selected }: { data: GraphNode & { treeMode?: boolean }; selected: boolean }) {
   const label = data?.label ?? data?.path?.split("/").pop() ?? "?";
   const dirPath = data?.dirPath ?? "";
   const isInCycle = data?.isInCycle ?? false;
 
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
+      <Handle type="target" position={data?.treeMode ? Position.Top : Position.Left} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
       <div
         className={`codemap-dependency-node${selected ? " selected" : ""}${isInCycle ? " in-cycle" : ""}`}
       >
@@ -142,6 +158,9 @@ function DependencyNode({ data, selected }: { data: GraphNode; selected: boolean
         <div className="codemap-dependency-node-body">
           <div className="codemap-dependency-node-header">
             <strong className="codemap-dependency-node-label">{label}</strong>
+            {data?.language && (
+              <span className="codemap-language-badge">{data.language as string}</span>
+            )}
             {isInCycle && (
               <span className="codemap-dependency-node-cycle">Cycle</span>
             )}
@@ -155,60 +174,23 @@ function DependencyNode({ data, selected }: { data: GraphNode; selected: boolean
           </div>
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
-    </>
-  );
-}
-
-interface ClusterNodeData {
-  kind: "cluster";
-  direction: "incoming" | "outgoing";
-  focusId: string;
-  nodeIds: string[];
-  count: number;
-  sample: string[];
-}
-
-function ClusterNode({ data }: { data: ClusterNodeData }) {
-  const isIncoming = data?.direction === "incoming";
-  return (
-    <>
-      <Handle type="target" position={Position.Left} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
-      <div className={`codemap-cluster-node ${isIncoming ? "direction-in" : "direction-out"}`}>
-        <div className="codemap-cluster-node-header">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="codemap-cluster-icon">
-            {isIncoming ? (
-              <><path d="M12 5v14" /><path d="M5 12l7 7 7-7" /></>
-            ) : (
-              <><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></>
-            )}
-          </svg>
-          <strong className="codemap-cluster-label">
-            +{data?.count ?? 0} {isIncoming ? "imported by" : "imports"}
-          </strong>
-        </div>
-        <div className="codemap-cluster-sample">
-          {(data?.sample ?? []).map((s, i) => (
-            <span key={i} className="codemap-cluster-sample-file">{s}</span>
-          ))}
-          {(data?.count ?? 0) > 3 && (
-            <span className="codemap-cluster-more">+{data.count - 3} more</span>
-          )}
-        </div>
-      </div>
-      <Handle type="source" position={Position.Right} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
+      <Handle type="source" position={data?.treeMode ? Position.Bottom : Position.Right} className="!w-[5px] !h-[5px] !border-0 !bg-[var(--muted-foreground)]/50 !rounded-full" />
     </>
   );
 }
 
 export function CodeMapPanel() {
+  const { fitView } = useReactFlow();
+  const lastFittedRef = useRef<string | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [layoutMap, setLayoutMap] = useState<Map<string, { x: number; y: number }> | null>(null);
+  const [layoutAlgo, setLayoutAlgo] = useState<string>("layered");
   const [layoutLoading, setLayoutLoading] = useState(false);
   const [navStack, setNavStack] = useState<NavState[]>([{ mode: "overview" }]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const currentNav = navStack[navStack.length - 1];
   const pushNav = (s: NavState) => setNavStack((prev) => [...prev, s]);
   const popNav = () => setNavStack((prev) => prev.slice(0, -1));
@@ -306,30 +288,108 @@ export function CodeMapPanel() {
       edges = Array.from(edgeMap.values());
       useFolder = false;
     } else if (currentNav.mode === "focus" && currentNav.focusNodeId && graphData) {
-      // Focus: focus node + direct neighbors only
+      // Focus: focus node + direct neighbors with sub-folder grouping for outgoing
       const focusId = currentNav.focusNodeId;
       const allNodes = graphData.nodes ?? [];
       const allEdges = graphData.edges ?? [];
-      const neighborIds = new Set<string>();
+      // Separate incoming vs outgoing neighbors
+      const outgoingIds = new Set<string>();
+      const incomingIds = new Set<string>();
       for (const e of allEdges) {
-        if (e.source === focusId) neighborIds.add(e.target);
-        if (e.target === focusId) neighborIds.add(e.source);
+        if (e.source === focusId) outgoingIds.add(e.target);
+        if (e.target === focusId) incomingIds.add(e.source);
       }
-      neighborIds.add(focusId);
-      nodes = allNodes
-        .filter((n) => neighborIds.has(n.id))
-        .map((n) => ({ ...n, fileCount: undefined as number | undefined }));
-      edges = allEdges
-        .filter((e) => neighborIds.has(e.source) && neighborIds.has(e.target))
+
+      // Incoming neighbors — always individual file nodes
+      const incomingFiles = allNodes.filter((n) => incomingIds.has(n.id));
+
+      // Outgoing neighbors — group by immediate parent dir
+      const outgoingFiles = allNodes.filter((n) => outgoingIds.has(n.id));
+      const totalOutgoing = outgoingFiles.length;
+      // Group if >= 4 files, OR >= 3 files and occupy >= 40% of outgoing neighbors
+      const shouldGroup = (files: typeof outgoingFiles) =>
+        files.length >= 4 || (files.length >= 3 && totalOutgoing > 0 && files.length / totalOutgoing >= 0.4);
+
+      const dirGroups = new Map<string, typeof outgoingFiles>();
+      for (const f of outgoingFiles) {
+        const dir = f.path.includes("/") ? f.path.split("/").slice(0, -1).join("/") : ".";
+        if (!dirGroups.has(dir)) dirGroups.set(dir, []);
+        dirGroups.get(dir)!.push(f);
+      }
+
+      const subFolders: Array<{ id: string; label: string; path: string; fileCount: number; inboundCount: number; outboundCount: number; memberIds: string[] }> = [];
+      const groupedIds = new Set<string>();
+      for (const [dir, files] of dirGroups) {
+        if (shouldGroup(files)) {
+          const label = dir === "." ? "/" : dir.split("/").pop()!;
+          subFolders.push({
+            id: `folder:${dir}`,
+            label,
+            path: dir,
+            fileCount: files.length,
+            inboundCount: files.reduce((s, f) => s + (f.inboundCount ?? 0), 0),
+            outboundCount: files.reduce((s, f) => s + (f.outboundCount ?? 0), 0),
+            memberIds: files.map((f) => f.id),
+          });
+          for (const f of files) groupedIds.add(f.id);
+        }
+      }
+
+      // Direct outgoing files (not grouped) + focus node
+      const directOutgoing = outgoingFiles.filter((f) => !groupedIds.has(f.id));
+      const focusNode = allNodes.find((n) => n.id === focusId);
+
+      // Build display nodes: focus + incoming + folder nodes (or expanded files) + direct outgoing
+      const expandedSubFolderFiles: typeof outgoingFiles = [];
+      nodes = [
+        ...(focusNode ? [{ ...focusNode, fileCount: undefined as number | undefined }] : []),
+        ...incomingFiles.map((n) => ({ ...n, fileCount: undefined as number | undefined })),
+        ...subFolders.flatMap((sf) => {
+          if (expandedFolders.has(sf.id)) {
+            const files = dirGroups.get(sf.path)!;
+            expandedSubFolderFiles.push(...files);
+            return files.map((n) => ({ ...n, fileCount: undefined as number | undefined }));
+          }
+          return [{
+            id: sf.id, label: sf.label, path: sf.path,
+            fileCount: sf.fileCount, inboundCount: sf.inboundCount, outboundCount: sf.outboundCount,
+            category: "other" as const, dirPath: undefined, isInCycle: false, language: undefined,
+          }];
+        }),
+        ...directOutgoing.map((n) => ({ ...n, fileCount: undefined as number | undefined })),
+      ];
+
+      // Build edges: map file edges → folder edges where applicable (skip expanded folders)
+      const memberToFolder = new Map<string, string>();
+      for (const sf of subFolders) {
+        if (!expandedFolders.has(sf.id)) {
+          for (const mid of sf.memberIds) memberToFolder.set(mid, sf.id);
+        }
+      }
+
+      const rawEdges = allEdges
+        .filter((e) => {
+          const srcIn = e.source === focusId || incomingIds.has(e.source) || memberToFolder.has(e.source) || directOutgoing.some((f) => f.id === e.source);
+          const tgtIn = e.target === focusId || outgoingIds.has(e.target) || memberToFolder.has(e.target) || directOutgoing.some((f) => f.id === e.target);
+          return srcIn && tgtIn && e.source !== e.target;
+        })
         .map((e) => ({
-          id: e.id, source: e.source, target: e.target,
+          id: e.id, source: memberToFolder.get(e.source) ?? e.source, target: memberToFolder.get(e.target) ?? e.target,
           importKind: e.importKind, isResolved: e.isResolved, edgeCount: undefined as number | undefined,
         }));
+
+      // Dedup edges
+      const edgeMap = new Map<string, typeof rawEdges[0]>();
+      for (const e of rawEdges) {
+        const key = `${e.source}->${e.target}`;
+        if (!edgeMap.has(key)) edgeMap.set(key, e);
+      }
+      edges = Array.from(edgeMap.values());
       useFolder = false;
     }
 
     return { displayNodes: nodes, displayEdges: edges, displayUseFolder: useFolder };
-  }, [graphData, currentNav, useFolderGraph]) as { displayNodes: any[]; displayEdges: any[]; displayUseFolder: boolean };
+  }, [graphData, currentNav, useFolderGraph, expandedFolders]) as { displayNodes: any[]; displayEdges: any[]; displayUseFolder: boolean };
 
   useEffect(() => {
     setLoading(true);
@@ -348,11 +408,7 @@ export function CodeMapPanel() {
       .finally(() => setLoading(false));
   }, []);
 
-  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
-  const [focusClusterNodes, setFocusClusterNodes] = useState<(ClusterNodeData & { id: string })[]>([]);
-  const [focusClusterEdges, setFocusClusterEdges] = useState<Array<{ id: string; source: string; target: string }>>([]);
-
-  // Async ELK layout (overview/structure) or star layout (focus)
+  // Async ELK layout for all modes
   useEffect(() => {
     if (!graphData) return;
     const isNotOverview = currentNav.mode !== "overview";
@@ -361,132 +417,16 @@ export function CodeMapPanel() {
     if (srcNodes.length === 0) return;
     setLayoutLoading(true);
 
-    // Focus mode: star layout with optional leaf clustering
-    if (currentNav.mode === "focus" && currentNav.focusNodeId) {
-      const focusId = currentNav.focusNodeId;
-      const allNeighbors = srcNodes.filter((n) => n.id !== focusId);
-
-      // Detect leaf nodes (degree=1 within this subgraph) — use any[] to avoid union-type inference issues
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const outgoingLeaves: any[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const incomingLeaves: any[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nonLeaves: any[] = [];
-
-      for (const n of allNeighbors) {
-        const hasExtraConnection = srcEdges.some(
-          (e) => (e.source === n.id && e.target !== focusId) || (e.target === n.id && e.source !== focusId),
-        );
-        if (!hasExtraConnection) {
-          if (srcEdges.some((e) => e.source === focusId && e.target === n.id)) {
-            outgoingLeaves.push(n);
-          } else {
-            incomingLeaves.push(n);
-          }
-        } else {
-          nonLeaves.push(n);
-        }
-      }
-
-      const shouldClusterOut = outgoingLeaves.length >= CLUSTER_THRESHOLD && !expandedClusters.has(`cluster:outgoing:${focusId}`);
-      const shouldClusterIn = incomingLeaves.length >= CLUSTER_THRESHOLD && !expandedClusters.has(`cluster:incoming:${focusId}`);
-
-      const getFileName = (p: string) => p.split("/").pop() ?? p;
-      const clusteredLeafIds = new Set<string>();
-      const clusterNodes: (ClusterNodeData & { id: string })[] = [];
-      const clusterEdges: Array<{ id: string; source: string; target: string }> = [];
-
-      if (shouldClusterOut) {
-        const cid = `cluster:outgoing:${focusId}`;
-        clusterNodes.push({
-          id: cid, kind: "cluster", direction: "outgoing", focusId,
-          nodeIds: outgoingLeaves.map((n) => n.id),
-          count: outgoingLeaves.length,
-          sample: outgoingLeaves.slice(0, 3).map((n) => getFileName(n.path ?? n.id)),
-        });
-        clusterEdges.push({ id: cid, source: focusId, target: cid });
-        outgoingLeaves.forEach((n) => clusteredLeafIds.add(n.id));
-      }
-
-      if (shouldClusterIn) {
-        const cid = `cluster:incoming:${focusId}`;
-        clusterNodes.push({
-          id: cid, kind: "cluster", direction: "incoming", focusId,
-          nodeIds: incomingLeaves.map((n) => n.id),
-          count: incomingLeaves.length,
-          sample: incomingLeaves.slice(0, 3).map((n) => getFileName(n.path ?? n.id)),
-        });
-        clusterEdges.push({ id: cid, source: cid, target: focusId });
-        incomingLeaves.forEach((n) => clusteredLeafIds.add(n.id));
-      }
-
-      // 3-column layout: incoming (left) | focus (center) | outgoing (right)
-      // Each column is stacked vertically; cluster nodes go at bottom of their column.
-      const COL_GAP = 320; // horizontal gap between columns
-      const ROW_GAP = 100; // vertical gap between rows
-
-      // Classify visible (non-clustered) neighbors by direction
-      const visibleOut = shouldClusterOut ? [] : outgoingLeaves;
-      const visibleIn = shouldClusterIn ? [] : incomingLeaves;
-
-      // nonLeaves: check their actual direction relative to focus
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nonLeafOut: any[] = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nonLeafIn: any[] = [];
-      for (const n of nonLeaves) {
-        const isOut = srcEdges.some((e) => e.source === focusId && e.target === n.id);
-        if (isOut) nonLeafOut.push(n); else nonLeafIn.push(n);
-      }
-      const leftNodes = [...visibleIn, ...nonLeafIn];
-      const rightNodes = [...visibleOut, ...nonLeafOut];
-
-      function stackColumn(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        items: any[],
-        clusterNode: (ClusterNodeData & { id: string }) | undefined,
-        x: number,
-      ): Map<string, { x: number; y: number }> {
-        const total = items.length + (clusterNode ? 1 : 0);
-        const totalH = total * NODE_H + (total - 1) * (ROW_GAP - NODE_H);
-        let startY = -totalH / 2;
-        const pos = new Map<string, { x: number; y: number }>();
-        for (const item of items) {
-          pos.set(item.id, { x, y: startY });
-          startY += ROW_GAP;
-        }
-        if (clusterNode) {
-          pos.set(clusterNode.id, { x: x - (220 - NODE_W) / 2, y: startY });
-        }
-        return pos;
-      }
-
-      const posMap = new Map<string, { x: number; y: number }>();
-      posMap.set(focusId, { x: 0, y: -(NODE_H / 2) });
-
-      const leftMap = stackColumn(leftNodes, shouldClusterIn ? clusterNodes.find((c) => c.direction === "incoming") : undefined, -COL_GAP);
-      const rightMap = stackColumn(rightNodes, shouldClusterOut ? clusterNodes.find((c) => c.direction === "outgoing") : undefined, COL_GAP);
-      for (const [k, v] of leftMap) posMap.set(k, v);
-      for (const [k, v] of rightMap) posMap.set(k, v);
-
-      setFocusClusterNodes(clusterNodes);
-      setFocusClusterEdges(clusterEdges);
-      setLayoutMap(posMap);
-      setLayoutLoading(false);
-      return;
-    }
-    setFocusClusterNodes([]);
-    setFocusClusterEdges([]);
-
     const dims = displayUseFolder || displayNodes.some((n: any) => (n.id as string).startsWith("folder:"))
       ? { w: FOLDER_W, h: FOLDER_H } : { w: NODE_W, h: NODE_H };
-    elkLayout(srcNodes, srcEdges, dims)
-      .then((posMap) => {
-        setLayoutMap(posMap);
+    const forcedAlgo = currentNav.mode === "focus" ? "layered" : undefined;
+    elkLayout(srcNodes, srcEdges, dims, forcedAlgo)
+      .then(({ positions, algo }) => {
+        setLayoutMap(positions);
+        setLayoutAlgo(algo);
       })
       .finally(() => setLayoutLoading(false));
-  }, [graphData, displayUseFolder, currentNav, expandedClusters]); // displayNodes/displayEdges derived from graphData+currentNav — stable enough
+  }, [graphData, displayUseFolder, currentNav, displayNodes, displayEdges]);
 
   const activeId = selectedId;
   const related = useMemo(
@@ -506,22 +446,35 @@ export function CodeMapPanel() {
         id: n.id,
         type: (n.id as string).startsWith("folder:") || displayUseFolder ? "folder" : "dependency",
         position: layoutMap.get(n.id)!,
-        data: n as unknown as Record<string, unknown>,
+        data: { ...(n as unknown as Record<string, unknown>), treeMode: layoutAlgo === "mrtree", expanded: (n.id as string).startsWith("folder:") && expandedFolders.has(n.id as string), focusMode: currentNav.mode === "focus" },
         selected: n.id === activeId,
         className: hasActive && !related.has(n.id) ? "opacity-30" : undefined,
       }));
-    const clNodes = focusClusterNodes
-      .filter((cn) => layoutMap.has(cn.id))
-      .map((cn) => ({
-        id: cn.id,
-        type: "cluster",
-        position: layoutMap.get(cn.id)!,
-        data: cn as unknown as Record<string, unknown>,
-        selected: false,
-        className: hasActive && !related.has(cn.id) ? "opacity-30" : undefined,
-      }));
-    setFlowNodes([...fileNodes, ...clNodes]);
-  }, [displayNodes, focusClusterNodes, layoutMap, activeId, related, displayUseFolder]);
+    setFlowNodes(fileNodes);
+
+    // Auto-fitView when entering focus mode
+    if (currentNav.mode === "focus" && currentNav.focusNodeId && lastFittedRef.current !== currentNav.focusNodeId) {
+      lastFittedRef.current = currentNav.focusNodeId;
+      setTimeout(() => fitView({ duration: 300, padding: 0.1 }), 80);
+    }
+  }, [displayNodes, layoutMap, activeId, related, displayUseFolder, expandedFolders, currentNav, fitView]);
+
+  // Listen for folder chevron click to toggle expand
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const id = (e as CustomEvent).detail?.id as string;
+      if (!id) return;
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+      // Reset active to focus node when expanding (folder node disappears from displayNodes)
+      setSelectedId(currentNav.focusNodeId ?? null);
+    };
+    window.addEventListener("codemap-folder-toggle", handler);
+    return () => window.removeEventListener("codemap-folder-toggle", handler);
+  }, [currentNav.focusNodeId]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => setFlowNodes((nds) => applyNodeChanges(changes, nds)),
@@ -540,10 +493,10 @@ export function CodeMapPanel() {
     ) => {
       if (isFaded) return { stroke: "var(--border)", strokeWidth: 0.5, opacity: 0.15 };
       if (isCycle) return { stroke: "#ef4444", strokeWidth: 1.5, opacity: 0.7 };
-      const color = isRel ? (directionOut ? "#a78bfa" : "#60a5fa") : "var(--border-strong)";
+      const color = isRel ? (directionOut ? "#a78bfa" : "#60a5fa") : "#94a3b8";
       const extra = isFocus && directionOut ? { strokeDasharray: "8 4" } : {};
-      const w = isFocus && !directionOut ? 0.5 : isRel ? 1.5 : 0.5;
-      return { stroke: color, strokeWidth: w, opacity: isRel ? 0.7 : 0.18, ...extra };
+      const w = isFocus && !directionOut ? 0.5 : isRel ? 1.5 : 1;
+      return { stroke: color, strokeWidth: w, opacity: isRel ? 0.9 : 0.55, ...extra };
     };
 
     const mapEdge = (id: string, source: string, target: string): Edge => {
@@ -554,23 +507,22 @@ export function CodeMapPanel() {
       const isRelated = related.has(source) && related.has(target);
       const isFaded = activeId !== null && !isRelated;
       const directionOut = source === focusId;
-      const markerColor = isCycleEdge ? "#ef4444" : isRelated ? (directionOut ? "#a78bfa" : "#60a5fa") : "var(--muted)";
+      const markerColor = isCycleEdge ? "#ef4444" : isRelated ? (directionOut ? "#a78bfa" : "#60a5fa") : "#9ca3af";
       return {
         id,
         source,
         target,
-        type: isFocus ? "focus" : "default",
-        animated: isFocus && !isFaded && !directionOut,
-        data: isFocus ? { flow: directionOut ? "outgoing" : "incoming", active: selectedId !== null } : undefined,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: markerColor },
+        type: "focus",
+        data: isFocus
+          ? { flow: directionOut ? "outgoing" : "incoming", active: isRelated && selectedId !== null }
+          : { mode: layoutAlgo === "mrtree" ? "mrtree" : "structure" },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: markerColor },
         style: edgeStyle(isCycleEdge, isRelated, isFaded, directionOut),
       };
     };
 
-    const regular = displayEdges.map(({ id, source, target }) => mapEdge(id, source, target));
-    const cluster = focusClusterEdges.map(({ id, source, target }) => mapEdge(id, source, target));
-    return [...regular, ...cluster];
-  }, [displayEdges, focusClusterEdges, related, displayNodes, currentNav, activeId, selectedId]);
+    return displayEdges.map(({ id, source, target }) => mapEdge(id, source, target));
+  }, [displayEdges, related, displayNodes, currentNav, activeId, selectedId, layoutAlgo]);
 
   const FocusEdge = ({
     id,
@@ -583,28 +535,27 @@ export function CodeMapPanel() {
     style,
     markerEnd,
     data,
-  }: EdgeProps<Edge<{ flow?: "incoming" | "outgoing"; active?: boolean }>>) => {
-    const [edgePath] = getBezierPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-    });
+  }: EdgeProps<Edge<{ flow?: "incoming" | "outgoing"; active?: boolean; mode?: "structure" | "mrtree" }>>) => {
+    const pathArgs = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
+    const [edgePath] = getBezierPath(pathArgs);
     const isIncoming = data?.flow === "incoming";
     const isActive = data?.active === true;
+    const isStructure = data?.mode === "structure";
 
     return (
       <>
         <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
-        {isIncoming ? (
+        {isStructure ? (
+          <circle r="3" fill="#facc15" opacity={0.85}>
+            <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
+          </circle>
+        ) : isIncoming ? (
           isActive ? (
             <circle r="5" fill="#3b82f6">
               <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
             </circle>
           ) : (
-            <circle r="3" fill="#3b82f6" opacity={0.4} />
+            <circle r="3" fill="#facc15" opacity={0.85} />
           )
         ) : null}
       </>
@@ -615,7 +566,6 @@ export function CodeMapPanel() {
   const nodeTypes = useMemo(() => ({
     dependency: DependencyNode as any,
     folder: FolderNode as any,
-    cluster: ClusterNode as any,
   }), []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -623,23 +573,68 @@ export function CodeMapPanel() {
     focus: FocusEdge as any,
   }), []);
 
-  // Reset expanded clusters when leaving focus mode
-  useEffect(() => {
-    if (currentNav.mode !== "focus") setExpandedClusters(new Set());
-  }, [currentNav.mode]);
+  // Active node info from selectedId
+  const selectedNodeData = useMemo(() => {
+    if (!selectedId || !graphData) return null;
+    const node = graphData.nodes?.find((n) => n.id === selectedId);
+    if (node) {
+      return {
+        id: node.id,
+        label: node.label ?? node.path?.split("/").pop() ?? selectedId,
+        path: node.path ?? selectedId,
+        language: node.language,
+        inboundCount: node.inboundCount ?? 0,
+        outgoingCount: node.outboundCount ?? 0,
+        isInCycle: node.isInCycle ?? false,
+        type: "dependency",
+      };
+    }
+    const folder = graphData.folderNodes?.find((f) => f.id === selectedId);
+    if (folder) {
+      return {
+        id: folder.id,
+        label: folder.folder.split("/").pop() ?? folder.folder,
+        path: folder.folder,
+        language: undefined,
+        inboundCount: folder.incomingCount ?? 0,
+        outgoingCount: folder.outgoingCount ?? 0,
+        isInCycle: false,
+        type: "folder",
+        fileCount: folder.fileCount,
+      };
+    }
+    return null;
+  }, [selectedId, graphData]);
 
-  const handleNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      // Cluster click → expand (show individual nodes instead of summary)
-      if (node.type === "cluster") {
-        const cid = node.id;
-        setExpandedClusters((prev) => {
-          const next = new Set(prev);
-          if (next.has(cid)) { next.delete(cid); } else { next.add(cid); }
-          return next;
-        });
-        return;
+  // Compute imports/imported-by for selected node
+  const activeDetail = useMemo(() => {
+    if (!selectedId || !graphData?.edges) return null;
+    const imports: { id: string; label: string; path: string }[] = [];
+    const importedBy: { id: string; label: string; path: string }[] = [];
+    for (const e of graphData.edges) {
+      if (e.target === selectedId) {
+        const src = graphData.nodes?.find((n) => n.id === e.source);
+        imports.push({ id: e.source, label: src?.label ?? e.source, path: src?.path ?? e.source });
       }
+      if (e.source === selectedId) {
+        const tgt = graphData.nodes?.find((n) => n.id === e.target);
+        importedBy.push({ id: e.target, label: tgt?.label ?? e.target, path: tgt?.path ?? e.target });
+      }
+    }
+    return { imports, importedBy };
+  }, [selectedId, graphData]);
+
+  // Single click → select node + show info panel
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      setSelectedId(node.id);
+    },
+    [],
+  );
+
+  // Double click → navigate (drill down / enter focus)
+  const onNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
       // Folder click in overview or structure → drill to structure
       if (node.type === "folder" && (currentNav.mode === "overview" || currentNav.mode === "structure")) {
         const targetNode = displayNodes.find((n) => n.id === node.id);
@@ -652,10 +647,26 @@ export function CodeMapPanel() {
       // File click in structure → focus
       if (node.type === "dependency" && currentNav.mode === "structure") {
         pushNav({ mode: "focus", folder: currentNav.folder, focusNodeId: node.id });
+        setSelectedId(node.id);
         return;
       }
-      // File click in overview or focus → select
-      setSelectedId(node.id);
+      // File click in focus → re-focus on that file
+      if (node.type === "dependency" && currentNav.mode === "focus" && node.id !== currentNav.focusNodeId) {
+        pushNav({ mode: "focus", folder: currentNav.folder, focusNodeId: node.id });
+        setSelectedId(node.id);
+        return;
+      }
+      // Folder click in focus → expand/collapse
+      if (node.type === "folder" && currentNav.mode === "focus") {
+        setExpandedFolders((prev) => {
+          const next = new Set(prev);
+          next.has(node.id) ? next.delete(node.id) : next.add(node.id);
+          return next;
+        });
+        // Folder node disappears from displayNodes when expanded → reset to focus node
+        setSelectedId(currentNav.focusNodeId ?? null);
+        return;
+      }
     },
     [currentNav, displayNodes, pushNav],
   );
@@ -668,7 +679,7 @@ export function CodeMapPanel() {
             {currentNav.mode !== "overview" ? (
               <button
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground -ml-1 px-1 py-0.5 rounded"
-                onClick={() => { popNav(); setSelectedId(null); setLayoutMap(null); }}
+                onClick={() => { popNav(); setSelectedId(null); setLayoutMap(null); setExpandedFolders(new Set()); }}
               >
                 ← Back
               </button>
@@ -684,11 +695,27 @@ export function CodeMapPanel() {
                 : "Module relationships and change impact"}
           </p>
         </div>
+
+        {selectedNodeData && selectedNodeData.type === "dependency" && (
+          <div className="codemap-node-info flex-1">
+            <div className="codemap-node-info-title">
+              <strong>{selectedNodeData.label}</strong>
+              {selectedNodeData.language && <span className="codemap-language-badge">{selectedNodeData.language}</span>}
+            </div>
+            <div className="codemap-node-info-stats">
+              <span className="stat-in">↓{selectedNodeData.inboundCount}</span>
+              <span className="stat-out">↑{selectedNodeData.outgoingCount}</span>
+              {selectedNodeData.isInCycle && <span className="codemap-tooltip-cycle">⚠ Cycle</span>}
+            </div>
+          </div>
+        )}
+
         <span className="codemap-view-label">
           {currentNav.mode === "overview" ? "Graph" : currentNav.mode === "structure" ? "Structure" : "Focus"}
         </span>
       </header>
 
+      <div className="codemap-map-container relative flex-1 flex flex-col min-h-0">
       <div className="flex-1 min-h-0 border border-border rounded-[10px] bg-card overflow-hidden">
         {loading ? (
           <div className="codemap-loading">
@@ -717,7 +744,8 @@ export function CodeMapPanel() {
             onNodesChange={onNodesChange}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            onNodeClick={handleNodeClick}
+            onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
             onPaneClick={() => setSelectedId(null)}
             fitView
             fitViewOptions={{ padding: 0.05 }}
@@ -735,6 +763,56 @@ export function CodeMapPanel() {
             <Controls />
           </ReactFlow>
         )}
+      </div>
+
+      {/* Legend overlay — bottom-left corner of graph */}
+      <div className="codemap-legend">
+        <div className="codemap-legend-row"><span className="codemap-legend-dot" style={{ background: "#94a3b8" }} />Dependency</div>
+        {currentNav.mode === "focus" && <>
+          <div className="codemap-legend-row"><span className="codemap-legend-line" style={{ background: "#60a5fa" }} />Imports this file</div>
+          <div className="codemap-legend-row"><span className="codemap-legend-line" style={{ background: "#a78bfa", borderStyle: "dashed" }} />This file imports</div>
+        </>}
+        <div className="codemap-legend-row"><span className="codemap-legend-line" style={{ background: "#ef4444" }} />Circular dep</div>
+        <div className="codemap-legend-divider" />
+        <div className="codemap-legend-row codemap-legend-hint">Click to select · Double-click to open</div>
+      </div>
+
+      {/* Detail panel (imports/imported by) — only show when there's actual data */}
+      {activeDetail && (activeDetail.imports.length > 0 || activeDetail.importedBy.length > 0) && (
+        <div className="codemap-detail-panel">
+          <div className="codemap-detail-section">
+            <h4 className="codemap-detail-heading">IMPORTS ({activeDetail.imports.length})</h4>
+            {activeDetail.imports.length === 0 ? (
+              <span className="codemap-detail-empty">None</span>
+            ) : (
+              <ul className="codemap-detail-list">
+                {activeDetail.imports.slice(0, 8).map((f) => (
+                  <li key={f.id} className="codemap-detail-file">{f.path}</li>
+                ))}
+                {activeDetail.imports.length > 8 && (
+                  <li className="codemap-detail-more">+{activeDetail.imports.length - 8} more</li>
+                )}
+              </ul>
+            )}
+          </div>
+          <div className="codemap-detail-section">
+            <h4 className="codemap-detail-heading">IMPORTED BY ({activeDetail.importedBy.length})</h4>
+            {activeDetail.importedBy.length === 0 ? (
+              <span className="codemap-detail-empty">None</span>
+            ) : (
+              <ul className="codemap-detail-list">
+                {activeDetail.importedBy.slice(0, 8).map((f) => (
+                  <li key={f.id} className="codemap-detail-file">{f.path}</li>
+                ))}
+                {activeDetail.importedBy.length > 8 && (
+                  <li className="codemap-detail-more">+{activeDetail.importedBy.length - 8} more</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       </div>
     </section>
   );

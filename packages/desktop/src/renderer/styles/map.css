@@ -296,6 +296,15 @@
   height: 100% !important;
 }
 
+.codemap-map-container {
+  position: relative;
+}
+
+.react-flow__controls {
+  visibility: hidden !important;
+  pointer-events: none;
+}
+
 .react-flow__background {
   background: var(--card) !important;
 }
@@ -325,7 +334,7 @@
 
 .codemap-dependency-node {
   display: flex;
-  width: 240px;
+  width: 280px;
   height: auto;
   min-height: 72px;
   border: 1.5px solid var(--border);
@@ -334,12 +343,17 @@
   overflow: hidden;
   cursor: pointer;
   box-sizing: border-box;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.codemap-dependency-node:hover {
+  border-color: var(--border-strong);
 }
 
 .codemap-dependency-node.selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3);
 }
 
 .codemap-dependency-node.in-cycle {
@@ -350,7 +364,7 @@
   flex-shrink: 0;
   width: 4px;
   background: var(--border-strong);
-  border-radius: 0;
+  border-radius: 10px 0 0 10px;
 }
 
 .codemap-dependency-node-body {
@@ -392,6 +406,169 @@
   letter-spacing: 0.05em;
 }
 
+.codemap-language-badge {
+  flex-shrink: 0;
+  padding: 0px 5px;
+  border-radius: 4px;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 16px;
+  text-transform: lowercase;
+}
+
+/* ── Node hover info panel (header) ── */
+
+.codemap-node-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.codemap-node-info-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.codemap-node-info-type {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.codemap-node-info-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.codemap-tooltip-cycle {
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ── Legend overlay ── */
+.codemap-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 10;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.codemap-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  line-height: 1;
+}
+
+.codemap-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.codemap-legend-line {
+  width: 16px;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+
+.codemap-legend-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.codemap-legend-hint {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+/* ── Detail panel (imports/imported by) ── */
+
+.codemap-detail-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 320px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-left: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 0 0 0 10px;
+  z-index: 50;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+}
+
+.codemap-detail-section {
+  margin-bottom: 10px;
+}
+
+.codemap-detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.codemap-detail-heading {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  margin: 0 0 6px 0;
+}
+
+.codemap-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.codemap-detail-file {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--foreground);
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codemap-detail-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.codemap-detail-more {
+  font-size: 10px;
+  color: var(--primary);
+  padding: 2px 0;
+  font-weight: 500;
+}
+
 .codemap-dependency-node-path {
   font-size: 10px;
   color: var(--muted);
@@ -411,11 +588,11 @@
 }
 
 .stat-in {
-  color: var(--success);
+  color: #10b981; /* emerald-500 */
 }
 
 .stat-out {
-  color: var(--warning);
+  color: #f59e0b; /* amber-500 */
 }
 
 /* ── Folder node card ── */
@@ -424,7 +601,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  width: 260px;
+  width: 300px;
   min-height: 96px;
   padding: 14px 16px;
   border: 1.5px solid var(--border);
@@ -432,11 +609,33 @@
   background: var(--card);
   box-sizing: border-box;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .codemap-folder-node:hover {
-  border-color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+.codemap-folder-node.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3);
+}
+
+.codemap-folder-node.expanded {
+  border-color: var(--primary);
+  background: hsl(var(--primary) / 0.06);
+  opacity: 0.7;
+}
+
+.codemap-folder-chevron {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-left: auto;
+  flex-shrink: 0;
+  align-self: center;
+  cursor: pointer;
+  user-select: none;
 }
 
 .codemap-folder-node-icon {
@@ -475,66 +674,6 @@
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   margin-top: 4px;
-}
-
-/* ── Cluster node (focus mode leaf grouping) ── */
-
-.codemap-cluster-node {
-  width: 220px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 10px;
-  background: var(--card);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.codemap-cluster-node:hover {
-  border-color: var(--foreground);
-  background: var(--hover);
-}
-.codemap-cluster-node.direction-in {
-  border-color: #6a8ee8;
-}
-.codemap-cluster-node.direction-out {
-  border-color: #a276d4;
-}
-.codemap-cluster-node-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.codemap-cluster-icon {
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-.codemap-cluster-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--foreground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.codemap-cluster-sample {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.codemap-cluster-sample-file {
-  font-size: 10px;
-  font-family: var(--mono);
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.codemap-cluster-more {
-  font-size: 10px;
-  color: var(--muted);
-  font-style: italic;
 }
 
 /* ── Legend / detail (reused from before) ── */
