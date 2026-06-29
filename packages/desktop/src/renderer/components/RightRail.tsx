@@ -14,7 +14,7 @@ function modelContextLimit(modelId: string): number {
   return 200_000;
 }
 
-interface RightRailProps {
+interface ChatRightRailProps {
   mode: "build" | "plan" | "fast";
   onTabChange: (tab: InspectorTab) => void;
   onStartResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -37,7 +37,7 @@ const tabs = [
   { id: "diff" as const, label: "Diff", icon: GitBranch },
 ];
 
-export function RightRail({
+export function ChatRightRail({
   mode,
   onRespondToPlanReview,
   onStartResize,
@@ -48,7 +48,7 @@ export function RightRail({
   tab,
   selectedModel,
   width,
-}: RightRailProps) {
+}: ChatRightRailProps) {
   if (!open) {
     return (
       <aside className="inspector-rail collapsed" aria-label="Inspector">

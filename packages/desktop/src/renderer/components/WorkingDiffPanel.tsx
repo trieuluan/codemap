@@ -22,7 +22,7 @@ import {
   Terminal,
 } from "lucide-react";
 import type { WorkingDiffFile } from "../../shared/ipc.js";
-import { MonacoDiffViewer } from "./MonacoDiffViewer.js";
+import { SimpleDiffViewer } from "./SimpleDiffViewer.js";
 
 function getFileIcon(filename: string): React.ReactNode {
   const lower = filename.toLowerCase();
@@ -430,9 +430,13 @@ export function WorkingDiffPanel() {
           <div className={`diff-panel-split ${fileSelectorVisible ? "" : "diff-panel-split-files-hidden"}`}>
             <div className="diff-panel-frame">
               <div className="diff-panel-content">
-                <MonacoDiffViewer
+                <SimpleDiffViewer
                   className="monaco-diff-viewer"
-                  files={files}
+                  files={files.map((file) => ({
+                    filePath: file.path,
+                    oldContent: file.original,
+                    newContent: file.modified,
+                  }))}
                   selectedPath={selectedPath}
                   onFileVisible={handleFileVisible}
                 />

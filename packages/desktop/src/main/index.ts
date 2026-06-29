@@ -5,9 +5,9 @@ import {
   ipcMain,
   shell,
 } from "electron";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import {
   DESKTOP_IPC,
@@ -305,6 +305,67 @@ ipcMain.handle(DESKTOP_IPC.command, async (event, raw: unknown) => {
       return { content, language: extToLanguage(ext), lines: allLines.length, truncated };
     } catch {
       return null;
+    }
+  }
+  if (command.type === "read_file") {
+    const absPath = command.filePath.startsWith("/")
+      ? command.filePath
+      : join(runtime.workspacePath, command.filePath);
+    try {
+      const raw = await readFile(absPath, "utf8");
+      const allLines = raw.split("\n");
+      const ext = absPath.split(".").pop()?.toLowerCase() ?? "";
+      return { content: raw, language: extToLanguage(ext), lines: allLines.length };
+    } catch {
+      return null;
+    }
+  }
+  if (command.type === "write_file") {
+    const absPath = command.filePath.startsWith("/")
+      ? command.filePath
+      : join(runtime.workspacePath, command.filePath);
+    await mkdir(dirname(absPath), { recursive: true });
+    await writeFile(absPath, command.content, "utf8");
+    return { success: true };
+  }
+  if (command.type === "stat_file") {
+    const absPath = command.filePath.startsWith("/")
+      ? command.filePath
+      : join(runtime.workspacePath, command.filePath);
+    try {
+      const info = await stat(absPath);
+      return {
+        path: command.filePath,
+        type: info.isDirectory() ? "directory" as const : "file" as const,
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+      };
+    } catch {
+      return null;
+    }
+  }
+  if (command.type === "read_directory" || command.type === "list_directory") {
+    const dirPath = command.dirPath || "";
+    const absPath = join(runtime.workspacePath, dirPath);
+    try {
+      const entries = await readdir(absPath, { withFileTypes: true });
+      const result = [];
+      for (const entry of entries) {
+        if (entry.name.startsWith(".")) continue;
+        if (entry.name === "node_modules") continue;
+        result.push({
+          name: entry.name,
+          path: dirPath ? `${dirPath}/${entry.name}` : entry.name,
+          type: entry.isDirectory() ? "directory" as const : "file" as const,
+        });
+      }
+      result.sort((a, b) => {
+        if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      return result;
+    } catch {
+      return [];
     }
   }
   await runtime.restart();

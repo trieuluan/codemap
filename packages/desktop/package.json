@@ -43,7 +43,6 @@
     "elkjs": "^0.11.1",
     "gpt-tokenizer": "^3.4.0",
     "mastracode": "^0.22.3",
-    "monaco-editor": "^0.55.1",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
     "react-markdown": "^10.1.0",

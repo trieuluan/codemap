@@ -59,6 +59,37 @@ export default defineConfig({
       alias: {
         "@": resolve(import.meta.dirname, "src/renderer"),
       },
+      dedupe: [
+        "monaco-editor",
+        "@codingame/monaco-vscode-api",
+      ],
+    },
+    worker: {
+      format: "es",
+    },
+    optimizeDeps: {
+      exclude: [
+        "monaco-editor",
+        "@codingame/monaco-vscode-api",
+        "@codingame/monaco-vscode-base-service-override",
+        "@codingame/monaco-vscode-configuration-service-override",
+        "@codingame/monaco-vscode-environment-service-override",
+        "@codingame/monaco-vscode-extensions-service-override",
+        "@codingame/monaco-vscode-files-service-override",
+        "@codingame/monaco-vscode-host-service-override",
+        "@codingame/monaco-vscode-keybindings-service-override",
+        "@codingame/monaco-vscode-languages-service-override",
+        "@codingame/monaco-vscode-layout-service-override",
+        "@codingame/monaco-vscode-model-service-override",
+        "@codingame/monaco-vscode-quickaccess-service-override",
+        "@codingame/monaco-vscode-textmate-service-override",
+        "@codingame/monaco-vscode-theme-service-override",
+        "@codingame/monaco-vscode-theme-defaults-default-extension",
+        "@codingame/monaco-vscode-javascript-default-extension",
+        "@codingame/monaco-vscode-json-default-extension",
+        "@codingame/monaco-vscode-typescript-basics-default-extension",
+        "@codingame/monaco-vscode-markdown-basics-default-extension",
+      ],
     },
     plugins: [react(), tailwindcss()],
     build: {

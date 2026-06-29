@@ -141,6 +141,37 @@ const api: DesktopApi = {
       requestId: crypto.randomUUID(),
       filePath,
     }),
+  readFile: (filePath) =>
+    invoke({
+      type: "read_file",
+      requestId: crypto.randomUUID(),
+      filePath,
+    }),
+  writeFile: (filePath, content) =>
+    invoke({
+      type: "write_file",
+      requestId: crypto.randomUUID(),
+      filePath,
+      content,
+    }),
+  statFile: (filePath) =>
+    invoke({
+      type: "stat_file",
+      requestId: crypto.randomUUID(),
+      filePath,
+    }),
+  readDirectory: (dirPath) =>
+    invoke({
+      type: "read_directory",
+      requestId: crypto.randomUUID(),
+      dirPath,
+    }),
+  listDirectory: (dirPath) =>
+    invoke({
+      type: "list_directory",
+      requestId: crypto.randomUUID(),
+      dirPath,
+    }),
   runSlashCommand: (name, args) =>
     invoke({
       type: "run_slash_command",

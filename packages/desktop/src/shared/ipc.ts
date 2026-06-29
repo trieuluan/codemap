@@ -160,6 +160,42 @@ export const desktopCommandSchema = z.discriminatedUnion("type", [
       requestId: requestIdSchema,
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("read_file"),
+      requestId: requestIdSchema,
+      filePath: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("write_file"),
+      requestId: requestIdSchema,
+      filePath: z.string().min(1),
+      content: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("stat_file"),
+      requestId: requestIdSchema,
+      filePath: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("read_directory"),
+      requestId: requestIdSchema,
+      dirPath: z.string().default(""),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("list_directory"),
+      requestId: requestIdSchema,
+      dirPath: z.string().default(""),
+    })
+    .strict(),
 ]);
 
 export const utilityCommandSchema = z.discriminatedUnion("type", [
@@ -372,6 +408,25 @@ export interface ReadFilePreviewResult {
   truncated: boolean;
 }
 
+export interface ReadFileResult {
+  content: string;
+  language: string;
+  lines: number;
+}
+
+export interface FileStatResult {
+  path: string;
+  type: "file" | "directory";
+  size: number;
+  mtimeMs: number;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+}
+
 export interface McpServerStatus {
   name: string;
   connected: boolean;
@@ -528,6 +583,11 @@ export interface DesktopApi {
   getMcpStatus(): Promise<McpStatusResult | null>;
   getToolsList(): Promise<ToolsListResult | null>;
   readFilePreview(filePath: string): Promise<ReadFilePreviewResult | null>;
+  readFile(filePath: string): Promise<ReadFileResult | null>;
+  writeFile(filePath: string, content: string): Promise<{ success: boolean }>;
+  statFile(filePath: string): Promise<FileStatResult | null>;
+  readDirectory(dirPath?: string): Promise<FileEntry[]>;
+  listDirectory(dirPath?: string): Promise<FileEntry[]>;
   runSlashCommand(name: string, args: string): Promise<SlashCommandResult>;
   getAccountInfo(): Promise<AccountInfo | null>;
   accountLogin(): Promise<AccountLoginResult | null>;

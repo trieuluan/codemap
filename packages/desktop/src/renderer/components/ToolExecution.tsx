@@ -9,7 +9,7 @@ import {
   ToolOutput,
 } from "./ai-elements/tool.js";
 import type { TaskItemData } from "./ai-elements/task.js";
-import { MonacoDiffViewer, type MonacoDiffFile, languageFromPath } from "./MonacoDiffViewer.js";
+import { SimpleDiffViewer, type MonacoDiffFile, languageFromPath } from "./SimpleDiffViewer.js";
 import {
   HoverCard,
   HoverCardContent,
@@ -242,10 +242,9 @@ function generateArgsPreview(
     return {
       filePath: path,
       diff: {
-        path,
-        original: oldStr,
-        modified: newStr,
-        language: languageFromPath(path),
+        filePath: path,
+        oldContent: oldStr,
+        newContent: newStr,
       },
     };
   }
@@ -258,10 +257,9 @@ function generateArgsPreview(
     return {
       filePath: path,
       diff: {
-        path,
-        original: pattern,
-        modified: replacement,
-        language: languageFromPath(path),
+        filePath: path,
+        oldContent: pattern,
+        newContent: replacement,
       },
     };
   }
@@ -329,7 +327,7 @@ export function ToolExecution({
         {/* Edit tools: show diff (string_replace_lsp / ast_smart_edit) */}
         {previewData?.diff && (
           <CollapsibleSection label="Diff">
-            <MonacoDiffViewer
+            <SimpleDiffViewer
               className="tool-monaco-diff"
               files={[previewData.diff]}
               height={280}
