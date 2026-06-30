@@ -21,6 +21,7 @@ import type {
 } from "./sqlite-index-store.ts";
 
 export type {
+  LocalGraphEdge,
   LocalIndexedFile,
   LocalImportedBy,
   LocalIndexSummary,

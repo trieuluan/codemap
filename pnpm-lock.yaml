@@ -91,6 +91,9 @@ importers:
 
   packages/code-index:
     dependencies:
+      ignore:
+        specifier: ^7.0.5
+        version: 7.0.5
       tree-sitter-python:
         specifier: ^0.25.0
         version: 0.25.0

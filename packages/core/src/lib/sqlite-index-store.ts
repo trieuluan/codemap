@@ -24,6 +24,14 @@ export interface LocalIndexSummary {
   stale: boolean;
 }
 
+export interface LocalGraphEdge {
+  sourceFileId: string;
+  targetFileId: string;
+  importKind: string;
+  isResolved: boolean;
+  resolutionKind: string;
+}
+
 export interface LocalImportedBy {
   sourceFilePath: string;
   moduleSpecifier: string;
@@ -362,6 +370,19 @@ export class SQLiteIndexStore {
   getAllFilePaths(): string[] {
     const rows = this.db.prepare("SELECT path FROM manifest ORDER BY path").all() as Array<{ path: string }>;
     return rows.map((r) => r.path);
+  }
+
+  getGraphEdges(): LocalGraphEdge[] {
+    const rows = this.db.prepare(
+      "SELECT filePath AS sourceFileId, targetPathText AS targetFileId, importKind, resolutionKind FROM imports WHERE targetPathText IS NOT NULL",
+    ).all() as Array<{ sourceFileId: string; targetFileId: string; importKind: string; resolutionKind: string }>;
+    return rows.map((r) => ({
+      sourceFileId: r.sourceFileId,
+      targetFileId: r.targetFileId,
+      importKind: r.importKind,
+      isResolved: r.resolutionKind !== "unresolved",
+      resolutionKind: r.resolutionKind,
+    }));
   }
 
   /**

@@ -106,7 +106,7 @@ function relatedNodeIds(selectedId: string, edges: { source: string; target: str
   return related;
 }
 
-function GroupFolderNode({ data, selected }: { data: { label: string; path?: string; fileCount: number; memberIds: string[]; expanded: boolean; id: string; incomingSummaryCount?: number; outgoingSummaryCount?: number; internalEdgeCount?: number; previewLabels?: string[] }; selected: boolean }) {
+function GroupFolderNode({ data, selected }: { data: { label: string; path?: string; fileCount: number; memberIds: string[]; expanded: boolean; id: string; incomingSummaryCount?: number; outgoingSummaryCount?: number; internalEdgeCount?: number; previewLabels?: string[]; layoutMode?: "single" | "grid" | "preview"; hiddenCount?: number; focusMode?: boolean; showInternalEdges?: boolean }; selected: boolean }) {
   const expanded = data?.expanded ?? false;
   const previewLabels = data?.previewLabels ?? [];
   const remainingCount = Math.max(0, (data?.fileCount ?? 0) - previewLabels.length);
@@ -128,6 +128,21 @@ function GroupFolderNode({ data, selected }: { data: { label: string; path?: str
             <span className="codemap-group-folder-metric stat-in" title="Unique files importing this group">↓{data?.incomingSummaryCount ?? 0}</span>
             <span className="codemap-group-folder-metric stat-out" title="Unique files this group imports">↑{data?.outgoingSummaryCount ?? 0}</span>
             <span className="codemap-group-folder-metric" title="Dependencies between files inside this group">↔{data?.internalEdgeCount ?? 0}</span>
+            {(data?.internalEdgeCount ?? 0) > 0 && expanded && (
+              <button
+                type="button"
+                className={`codemap-group-folder-toggle-edges nodrag nopan${data?.showInternalEdges ? " active" : ""}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new CustomEvent("codemap-toggle-internal-edges", { detail: { id: data.id } }));
+                }}
+                title="Toggle internal dependency lines"
+              >
+                {data?.showInternalEdges ? "✓ " : ""}Edges
+              </button>
+            )}
           </div>
           <span
             className="codemap-group-folder-chevron"
@@ -163,7 +178,24 @@ function GroupFolderNode({ data, selected }: { data: { label: string; path?: str
           </div>
         )}
         {expanded && (
-          <div className="codemap-group-folder-children" />
+          <div className={`codemap-group-folder-children codemap-group-folder-children-${data?.layoutMode ?? "single"}`} />
+        )}
+        {expanded && data?.layoutMode === "preview" && (data?.hiddenCount ?? 0) > 0 && (
+          <div className="codemap-group-folder-footer">
+            <span className="codemap-group-folder-footer-count">+{data.hiddenCount} more files</span>
+            <button
+              type="button"
+              className="codemap-group-folder-footer-btn nodrag nopan"
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent("codemap-group-open-folder", { detail: { id: data.id } }));
+              }}
+            >
+              Open folder →
+            </button>
+          </div>
         )}
       </div>
     </>
@@ -274,6 +306,8 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
   const [layoutLoading, setLayoutLoading] = useState(false);
   const [navStack, setNavStack] = useState<NavState[]>([{ mode: "overview" }]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedAllFolders, setExpandedAllFolders] = useState<Set<string>>(new Set());
+  const [showInternalGroupEdges, setShowInternalGroupEdges] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredEdgeLabel, setHoveredEdgeLabel] = useState<{ label: string; x: number; y: number } | null>(null);
   const currentNav = navStack[navStack.length - 1];
@@ -399,7 +433,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
       }
 
       // Build group nodes (always present) and collect expanded children
-      const groupNodes: Array<{ id: string; label: string; path: string; fileCount: number; inboundCount: number; outboundCount: number; incomingSummaryCount: number; outgoingSummaryCount: number; internalEdgeCount: number; memberIds: string[]; previewLabels: string[]; childrenHeight: number }> = [];
+      const groupNodes: Array<{ id: string; label: string; path: string; fileCount: number; inboundCount: number; outboundCount: number; incomingSummaryCount: number; outgoingSummaryCount: number; internalEdgeCount: number; internalEdgeSet: Set<string>; memberIds: string[]; previewLabels: string[]; childrenHeight: number; layoutMode: "single" | "grid" | "preview"; hiddenCount: number }> = [];
       const groupedIds = new Set<string>();
 
       for (const [dir, files] of dirGroups) {
@@ -411,6 +445,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
         for (const f of files) groupedIds.add(f.id);
 
         let internalEdgeCount = 0;
+        const internalEdgeSet = new Set<string>();
         const incomingSummaryIds = new Set<string>();
         const outgoingSummaryIds = new Set<string>();
         for (const e of allEdges) {
@@ -418,23 +453,55 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
           const targetInGroup = memberIdSet.has(e.target);
           if (sourceInGroup && targetInGroup) {
             internalEdgeCount += 1;
+            internalEdgeSet.add(`${e.source}->${e.target}`);
             continue;
           }
           if (targetInGroup) incomingSummaryIds.add(e.source);
           if (sourceInGroup) outgoingSummaryIds.add(e.target);
         }
 
+        // Import-aware column split: score = out - in (high=left, low=right)
+        const internalScores = new Map<string, number>();
+        for (const f of files) {
+          let outCount = 0, inCount = 0;
+          for (const e of allEdges) {
+            if (e.source === f.id && memberIdSet.has(e.target)) outCount += 1;
+            if (e.target === f.id && memberIdSet.has(e.source)) inCount += 1;
+          }
+          internalScores.set(f.id, outCount - inCount);
+        }
+
+        const rankedFiles = [...files].sort((a, b) => {
+          const scoreA = internalScores.get(a.id) ?? 0;
+          const scoreB = internalScores.get(b.id) ?? 0;
+          if (scoreA !== scoreB) return scoreB - scoreA;
+          return (a.label ?? "").localeCompare(b.label ?? "");
+        });
+        const totalFiles = rankedFiles.length;
+        const isExpandedAll = expandedAllFolders.has(groupId);
+        const layoutMode: "single" | "grid" | "preview" = isExpandedAll ? "grid" : totalFiles <= 8 ? "single" : totalFiles <= 20 ? "grid" : "preview";
+        const previewLimit = 6;
+        const visibleLimit = layoutMode === "preview" ? previewLimit : totalFiles;
+        const hiddenCount = layoutMode === "preview" ? totalFiles - previewLimit : 0;
+        const childrenHeight =
+          layoutMode === "single" ? totalFiles * ROW_GAP
+          : layoutMode === "grid" ? Math.ceil(totalFiles / 2) * ROW_GAP
+          : previewLimit * ROW_GAP + 36; // 6 rows + footer bar
+
         groupNodes.push({
           id: groupId, label, path: dir,
-          fileCount: files.length,
-          inboundCount: files.reduce((s, f) => s + (f.inboundCount ?? 0), 0),
-          outboundCount: files.reduce((s, f) => s + (f.outboundCount ?? 0), 0),
+          fileCount: totalFiles,
+          inboundCount: rankedFiles.reduce((s, f) => s + (f.inboundCount ?? 0), 0),
+          outboundCount: rankedFiles.reduce((s, f) => s + (f.outboundCount ?? 0), 0),
           incomingSummaryCount: incomingSummaryIds.size,
           outgoingSummaryCount: outgoingSummaryIds.size,
           internalEdgeCount,
-          memberIds,
-          previewLabels: files.slice(0, 3).map((f) => f.label ?? f.path.split("/").pop() ?? f.id),
-          childrenHeight: files.length * ROW_GAP,
+          internalEdgeSet,
+          memberIds: rankedFiles.slice(0, visibleLimit).map((f) => f.id),
+          previewLabels: rankedFiles.slice(0, 3).map((f) => f.label ?? f.path.split("/").pop() ?? f.id),
+          childrenHeight,
+          layoutMode,
+          hiddenCount,
         });
       }
 
@@ -450,8 +517,8 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
           id: g.id, label: g.label, path: g.path,
           fileCount: g.fileCount, inboundCount: g.inboundCount, outboundCount: g.outboundCount,
           incomingSummaryCount: g.incomingSummaryCount, outgoingSummaryCount: g.outgoingSummaryCount, internalEdgeCount: g.internalEdgeCount,
-          memberIds: g.memberIds, previewLabels: g.previewLabels, childrenHeight: g.childrenHeight,
-          nodeWidth: 300, nodeHeight: GROUP_HEADER_H + g.childrenHeight,
+          memberIds: g.memberIds, internalEdgeSet: g.internalEdgeSet, showInternalEdges: showInternalGroupEdges, previewLabels: g.previewLabels, childrenHeight: g.childrenHeight, layoutMode: g.layoutMode, hiddenCount: g.hiddenCount,
+          nodeWidth: g.layoutMode === "grid" ? 608 : 300, nodeHeight: expandedFolders.has(g.id) ? GROUP_HEADER_H + g.childrenHeight : GROUP_HEADER_H,
           groupType: "groupFolder" as const,
           category: "other" as const, dirPath: undefined, isInCycle: false, language: undefined,
         })),
@@ -467,11 +534,23 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
         }
       }
 
+      // Build set of internal group edge IDs for filtering
+      const internalGroupEdgeSet = new Set<string>();
+      for (const g of groupNodes) {
+        if (!expandedFolders.has(g.id)) continue;
+        for (const edgeId of g.internalEdgeSet) internalGroupEdgeSet.add(edgeId);
+      }
+
       const rawEdges = allEdges
         .filter((e) => {
           const srcIn = e.source === focusId || incomingIds.has(e.source) || memberToFolder.has(e.source);
           const tgtIn = e.target === focusId || outgoingIds.has(e.target) || memberToFolder.has(e.target);
-          return srcIn && tgtIn && e.source !== e.target;
+          if (!srcIn || !tgtIn || e.source === e.target) return false;
+          // Filter internal group edges: hide unless showInternalGroupEdges or edge involves selected file
+          if (internalGroupEdgeSet.has(`${e.source}->${e.target}`) && !showInternalGroupEdges) {
+            if (selectedId !== e.source && selectedId !== e.target) return false;
+          }
+          return true;
         })
         .map((e) => ({
           id: e.id,
@@ -498,7 +577,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     }
 
     return { displayNodes: nodes, displayEdges: edges, displayUseFolder: useFolder };
-  }, [graphData, currentNav, useFolderGraph, expandedFolders]) as { displayNodes: any[]; displayEdges: any[]; displayUseFolder: boolean };
+  }, [graphData, currentNav, useFolderGraph, expandedFolders, expandedAllFolders, showInternalGroupEdges, selectedId]) as { displayNodes: any[]; displayEdges: any[]; displayUseFolder: boolean };
 
   // Search filter — match nodes by label/path
   const matchedIds = useMemo(() => {
@@ -620,12 +699,13 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     const expandSet = expandedFolders;
 
     // Build child-to-group mapping from group nodes (id starts with "group:")
-    const childToGroup = new Map<string, { groupId: string; index: number }>();
+    const childToGroup = new Map<string, { groupId: string; index: number; layoutMode: string }>();
     for (const n of displayNodes) {
       const nid = n.id as string;
       if (nid.startsWith("group:") && (n as any).memberIds) {
         const members = (n as any).memberIds as string[];
-        members.forEach((mid, i) => childToGroup.set(mid, { groupId: nid, index: i }));
+        const lm = (n as any).layoutMode ?? "single";
+        members.forEach((mid, i) => childToGroup.set(mid, { groupId: nid, index: i, layoutMode: lm }));
       }
     }
 
@@ -670,7 +750,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
             id: nid,
             type: "groupFolder",
             position: layoutMap.get(nid)!,
-            style: { width: 300, height: isExpanded ? (gd.nodeHeight as number ?? GROUP_HEADER_H + (gd.childrenHeight as number || 0)) : GROUP_HEADER_H },
+            style: { width: (gd.layoutMode as string) === "grid" ? 608 : 300, height: isExpanded ? (gd.nodeHeight as number ?? GROUP_HEADER_H + (gd.childrenHeight as number || 0)) : GROUP_HEADER_H },
             data: {
               ...gd,
               expanded: isExpanded,
@@ -704,7 +784,9 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
         type: "dependency",
         parentId: info.groupId,
         extent: "parent" as const,
-        position: { x: 8, y: GROUP_HEADER_H + info.index * ROW_GAP },
+        position: info.layoutMode === "grid"
+        ? { x: 12 + (info.index % 2) * 296, y: GROUP_HEADER_H + Math.floor(info.index / 2) * ROW_GAP }
+        : { x: 8, y: GROUP_HEADER_H + info.index * ROW_GAP },
         data: { ...(cn as unknown as Record<string, unknown>), treeMode: false, insideGroup: true },
         selected: cn.id === activeId,
         className: undefined,
@@ -732,7 +814,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
         });
       });
     }
-  }, [displayNodes, layoutMap, activeId, related, displayUseFolder, expandedFolders, currentNav, fitView, updateNodeInternals, matchedIds, blastIds]);
+  }, [displayNodes, layoutMap, activeId, related, displayUseFolder, expandedFolders, expandedAllFolders, currentNav, fitView, updateNodeInternals, matchedIds, blastIds]);
 
   // Listen for folder chevron click to toggle expand
   useEffect(() => {
@@ -749,6 +831,25 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     };
     window.addEventListener("codemap-group-toggle", handler);
     return () => window.removeEventListener("codemap-group-toggle", handler);
+  }, [currentNav.focusNodeId]);
+
+  useEffect(() => {
+    const handler = () => setShowInternalGroupEdges((prev) => !prev);
+    window.addEventListener("codemap-toggle-internal-edges", handler);
+    return () => window.removeEventListener("codemap-toggle-internal-edges", handler);
+  }, []);
+
+  // Group folder "Open folder" button → navigate to structure view
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const groupId = (e as CustomEvent).detail?.id as string;
+      if (!groupId) return;
+      setExpandedFolders((prev) => new Set(prev).add(groupId));
+      setExpandedAllFolders((prev) => new Set(prev).add(groupId));
+      setSelectedId(currentNav.focusNodeId ?? null);
+    };
+    window.addEventListener("codemap-group-open-folder", handler);
+    return () => window.removeEventListener("codemap-group-open-folder", handler);
   }, [currentNav.focusNodeId]);
 
   // Node toolbar → focus on file
@@ -990,19 +1091,24 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
   );
   const onEdgeMouseLeave = useCallback(() => setHoveredEdgeLabel(null), []);
 
-  // Breadcrumb segments from navStack
+  // Breadcrumb segments from current nav position (VSCode-style: show full path to where you are now)
   const breadcrumbs = useMemo(() => {
     const segs: { label: string; index: number }[] = [];
     segs.push({ label: "Graph", index: 0 });
-    for (let i = 1; i < navStack.length; i++) {
-      const nav = navStack[i];
-      if (nav.mode === "structure" && nav.folder) {
-        segs.push({ label: nav.folder.path.split("/").pop() ?? nav.folder.path, index: i });
-      } else if (nav.mode === "focus" && nav.focusNodeId) {
-        const node = graphData?.nodes?.find((n) => n.id === nav.focusNodeId);
-        segs.push({ label: node?.label ?? nav.focusNodeId.split("/").pop() ?? nav.focusNodeId, index: i });
-      }
+
+    const lastNav = navStack[navStack.length - 1];
+    if (!lastNav) return segs;
+
+    if (lastNav.mode === "structure" && lastNav.folder) {
+      const parts = lastNav.folder.path.split("/").filter(Boolean);
+      parts.forEach((part) => segs.push({ label: part, index: navStack.length - 1 }));
+    } else if (lastNav.mode === "focus" && lastNav.focusNodeId) {
+      const node = graphData?.nodes?.find((n) => n.id === lastNav.focusNodeId);
+      const fullPath = node?.path ?? lastNav.focusNodeId;
+      const parts = fullPath.split("/").filter(Boolean);
+      parts.forEach((part) => segs.push({ label: part, index: navStack.length - 1 }));
     }
+
     return segs;
   }, [navStack, graphData]);
 

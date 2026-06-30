@@ -1,5 +1,6 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import ignore from "ignore";
 import {
   buildFileSha256,
   isBinaryBuffer,
@@ -23,8 +24,6 @@ export const IGNORED_NAMES = new Set([
   "node_modules",
   ".pnpm",
   ".pnpm-store",
-  ".dist",
-  "build",
   ".next",
   "coverage",
   ".turbo",
@@ -35,7 +34,6 @@ export const IGNORED_NAMES = new Set([
   ".vercel",
   "tmp",
   "temp",
-  "lib",
   ".continue",
   ".github",
   ".vscode",
@@ -49,6 +47,48 @@ export const IGNORED_NAMES = new Set([
   ".mypy_cache",
   ".pytest_cache",
 ]);
+
+// ponytail: removed lib/, dist/, build/ — these are gitignore's domain (lib/ is source in Ruby/Dart/Elixir)
+
+async function loadGitignoreMatcher(workspacePath: string) {
+  const matcher = ignore();
+  try {
+    matcher.add(await readFile(path.join(workspacePath, ".gitignore"), "utf8"));
+  } catch {
+    // no root .gitignore
+  }
+  return matcher;
+}
+
+async function walkDir(
+  dirPath: string,
+  workspacePath: string,
+  gitignoreMatcher: ReturnType<typeof ignore>,
+  onFile: (relativePath: string, absolutePath: string) => Promise<void>,
+): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const abs = path.join(dirPath, entry.name);
+    const rel = path.relative(workspacePath, abs).split(path.sep).join("/");
+    const relForMatcher = entry.isDirectory() ? `${rel}/` : rel;
+
+    if (entry.isDirectory()) {
+      if (IGNORED_NAMES.has(entry.name)) continue;
+      if (gitignoreMatcher.ignores(relForMatcher)) continue;
+      await walkDir(abs, workspacePath, gitignoreMatcher, onFile);
+    } else if (entry.isFile()) {
+      if (IGNORED_NAMES.has(entry.name)) continue;
+      if (gitignoreMatcher.ignores(relForMatcher)) continue;
+      await onFile(rel, abs);
+    }
+  }
+}
 
 /** Helper to check if a path should be ignored */
 export function isPathIgnored(path: string): boolean {
@@ -191,47 +231,33 @@ export async function collectSingleFile(
 export async function collectWorkspaceFiles(
   workspacePath: string,
 ): Promise<WorkspaceFileCandidate[]> {
+  const gitignoreMatcher = await loadGitignoreMatcher(workspacePath);
   const candidates: WorkspaceFileCandidate[] = [];
 
-  async function visit(absolutePath: string) {
+  async function onFile(relativePath: string, absolutePath: string) {
     const entryStats = await lstat(absolutePath);
-
-    // Skip symlinks
-    if (entryStats.isSymbolicLink()) return;
-
     const name = path.basename(absolutePath);
-
-    if (entryStats.isDirectory()) {
-      if (IGNORED_NAMES.has(name)) return;
-
-      const entries = await readdir(absolutePath, { withFileTypes: true });
-      for (const entry of entries) {
-        await visit(path.join(absolutePath, entry.name));
-      }
-      return;
-    }
-
-    if (!entryStats.isFile()) return;
-
-    const relativePath = normalizeRepositoryFilePath(
-      path.relative(workspacePath, absolutePath).split(path.sep).join("/"),
-    );
     const extension = extensionFromFilename(name);
     const language = inferLanguage(extension);
     const mimeType = inferMimeType(extension);
     const sample = await readSampleBuffer(absolutePath, entryStats.size);
     const isBinary = isBinaryBuffer(sample);
     const isText = !isBinary;
-    const maxParseBytes = (language ? MAX_PARSE_BYTES_BY_LANGUAGE[language] : undefined) ?? MAX_PARSE_BYTES;
-    const isParseable = Boolean(language) && isText && entryStats.size <= maxParseBytes;
+    const maxParseBytes =
+      (language ? MAX_PARSE_BYTES_BY_LANGUAGE[language] : undefined) ??
+      MAX_PARSE_BYTES;
+    const isParseable =
+      Boolean(language) && isText && entryStats.size <= maxParseBytes;
 
-    const dirPath = path.posix.dirname(relativePath) === "."
-      ? ""
-      : path.posix.dirname(relativePath);
+    const normalizedPath = normalizeRepositoryFilePath(relativePath);
+    const dirPath =
+      path.posix.dirname(normalizedPath) === "."
+        ? ""
+        : path.posix.dirname(normalizedPath);
 
     if (!isParseable) {
       candidates.push({
-        path: relativePath,
+        path: normalizedPath,
         absolutePath,
         dirPath,
         baseName: name,
@@ -260,9 +286,8 @@ export async function collectWorkspaceFiles(
     }
 
     const content = await readFile(absolutePath, "utf8");
-
     candidates.push({
-      path: relativePath,
+      path: normalizedPath,
       absolutePath,
       dirPath,
       baseName: name,
@@ -285,6 +310,6 @@ export async function collectWorkspaceFiles(
     });
   }
 
-  await visit(workspacePath);
-  return candidates.sort((left, right) => left.path.localeCompare(right.path));
+  await walkDir(workspacePath, workspacePath, gitignoreMatcher, onFile);
+  return candidates.sort((l, r) => l.path.localeCompare(r.path));
 }

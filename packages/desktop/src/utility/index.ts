@@ -37,6 +37,7 @@ import {
   type GraphNode,
   type GraphEdge,
 } from "../shared/ipc.js";
+import { getLocalGraphData } from './local-graph.js';
 
 if (!process.send) throw new Error("Desktop utility requires a parent IPC channel");
 
@@ -599,6 +600,12 @@ function post(message: RuntimeMessage): void {
 }
 
 async function getGraphData(): Promise<GraphData> {
+  try {
+    return await getLocalGraphData(workspacePath || process.cwd());
+  } catch {
+    // Local index not available — fall through to cloud API
+  }
+
   const config = await loadConfig(workspacePath || process.cwd());
   const wsProject = await readWorkspaceProjectConfig(workspacePath || process.cwd());
   if (!config.apiToken) {

@@ -12,7 +12,9 @@
     "./agent/contracts": "./src/agent/contracts/index.ts",
     "./agent/session": "./src/agent/session/index.ts",
     "./agent/config": "./src/agent/config/index.ts",
-    "./agent/loop": "./src/agent/loop/index.ts"
+    "./agent/loop": "./src/agent/loop/index.ts",
+    "./graph/builder.js": "./src/graph/builder.ts",
+    "./graph/utils.js": "./src/graph/utils.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
