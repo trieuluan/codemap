@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { TypeScriptResolverConfig } from "../ts-resolver.js";
+import type { TypeScriptResolverConfig, WorkspacePackageMap } from "../ts-resolver.js";
 import type { ParsedExternalSymbolDraft } from "./types.js";
 
 export const JS_TS_EXTENSIONS = ["ts", "tsx", "js", "jsx"];
@@ -133,6 +133,66 @@ export function resolveTsconfigAliasTargetPath(
   }
 
   return null;
+}
+
+const WORKSPACE_PACKAGE_PREFIX_RE = /^@[^/]+\/[^/]+/;
+
+/**
+ * Resolve workspace package imports (e.g. `@codemap-ai/core/lib/foo`)
+ * to workspace-relative file paths (e.g. `packages/core/src/lib/foo.ts`).
+ */
+export function resolveWorkspacePackageTargetPath(
+  workspacePath: string,
+  moduleSpecifier: string,
+  language: string,
+  filePathSet: Set<string>,
+  workspacePackageMap: WorkspacePackageMap,
+) {
+  if (!WORKSPACE_PACKAGE_PREFIX_RE.test(moduleSpecifier)) return null;
+
+  // e.g. moduleSpecifier = "@codemap-ai/core/lib/foo"
+  // parts[0] = "@codemap-ai/core", parts[1] = "lib/foo"
+  const slashIdx = moduleSpecifier.indexOf("/");
+  const secondSlash = moduleSpecifier.indexOf("/", slashIdx + 1);
+  let packageName: string;
+  let subpath: string;
+
+  if (secondSlash >= 0) {
+    // e.g. @scope/pkg/sub/path — packageName is @scope/pkg
+    packageName = moduleSpecifier.slice(0, secondSlash);
+    subpath = moduleSpecifier.slice(secondSlash + 1);
+  } else {
+    // e.g. @scope/pkg — no subpath, resolve to package entry
+    packageName = moduleSpecifier;
+    subpath = "";
+  }
+
+  const sourceDir = workspacePackageMap[packageName];
+  if (!sourceDir) return null;
+
+  const extensions =
+    language === "TypeScript" || language === "JavaScript" ? JS_TS_EXTENSIONS
+    : language === "Dart" ? DART_EXTENSIONS
+    : language === "Python" ? PYTHON_EXTENSIONS
+    : language === "Java" ? JAVA_EXTENSIONS
+    : language === "Kotlin" ? KOTLIN_EXTENSIONS
+    : PHP_EXTENSIONS;
+
+  // base path e.g. "packages/core/src/lib/foo" or "packages/core/src"
+  const basePath = subpath ? `${sourceDir}/${subpath}` : sourceDir;
+  const candidates: string[] = [basePath];
+
+  if (!path.posix.extname(basePath)) {
+    for (const ext of extensions) {
+      candidates.push(`${basePath}.${ext}`, `${basePath}/index.${ext}`);
+    }
+  } else if (path.posix.extname(basePath) === ".js") {
+    candidates.push(basePath.replace(/\.js$/, ".ts"), basePath.replace(/\.js$/, ".tsx"));
+  }
+
+  const resolvedPath = candidates.find((c) => filePathSet.has(c));
+  if (resolvedPath) return { resolvedPath, attemptedPath: basePath };
+  return { resolvedPath: null, attemptedPath: basePath };
 }
 
 export function maskCommentsAndTemplateLiterals(

@@ -2,6 +2,25 @@ import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import monacoEditorPluginModule from "vite-plugin-monaco-editor";
+
+// vite-plugin-monaco-editor uses CJS exports.default; TS import gets the namespace
+const monacoEditorPlugin = (monacoEditorPluginModule as any).default ?? monacoEditorPluginModule;
+
+// Strip missing source map references from monaco-editor minified files
+// Monaco ships sourceMappingURL comments pointing to min-maps/ dir that doesn't exist in npm package
+function stripMonacoSourcemapRefs(): import("vite").Plugin {
+  return {
+    name: "strip-monaco-sourcemap",
+    enforce: "pre",
+    transform(code, id) {
+      if (id.includes("monaco-editor") && id.includes("loader.js")) {
+        return { code: code.replace(/\/\/# sourceMappingURL=.+$/m, ""), map: null };
+      }
+    },
+  };
+}
 
 export default defineConfig({
   main: {
@@ -59,39 +78,18 @@ export default defineConfig({
       alias: {
         "@": resolve(import.meta.dirname, "src/renderer"),
       },
-      dedupe: [
-        "monaco-editor",
-        "@codingame/monaco-vscode-api",
-      ],
     },
     worker: {
       format: "es",
     },
-    optimizeDeps: {
-      exclude: [
-        "monaco-editor",
-        "@codingame/monaco-vscode-api",
-        "@codingame/monaco-vscode-base-service-override",
-        "@codingame/monaco-vscode-configuration-service-override",
-        "@codingame/monaco-vscode-environment-service-override",
-        "@codingame/monaco-vscode-extensions-service-override",
-        "@codingame/monaco-vscode-files-service-override",
-        "@codingame/monaco-vscode-host-service-override",
-        "@codingame/monaco-vscode-keybindings-service-override",
-        "@codingame/monaco-vscode-languages-service-override",
-        "@codingame/monaco-vscode-layout-service-override",
-        "@codingame/monaco-vscode-model-service-override",
-        "@codingame/monaco-vscode-quickaccess-service-override",
-        "@codingame/monaco-vscode-textmate-service-override",
-        "@codingame/monaco-vscode-theme-service-override",
-        "@codingame/monaco-vscode-theme-defaults-default-extension",
-        "@codingame/monaco-vscode-javascript-default-extension",
-        "@codingame/monaco-vscode-json-default-extension",
-        "@codingame/monaco-vscode-typescript-basics-default-extension",
-        "@codingame/monaco-vscode-markdown-basics-default-extension",
-      ],
-    },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      stripMonacoSourcemapRefs(),
+      monacoEditorPlugin({
+        languageWorkers: ["editorWorkerService", "typescript", "json", "css", "html"],
+      }),
+    ],
     build: {
       rollupOptions: {
         input: resolve(import.meta.dirname, "src/renderer/index.html"),

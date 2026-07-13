@@ -1,5 +1,5 @@
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
-import type { TypeScriptResolverConfig } from "../ts-resolver.js";
+import type { TypeScriptResolverConfig, WorkspacePackageMap } from "../ts-resolver.js";
 import { parseDartFile } from "./dart.js";
 import { parseJavaFile } from "./java.js";
 import { parseKotlinFile } from "./kotlin.js";
@@ -16,6 +16,7 @@ export async function parseWorkspaceFileSemantics(input: {
   projectImportId: string;
   workspacePath: string;
   resolverConfigs?: TypeScriptResolverConfig[];
+  workspacePackageMap?: WorkspacePackageMap;
 }) {
   if (!input.file.language || !input.file.content) {
     return { ...EMPTY_SEMANTICS };
@@ -30,6 +31,7 @@ export async function parseWorkspaceFileSemantics(input: {
         input.projectImportId,
         input.workspacePath,
         input.resolverConfigs ?? [],
+        input.workspacePackageMap ?? {},
       );
     case "Dart":
       return parseDartFile(input.file, input.filePathSet, input.projectImportId);

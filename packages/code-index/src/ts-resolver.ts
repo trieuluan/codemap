@@ -1,4 +1,4 @@
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
 import { IGNORED_NAMES, normalizeRepositoryFilePath } from "./file-discovery.js";
@@ -148,4 +148,83 @@ export async function loadTypeScriptResolverConfigs(
   return resolverConfigs.sort(
     (left, right) => right.configDirPath.length - left.configDirPath.length,
   );
+}
+
+/**
+ * Workspace package name → source directory mapping.
+ * e.g. { "@codemap-ai/core": "packages/core/src" }
+ */
+export interface WorkspacePackageMap {
+  [packageName: string]: string; // workspace-relative source dir
+}
+
+/**
+ * Scan workspace for package.json files and build a map of
+ * package name → workspace-relative source directory.
+ * Checks for src/ dir first, falls back to package root.
+ * ponytail: no exports field parsing — add when subpath imports needed
+ */
+export async function loadWorkspacePackageMap(
+  workspacePath: string,
+): Promise<WorkspacePackageMap> {
+  const map: WorkspacePackageMap = {};
+  const pkgDirs: string[] = [];
+
+  // Read pnpm-workspace.yaml or package.json workspaces
+  try {
+    const rootPkg = JSON.parse(await readFile(path.join(workspacePath, "package.json"), "utf8"));
+    if (Array.isArray(rootPkg.workspaces)) {
+      pkgDirs.push(...rootPkg.workspaces);
+    }
+  } catch { /* no root package.json */ }
+
+  if (pkgDirs.length === 0) {
+    try {
+      const yamlContent = await readFile(path.join(workspacePath, "pnpm-workspace.yaml"), "utf8");
+      // Simple YAML array parse — covers "- 'packages/*'" pattern
+      for (const line of yamlContent.split("\n")) {
+        const m = line.match(/^\s*-\s+['"]?([^'"]+)['"]?\s*$/);
+        if (m) pkgDirs.push(m[1]);
+      }
+    } catch { /* no pnpm-workspace.yaml */ }
+  }
+
+  if (pkgDirs.length === 0) return map;
+
+  // Expand glob patterns like "packages/*"
+  const expandedDirs: string[] = [];
+  for (const pattern of pkgDirs) {
+    if (pattern.endsWith("/*")) {
+      const parentDir = path.join(workspacePath, pattern.slice(0, -2));
+      try {
+        const entries = await readdir(parentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith(".")) {
+            expandedDirs.push(path.join(parentDir, entry.name));
+          }
+        }
+      } catch { /* dir doesn't exist */ }
+    } else {
+      expandedDirs.push(path.join(workspacePath, pattern));
+    }
+  }
+
+  for (const dir of expandedDirs) {
+    try {
+      const pkg = JSON.parse(await readFile(path.join(dir, "package.json"), "utf8"));
+      if (!pkg.name) continue;
+      const relDir = path.relative(workspacePath, dir).split(path.sep).join("/");
+      // Prefer src/ subdir if it exists
+      try {
+        const srcStat = await lstat(path.join(dir, "src"));
+        if (srcStat.isDirectory()) {
+          map[pkg.name] = relDir + "/src";
+          continue;
+        }
+      } catch { /* no src/ dir */ }
+      map[pkg.name] = relDir;
+    } catch { /* no package.json in this dir */ }
+  }
+
+  return map;
 }

@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-const MIN_WIDTH = 220;
-const MAX_WIDTH = 480;
+const MIN_WIDTH = 320;
 const DEFAULT_WIDTH = 256;
 
-export function useSidebarResize(sidebarOpen: boolean) {
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+export function useSidebarResize(sidebarOpen: boolean, fromRight = false, maxWidth = 480, initialWidth?: number) {
+  const [sidebarWidth, setSidebarWidth] = useState(initialWidth ?? DEFAULT_WIDTH);
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  const clampedWidth = Math.max(MIN_WIDTH, Math.min(sidebarWidth, MAX_WIDTH));
+  const clampedWidth = Math.max(MIN_WIDTH, Math.min(sidebarWidth, maxWidth));
 
   useEffect(() => {
     if (!sidebarOpen) return;
 
     function handlePointerMove(event: PointerEvent) {
       if (!resizeState.current) return;
-      const next =
-        resizeState.current.startWidth + event.clientX - resizeState.current.startX;
-      setSidebarWidth(Math.max(MIN_WIDTH, Math.min(next, MAX_WIDTH)));
+      const delta = event.clientX - resizeState.current.startX;
+      const next = resizeState.current.startWidth + (fromRight ? -delta : delta);
+      setSidebarWidth(Math.max(MIN_WIDTH, Math.min(next, maxWidth)));
     }
 
     function handlePointerUp() {

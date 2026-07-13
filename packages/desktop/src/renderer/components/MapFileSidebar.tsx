@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Braces,
   Code2,
@@ -76,11 +76,13 @@ function renderFileIcon(filename: string) {
   }
 }
 
-export function MapFileSidebar({ onSelectFile }: { onSelectFile?: (filePath: string) => void }) {
+export function MapFileSidebar({ onSelectFile, selectedPath, searchQuery = "" }: { onSelectFile?: (filePath: string) => void; selectedPath?: string | null; searchQuery?: string }) {
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Record<string, FileEntry[]>>({});
   const [loading, setLoading] = useState(true);
+  const activeRowRef = useRef<HTMLButtonElement | null>(null);
 
+  // Client-side filter tree by searchQuery
   const loadDir = useCallback(async (dirPath: string) => {
     const entries = await window.codemap.readDirectory(dirPath);
     return entries;
@@ -93,6 +95,35 @@ export function MapFileSidebar({ onSelectFile }: { onSelectFile?: (filePath: str
       setLoading(false);
     })();
   }, [loadDir]);
+
+  // Auto-expand parent dirs + scroll to active file when selectedPath changes
+  useEffect(() => {
+    if (!selectedPath) return;
+    const expandParents = async () => {
+      const parts = selectedPath.split("/");
+      let current = "";
+      const toExpand: string[] = [];
+      for (let i = 0; i < parts.length - 1; i++) {
+        current = current ? `${current}/${parts[i]}` : parts[i];
+        if (!(current in expandedDirs)) {
+          toExpand.push(current);
+        }
+      }
+      if (toExpand.length === 0) {
+        activeRowRef.current?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      // Expand all parent dirs sequentially
+      for (const dir of toExpand) {
+        if (dir in expandedDirs) continue;
+        const entries = await loadDir(dir);
+        setExpandedDirs((prev) => ({ ...prev, [dir]: entries }));
+      }
+      // Scroll after next render
+      requestAnimationFrame(() => activeRowRef.current?.scrollIntoView({ block: "nearest" }));
+    };
+    void expandParents();
+  }, [selectedPath, loadDir]);
 
   const toggleDir = useCallback(async (dirPath: string) => {
     if (expandedDirs[dirPath]) {
@@ -108,12 +139,18 @@ export function MapFileSidebar({ onSelectFile }: { onSelectFile?: (filePath: str
     }
   }, [expandedDirs, loadDir]);
 
-  const renderEntry = (entry: FileEntry, depth: number) => {
+  const renderEntry = (entry: FileEntry, depth: number): React.ReactNode | null => {
     const isExpanded = entry.path in expandedDirs;
     const indent = depth * 12;
+    const q = searchQuery.trim().toLowerCase();
 
     if (entry.type === "directory") {
       const children = expandedDirs[entry.path];
+      const filteredChildren = children ? children.map(c => renderEntry(c, depth + 1)).filter(Boolean) : null;
+
+      // If query active: show dir only if any child matches or dir name itself matches
+      if (q && !entry.name.toLowerCase().includes(q) && (!filteredChildren || filteredChildren.length === 0)) return null;
+
       return (
         <div key={entry.path}>
           <button
@@ -130,15 +167,18 @@ export function MapFileSidebar({ onSelectFile }: { onSelectFile?: (filePath: str
               : <Folder size={14} className="map-file-tree-icon map-file-tree-icon--folder" />}
             <span className="map-file-tree-name">{entry.name}</span>
           </button>
-          {isExpanded && children && children.map(child => renderEntry(child, depth + 1))}
+          {isExpanded && filteredChildren && filteredChildren.length > 0 && filteredChildren}
         </div>
       );
     }
 
+    if (q && !entry.name.toLowerCase().includes(q) && !entry.path.toLowerCase().includes(q)) return null;
+
     return (
       <button
         key={entry.path}
-        className="map-file-tree-row map-file-tree-file"
+        ref={entry.path === selectedPath ? activeRowRef : undefined}
+        className={`map-file-tree-row map-file-tree-file${entry.path === selectedPath ? " map-file-tree-row--active" : ""}`}
         style={{ paddingLeft: 20 + indent }}
         title={entry.path}
         onClick={() => onSelectFile?.(entry.path)}
@@ -173,7 +213,10 @@ export function MapFileSidebar({ onSelectFile }: { onSelectFile?: (filePath: str
           ? <div className="map-file-tree-empty">Loading...</div>
           : rootEntries.length === 0
             ? <div className="map-file-tree-empty">No files found</div>
-            : rootEntries.map(entry => renderEntry(entry, 0))}
+            : (() => {
+              const result = rootEntries.map(entry => renderEntry(entry, 0)).filter(Boolean);
+              return result.length > 0 ? result : <div className="map-file-tree-empty">No files match</div>;
+            })()}
       </div>
     </div>
   );

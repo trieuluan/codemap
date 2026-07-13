@@ -570,16 +570,6 @@
 
 /* ── Right inspector panel ── */
 
-.codemap-inspector {
-  display: flex;
-  flex-direction: column;
-  width: 260px;
-  min-width: 260px;
-  border-left: 1px solid var(--border);
-  background: var(--card);
-  overflow: hidden;
-}
-
 .codemap-inspector-header {
   display: flex;
   align-items: flex-start;
@@ -631,10 +621,74 @@
   color: var(--foreground);
 }
 
-.codemap-inspector-body {
+/* ── File preview in inspector ── */
+
+.codemap-inspector-preview {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  overflow-y: auto;
-  padding: 12px;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.codemap-inspector-preview-loading,
+.codemap-inspector-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.codemap-inspector-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.codemap-inspector-preview-lang {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.codemap-inspector-preview-lines {
+  opacity: 0.7;
+}
+
+.codemap-inspector-preview-code {
+  max-height: 300px;
+  overflow: auto;
+  margin: 0;
+  padding: 0 12px 10px;
+}
+
+.codemap-inspector-preview-code code {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+/* ── Symbol list in inspector ── */
+
+.codemap-symbol-list {
+  border-top: 1px solid var(--border);
+  padding: 0 0 6px;
+}
+
+.codemap-symbol-item {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 12px;
+  color: var(--foreground);
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Detail helpers (shared by inspector) ── */
@@ -1009,6 +1063,15 @@
 
 .map-file-tree-row.selected:hover {
   background: #094771;
+}
+
+.map-file-tree-row--active {
+  background: rgba(13, 97, 225, 0.12);
+  border-left-color: var(--primary);
+}
+
+.map-file-tree-row--active:hover {
+  background: rgba(13, 97, 225, 0.20);
 }
 
 .map-file-tree-chevron {
@@ -2327,10 +2390,15 @@ body.diff-panel-resizing {
 }
 
 .codemap-group-folder-handle {
-  width: 1px !important;
-  height: 1px !important;
-  min-width: 1px !important;
-  min-height: 1px !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
 }
 
 .codemap-group-folder-handle-left {

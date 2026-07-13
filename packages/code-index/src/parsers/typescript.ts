@@ -1,14 +1,15 @@
 import ts from "typescript";
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
+import type { TypeScriptResolverConfig, WorkspacePackageMap } from "../ts-resolver.js";
 import {
   buildLocalSymbolKey,
   buildStableSymbolKey,
   buildImportLocalKey,
   resolveRelativeTargetPath,
   resolveTsconfigAliasTargetPath,
+  resolveWorkspacePackageTargetPath,
   createExternalSymbolDraft,
 } from "./shared.js";
-import type { TypeScriptResolverConfig } from "../ts-resolver.js";
 import type {
   ParsedCallDraft,
   ParsedImportDraft,
@@ -46,6 +47,7 @@ function extractImportsWithAst(
   projectImportId: string,
   workspacePath: string,
   resolverConfigs: TypeScriptResolverConfig[],
+  workspacePackageMap: WorkspacePackageMap,
 ): Pick<ParsedWorkspaceSemantics, "imports" | "exports" | "issues" | "externalSymbols"> {
   const imports: ParsedImportDraft[] = [];
   const exports: ParsedWorkspaceSemantics["exports"] = [];
@@ -80,9 +82,12 @@ function extractImportsWithAst(
     const aliasResolution = !isRelative
       ? resolveTsconfigAliasTargetPath(workspacePath, file.path, moduleSpecifier, file.language!, filePathSet, resolverConfigs)
       : null;
+    const workspaceResolution = !isRelative && !aliasResolution?.matched
+      ? resolveWorkspacePackageTargetPath(workspacePath, moduleSpecifier, file.language!, filePathSet, workspacePackageMap)
+      : null;
     const resolution = isRelative
       ? resolveRelativeTargetPath(file.path, moduleSpecifier, file.language!, filePathSet)
-      : (aliasResolution ?? { resolvedPath: null, attemptedPath: null });
+      : (aliasResolution ?? workspaceResolution ?? { resolvedPath: null, attemptedPath: null });
     const importLocalKey = buildImportLocalKey(file.path, importKind, moduleSpecifier, line, col);
 
     imports.push({
@@ -98,14 +103,15 @@ function extractImportsWithAst(
       resolutionKind: isRelative
         ? resolution.resolvedPath ? "relative_path" : "unresolved"
         : aliasResolution?.resolvedPath ? "tsconfig_alias"
-        : aliasResolution?.matched ? "unresolved" : "package",
+        : workspaceResolution?.resolvedPath ? "workspace_package"
+        : aliasResolution?.matched || workspaceResolution ? "unresolved" : "package",
       targetPathText: resolution.resolvedPath ?? resolution.attemptedPath,
-      targetExternalSymbolKey: isRelative || aliasResolution?.matched
+      targetExternalSymbolKey: isRelative || aliasResolution?.matched || workspaceResolution
         ? null
         : `${file.language?.toLowerCase()}:${moduleSpecifier}`,
     });
 
-    if (!isRelative && !aliasResolution?.matched) {
+    if (!isRelative && !aliasResolution?.matched && !workspaceResolution) {
       externalSymbols.push(createExternalSymbolDraft(projectImportId, file.language!, moduleSpecifier));
     } else if (!resolution.resolvedPath) {
       issues.push({
@@ -636,11 +642,12 @@ export function parseTypeScriptOrJavaScriptFile(
   projectImportId: string,
   workspacePath: string,
   resolverConfigs: TypeScriptResolverConfig[],
+  workspacePackageMap: WorkspacePackageMap = {},
 ): ParsedWorkspaceSemantics {
   const sourceFile = createSourceFile(file);
 
   const { imports, exports, issues, externalSymbols } = extractImportsWithAst(
-    file, sourceFile, filePathSet, projectImportId, workspacePath, resolverConfigs,
+    file, sourceFile, filePathSet, projectImportId, workspacePath, resolverConfigs, workspacePackageMap,
   );
 
   const { symbols: astSymbols, relationships } = extractSymbolsWithAst(file, sourceFile);

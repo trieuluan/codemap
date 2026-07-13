@@ -48,6 +48,7 @@ export type RepoImportKind =
 export type RepoImportResolutionKind =
   | "relative_path"
   | "tsconfig_alias"
+  | "workspace_package"
   | "package"
   | "unresolved"
   | "builtin";

@@ -24,6 +24,7 @@
     "@mastra/libsql": "1.12.1",
     "@mastra/mcp": "1.9.1",
     "@mastra/memory": "1.20.2",
+    "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-collapsible": "^1.1.13",
     "@radix-ui/react-context-menu": "^2.3.0",
     "@radix-ui/react-dialog": "^1.1.16",
@@ -42,7 +43,10 @@
     "cmdk": "^1.1.1",
     "elkjs": "^0.11.1",
     "gpt-tokenizer": "^3.4.0",
+    "html-to-image": "^1.11.13",
     "mastracode": "^0.22.3",
+    "monaco-editor": "^0.55.1",
+    "monaco-languageclient": "^10.7.0",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
     "react-markdown": "^10.1.0",
@@ -52,7 +56,10 @@
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "use-stick-to-bottom": "^1.1.6"
+    "use-stick-to-bottom": "^1.1.6",
+    "vite-plugin-monaco-editor": "^1.1.0",
+    "vscode-json-languageservice": "^5.7.2",
+    "vscode-languageserver": "^10.1.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",

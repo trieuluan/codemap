@@ -3,6 +3,7 @@ import {
   collectSingleFile,
   collectWorkspaceFiles,
   loadTypeScriptResolverConfigs,
+  loadWorkspacePackageMap,
   parseWorkspaceFileSemantics,
   PARSE_TOOL_NAME,
   PARSE_TOOL_VERSION,
@@ -95,6 +96,7 @@ export async function buildLocalIndex(input?: {
   const files = await collectWorkspaceFiles(workspaceRootPath);
   const filePathSet = new Set(files.map((f) => f.path));
   const resolverConfigs = await loadTypeScriptResolverConfigs(workspaceRootPath);
+  const workspacePackageMap = await loadWorkspacePackageMap(workspaceRootPath);
 
   const indexedFiles: LocalIndexedFile[] = [];
   for (const file of files) {
@@ -104,6 +106,7 @@ export async function buildLocalIndex(input?: {
       projectImportId: "local",
       workspacePath: workspaceRootPath,
       resolverConfigs,
+      workspacePackageMap,
     });
     indexedFiles.push(toLocalFile(file, semantics));
   }
@@ -210,12 +213,14 @@ export async function refreshLocalFile(
   filePathSet.add(candidate.path);
 
   const resolverConfigs = await loadTypeScriptResolverConfigs(meta.workspaceRootPath);
+  const workspacePackageMap = await loadWorkspacePackageMap(meta.workspaceRootPath);
   const semantics = await parseWorkspaceFileSemantics({
     file: candidate,
     filePathSet,
     projectImportId: "local",
     workspacePath: meta.workspaceRootPath,
     resolverConfigs,
+    workspacePackageMap,
   });
 
   const localFile = toLocalFile(candidate, semantics);

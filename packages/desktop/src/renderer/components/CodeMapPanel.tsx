@@ -3,6 +3,61 @@ import { ReactFlow, Background, Controls, MiniMap, Handle, Position, BaseEdge, g
 import "@xyflow/react/dist/style.css";
 import ElkConstructor from "elkjs/lib/elk.bundled.js";
 import type { GraphNode, GraphData } from "../../shared/ipc.js";
+import { Editor, loader } from "@monaco-editor/react";
+import { useSidebarResize } from "../hooks/useSidebarResize.js";
+
+// Configure Monaco loader to use local files instead of CDN
+// In development, Vite serves from node_modules; in production, plugin bundles it
+loader.config({ 
+  paths: { 
+    vs: new URL('../../../node_modules/monaco-editor/min/vs', import.meta.url).href.replace(/^file:\/\//, '')
+  } 
+});
+
+// Initialize Monaco before first use with project-aligned compiler options.
+// Semantic validation disabled: single-file editor has no workspace filesystem, so
+// module-resolution errors (2307) and unused-locals noise are meaningless here.
+loader.init().then(monaco => {
+  const ts = monaco.languages.typescript;
+  const configure = (defaults: typeof ts.typescriptDefaults) => {
+    defaults.setCompilerOptions({
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
+      allowNonTsExtensions: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      strict: true,
+      skipLibCheck: true,
+    });
+    defaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: false,
+      noSuggestionDiagnostics: true,
+    });
+  };
+  configure(ts.typescriptDefaults);
+  configure(ts.javascriptDefaults);
+});
+
+// Simple regex-based top-level symbol parser for inspector preview
+function parseTopLevelSymbols(code: string): { kind: string; name: string }[] {
+  const symbols: { kind: string; name: string }[] = [];
+  const re = /^export\s+(?:default\s+)?(?:function|class|const|let|var|interface|type|enum|abstract\s+class|async\s+function)\s+(\w+)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    const line = m[0];
+    const kind = line.includes("class") ? "class"
+      : line.includes("interface") ? "interface"
+        : line.includes("type") ? "type"
+          : line.includes("enum") ? "enum"
+            : line.includes("function") || line.includes("async function") ? "function"
+              : "const";
+    symbols.push({ kind, name: m[1] });
+  }
+  return symbols;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const elk = new (ElkConstructor as any)();
@@ -293,7 +348,7 @@ function DependencyNode({ data, selected }: { data: GraphNode & { treeMode?: boo
   );
 }
 
-export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = {}) {
+export function CodeMapPanel({ focusedPath, searchQuery = "", onSearchQuery }: { focusedPath?: string | null; searchQuery?: string; onSearchQuery?: (q: string) => void } = {}) {
   const { fitView } = useReactFlow();
   const lastFittedRef = useRef<string | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -308,13 +363,77 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [expandedAllFolders, setExpandedAllFolders] = useState<Set<string>>(new Set());
   const [showInternalGroupEdges, setShowInternalGroupEdges] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [hoveredEdgeLabel, setHoveredEdgeLabel] = useState<{ label: string; x: number; y: number } | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewCache = useRef<Record<string, { content: string; language: string; lines: number; truncated: boolean }>>({});
+  const [editorContent, setEditorContent] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const currentNav = navStack[navStack.length - 1];
   const pushNav = (s: NavState) => setNavStack((prev) => [...prev, s]);
 
+  // Load full file content for Monaco editor when inspector opens on a node
+  useEffect(() => {
+    if (!selectedId || !graphData?.nodes) return;
+    const node = graphData.nodes.find((n) => n.id === selectedId);
+    if (!node?.path) return;
+    setDirty(false);
+    // Load preview metadata (language, line count) if not cached
+    if (!(node.path in previewCache.current)) {
+      setPreviewLoading(true);
+      void window.codemap.readFilePreview(node.path).then((result) => {
+        if (result) previewCache.current[node.path] = result;
+        setPreviewLoading(false);
+      });
+    }
+    // Load full file content for editor
+    void window.codemap.readFile(node.path).then((result) => {
+      setEditorContent(result?.content ?? null);
+    });
+  }, [selectedId, graphData?.nodes]);
+
+  // Dispatch custom event for sidebar sync when selected node changes
+  useEffect(() => {
+    if (!selectedId || !graphData?.nodes) return;
+    const node = graphData.nodes.find((n) => n.id === selectedId);
+    if (node?.path) {
+      window.dispatchEvent(new CustomEvent("codemap-selected-node", { detail: { path: node.path } }));
+    }
+  }, [selectedId, graphData?.nodes]);
+
   const folderNodes = graphData?.folderNodes;
   const useFolderGraph = folderNodes && folderNodes.length > 0;
+
+  // Drawer state — opens when a node is selected
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { clampedWidth: drawerWidth, startResize: startDrawerResize } = useSidebarResize(true, true, 1200, 520);
+  useEffect(() => {
+    if (selectedId) setDrawerOpen(true);
+  }, [selectedId]);
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape" && drawerOpen) setDrawerOpen(false); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [drawerOpen]);
+
+  // Cmd/Ctrl+S: save edited file
+  useEffect(() => {
+    const node = selectedId ? graphData?.nodes?.find((n) => n.id === selectedId) : null;
+    const handleSave = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s" && dirty && node?.path && editorContent !== null) {
+        e.preventDefault();
+        setSaving(true);
+        void window.codemap.writeFile(node.path, editorContent).then((res) => {
+          if (res.success) setDirty(false);
+          setSaving(false);
+        });
+      }
+    };
+    window.addEventListener("keydown", handleSave);
+    return () => window.removeEventListener("keydown", handleSave);
+  }, [dirty, selectedId, editorContent, graphData?.nodes]);
 
   // Mode-based data filtering (memoized to avoid re-layout on drag)
   const { displayNodes, displayEdges, displayUseFolder } = useMemo(() => {
@@ -667,6 +786,26 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     [activeId, displayEdges],
   );
 
+  // Cycle node/edge sets derived from graphData
+  const cycleNodeIds = useMemo(() => {
+    if (!graphData?.cycles) return new Set<string>();
+    return new Set(graphData.cycles.flatMap((c) => c.nodeIds));
+  }, [graphData?.cycles]);
+  const cycleEdgeIds = useMemo(() => {
+    if (!graphData?.edges || !graphData.cycles) return new Set<string>();
+    const edgeSet = new Set(graphData.edges.map((e) => e.id));
+    const ids = new Set<string>();
+    for (const cycle of graphData.cycles) {
+      for (let i = 0; i < cycle.nodeIds.length; i++) {
+        const a = cycle.nodeIds[i];
+        const b = cycle.nodeIds[(i + 1) % cycle.nodeIds.length];
+        const eId = `${a}->${b}`;
+        if (edgeSet.has(eId)) ids.add(eId);
+      }
+    }
+    return ids;
+  }, [graphData?.edges, graphData?.cycles]);
+
   // Blast radius: BFS reverse from selected node (who imports this?)
   const blastIds = useMemo(() => {
     if (!selectedId || !graphData?.edges) return new Set<string>();
@@ -888,7 +1027,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
         input?.focus();
       }
       if (e.key === "Escape") {
-        setSearchQuery("");
+        onSearchQuery?.("");
       }
     };
     window.addEventListener("keydown", handler);
@@ -920,10 +1059,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     };
 
     const mapEdge = (id: string, source: string, target: string): Edge => {
-      const isCycleEdge = Boolean(
-        (displayNodes.find((n) => n.id === source) as Record<string, unknown> | undefined)?.isInCycle &&
-        (displayNodes.find((n) => n.id === target) as Record<string, unknown> | undefined)?.isInCycle,
-      );
+      const isCycleEdge = cycleEdgeIds.has(id);
       const isBlastEdge = blastIds.size > 1 && blastIds.has(source) && blastIds.has(target);
       const isRelated = related.has(source) && related.has(target);
       const isFaded = blastIds.size > 1 ? !isBlastEdge : (activeId !== null && !isRelated);
@@ -943,7 +1079,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
     };
 
     return displayEdges.map(({ id, source, target }) => mapEdge(id, source, target));
-  }, [displayEdges, related, displayNodes, currentNav, activeId, selectedId, layoutAlgo, blastIds, expandedFolders]);
+  }, [displayEdges, related, displayNodes, currentNav, activeId, selectedId, layoutAlgo, blastIds, cycleNodeIds]);
 
   const FocusEdge = ({
     id,
@@ -1091,6 +1227,34 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
   );
   const onEdgeMouseLeave = useCallback(() => setHoveredEdgeLabel(null), []);
 
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !(e.target instanceof Node && exportRef.current.contains(e.target))) setShowExportMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showExportMenu]);
+
+  // Graph export — captures full ReactFlow view (HTML nodes + SVG edges)
+  const exportGraph = useCallback(async (format: "png" | "svg") => {
+    const container = document.querySelector<HTMLElement>(".react-flow");
+    if (!container) return;
+    const { toPng, toSvg } = await import("html-to-image");
+    const opts = { backgroundColor: "#0d1117", pixelRatio: 2 };
+    const toFn = format === "png" ? toPng : toSvg;
+    const ext = format === "png" ? "png" : "svg";
+    const dataUrl = await toFn(container, opts as Record<string, unknown>);
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.download = `codemap.${ext}`;
+    a.href = url;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   // Breadcrumb segments from current nav position (VSCode-style: show full path to where you are now)
   const breadcrumbs = useMemo(() => {
     const segs: { label: string; index: number }[] = [];
@@ -1134,7 +1298,7 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
                           setSelectedId(null);
                           setLayoutMap(null);
                           setExpandedFolders(new Set());
-                          setSearchQuery("");
+                          onSearchQuery?.("");
                         }}
                       >
                         {crumb.label}
@@ -1163,8 +1327,42 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
           className="codemap-search-input"
           placeholder="Search... ⌘K"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => onSearchQuery?.(e.target.value)}
         />
+
+        <div className="relative" ref={exportRef}>
+          <button
+            type="button"
+            className="px-2.5 py-1.5 text-xs rounded-md border border-border bg-card hover:bg-accent transition-colors"
+            onClick={() => setShowExportMenu((v) => !v)}
+          >
+            Export
+          </button>
+          {showExportMenu && (
+            <div className="absolute right-0 top-full mt-1 min-w-[140px] rounded-md border border-border bg-card shadow-lg z-20 overflow-hidden">
+              <button
+                type="button"
+                className="block w-full px-3 py-2 text-left text-xs hover:bg-accent transition-colors"
+                onClick={() => {
+                  void exportGraph("png");
+                  setShowExportMenu(false);
+                }}
+              >
+                Export PNG
+              </button>
+              <button
+                type="button"
+                className="block w-full px-3 py-2 text-left text-xs hover:bg-accent transition-colors"
+                onClick={() => {
+                  void exportGraph("svg");
+                  setShowExportMenu(false);
+                }}
+              >
+                Export SVG
+              </button>
+            </div>
+          )}
+        </div>
 
         <span className="codemap-view-label">
           {currentNav.mode === "overview" ? "Graph" : currentNav.mode === "structure" ? "Structure" : "Focus"}
@@ -1278,50 +1476,109 @@ export function CodeMapPanel({ focusedPath }: { focusedPath?: string | null } = 
       </div> {/* end codemap-map-container */}
       </div> {/* end left column */}
 
-      {/* Right inspector — docked, full height, scrollable */}
-      {activeDetail && (
-        <aside className="codemap-inspector">
-          <div className="codemap-inspector-header">
-            <div className="codemap-inspector-title-wrap">
-              <span className="codemap-inspector-title">
-                {graphData?.nodes?.find((n) => n.id === selectedId)?.label ?? selectedId}
-              </span>
-              {graphData?.nodes?.find((n) => n.id === selectedId)?.path && (
-                <span className="codemap-inspector-path">
-                  {graphData?.nodes?.find((n) => n.id === selectedId)?.path}
-                </span>
+      {/* Right inspector — overlay drawer */}
+
+      <aside className={`fixed inset-y-0 right-0 max-w-[70vw] z-[100] flex flex-col bg-card border-l border-[var(--border)] shadow-[-2px_0_8px_rgba(0,0,0,0.15)] transition-transform duration-300 ease-out ${drawerOpen ? "translate-x-0" : "translate-x-full pointer-events-none"}`} style={{ width: `${drawerWidth}px` }}>
+        <div className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/40 z-[110]" onPointerDown={startDrawerResize} />
+        {activeDetail && (() => {
+          const node = graphData?.nodes?.find((n) => n.id === selectedId);
+          const cached = node?.path ? previewCache.current[node.path] : null;
+          return (
+            <>
+              <div className="codemap-inspector-header">
+                <div className="codemap-inspector-title-wrap">
+                  <span className="codemap-inspector-title">
+                    {node?.label ?? selectedId}
+                  </span>
+                  {node?.path && (
+                    <span className="codemap-inspector-path">{node.path}</span>
+                  )}
+                </div>
+                <button className="codemap-inspector-close" onClick={() => { setSelectedId(null); setDrawerOpen(false); }} aria-label="Close">×</button>
+              </div>
+              {node?.path && (
+                <div className="codemap-inspector-preview">
+                  {previewLoading && !cached ? (
+                    <div className="codemap-inspector-preview-loading">Loading preview...</div>
+                  ) : cached ? (
+                    <>
+                      <div className="codemap-inspector-preview-header">
+                        <span className="codemap-inspector-preview-lang">{cached.language}</span>
+                        <span className="codemap-inspector-preview-lines">
+                          {cached.truncated ? `${cached.lines}+ lines` : `${cached.lines} lines`}
+                        </span>
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {dirty && <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>●</span>}
+                          <button 
+                            onClick={() => {
+                              if (node?.path && editorContent !== null) {
+                                setSaving(true);
+                                void window.codemap.writeFile(node.path, editorContent).then((res) => {
+                                  if (res.success) setDirty(false);
+                                  setSaving(false);
+                                });
+                              }
+                            }}
+                            disabled={!dirty || saving}
+                            style={{ 
+                              fontSize: '10px', 
+                              padding: '2px 8px', 
+                              background: dirty ? 'var(--primary)' : 'transparent',
+                              color: dirty ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '3px',
+                              cursor: dirty && !saving ? 'pointer' : 'default',
+                              opacity: dirty ? 1 : 0.5
+                            }}
+                          >
+                            {saving ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                        <Editor
+                          height="100%"
+                          language={cached.language}
+                          value={editorContent ?? cached.content}
+                          onChange={(val) => {
+                            if (val !== undefined && val !== (editorContent ?? cached.content)) {
+                              setEditorContent(val);
+                              setDirty(true);
+                            }
+                          }}
+                          theme="vs-dark"
+                          options={{
+                            minimap: { enabled: false },
+                            fontSize: 12,
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'off',
+                            automaticLayout: true,
+                          }}
+                        />
+                      </div>
+                      {(() => {
+                        const symbols = parseTopLevelSymbols(cached.content);
+                        if (symbols.length === 0) return null;
+                        return (
+                          <div className="codemap-symbol-list">
+                            <span className="codemap-detail-heading" style={{ display: 'block', padding: '8px 12px 4px' }}>SYMBOLS ({symbols.length})</span>
+                            {symbols.map((s) => (
+                              <div key={s.name} className="codemap-symbol-item"><span style={{ color: 'var(--muted-foreground)', marginRight: 4 }}>{s.kind}</span>{s.name}</div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <div className="codemap-inspector-preview-empty">Preview not available</div>
+                  )}
+                </div>
               )}
-            </div>
-            <button className="codemap-inspector-close" onClick={() => setSelectedId(null)} aria-label="Close">×</button>
-          </div>
-          <div className="codemap-inspector-body">
-            <div className="codemap-detail-section">
-              <h4 className="codemap-detail-heading">IMPORTS ({activeDetail.imports.length})</h4>
-              {activeDetail.imports.length === 0 ? (
-                <span className="codemap-detail-empty">None</span>
-              ) : (
-                <ul className="codemap-detail-list">
-                  {activeDetail.imports.map((f) => (
-                    <li key={f.id} className="codemap-detail-file" title={f.path}>{f.path}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="codemap-detail-section">
-              <h4 className="codemap-detail-heading">IMPORTED BY ({activeDetail.importedBy.length})</h4>
-              {activeDetail.importedBy.length === 0 ? (
-                <span className="codemap-detail-empty">None</span>
-              ) : (
-                <ul className="codemap-detail-list">
-                  {activeDetail.importedBy.map((f) => (
-                    <li key={f.id} className="codemap-detail-file" title={f.path}>{f.path}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </aside>
-      )}
+            </>
+          );
+        })()}
+      </aside>
     </section>
   );
 }

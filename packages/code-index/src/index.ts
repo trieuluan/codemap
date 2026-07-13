@@ -24,9 +24,11 @@ export {
 } from "./language-utils.js";
 export {
   loadTypeScriptResolverConfigs,
+  loadWorkspacePackageMap,
   normalizeWorkspaceRelativePath,
   type TypeScriptPathAliasPattern,
   type TypeScriptResolverConfig,
+  type WorkspacePackageMap,
 } from "./ts-resolver.js";
 export {
   parseWorkspaceFileSemantics,

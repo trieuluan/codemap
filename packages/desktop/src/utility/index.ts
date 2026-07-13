@@ -3,7 +3,6 @@ import {
   buildCodeMapAgentInstructions,
 } from "@codemap-ai/core/agent";
 import { loadConfig } from "@codemap-ai/core/config.js";
-import { readWorkspaceProjectConfig } from "@codemap-ai/core/lib/workspace-project.js";
 import type {
   AgentSessionCommand,
   AgentSessionController,
@@ -34,8 +33,6 @@ import {
   type ListProjectsResult,
   type LinkProjectResult,
   type GraphData,
-  type GraphNode,
-  type GraphEdge,
 } from "../shared/ipc.js";
 import { getLocalGraphData } from './local-graph.js';
 
@@ -602,104 +599,9 @@ function post(message: RuntimeMessage): void {
 async function getGraphData(): Promise<GraphData> {
   try {
     return await getLocalGraphData(workspacePath || process.cwd());
-  } catch {
-    // Local index not available — fall through to cloud API
-  }
-
-  const config = await loadConfig(workspacePath || process.cwd());
-  const wsProject = await readWorkspaceProjectConfig(workspacePath || process.cwd());
-  if (!config.apiToken) {
-    return { nodes: [], edges: [], timestamp: Date.now(), error: "Not logged in" };
-  }
-  if (!wsProject.projectId) {
-    return { nodes: [], edges: [], timestamp: Date.now(), error: "No project linked" };
-  }
-
-  const apiUrl = config.apiUrl || "https://api.codemap.codes";
-  const url = `${apiUrl}/projects/${wsProject.projectId}/map/graph`;
-
-  type ApiNode = { id: string; path: string; language?: string; dirPath?: string; incomingCount: number; outgoingCount: number };
-  type ApiEdge = { id: string; source: string; target: string; importKind: string; isResolved: boolean };
-  type ApiCycle = { nodeIds: string[] };
-
-  let apiNodes: ApiNode[] = [];
-  let apiEdges: ApiEdge[] = [];
-  let apiCycles: ApiCycle[] = [];
-  let apiFolderNodes: { id: string; folder: string; fileCount: number; incomingCount: number; outgoingCount: number }[] = [];
-  let apiFolderEdges: { id: string; source: string; target: string; edgeCount: number }[] = [];
-  try {
-    const res = await fetch(url, { headers: { "x-api-key": config.apiToken } });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      const msg = (body.error as Record<string, unknown>)?.message ?? `HTTP ${res.status}`;
-      return { nodes: [], edges: [], timestamp: Date.now(), error: String(msg) };
-    }
-    const json = (await res.json()) as {
-      success: boolean;
-      data: {
-        nodes: ApiNode[]; edges: ApiEdge[]; cycles?: ApiCycle[];
-        folderNodes?: { id: string; folder: string; fileCount: number; incomingCount: number; outgoingCount: number }[];
-        folderEdges?: { id: string; source: string; target: string; edgeCount: number }[];
-      };
-    };
-    apiNodes = json.data.nodes ?? [];
-    apiEdges = json.data.edges ?? [];
-    apiCycles = json.data.cycles ?? [];
-    apiFolderNodes = json.data.folderNodes ?? [];
-    apiFolderEdges = json.data.folderEdges ?? [];
   } catch (err) {
     return { nodes: [], edges: [], timestamp: Date.now(), error: (err as Error).message };
   }
-
-  // Build cycle node id set
-  const cycleNodeIds = new Set(apiCycles.flatMap((c) => c.nodeIds));
-
-  const maxInbound = Math.max(1, ...apiNodes.map((n) => n.incomingCount));
-  const categorise = (n: ApiNode): GraphNode["category"] => {
-    if (n.incomingCount === 0 && n.outgoingCount > 3) return "entry";
-    if (n.incomingCount >= maxInbound * 0.4) return "core";
-    if (n.outgoingCount > 5) return "shared";
-    return "other";
-  };
-
-  const nodes: GraphNode[] = apiNodes.map((n) => ({
-    id: n.id,
-    label: n.path.split("/").pop() ?? n.path,
-    path: n.path,
-    language: n.language,
-    dirPath: n.dirPath,
-    isInCycle: cycleNodeIds.has(n.id),
-    inboundCount: n.incomingCount,
-    outboundCount: n.outgoingCount,
-    category: categorise(n),
-  }));
-
-  const edges: GraphEdge[] = apiEdges.map((e, i) => ({
-    id: e.id ?? `edge-${i}`,
-    source: e.source,
-    target: e.target,
-    importKind: e.importKind,
-    isResolved: e.isResolved,
-  }));
-
-  const folderNodes = apiFolderNodes.map((f) => ({
-    id: f.id,
-    folder: f.folder,
-    fileCount: f.fileCount,
-    incomingCount: f.incomingCount,
-    outgoingCount: f.outgoingCount,
-  }));
-
-  const folderEdges = apiFolderEdges.map((e, i) => ({
-    id: e.id ?? `folder-edge-${i}`,
-    source: e.source,
-    target: e.target,
-    edgeCount: e.edgeCount,
-  }));
-
-  const cycles = apiCycles.length > 0 ? apiCycles : undefined;
-
-  return { nodes, edges, folderNodes, folderEdges, cycles, timestamp: Date.now() };
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
