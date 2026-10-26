@@ -1,4 +1,4 @@
-// Agent runtime types and shared abstractions for CLI and desktop apps.
+// Agent runtime types and shared abstractions for CLI and browser apps.
 // lifecycle.ts stays in @codemap-ai/cli — it depends on CLI-only modules
 // (tool-approval-policy, custom tools, hooks, CLI settings).
 

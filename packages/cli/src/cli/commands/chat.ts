@@ -10,6 +10,8 @@ import type { GatewayConfig, GatewayModel } from "@codemap-ai/core/agent";
 import { printGatewayHint } from "./doctor.js";
 import { loadConfig } from "@codemap-ai/core/config.js";
 import { installStderrInterceptor } from "../../tui/renderer/stderr-interceptor.js";
+import { ensure9RouterRunning } from "../../agent/setup/9router-helpers.js";
+import type { ChildProcess } from "node:child_process";
 
 export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const provider = new NineRouterProvider(
@@ -27,6 +29,12 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
 
   const cleanupInterceptor = installStderrInterceptor();
 
+  // Auto-start 9router as managed child (no detach/unref) — killed on CLI exit
+  let nineRouterChild: ChildProcess | null = null;
+  if (ctx.config.provider === "9router") {
+    nineRouterChild = await ensure9RouterRunning();
+  }
+
   // Intercept process.exit so MCP child processes are always cleaned up before
   // the process terminates — covers Ctrl+C (pre-TUI), /exit command, and SIGTERM.
   const originalProcessExit = process.exit.bind(process) as typeof process.exit;
@@ -34,6 +42,12 @@ export async function runChat(ctx: GatewayCommandContext): Promise<void> {
   const cleanupChildren = async () => {
     if (childCleanupDone) return;
     childCleanupDone = true;
+    // Kill managed 9router child first
+    if (nineRouterChild) {
+      try {
+        nineRouterChild.kill("SIGTERM");
+      } catch {}
+    }
     await toolClient.close().catch(() => {});
     await resetHarnessSingleton().catch(() => {});
     // Only safe to run once the harness above has stopped writing —

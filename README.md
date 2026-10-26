@@ -276,3 +276,20 @@ See [CHANGELOG.md](CHANGELOG.md) for release history and breaking changes.
 ## License
 
 [MIT](LICENSE)
+
+## Local browser workspace
+
+Run `codemap web` inside a repository, or `codemap web /path/to/repository`.
+The command starts the workspace at `http://127.0.0.1:4747` and opens your browser.
+Use `--port 4848` to change the port or `--no-open` to print the URL without
+opening a tab. Stop the server with Ctrl+C. Each server opens one fixed repository;
+start another server on a different port to use a second workspace.
+
+Graph exploration, file editing and working diffs use your local repository.
+The graph index builds in the background and does not require an LLM account.
+Chat uses your existing CodeMap gateway settings, model selection and approval
+workflow. Source files and gateway credentials are not sent to the UI prototype.
+
+The browser workspace replaces the Electron desktop application.
+For development, `pnpm run build:cli` builds both the UI and the CLI worker;
+`pnpm run dev:web -- /path/to/repository` starts the local server.

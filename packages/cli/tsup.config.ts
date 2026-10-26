@@ -1,7 +1,9 @@
 import { defineConfig } from "tsup";
+import { cp, readdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 
 export default defineConfig({
-  entry: ["src/index.ts"],
+  entry: { index: "src/index.ts", "web-worker": "src/web/worker.ts" },
   outDir: "dist",
   format: "esm",
   target: "node22",
@@ -25,6 +27,7 @@ export default defineConfig({
     "tree-sitter-wasms",
     "tree-sitter-python",
     "better-sqlite3",
+    "@parcel/watcher",
     // Transitive deps of @codemap-ai/runtime-node — keep as require()
     "mastracode",
     /^@mastra\//,
@@ -32,6 +35,14 @@ export default defineConfig({
     /^@ai-sdk\//,
     "@modelcontextprotocol/sdk",
   ],
-  onSuccess:
-    "chmod +x dist/index.js && perl -pi -e 's/from \"sqlite\"/from \"node:sqlite\"/g' dist/*.js",
+  async onSuccess() {
+    execFileSync("chmod", ["+x", "dist/index.js"]);
+    for (const file of await readdir("dist")) {
+      if (!file.endsWith(".js")) continue;
+      const path = `dist/${file}`;
+      const source = await readFile(path, "utf8");
+      await writeFile(path, source.replaceAll('from "sqlite"', 'from "node:sqlite"'));
+    }
+    await cp("../web/dist", "dist/web", { recursive: true });
+  },
 });

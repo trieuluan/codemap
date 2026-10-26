@@ -7,8 +7,6 @@ allowBuilds:
   argon2: false
   bufferutil: true
   edgedriver: false
-  electron: true
-  electron-winstaller: false
   esbuild: true
   geckodriver: false
   koffi: true

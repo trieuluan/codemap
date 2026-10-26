@@ -48,5 +48,13 @@ jobs:
       - name: Run runtime-node tests
         run: cd packages/runtime-node && node --import tsx --test src/**/*.test.ts
 
+      - name: Typecheck web and CLI
+        run: |
+          pnpm --filter @codemap-ai/web run build:tsc
+          pnpm --filter @codemap-ai/cli run build:tsc
+
+      - name: Run web tests
+        run: pnpm --filter @codemap-ai/web run test
+
       - name: Run CLI tests
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts

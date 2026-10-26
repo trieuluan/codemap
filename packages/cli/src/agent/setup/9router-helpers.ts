@@ -1,4 +1,4 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -84,4 +84,19 @@ export function start9Router(): void {
     stdio: "ignore",
   });
   child.unref();
+}
+
+/**
+ * Spawns 9router as a managed child process (no detach/unref) so the caller
+ * can kill it on exit. Returns the ChildProcess if just spawned, or null if
+ * 9router is already running or not installed.
+ */
+export async function ensure9RouterRunning(): Promise<ChildProcess | null> {
+  if (!is9RouterInstalled()) return null;
+  if (await is9RouterRunning()) return null;
+  const child = spawn("9router", ["--port", String(NINE_ROUTER_LOCAL_PORT)], {
+    stdio: "ignore",
+    // ponytail: no detached/unref — caller owns this process and kills on exit
+  });
+  return child;
 }

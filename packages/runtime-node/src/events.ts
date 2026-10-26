@@ -83,7 +83,7 @@ export interface BridgeCallbacks {
   mcpServerIds?: Set<string>;
   /**
    * Optional hook to build a preview string for a tool call.
-   * CLI injects buildToolPreview; desktop apps can supply their own or omit.
+   * CLI injects buildToolPreview; browser apps can supply their own or omit.
    */
   toolPreviewBuilder?: (name: string, args: Record<string, unknown>) => string | undefined;
 }

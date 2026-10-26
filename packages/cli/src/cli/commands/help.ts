@@ -8,6 +8,8 @@ Usage:
   codemap help                Show this help
   codemap version             Show CodeMap CLI version
   codemap --version           Show CodeMap CLI version
+  codemap web [path]          Open local Graph, Chat and Changes in your browser
+                             --port 4747 --no-open
 
 Chat:
   codemap chat                Enter interactive chat (explicit)

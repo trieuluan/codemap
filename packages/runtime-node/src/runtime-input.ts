@@ -1,4 +1,4 @@
-// Shared runtime input type for CLI harness and desktop app.
+// Shared runtime input type for CLI harness and browser app.
 
 import type {
   GatewayModeDefaults,
@@ -8,14 +8,14 @@ import type {
 import type { AskQuestionOption, HarnessQuestionAnswer, HarnessQuestionSelectionMode, HarnessDisplayState } from "./events.ts";
 import type { ResolvedCustomTool } from "./tools/custom/index.ts";
 
-export type ChatUiMode = "tui" | "electron" | string;
+export type ChatUiMode = "tui" | "web" | string;
 
 export type AgentPhase = "planning" | "executing";
 export type PlanReviewAction = "apply" | "cancel" | string;
 
 /**
  * Interface for a tool client that the harness runtime uses.
- * Both CLI's CodeMapMcpToolClient and desktop equivalents implement this.
+ * Both CLI's CodeMapMcpToolClient and browser equivalents implement this.
  */
 export interface ToolClientLike {
   getServerConfig(): { command: string; args?: string[]; env?: Record<string, string> };
@@ -31,7 +31,7 @@ export interface ProviderLike {
 }
 
 /**
- * Functions that must be provided by the host (CLI or desktop app).
+ * Functions that must be provided by the host (CLI or browser app).
  * All fields are optional — missing deps are skipped gracefully.
  */
 export interface HarnessDeps {

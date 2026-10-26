@@ -32,6 +32,17 @@ export interface LocalGraphEdge {
   resolutionKind: string;
 }
 
+export interface LocalGraphSymbol {
+  filePath: string;
+  localKey: string;
+  displayName: string;
+  kind: string;
+  parentLocalKey: string | null;
+  isExported: boolean;
+  line: number | null;
+  signature: string | null;
+}
+
 export interface LocalImportedBy {
   sourceFilePath: string;
   moduleSpecifier: string;
@@ -382,6 +393,22 @@ export class SQLiteIndexStore {
       importKind: r.importKind,
       isResolved: r.resolutionKind !== "unresolved",
       resolutionKind: r.resolutionKind,
+    }));
+  }
+
+  getGraphSymbols(): LocalGraphSymbol[] {
+    const rows = this.db.prepare(
+      "SELECT filePath, localKey, displayName, kind, parentSymbolLocalKey, isExported, line, signature FROM symbols ORDER BY filePath, line",
+    ).all() as Array<{ filePath: string; localKey: string; displayName: string; kind: string; parentSymbolLocalKey: string | null; isExported: number; line: number | null; signature: string | null }>;
+    return rows.map((r) => ({
+      filePath: r.filePath,
+      localKey: r.localKey,
+      displayName: r.displayName,
+      kind: r.kind,
+      parentLocalKey: r.parentSymbolLocalKey,
+      isExported: r.isExported === 1,
+      line: r.line,
+      signature: r.signature,
     }));
   }
 

@@ -36,6 +36,14 @@ jobs:
           pnpm --filter @codemap-ai/mcp run build
           pnpm --filter @codemap-ai/cli run build
 
+      - name: Typecheck web and CLI
+        run: |
+          pnpm --filter @codemap-ai/web run build:tsc
+          pnpm --filter @codemap-ai/cli run build:tsc
+
+      - name: Check web contracts and UI
+        run: pnpm --filter @codemap-ai/web run test
+
       - name: Run tests
         run: cd packages/cli && node --import tsx --test src/**/*.test.ts
 

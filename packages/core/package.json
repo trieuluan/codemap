@@ -14,6 +14,7 @@
     "./agent/config": "./src/agent/config/index.ts",
     "./agent/loop": "./src/agent/loop/index.ts",
     "./graph/builder.js": "./src/graph/builder.ts",
+    "./graph/symbol-graph.js": "./src/graph/symbol-graph.ts",
     "./graph/utils.js": "./src/graph/utils.ts"
   },
   "scripts": {

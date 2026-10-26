@@ -3,7 +3,7 @@
  *
  * Injectable dependencies (loadSettings, loadCustomTools, syncHooksToMastra,
  * buildMastraPermissionRules, upsertGlobalMastraProvider) are provided via
- * `CreateHarnessOptions.deps` so both CLI and desktop can supply their own
+ * `CreateHarnessOptions.deps` so both CLI and web can supply their own
  * implementations.
  */
 import type { AgentLoopResult, GatewayProviderId } from "@codemap-ai/core/agent";

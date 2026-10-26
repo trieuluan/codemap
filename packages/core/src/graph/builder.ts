@@ -17,7 +17,7 @@ export interface LocalGraphEdge {
 	resolutionKind: string;
 }
 
-// ---- Output types matching desktop GraphData (ipc.ts) ----
+// ---- Output types matching web GraphData (ipc.ts) ----
 
 export interface GraphNode {
 	id: string;
@@ -54,12 +54,31 @@ export interface GraphFolderEdge {
 	edgeCount: number;
 }
 
+export interface GraphSymbolNode {
+	id: string;
+	filePath: string;
+	name: string;
+	kind: string;
+	isExported: boolean;
+	line?: number;
+}
+
+export interface GraphSymbolEdge {
+	id: string;
+	source: string;
+	target: string;
+	kind: "defines" | "extends" | "implements";
+}
+
 export interface GraphData {
 	nodes: GraphNode[];
 	edges: GraphEdge[];
 	folderNodes?: GraphFolderNode[];
 	folderEdges?: GraphFolderEdge[];
 	cycles?: Array<{ nodeIds: string[] }>;
+	/** Symbol-level nodes (classes, functions, methods…); `defines` edges start at a file id. */
+	symbols?: GraphSymbolNode[];
+	symbolEdges?: GraphSymbolEdge[];
 	timestamp: number;
 	error?: string;
 }

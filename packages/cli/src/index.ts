@@ -137,6 +137,12 @@ async function main() {
     return;
   }
 
+  if (command === "web") {
+    const { runWebCommand } = await import("./cli/commands/web.js");
+    await runWebCommand(process.argv.slice(3));
+    return;
+  }
+
   // Utility commands: auth, workspace, hooks — don't need gateway config
   switch (command) {
     case "login":

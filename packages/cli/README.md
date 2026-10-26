@@ -103,3 +103,15 @@ Example `settings.json`:
 ## License
 
 MIT
+
+### Browser workspace
+
+```sh
+codemap web
+codemap web /path/to/repo --port 4848 --no-open
+```
+
+Starts a loopback-only Graph, Chat and Changes workspace. The web UI is bundled
+with the CLI; no Electron installation or separate frontend server is needed.
+One repository is opened per server. Ctrl+C shuts down the runtime and watcher.
+Graph indexing works without LLM configuration; chat uses existing gateway settings.
