@@ -24,37 +24,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build shared
-        run: pnpm run build:shared
+      - name: Build all packages
+        run: pnpm run build:mcp
 
-      - name: Build code-index
-        run: pnpm --filter @codemap-ai/code-index run build
-
-      - name: Build core
-        run: pnpm --filter @codemap-ai/core run build
-
-      - name: Build runtime-node
-        run: pnpm --filter @codemap-ai/runtime-node run build
-
-      - name: Build MCP
-        run: pnpm --filter @codemap-ai/mcp run build
-
-      - name: Build CLI
-        run: pnpm --filter @codemap-ai/cli run build
-
-      - name: Build tool-types
-        run: pnpm --filter @codemap-ai/tool-types run build
-
-      - name: Run runtime-node tests
-        run: cd packages/runtime-node && node --import tsx --test src/**/*.test.ts
-
-      - name: Typecheck web and CLI
-        run: |
-          pnpm --filter @codemap-ai/web run build:tsc
-          pnpm --filter @codemap-ai/cli run build:tsc
-
-      - name: Run web tests
-        run: pnpm --filter @codemap-ai/web run test
-
-      - name: Run CLI tests
-        run: cd packages/cli && node --import tsx --test src/**/*.test.ts
+      - name: Run tests
+        run: pnpm test

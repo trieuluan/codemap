@@ -7,7 +7,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "node --liftoff-only --import tsx --test --test-isolation=none \"src/**/*.test.ts\""
   },
   "dependencies": {
     "ignore": "^7.0.5",
