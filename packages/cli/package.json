@@ -1,8 +1,8 @@
 {
   "name": "@codemap-ai/cli",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "type": "module",
-  "description": "CodeMap \u2014 AI-powered coding agent CLI",
+  "description": "CodeMap — AI-powered coding agent CLI",
   "license": "MIT",
   "main": "dist/index.js",
   "bin": {
@@ -27,42 +27,42 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
     "@clack/prompts": "^1.5.0",
     "@codemap-ai/core": "workspace:*",
     "@codemap-ai/mcp": "workspace:*",
     "@codemap-ai/runtime-node": "workspace:*",
     "@codemap-ai/shared": "workspace:*",
     "@earendil-works/pi-tui": "^0.74.0",
+    "@mastra/core": "^1.42.0",
+    "@mastra/fastembed": "1.1.2",
+    "@mastra/libsql": "1.12.1",
+    "@mastra/mcp": "1.9.1",
+    "@mastra/memory": "1.20.2",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@parcel/watcher": "^2.5.0",
+    "ai": "^6.0.176",
     "cfonts": "^3.3.1",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
+    "mastracode": "^0.22.3",
     "node-html-parser": "^7.1.0",
     "sharp": "^0.34.2",
     "shiki": "^4.0.2",
-    "zod": "^4.3.6",
-    "@ai-sdk/openai": "^3.0.63",
-    "@mastra/core": "^1.42.0",
-    "@mastra/fastembed": "1.1.2",
-    "@mastra/libsql": "1.12.1",
-    "@mastra/memory": "1.20.2",
-    "@modelcontextprotocol/sdk": "^1.21.0",
-    "@parcel/watcher": "^2.5.0",
-    "ai": "^6.0.176",
-    "mastracode": "^0.22.3",
-    "@mastra/mcp": "1.9.1",
-    "web-tree-sitter": "^0.26.8",
+    "tree-sitter-python": "^0.25.0",
     "tree-sitter-wasms": "^0.1.13",
-    "tree-sitter-python": "^0.25.0"
+    "web-tree-sitter": "^0.26.8",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@codemap-ai/code-index": "workspace:*",
+    "@codemap-ai/web": "workspace:*",
     "@types/node": "^24.12.2",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
-    "typescript": "~6.0.3",
-    "@codemap-ai/web": "workspace:*"
+    "typescript": "~6.0.3"
   },
   "publishConfig": {
     "access": "public"
