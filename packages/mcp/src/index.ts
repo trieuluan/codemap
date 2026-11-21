@@ -8,6 +8,7 @@ import { buildServerInstructions } from "@codemap-ai/core/lib/server-instruction
 import { autoInjectRules } from "@codemap-ai/core/lib/auto-inject.js";
 import { ensureLocalIndex } from "@codemap-ai/core/lib/local-index.js";
 import { enableAutoIndexing } from "@codemap-ai/core/lib/auto-indexing.js";
+import { warmLocalVectorIndex } from "@codemap-ai/core/lib/local-vector-index.js";
 
 import { registerGetProjectTool } from "./tools/get-project.js";
 import { registerGetProjectMapTool } from "./tools/get-project-map.js";
@@ -47,12 +48,14 @@ async function runMcpServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Auto-start local index and file watcher — fire-and-forget, does not block startup
+  // Auto-start local index, file watcher, and background vector cache — fire-and-forget
   ensureLocalIndex({ force: false })
     .then((store) => {
       const workspaceRootPath = store.getMeta()?.workspaceRootPath;
-      if (!workspaceRootPath) return;
-      return enableAutoIndexing(store, workspaceRootPath);
+      if (workspaceRootPath) {
+        enableAutoIndexing(store, workspaceRootPath).catch(() => {});
+      }
+      return warmLocalVectorIndex(store);
     })
     .catch(() => {
       // Auto-start failure is non-fatal

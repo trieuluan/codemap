@@ -26,6 +26,7 @@ export default defineConfig({
     "tree-sitter-python",
     "better-sqlite3",
     "@parcel/watcher",
+    "@mastra/fastembed",
   ],
   esbuildPlugins: [
     {

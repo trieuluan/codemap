@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
+import { searchLocalSemantic } from "@codemap-ai/core/lib/local-vector-index.js";
 import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
 import { sessionTracker } from "@codemap-ai/core/lib/session-tracker.js";
 import type {
@@ -266,6 +267,22 @@ async function buildLocalFallbackResponse(
   }
 
   const localData = buildLocalExploreData(task, localSearch, importerCountsByPath);
+  const semanticMatches = await searchLocalSemantic(store, task, 5, false).catch(() => []);
+  const existingPaths = new Set([
+    ...localData.likelyFiles.map((f) => f.path),
+    ...localData.entrypoints.map((f) => f.path),
+  ]);
+  for (const m of semanticMatches) {
+    if (existingPaths.has(m.path)) continue;
+    existingPaths.add(m.path);
+    localData.likelyFiles.push({
+      path: m.path,
+      language: m.language,
+      confidence: "low",
+      reason: `Semantic match (score: ${Math.round(m.score * 100)}%)`,
+      readPlan: OUTLINE_PLAN,
+    });
+  }
   const risks: ContextRisk[] = [];
   const risksSeen = new Set<string>();
   for (const path of [

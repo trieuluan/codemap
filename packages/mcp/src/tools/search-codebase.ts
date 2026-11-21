@@ -17,6 +17,7 @@ import type {
   SemanticSearchResult,
 } from "@codemap-ai/core/lib/api-types.js";
 import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
+import { searchLocalSemantic, warmLocalVectorIndex } from "@codemap-ai/core/lib/local-vector-index.js";
 
 const SYMBOL_KIND_VALUES = [
   "module",
@@ -362,6 +363,11 @@ export function registerSearchCodebaseTool(server: McpServer) {
           .array(z.enum(SYMBOL_KIND_VALUES))
           .optional()
           .describe("Filter symbols by kind (function, class, method, etc.)."),
+        semantic: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Also run local vector semantic search alongside keyword search (useful for conceptual queries)."),
         verbosity: z
           .enum(["compact", "normal", "verbose", "debug"])
           .optional()
@@ -378,20 +384,37 @@ export function registerSearchCodebaseTool(server: McpServer) {
       },
     },
     withToolError(
-      async ({ query, kinds, symbol_kinds, verbosity, limit, max_chars, include_raw }) => {
+      async ({ query, kinds, symbol_kinds, semantic, verbosity, limit, max_chars, include_raw }) => {
         const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
         const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
         const localResults = rerankResults(query, store.search(query, symbol_kinds ?? null));
         const files = activeKinds.has("files") ? localResults.files : [];
         const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
         const exports = activeKinds.has("exports") ? localResults.exports : [];
-        const total = files.length + symbols.length + exports.length;
+
+        let semanticHits: Array<{ path: string; language: string | null; score: number }> = [];
+        if (semantic) {
+          warmLocalVectorIndex(store).catch(() => {});
+          semanticHits = await searchLocalSemantic(store, query, limit, false);
+        }
+        const semanticResults: SemanticSearchResult[] = semanticHits.map((h) => ({
+          path: h.path,
+          score: h.score,
+          chunkType: "file",
+          symbolName: null,
+          symbolKind: null,
+          startLine: null,
+          endLine: null,
+          preview: null,
+        }));
+        const total = files.length + symbols.length + exports.length + semanticResults.length;
 
         const envelope = buildSearchEnvelope(
           query,
           localResults,
           activeKinds,
           { verbosity, limit, max_chars, include_raw },
+          semanticResults,
         );
         return success(envelope.display ?? envelope.summary, {
           ...envelope,

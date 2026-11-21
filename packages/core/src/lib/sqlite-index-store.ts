@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type {
@@ -296,6 +297,12 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_rel_filePath ON symbol_relationships(filePath);
   CREATE INDEX IF NOT EXISTS idx_rel_from ON symbol_relationships(fromSymbolLocalKey);
   CREATE INDEX IF NOT EXISTS idx_rel_to ON symbol_relationships(toSymbolName);
+
+  CREATE TABLE IF NOT EXISTS file_vectors (
+    filePath TEXT PRIMARY KEY,
+    textSha256 TEXT NOT NULL,
+    vector BLOB NOT NULL
+  );
 `;
 
 const FTS_SCHEMA_SQL = `
@@ -452,6 +459,7 @@ export class SQLiteIndexStore {
     const delExports = this.db.prepare("DELETE FROM exports WHERE filePath = ?");
     const delCalls = this.db.prepare("DELETE FROM symbol_calls WHERE filePath = ?");
     const delRels = this.db.prepare("DELETE FROM symbol_relationships WHERE filePath = ?");
+    const delVecs = this.db.prepare("DELETE FROM file_vectors WHERE filePath = ?");
 
     try {
       this.db.exec("BEGIN");
@@ -463,6 +471,7 @@ export class SQLiteIndexStore {
       delExports.run(filePath);
       delCalls.run(filePath);
       delRels.run(filePath);
+      delVecs.run(filePath);
       this.db.exec("COMMIT");
       return r.changes > 0;
     } catch (error) {
@@ -1321,6 +1330,118 @@ export class SQLiteIndexStore {
       toSymbolName: string;
       relationshipKind: string;
     }>;
+  }
+
+  getFileVectorSummaries(): Array<{
+    filePath: string;
+    language: string | null;
+    summaryText: string;
+    textSha256: string;
+  }> {
+    const fileRows = this.db
+      .prepare("SELECT path, language FROM files WHERE isText = 1 AND isBinary = 0 ORDER BY path")
+      .all() as Array<{ path: string; language: string | null }>;
+
+    const symRows = this.db
+      .prepare("SELECT filePath, kind, displayName, signature FROM symbols ORDER BY filePath, line")
+      .all() as Array<{ filePath: string; kind: string; displayName: string; signature: string | null }>;
+
+    const symsByFile = new Map<string, typeof symRows>();
+    for (const s of symRows) {
+      let arr = symsByFile.get(s.filePath);
+      if (!arr) {
+        arr = [];
+        symsByFile.set(s.filePath, arr);
+      }
+      arr.push(s);
+    }
+
+    return fileRows.map((f) => {
+      const syms = symsByFile.get(f.path) ?? [];
+      const symText = syms
+        .slice(0, 25)
+        .map((s) => `${s.kind} ${s.displayName}`)
+        .join(", ");
+      const sigText = syms
+        .slice(0, 12)
+        .map((s) => s.signature ?? "")
+        .filter(Boolean)
+        .join("; ");
+      const raw = `${f.path}${f.language ? ` (${f.language})` : ""}${symText ? ` | symbols: ${symText}` : ""}${sigText ? ` | ${sigText}` : ""}`;
+      const summaryText = raw.slice(0, 900);
+      const textSha256 = createHash("sha256").update(summaryText).digest("hex");
+      return { filePath: f.path, language: f.language, summaryText, textSha256 };
+    });
+  }
+
+  getStoredVectorHashes(): Map<string, string> {
+    const rows = this.db
+      .prepare("SELECT filePath, textSha256 FROM file_vectors")
+      .all() as Array<{ filePath: string; textSha256: string }>;
+    return new Map(rows.map((r) => [r.filePath, r.textSha256]));
+  }
+
+  upsertFileVectors(
+    rows: Array<{ filePath: string; textSha256: string; vector: Float32Array }>,
+  ): void {
+    if (rows.length === 0) return;
+    this.db.exec("BEGIN");
+    try {
+      const stmt = this.db.prepare(
+        "INSERT OR REPLACE INTO file_vectors(filePath, textSha256, vector) VALUES(?, ?, ?)",
+      );
+      for (const r of rows) {
+        const bytes = new Uint8Array(r.vector.buffer, r.vector.byteOffset, r.vector.byteLength);
+        stmt.run(r.filePath, r.textSha256, bytes);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  searchSemantic(
+    queryVector: Float32Array,
+    limit = 10,
+  ): Array<{ path: string; language: string | null; score: number }> {
+    const rows = this.db
+      .prepare(
+        "SELECT v.filePath, f.language, v.vector FROM file_vectors v LEFT JOIN files f ON f.path = v.filePath",
+      )
+      .all() as Array<{ filePath: string; language: string | null; vector: Uint8Array }>;
+
+    if (rows.length === 0) return [];
+
+    let qNorm = 0;
+    for (let i = 0; i < queryVector.length; i++) qNorm += queryVector[i]! * queryVector[i]!;
+    qNorm = Math.sqrt(qNorm) || 1;
+
+    const scored: Array<{ path: string; language: string | null; score: number }> = [];
+    for (const r of rows) {
+      const vec = new Float32Array(
+        r.vector.buffer,
+        r.vector.byteOffset,
+        Math.floor(r.vector.byteLength / 4),
+      );
+      if (vec.length !== queryVector.length) continue;
+      let dot = 0;
+      let vNorm = 0;
+      for (let i = 0; i < vec.length; i++) {
+        const a = queryVector[i]!;
+        const b = vec[i]!;
+        dot += a * b;
+        vNorm += b * b;
+      }
+      const denom = qNorm * (Math.sqrt(vNorm) || 1);
+      const score = dot / denom;
+      if (score > 0.2) {
+        scored.push({ path: r.filePath, language: r.language, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit);
   }
 
   close(): void {
