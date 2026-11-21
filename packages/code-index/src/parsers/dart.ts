@@ -1,27 +1,10 @@
-import path from "node:path";
-import { Parser, Language, type Node } from "web-tree-sitter";
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft, maskCommentsAndTemplateLiterals, resolveRelativeTargetPath } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedImportDraft, type ParsedSymbolDraft, type ParsedWorkspaceSemantics, type RepoImportKind, type RepoImportResolutionKind, type RepoSymbolKind } from "./types.js";
+import { loadWasmLanguage, type SyntaxNode as Node, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
-let parserReady: Promise<{ parser: Parser; language: Language }> | null = null;
-
-function getDartParser(): Promise<{ parser: Parser; language: Language }> {
-  if (!parserReady) {
-    parserReady = (async () => {
-      await Parser.init();
-      const wasmPath = path.resolve(
-        path.dirname(require.resolve("tree-sitter-wasms/package.json")),
-        "out",
-        "tree-sitter-dart.wasm",
-      );
-      const language = await Language.load(wasmPath);
-      const parser = new Parser();
-      parser.setLanguage(language);
-      return { parser, language };
-    })();
-  }
-  return parserReady;
+function getDartParser() {
+  return loadWasmLanguage("tree-sitter-dart.wasm");
 }
 
 export async function parseDartFile(

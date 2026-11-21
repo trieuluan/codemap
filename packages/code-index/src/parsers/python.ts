@@ -1,26 +1,11 @@
 import path from "node:path";
-import { Parser, Language, Query } from "web-tree-sitter";
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
+import { loadWasmLanguage, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
-let parserReady: Promise<{ parser: Parser; language: Language }> | null = null;
-
-function getPythonParser(): Promise<{ parser: Parser; language: Language }> {
-  if (!parserReady) {
-    parserReady = (async () => {
-      await Parser.init();
-      const wasmPath = path.resolve(
-        path.dirname(require.resolve("tree-sitter-python/package.json")),
-        "tree-sitter-python.wasm",
-      );
-      const language = await Language.load(wasmPath);
-      const parser = new Parser();
-      parser.setLanguage(language);
-      return { parser, language };
-    })();
-  }
-  return parserReady;
+function getPythonParser() {
+  return loadWasmLanguage("tree-sitter-python.wasm");
 }
 
 export async function parsePythonFile(
@@ -53,7 +38,7 @@ export async function parsePythonFile(
   };
 
   // Extract class and function/method definitions
-  const symbolQuery = new Query(language, `
+  const symbolQuery = language.query(`
     (class_definition name: (identifier) @name) @class
     (function_definition name: (identifier) @name) @function
   `);
@@ -94,7 +79,7 @@ export async function parsePythonFile(
   }
 
   // Extract imports: `import X` and `from X import Y`
-  const importQuery = new Query(language, `
+  const importQuery = language.query(`
     (import_statement) @stmt
     (import_from_statement) @stmt
   `);

@@ -1,8 +1,5 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap-ai/core/config.js";
-import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import {
   buildToolEnvelope,
   normalizeLimit,
@@ -12,7 +9,6 @@ import {
   truncateText,
   withToolError,
 } from "@codemap-ai/core/lib/tool-response.js";
-import { readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
 import type {
   CodebaseSearchResponse,
   SearchExportResult,
@@ -20,11 +16,7 @@ import type {
   SearchSymbolResult,
   SemanticSearchResult,
 } from "@codemap-ai/core/lib/api-types.js";
-import {
-  ensureLocalIndexWithSummary,
-  shouldFallbackToLocal,
-  shouldUseLocalIndexBeforeRemote,
-} from "@codemap-ai/core/lib/local-index.js";
+import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
 
 const SYMBOL_KIND_VALUES = [
   "module",
@@ -352,52 +344,24 @@ function buildOutput(
   return sections.join("\n");
 }
 
-export function registerSearchCodebaseTool(
-  server: McpServer,
-  config: McpServerConfig,
-) {
-  const client = createCodeMapClient(config);
-
+export function registerSearchCodebaseTool(server: McpServer) {
   server.registerTool(
     "search_codebase",
     {
       title: "Search Codebase",
       description:
-        "Search for symbols, functions, classes, exports, or keywords in the indexed codebase. " +
-        "Use this INSTEAD OF grep/rg/awk for any source file lookup — faster and more accurate. " +
-        "Returns ranked results with file paths and line numbers. " +
-        "Use for narrow lookup when you know a keyword, filename, symbol, or export name. " +
-        "Pass semantic=true to also run embedding-based search alongside keyword search — " +
-        "useful when the query is conceptual ('authentication flow', 'error handling') rather than an exact symbol name. " +
-        "For broad implementation tasks use explore_task first; for related-file questions use find_related_files. " +
-        "project_id is optional if workspace is linked.",
+        "Search for symbols, functions, classes, exports, or file paths in the local SQLite index. " +
+        "Use this INSTEAD OF grep/rg for symbol and file lookup.",
       inputSchema: {
         query: z.string().min(1).describe("Search query string."),
-        project_id: uuidSchema
-          .optional()
-          .describe(
-            "CodeMap project UUID. Auto-resolved from workspace if omitted.",
-          ),
         kinds: z
           .array(z.enum(["files", "symbols", "exports"]))
           .optional()
-          .describe(
-            "Which result types to include. Defaults to all: files, symbols, exports.",
-          ),
+          .describe("Which result types to include. Defaults to all: files, symbols, exports."),
         symbol_kinds: z
           .array(z.enum(SYMBOL_KIND_VALUES))
           .optional()
-          .describe(
-            "Filter symbols by kind (function, class, method, etc.). Only used when kinds includes 'symbols'.",
-          ),
-        semantic: z
-          .boolean()
-          .optional()
-          .describe(
-            "Also run semantic (embedding) search alongside keyword search. " +
-              "Use when query is conceptual ('authentication flow', 'error handling') rather than a known symbol name. " +
-              "Requires embeddings to be indexed. Ignored if no project is linked.",
-          ),
+          .describe("Filter symbols by kind (function, class, method, etc.)."),
         verbosity: z
           .enum(["compact", "normal", "verbose", "debug"])
           .optional()
@@ -414,221 +378,42 @@ export function registerSearchCodebaseTool(
       },
     },
     withToolError(
-      async ({
-        query,
-        project_id,
-        kinds,
-        symbol_kinds,
-        semantic,
-        verbosity,
-        limit,
-        max_chars,
-        include_raw,
-      }) => {
-        const resolvedProjectId =
-          project_id ?? (await readWorkspaceProjectId());
+      async ({ query, kinds, symbol_kinds, verbosity, limit, max_chars, include_raw }) => {
         const activeKinds = new Set(kinds ?? ["files", "symbols", "exports"]);
-
-        if (!resolvedProjectId) {
-          const { store, summary: localIndex } =
-            await ensureLocalIndexWithSummary();
-          const localResults = rerankResults(
-            query,
-            store.search(query, symbol_kinds ?? null),
-          );
-          const files = activeKinds.has("files") ? localResults.files : [];
-          const symbols = activeKinds.has("symbols")
-            ? localResults.symbols
-            : [];
-          const exports = activeKinds.has("exports")
-            ? localResults.exports
-            : [];
-          const total = files.length + symbols.length + exports.length;
-
-          const envelope = buildSearchEnvelope(
-            query,
-            localResults,
-            activeKinds,
-            { verbosity, limit, max_chars, include_raw },
-          );
-          return success(envelope.display ?? envelope.summary, {
-            ...envelope,
-            projectId: null,
-            query,
-            source: "local",
-            localIndex,
-            kinds: Array.from(activeKinds),
-            symbolKinds: symbol_kinds ?? null,
-            files,
-            symbols,
-            exports,
-            total,
-            found: total > 0,
-            suggestedNextTools:
-              symbols.length > 0
-                ? [
-                    `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
-                    `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
-                  ]
-                : files.length > 0
-                  ? [`get_file("${files[0].path}", include=["outline"])`]
-                  : [],
-          });
-        }
-
-        if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-          const { store, summary: localIndex } =
-            await ensureLocalIndexWithSummary();
-          const localResults = rerankResults(
-            query,
-            store.search(query, symbol_kinds ?? null),
-          );
-          const files = activeKinds.has("files") ? localResults.files : [];
-          const symbols = activeKinds.has("symbols")
-            ? localResults.symbols
-            : [];
-          const exports = activeKinds.has("exports")
-            ? localResults.exports
-            : [];
-          const total = files.length + symbols.length + exports.length;
-
-          const envelope = buildSearchEnvelope(
-            query,
-            localResults,
-            activeKinds,
-            { verbosity, limit, max_chars, include_raw },
-          );
-          return success(envelope.display ?? envelope.summary, {
-            ...envelope,
-            projectId: resolvedProjectId,
-            query,
-            source: "local",
-            localIndex,
-            kinds: Array.from(activeKinds),
-            symbolKinds: symbol_kinds ?? null,
-            files,
-            symbols,
-            exports,
-            total,
-            found: total > 0,
-            suggestedNextTools:
-              symbols.length > 0
-                ? [
-                    `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
-                    `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
-                  ]
-                : files.length > 0
-                  ? [`get_file("${files[0].path}", include=["outline"])`]
-                  : [],
-          });
-        }
-
-        let results: CodebaseSearchResponse;
-        let source: "remote" | "local" = "remote";
-        let localIndexSummary:
-          | Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["summary"]
-          | null = null;
-        let semanticResults: SemanticSearchResult[] = [];
-
-        try {
-          const searchQuery: Record<string, string> = { q: query };
-          if (symbol_kinds && symbol_kinds.length > 0) {
-            searchQuery.symbolKinds = symbol_kinds.join(",");
-          }
-
-          const [keywordResult, semanticResult] = await Promise.allSettled([
-            client.request<CodebaseSearchResponse>(
-              `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-              { authRequired: true, query: searchQuery },
-            ),
-            semantic
-              ? client.request<{ results: SemanticSearchResult[] }>(
-                  `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
-                  { authRequired: true, query: { q: query, limit: "10" } },
-                ).then(r => r.results ?? [])
-              : Promise.resolve([] as SemanticSearchResult[]),
-          ]);
-
-          if (keywordResult.status === "rejected") throw keywordResult.reason;
-          results = keywordResult.value;
-
-          if (
-            semanticResult.status === "fulfilled" &&
-            Array.isArray(semanticResult.value)
-          ) {
-            // Dedup: exclude paths already covered by keyword results
-            const keywordPaths = new Set([
-              ...results.files.map((f) => f.path),
-              ...results.symbols.map((s) => s.filePath),
-            ]);
-            semanticResults = semanticResult.value.filter(
-              (r) => !keywordPaths.has(r.path),
-            );
-          }
-        } catch (error) {
-          if (shouldFallbackToLocal(error)) {
-            const { store, summary: localIndex } =
-              await ensureLocalIndexWithSummary();
-            results = store.search(query, symbol_kinds ?? null);
-            source = "local";
-            localIndexSummary = localIndex;
-          } else {
-            throw error;
-          }
-        }
-        // Preserve current remote ranking and apply it to local fallback too.
-        results = rerankResults(query, results);
-
-        const files = activeKinds.has("files") ? results.files : [];
-        const symbols = activeKinds.has("symbols") ? results.symbols : [];
-        const exports = activeKinds.has("exports") ? results.exports : [];
-        const total =
-          files.length +
-          symbols.length +
-          exports.length +
-          semanticResults.length;
-
-        const suggestedNextTools: string[] = [];
-        if (symbols.length > 0) {
-          suggestedNextTools.push(
-            `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
-          );
-          suggestedNextTools.push(
-            `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
-          );
-        } else if (files.length > 0) {
-          suggestedNextTools.push(
-            `get_file("${files[0].path}", include=["outline"])`,
-          );
-        } else if (semanticResults[0]) {
-          suggestedNextTools.push(
-            `get_file("${semanticResults[0].path}", include=["outline"])`,
-          );
-        }
+        const { store, summary: localIndex } = await ensureLocalIndexWithSummary();
+        const localResults = rerankResults(query, store.search(query, symbol_kinds ?? null));
+        const files = activeKinds.has("files") ? localResults.files : [];
+        const symbols = activeKinds.has("symbols") ? localResults.symbols : [];
+        const exports = activeKinds.has("exports") ? localResults.exports : [];
+        const total = files.length + symbols.length + exports.length;
 
         const envelope = buildSearchEnvelope(
           query,
-          results,
+          localResults,
           activeKinds,
           { verbosity, limit, max_chars, include_raw },
-          semanticResults.length ? semanticResults : undefined,
         );
         return success(envelope.display ?? envelope.summary, {
           ...envelope,
-          projectId: resolvedProjectId,
           query,
-          source,
-          ...(localIndexSummary ? { localIndex: localIndexSummary } : {}),
+          source: "local",
+          localIndex,
           kinds: Array.from(activeKinds),
           symbolKinds: symbol_kinds ?? null,
-          semantic: semantic ?? false,
           files,
           symbols,
           exports,
-          semanticMatches: semanticResults,
           total,
           found: total > 0,
-          suggestedNextTools,
+          suggestedNextTools:
+            symbols.length > 0
+              ? [
+                  `symbol(action="context", symbol_name="${symbols[0].displayName}", file_path="${symbols[0].filePath}")`,
+                  `get_file("${symbols[0].filePath}", include=["symbols"], symbol_names=["${symbols[0].displayName}"])`,
+                ]
+              : files.length > 0
+                ? [`get_file("${files[0].path}", include=["outline"])`]
+                : [],
         });
       },
     ),

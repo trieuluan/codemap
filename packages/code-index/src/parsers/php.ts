@@ -1,27 +1,10 @@
-import path from "node:path";
-import { Parser, Language, Query } from "web-tree-sitter";
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
+import { loadWasmLanguage, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
-let parserReady: Promise<{ parser: Parser; language: Language }> | null = null;
-
-function getPhpParser(): Promise<{ parser: Parser; language: Language }> {
-  if (!parserReady) {
-    parserReady = (async () => {
-      await Parser.init();
-      const wasmPath = path.resolve(
-        path.dirname(require.resolve("tree-sitter-wasms/package.json")),
-        "out",
-        "tree-sitter-php.wasm",
-      );
-      const language = await Language.load(wasmPath);
-      const parser = new Parser();
-      parser.setLanguage(language);
-      return { parser, language };
-    })();
-  }
-  return parserReady;
+function getPhpParser() {
+  return loadWasmLanguage("tree-sitter-php.wasm");
 }
 
 export async function parsePhpFile(
@@ -55,7 +38,7 @@ export async function parsePhpFile(
   const lines = content.split(/\r?\n/);
 
   // Extract symbols: namespace, class, interface, trait, enum, function, method
-  const symbolQuery = new Query(language, `
+  const symbolQuery = language.query(`
     (namespace_definition name: (namespace_name) @name) @namespace
     (class_declaration name: (name) @name) @class
     (interface_declaration name: (name) @name) @interface
@@ -99,7 +82,7 @@ export async function parsePhpFile(
   }
 
   // Extract use statements and require/include
-  const importQuery = new Query(language, `
+  const importQuery = language.query(`
     (use_declaration (use_declarator (qualified_name) @name)) @use
     (namespace_use_declaration (namespace_use_clause (qualified_name) @name)) @use
     (require_expression (string) @path) @require

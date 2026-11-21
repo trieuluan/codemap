@@ -8,6 +8,8 @@ export const PHP_EXTENSIONS = ["php"];
 export const PYTHON_EXTENSIONS = ["py"];
 export const JAVA_EXTENSIONS = ["java"];
 export const KOTLIN_EXTENSIONS = ["kt", "kts"];
+export const C_CPP_EXTENSIONS = ["c", "h", "cpp", "hpp", "cc", "hh", "cxx", "hxx"];
+export const RUBY_EXTENSIONS = ["rb"];
 
 export function buildLocalSymbolKey(filePath: string, kind: string, displayName: string) {
   return `${filePath}#${kind}:${displayName}`;
@@ -42,6 +44,8 @@ export function resolveRelativeTargetPath(
     : language === "Python" ? PYTHON_EXTENSIONS
     : language === "Java" ? JAVA_EXTENSIONS
     : language === "Kotlin" ? KOTLIN_EXTENSIONS
+    : language === "C" || language === "C++" ? C_CPP_EXTENSIONS
+    : language === "Ruby" ? RUBY_EXTENSIONS
     : JS_TS_EXTENSIONS;
   const candidates = [basePath];
 

@@ -1,12 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap-ai/core/config.js";
-import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
-import { readWorkspacePath, readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
+import { readWorkspacePath } from "@codemap-ai/core/lib/workspace-project.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -221,28 +218,22 @@ function buildRefOutput(result: ProjectDiffResponse, includePatch: boolean): str
 
 // ─── unified tool ────────────────────────────────────────────────────────────
 
-export function registerDiffTool(server: McpServer, config: McpServerConfig) {
-  const client = createCodeMapClient(config);
-
+export function registerDiffTool(server: McpServer) {
   server.registerTool(
     "diff",
     {
       title: "Diff",
       description:
-        "Show git diff. Two modes:\n" +
-        "  • mode=\"working\" (default): uncommitted local changes — staged, unstaged, and untracked files. " +
-        "Use after edits to verify what changed before committing or calling reimport.\n" +
-        "  • mode=\"ref\": diff between two committed refs (commits, branches, tags) in the linked CodeMap project. " +
-        "Requires `from` (and optional `to`). Useful for reviewing PRs or debugging regressions. " +
-        "Requires a retained workspace on the project.\n" +
-        "project_id is optional in ref mode if the workspace is linked.",
+        "Show local git diff. Two modes:\n" +
+        "  • mode=\"working\" (default): uncommitted local changes — staged, unstaged, and untracked files.\n" +
+        "  • mode=\"ref\": diff between two committed refs (commits, branches, tags). Requires `from` (and optional `to`).",
       inputSchema: {
         mode: z
           .enum(["working", "ref"])
           .optional()
           .describe(
             "Which diff to compute. \"working\" = uncommitted local changes (default). " +
-            "\"ref\" = diff between two committed git refs via the linked project.",
+            "\"ref\" = diff between two committed git refs.",
           ),
         from: z
           .string()
@@ -266,17 +257,14 @@ export function registerDiffTool(server: McpServer, config: McpServerConfig) {
           .optional()
           .default(true)
           .describe("Working mode only: include untracked files in the result. Default true."),
-        project_id: uuidSchema
-          .optional()
-          .describe("Ref mode only: CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
-    withToolError(async ({ mode, from, to, include_patch, include_untracked, project_id }) => {
+    withToolError(async ({ mode, from, to, include_patch, include_untracked }) => {
       const resolvedMode = mode ?? "working";
       const includePatch = Boolean(include_patch);
+      const workspacePath = await readWorkspacePath();
 
       if (resolvedMode === "working") {
-        const workspacePath = await readWorkspacePath();
 
         const [stagedFiles, unstagedFiles, untrackedFiles] = await Promise.all([
           getStagedFiles(workspacePath),
@@ -325,74 +313,55 @@ export function registerDiffTool(server: McpServer, config: McpServerConfig) {
         );
       }
 
-      const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+      const targetRef = to ?? "HEAD";
+      const range = `${from}..${targetRef}`;
+      const { stdout } = await execFileAsync(
+        "git",
+        ["diff", "--name-status", range],
+        { cwd: workspacePath, maxBuffer: 10 * 1024 * 1024 },
+      );
 
-      if (!resolvedProjectId) {
-        const summary =
-          "No project ID provided and no linked project found for this workspace.\n" +
-          "Use link_project to connect an existing project, or create_project to create one (first time only). These require a cloud project.";
-
-        return success(summary, {
-          mode: "ref" as const,
-          projectId: null,
-          available: false,
-          from,
-          to: to ?? "HEAD",
-          includePatch,
-          totalChanged: 0,
-          files: [],
+      const files: ProjectDiffResponse["files"] = [];
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const parts = line.split("\t");
+        const code = parts[0]?.[0] ?? "M";
+        const status: ProjectDiffResponse["files"][number]["status"] =
+          code === "A" ? "added"
+          : code === "D" ? "deleted"
+          : code === "R" ? "renamed"
+          : "modified";
+        const filePath = code === "R" ? (parts[2] ?? parts[1] ?? "") : (parts[1] ?? "");
+        const oldPath = code === "R" ? parts[1] : undefined;
+        let patch: string | undefined;
+        if (includePatch && filePath) {
+          try {
+            const p = await execFileAsync(
+              "git",
+              ["diff", range, "--", filePath],
+              { cwd: workspacePath, maxBuffer: 5 * 1024 * 1024 },
+            );
+            patch = p.stdout || undefined;
+          } catch {
+            patch = undefined;
+          }
+        }
+        files.push({
+          path: filePath,
+          status,
+          ...(oldPath ? { oldPath } : {}),
+          ...(patch ? { patch } : {}),
         });
       }
 
-      const query: Record<string, string> = { from };
-      if (to) query.to = to;
-      if (includePatch) query.includePatch = "true";
-
-      let result: ProjectDiffResponse;
-
-      try {
-        result = await client.request<ProjectDiffResponse>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/diff`,
-          { authRequired: true, query },
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        if (message.includes("404")) {
-          return success(`Project not found: ${resolvedProjectId}`, {
-            mode: "ref" as const,
-            projectId: resolvedProjectId,
-            available: false,
-            from,
-            to: to ?? "HEAD",
-            includePatch,
-            totalChanged: 0,
-            files: [],
-          });
-        }
-        if (message.includes("422")) {
-          const summary =
-            "Retained workspace is not available for this project. " +
-            "Re-import the project to restore git access.";
-
-          return success(summary, {
-            mode: "ref" as const,
-            projectId: resolvedProjectId,
-            available: false,
-            from,
-            to: to ?? "HEAD",
-            includePatch,
-            totalChanged: 0,
-            files: [],
-          });
-        }
-
-        throw error;
-      }
+      const result: ProjectDiffResponse = {
+        from,
+        to: targetRef,
+        files,
+      };
 
       return success(buildRefOutput(result, includePatch), {
         mode: "ref" as const,
-        projectId: resolvedProjectId,
         available: true,
         from: result.from,
         to: result.to,

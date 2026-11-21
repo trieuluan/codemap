@@ -1,189 +1,100 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap-ai/core/config.js";
-import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
+import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
 import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
-import { readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
-import type { ProjectMapSnapshot, ProjectMapTreeNode } from "@codemap-ai/core/lib/api-types.js";
 
-function countNodes(node: ProjectMapTreeNode): { files: number; dirs: number } {
-  if (node.type === "file") return { files: 1, dirs: 0 };
-  let files = 0;
-  let dirs = 0;
-  for (const child of node.children ?? []) {
-    const counts = countNodes(child);
-    files += counts.files;
-    dirs += counts.dirs;
-  }
-  return { files, dirs: dirs + 1 };
+interface TreeNode {
+  dirs: Map<string, TreeNode>;
+  files: string[];
 }
 
-function findSubtree(
-  node: ProjectMapTreeNode,
-  folderPath: string,
-): ProjectMapTreeNode | null {
-  const normalized = folderPath.replace(/\/$/, "");
-  if (node.path === normalized || node.name === normalized) return node;
-  for (const child of node.children ?? []) {
-    const found = findSubtree(child, normalized);
-    if (found) return found;
+function insertPath(root: TreeNode, parts: string[]): void {
+  let curr = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const dir = parts[i]!;
+    let next = curr.dirs.get(dir);
+    if (!next) {
+      next = { dirs: new Map(), files: [] };
+      curr.dirs.set(dir, next);
+    }
+    curr = next;
   }
-  return null;
+  const fileName = parts[parts.length - 1];
+  if (fileName) curr.files.push(fileName);
 }
 
 function renderTree(
-  node: ProjectMapTreeNode,
+  node: TreeNode,
+  depth: number,
+  maxDepth: number,
   indent: string,
   lines: string[],
 ): void {
-  const isDir = node.type === "directory";
-  lines.push(`${indent}${node.name}${isDir ? "/" : ""}`);
-
-  if (isDir) {
-    const children = [...(node.children ?? [])].sort((a, b) => {
-      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    for (const child of children) {
-      renderTree(child, indent + "  ", lines);
+  const dirNames = [...node.dirs.keys()].sort((a, b) => a.localeCompare(b));
+  for (const dir of dirNames) {
+    const child = node.dirs.get(dir)!;
+    if (depth >= maxDepth) {
+      lines.push(`${indent}${dir}/ (...)`);
+      continue;
     }
+    lines.push(`${indent}${dir}/`);
+    renderTree(child, depth + 1, maxDepth, `${indent}  `, lines);
+  }
+  const files = [...node.files].sort((a, b) => a.localeCompare(b));
+  for (const f of files) {
+    lines.push(`${indent}${f}`);
   }
 }
 
-export function registerGetProjectMapTool(
-  server: McpServer,
-  config: McpServerConfig,
-) {
-  const client = createCodeMapClient(config);
-
+export function registerGetProjectMapTool(server: McpServer) {
   server.registerTool(
     "get_project_map",
     {
       title: "Get Project Map",
       description:
-        "Returns the file tree of a CodeMap project as an indented directory listing. " +
-        "Use this to understand the project structure before diving into specific files. " +
-        "For large repos (1000+ files), use the folder parameter to inspect a subtree instead of the full tree — " +
-        "omitting folder returns the complete tree which may be very large. " +
-        "project_id is optional if this workspace was linked via create_project.",
+        "Returns the file tree of the local workspace from the SQLite index. Use folder and max_depth to keep output compact.",
       inputSchema: {
-        project_id: uuidSchema
-          .optional()
-          .describe(
-            "CodeMap project UUID. Auto-resolved from workspace if omitted.",
-          ),
         folder: z
           .string()
           .optional()
-          .describe(
-            "Show only this sub-folder, e.g. 'src/components'. Omit for the full tree.",
-          ),
-        include_raw_tree: z
-          .boolean()
+          .describe("Sub-folder prefix, e.g. 'src/components'. Omit for workspace root."),
+        max_depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(12)
           .optional()
-          .default(false)
-          .describe(
-            "Include the raw tree JSON in the response data. Defaults to false. " +
-            "Enable only when a client needs to programmatically traverse the tree.",
-          ),
+          .default(4)
+          .describe("Maximum directory depth to expand (default: 4)."),
       },
     },
-    withToolError(async ({ project_id, folder, include_raw_tree }) => {
-      const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
+    withToolError(async ({ folder, max_depth }) => {
+      const { store } = await ensureLocalIndexWithSummary();
+      const allPaths = store.getAllFilePaths();
 
-      if (!resolvedProjectId) {
-        const summary =
-          "No project ID provided and no linked project found for this workspace.\n" +
-          "Use link_project to connect an existing project, or create_project to create one (first time only). These require a cloud project.";
+      const prefix = folder ? folder.replace(/^\/+|\/+$/g, "") : "";
+      const filtered = prefix
+        ? allPaths.filter((p) => p === prefix || p.startsWith(`${prefix}/`))
+        : allPaths;
 
-        return success(summary, {
-          projectId: null,
-          available: false,
-          folder: folder ?? null,
-          snapshot: null,
-          counts: { files: 0, dirs: 0 },
-          tree: null,
-        });
+      const root: TreeNode = { dirs: new Map(), files: [] };
+      for (const filePath of filtered) {
+        const rel = prefix && filePath.startsWith(`${prefix}/`)
+          ? filePath.slice(prefix.length + 1)
+          : filePath;
+        const parts = rel.split("/").filter(Boolean);
+        if (parts.length > 0) insertPath(root, parts);
       }
 
-      let snapshot: ProjectMapSnapshot;
+      const lines: string[] = [];
+      if (prefix) lines.push(`${prefix}/`);
+      renderTree(root, 1, max_depth, prefix ? "  " : "", lines);
 
-      try {
-        snapshot = await client.request<ProjectMapSnapshot>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map`,
-          { authRequired: true },
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        if (message.includes("404")) {
-          const summary =
-            `Project not found or not yet imported: ${resolvedProjectId}\n` +
-            "Run reimport to index the project first.";
-
-          return success(summary, {
-            projectId: resolvedProjectId,
-            available: false,
-            folder: folder ?? null,
-            snapshot: null,
-            counts: { files: 0, dirs: 0 },
-            tree: null,
-          });
-        }
-
-        throw error;
-      }
-
-      let root = snapshot.tree;
-
-      if (folder) {
-        const subtree = findSubtree(root, folder);
-        if (!subtree) {
-          const summary =
-            `Folder not found: ${folder}\n` +
-            "Check the path and make sure it exists in the project.";
-
-          return success(summary, {
-            projectId: resolvedProjectId,
-            available: true,
-            folder,
-            snapshot: {
-              id: snapshot.id,
-              importId: snapshot.importId,
-              createdAt: snapshot.createdAt,
-              updatedAt: snapshot.updatedAt,
-            },
-            counts: { files: 0, dirs: 0 },
-            tree: null,
-          });
-        }
-        root = subtree;
-      }
-
-      const { files, dirs } = countNodes(root);
-      const snapshotDate = new Date(snapshot.createdAt).toLocaleString();
-
-      const lines: string[] = [
-        `Project map — snapshot from ${snapshotDate}`,
-        `${files} file${files !== 1 ? "s" : ""}, ${dirs} director${dirs !== 1 ? "ies" : "y"}`,
-        "",
-      ];
-
-      renderTree(root, "", lines);
-
-      return success(lines.join("\n"), {
-        projectId: resolvedProjectId,
-        available: true,
-        folder: folder ?? null,
-        snapshot: {
-          id: snapshot.id,
-          importId: snapshot.importId,
-          createdAt: snapshot.createdAt,
-          updatedAt: snapshot.updatedAt,
-        },
-        counts: { files, dirs },
-        tree: include_raw_tree ? root : null,
+      const header = `Project map (${filtered.length} files${prefix ? ` under ${prefix}` : ""}, max_depth=${max_depth}):`;
+      return success(`${header}\n\n${lines.join("\n")}`, {
+        folder: prefix || null,
+        fileCount: filtered.length,
+        maxDepth: max_depth,
       });
     }),
   );

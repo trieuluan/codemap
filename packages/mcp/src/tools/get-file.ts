@@ -1,17 +1,10 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap-ai/core/config.js";
-import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
 import { success, withToolError, prependContextWarnings } from "@codemap-ai/core/lib/tool-response.js";
 import { sessionTracker } from "@codemap-ai/core/lib/session-tracker.js";
-import { readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
 import type { FileContent, BlastRadius } from "@codemap-ai/core/lib/api-types.js";
 import {
   ensureLocalIndexWithSummary,
-  isCloudContentEmpty,
-  shouldFallbackToLocal,
-  shouldUseLocalIndexBeforeRemote,
   toRepoRelativePath,
 } from "@codemap-ai/core/lib/local-index.js";
 import { markdownFenceStart } from "@codemap-ai/core/lib/markdown-fence.js";
@@ -314,11 +307,7 @@ function buildBlastRadiusSection(br: BlastRadius, maxFiles: number): string {
 
 // ─── tool ────────────────────────────────────────────────────────────────────
 
-export function registerGetFileTool(
-  server: McpServer,
-  config: McpServerConfig,
-) {
-  const client = createCodeMapClient(config);
+export function registerGetFileTool(server: McpServer) {
 
   server.registerTool(
     "get_file",
@@ -340,11 +329,6 @@ export function registerGetFileTool(
           ])
           .describe(
             "Repository-relative file path, or up to 7 paths for batch outline mode, e.g. 'src/lib/utils.ts'.",
-          ),
-        project_id: uuidSchema
-          .optional()
-          .describe(
-            "CodeMap project UUID. Auto-resolved from workspace if omitted.",
           ),
         include: z
           .array(z.enum(["content", "outline", "blast_radius", "symbols"]))
@@ -393,9 +377,8 @@ export function registerGetFileTool(
       },
     },
     withToolError(
-      async ({ path: filePath, project_id, include, blast_radius_max_files, start_line, end_line, symbol_names }) => {
-        const resolvedProjectId =
-          project_id ?? (await readWorkspaceProjectId());
+      async ({ path: filePath, include, blast_radius_max_files, start_line, end_line, symbol_names }) => {
+        const resolvedProjectId: string | null = null;
 
         if (Array.isArray(filePath)) {
           async function normalizePaths(rawPaths: string[]): Promise<string[]> {
@@ -438,70 +421,7 @@ export function registerGetFileTool(
             });
           }
 
-          if (!resolvedProjectId) {
-            return buildBatchLocalResults("local");
-          }
-
-          if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-            return buildBatchLocalResults("local");
-          }
-
-          const results = await Promise.allSettled(
-            normalizedPaths.map(async (path) => {
-              try {
-                return await client.request<FileParseResponse>(
-                  `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
-                  { authRequired: true, query: { path } },
-                );
-              } catch (error) {
-                if (shouldFallbackToLocal(error)) return { _localFallback: true, path, error };
-                throw error;
-              }
-            }),
-          );
-
-          const needsLocalFallback = results.some(
-            (r) => r.status === "fulfilled" && r.value && "_localFallback" in r.value,
-          );
-
-          if (needsLocalFallback) {
-            return buildBatchLocalResults("local");
-          }
-
-          const output: string[] = [`# Batch Outline (${normalizedPaths.length} files)`, ""];
-          const structured: Array<{ path: string; status: "ok" | "error"; error?: string }> = [];
-
-          for (let i = 0; i < normalizedPaths.length; i++) {
-            const path = normalizedPaths[i];
-            const result = results[i];
-            output.push(`## ${path}`);
-            output.push("");
-
-            if (result.status === "fulfilled" && result.value) {
-              output.push(buildOutlineSection(result.value as FileParseResponse));
-              structured.push({ path, status: "ok" });
-            } else {
-              const msg =
-                result.status === "rejected"
-                  ? result.reason instanceof Error
-                    ? result.reason.message
-                    : String(result.reason)
-                  : "No data returned";
-              output.push(`_Failed to load: ${msg}_`);
-              structured.push({ path, status: "error", error: msg });
-            }
-
-            output.push("");
-          }
-
-          return success(output.join("\n").trimEnd(), {
-            projectId: resolvedProjectId,
-            source: "remote",
-            paths: normalizedPaths,
-            results: structured,
-            available: true,
-            sections: ["outline"],
-          });
+          return buildBatchLocalResults("local");
         }
 
         // Normalize absolute paths (e.g. from bash/tool output) to repo-relative
@@ -639,167 +559,7 @@ export function registerGetFileTool(
           });
         }
 
-        if (!resolvedProjectId) {
-          return localResponse(null, "missing_project_id");
-        }
-
-        if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-          return localResponse(resolvedProjectId, "remote_index_not_ready_or_stale");
-        }
-
-        const [contentResult, parseResult] = await Promise.allSettled([
-          wantContent
-            ? client.request<FileContent>(
-                `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/content`,
-                {
-                  authRequired: true,
-                  query: {
-                    path: filePath,
-                    ...(start_line !== undefined && { startLine: String(start_line) }),
-                    ...(end_line !== undefined && { endLine: String(end_line) }),
-                  },
-                },
-              )
-            : Promise.resolve(null),
-
-          wantParse
-            ? client.request<FileParseResponse>(
-                `/projects/${encodeURIComponent(resolvedProjectId)}/map/files/parse`,
-                { authRequired: true, query: { path: filePath } },
-              )
-            : Promise.resolve(null),
-        ]);
-
-        // If both failed, surface the error
-        const requestedResults = [
-          wantContent ? contentResult : null,
-          wantParse ? parseResult : null,
-        ].filter(Boolean) as PromiseSettledResult<unknown>[];
-
-        if (requestedResults.every((r) => r.status === "rejected")) {
-          const err =
-            contentResult.status === "rejected"
-              ? contentResult.reason
-              : parseResult.status === "rejected"
-                ? parseResult.reason
-                : null;
-          const msg = err instanceof Error ? err.message : String(err);
-          if (shouldFallbackToLocal(err)) {
-            return localResponse(resolvedProjectId, msg);
-          }
-          throw err;
-        }
-
-        const output: string[] = [`# ${filePath}`, ""];
-        const content =
-          contentResult.status === "fulfilled" ? contentResult.value : null;
-        const parse =
-          parseResult.status === "fulfilled" ? parseResult.value : null;
-
-        // Cloud returned "ready" but null content — index is stale relative to
-        // local uncommitted edits.  Fall back to the local index which always
-        // reflects the current working tree after refresh_local_index.
-        if (wantContent && isCloudContentEmpty(content)) {
-          return localResponse(resolvedProjectId, "cloud_content_unavailable");
-        }
-        const errors: string[] = [];
-
-        // Content — skip if only fetched to support symbols section
-        if (sections.includes("content")) {
-          output.push("## Content");
-          if (content) {
-            output.push(buildContentSection(content, start_line, end_line));
-          } else if (contentResult.status === "rejected") {
-            errors.push(`content: ${(contentResult.reason as Error).message}`);
-            output.push(
-              `Failed to load: ${(contentResult.reason as Error).message}`,
-            );
-          }
-          output.push("");
-        }
-
-        // Outline (imports + importedBy + exports + symbols)
-        if (sections.includes("outline")) {
-          output.push("## Outline");
-          if (parse) {
-            output.push(buildOutlineSection(parse));
-          } else if (parseResult.status === "rejected") {
-            errors.push(`outline: ${(parseResult.reason as Error).message}`);
-            output.push(
-              `Failed to load: ${(parseResult.reason as Error).message}`,
-            );
-          }
-          output.push("");
-        }
-
-        // Symbol bodies
-        if (wantSymbols && symbol_names && symbol_names.length > 0) {
-          output.push("## Symbols");
-          if (parse && content?.content) {
-            output.push(buildSymbolBodiesSection(parse, content.content, symbol_names));
-          } else if (!parse || !content?.content) {
-            output.push("_Symbol bodies unavailable — file content or parse data missing._");
-          }
-          output.push("");
-        }
-
-        // Blast radius (from the same parse response)
-        if (wantBlastRadius) {
-          output.push("## Blast Radius");
-          if (parse) {
-            const br = parse.blastRadius;
-            output.push(
-              buildBlastRadiusSection(br, blast_radius_max_files),
-            );
-          } else if (parseResult.status === "rejected") {
-            errors.push(
-              `blast_radius: ${(parseResult.reason as Error).message}`,
-            );
-            output.push(
-              `Failed to load: ${(parseResult.reason as Error).message}`,
-            );
-          }
-          output.push("");
-        }
-
-        return success(prependContextWarnings(output.join("\n").trimEnd(), contextWarnings), {
-          projectId: resolvedProjectId,
-          source: "remote",
-          path: filePath,
-          found: Boolean(content || parse),
-          sections,
-          range: {
-            startLine: start_line ?? null,
-            endLine: end_line ?? null,
-          },
-          content: content
-            ? {
-                path: content.path,
-                name: content.name,
-                type: content.type,
-                extension: content.extension,
-                language: content.language,
-                kind: content.kind,
-                mimeType: content.mimeType,
-                status: content.status,
-                sizeBytes: content.sizeBytes,
-                reason: content.reason,
-                content: content.content,
-              }
-            : null,
-          outline: parse
-            ? {
-                file: parse.file,
-                imports: parse.imports,
-                importedBy: parse.importedBy,
-                exports: parse.exports,
-                symbols: parse.symbols,
-                cycles: parse.cycles,
-              }
-            : null,
-          blastRadius: wantBlastRadius && parse ? parse.blastRadius : null,
-          errors,
-        });
+        return localResponse(null);
       },
     ),
   );

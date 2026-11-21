@@ -6,6 +6,13 @@ import { parseKotlinFile } from "./kotlin.js";
 import { parsePhpFile } from "./php.js";
 import { parsePythonFile } from "./python.js";
 import { parseTypeScriptOrJavaScriptFile } from "./typescript.js";
+import { parseRustFile } from "./rust.js";
+import { parseGoFile } from "./go.js";
+import { parseCCppFile } from "./c-cpp.js";
+import { parseCSharpFile } from "./csharp.js";
+import { parseRubyFile } from "./ruby.js";
+import { parseSwiftFile } from "./swift.js";
+import { parseExtraLanguageFile } from "./extra-langs.js";
 import { EMPTY_SEMANTICS } from "./types.js";
 
 export type { ParsedWorkspaceSemantics } from "./types.js";
@@ -43,6 +50,24 @@ export async function parseWorkspaceFileSemantics(input: {
       return parsePhpFile(input.file, input.projectImportId);
     case "Python":
       return parsePythonFile(input.file, input.filePathSet, input.projectImportId);
+    case "Rust":
+      return parseRustFile(input.file, input.filePathSet, input.projectImportId);
+    case "Go":
+      return parseGoFile(input.file, input.projectImportId);
+    case "C":
+    case "C++":
+      return parseCCppFile(input.file, input.filePathSet, input.projectImportId);
+    case "C#":
+      return parseCSharpFile(input.file, input.projectImportId);
+    case "Ruby":
+      return parseRubyFile(input.file, input.filePathSet, input.projectImportId);
+    case "Swift":
+      return parseSwiftFile(input.file, input.projectImportId);
+    case "Scala":
+    case "Elixir":
+    case "Lua":
+    case "Zig":
+      return parseExtraLanguageFile(input.file, input.projectImportId);
     default:
       return { ...EMPTY_SEMANTICS };
   }

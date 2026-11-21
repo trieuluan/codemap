@@ -1,21 +1,11 @@
 import { z } from "zod";
-import { uuidSchema } from "@codemap-ai/core/lib/uuid-schema.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { McpServerConfig } from "@codemap-ai/core/config.js";
-import { createCodeMapClient } from "@codemap-ai/core/lib/codemap-api.js";
-import {
-  ensureLocalIndexWithSummary,
-  shouldFallbackToLocal,
-  shouldUseLocalIndexBeforeRemote,
-} from "@codemap-ai/core/lib/local-index.js";
+import { ensureLocalIndexWithSummary } from "@codemap-ai/core/lib/local-index.js";
 import { success, withToolError } from "@codemap-ai/core/lib/tool-response.js";
-import { readWorkspaceProjectId } from "@codemap-ai/core/lib/workspace-project.js";
 import { sessionTracker } from "@codemap-ai/core/lib/session-tracker.js";
 import type {
   CodebaseSearchResponse,
-  EditLocationsResponse,
   EditLocationReadPlan,
-  SemanticSearchResult,
 } from "@codemap-ai/core/lib/api-types.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -475,278 +465,26 @@ function buildTextOutput(pack: ContextPack): string {
 
 // ── Tool registration ─────────────────────────────────────────────────────────
 
-export function registerExploreTaskTool(
-  server: McpServer,
-  config: McpServerConfig,
-) {
-  const client = createCodeMapClient(config);
-
+export function registerExploreTaskTool(server: McpServer) {
   server.registerTool(
     "explore_task",
     {
       title: "Explore Task",
       description:
-        "REQUIRED FIRST STEP for any broad coding task — fixing bugs, implementing features, investigating issues, debugging, refactoring. " +
-        "Returns a full context pack: likelyFiles (what to edit), entrypoints (flow entry points), " +
-        "symbols (relevant functions/classes), risks (high blast-radius or dangerous files), " +
-        "recommendedReads (ordered reading list), and suggestedNextTools (exact tool calls to make next). " +
-        "Automatically runs keyword search, edit-location analysis, and semantic embedding search in parallel — " +
-        "semantic results are injected as additional low-confidence candidates when embeddings are available. " +
-        "Call this BEFORE reading any file or running any command. " +
-        "Replaces grep + manual file search. Replaces search_codebase combined. " +
-        "If the user asks only which files are related or which files to read, use find_related_files instead.",
+        "FIRST STEP for any broad coding task — fixing bugs, implementing features, investigating issues, debugging, refactoring. " +
+        "Searches the local SQLite index and returns likelyFiles, entrypoints, symbols, risks (blast radius), recommendedReads, and suggestedNextTools. " +
+        "Call this BEFORE reading files blindly.",
       inputSchema: {
         task: z
           .string()
           .min(1)
           .max(500)
           .describe("Describe the task, feature, or bug to investigate."),
-        project_id: uuidSchema
-          .optional()
-          .describe("CodeMap project UUID. Auto-resolved from workspace if omitted."),
       },
     },
-    withToolError(async ({ task, project_id }) => {
+    withToolError(async ({ task }) => {
       sessionTracker.markCalled("explore_task");
-      const resolvedProjectId = project_id ?? (await readWorkspaceProjectId());
-
-      if (!resolvedProjectId) {
-        return success(
-          "No linked project found. Run link_project or get_project first.",
-          { projectId: null, task, available: false },
-        );
-      }
-
-      // ── Early exit if cloud index not ready ───────────────────────────────
-      if (await shouldUseLocalIndexBeforeRemote(client, resolvedProjectId)) {
-        return buildLocalFallbackResponse(
-          resolvedProjectId,
-          task,
-          "cloud index not ready",
-        );
-      }
-
-      // ── Phase 1: parallel — keyword search + edit locations + semantic ───
-
-      const [searchResult, editLocsResult, semanticResult] = await Promise.allSettled([
-        client.request<CodebaseSearchResponse>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search`,
-          { authRequired: true, query: { q: task } },
-        ),
-        client.request<EditLocationsResponse>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/edit-locations`,
-          { authRequired: true, query: { q: task, limit: "10" } },
-        ),
-        client.request<{ results: SemanticSearchResult[] }>(
-          `/projects/${encodeURIComponent(resolvedProjectId)}/map/search/semantic`,
-          { authRequired: true, query: { q: task, limit: "5" } },
-        ).then(r => r.results ?? []),
-      ]);
-
-      const search: CodebaseSearchResponse =
-        searchResult.status === "fulfilled"
-          ? searchResult.value
-          : { files: [], symbols: [], exports: [] };
-
-      const editLocs: EditLocationsResponse =
-        editLocsResult.status === "fulfilled"
-          ? editLocsResult.value
-          : ({ suggestions: [] } as unknown as EditLocationsResponse);
-
-      const semanticMatches: SemanticSearchResult[] =
-        semanticResult.status === "fulfilled" && Array.isArray(semanticResult.value)
-          ? semanticResult.value
-          : [];
-
-      // If both cloud calls failed, switch to local SQLite fallback
-      const bothFailed =
-        searchResult.status === "rejected" && editLocsResult.status === "rejected";
-      const cloudFailed =
-        bothFailed &&
-        shouldFallbackToLocal(
-          searchResult.status === "rejected" ? searchResult.reason : null,
-        );
-
-      if (cloudFailed) {
-        return buildLocalFallbackResponse(
-          resolvedProjectId,
-          task,
-          "cloud API unavailable",
-        );
-      }
-
-      // ── Phase 2: classify into likelyFiles, entrypoints, symbols ─────────
-
-      const likelyFiles: ContextFile[] = editLocs.suggestions
-        .filter((s) => s.confidence === "high" || s.confidence === "medium")
-        .slice(0, 8)
-        .map((s) => ({
-          path: s.path,
-          language: s.language ?? null,
-          confidence: s.confidence,
-          reason: s.reason,
-          readPlan: s.readPlan,
-        }));
-
-      // Inject top-3 semantic matches as low-confidence context files (deduplicated).
-      const likelyFilePaths = new Set(likelyFiles.map((f) => f.path));
-      const keywordPaths = new Set([
-        ...search.files.map((f) => f.path),
-        ...search.symbols.map((s) => s.filePath),
-      ]);
-      let semanticInjected = 0;
-      for (const r of semanticMatches) {
-        if (semanticInjected >= 3) break;
-        if (!likelyFilePaths.has(r.path) && !keywordPaths.has(r.path)) {
-          likelyFiles.push({
-            path: r.path,
-            language: null,
-            confidence: "low",
-            reason: `semantic match (score=${r.score.toFixed(2)})${r.symbolName ? ` · ${r.symbolName}` : ""}`,
-            readPlan: OUTLINE_PLAN,
-          });
-          likelyFilePaths.add(r.path);
-          semanticInjected++;
-        }
-      }
-
-      const entrypointMap = new Map<string, string>();
-      const allPaths = [
-        ...search.files.map((f) => f.path),
-        ...search.symbols.map((s) => s.filePath),
-        ...likelyFiles.map((f) => f.path),
-      ];
-      for (const path of allPaths) {
-        const label = detectEntrypoint(path);
-        if (label && !entrypointMap.has(path)) entrypointMap.set(path, label);
-      }
-
-      const entrypoints: ContextFile[] = [...entrypointMap.entries()].map(
-        ([path, label]) => ({
-          path,
-          language: null,
-          confidence: "medium" as const,
-          reason: label,
-          readPlan: OUTLINE_PLAN,
-        }),
-      );
-
-      const symbols: ContextSymbol[] = search.symbols.slice(0, 8).map((s) => ({
-        name: s.displayName,
-        kind: s.symbolKind,
-        filePath: s.filePath,
-        startLine: s.startLine ?? null,
-        signature: s.signature ?? null,
-      }));
-
-      // ── Phase 3: blast radius for top-4 likely files ──────────────────────
-
-      const topPaths = likelyFiles.slice(0, 4).map((f) => f.path);
-      const blastResults = await Promise.allSettled(
-        topPaths.map((path) =>
-          client.request<{ file: FileRelationship }>(
-            `/projects/${encodeURIComponent(resolvedProjectId)}/map/files`,
-            { authRequired: true, query: { path } },
-          ),
-        ),
-      );
-
-      const importerCounts = new Map<string, number>();
-      blastResults.forEach((result, i) => {
-        if (result.status === "fulfilled") {
-          importerCounts.set(topPaths[i], result.value.file.importedBy?.length ?? 0);
-        }
-      });
-
-      likelyFiles.forEach((f) => {
-        const count = importerCounts.get(f.path);
-        if (count !== undefined) f.blastRadius = count;
-      });
-
-      // ── Phase 4: risks — path patterns + blast radius ─────────────────────
-
-      const risksSeen = new Set<string>();
-      const risks: ContextRisk[] = [];
-
-      const allRiskCandidates = [
-        ...likelyFiles.map((f) => f.path),
-        ...entrypoints.map((f) => f.path),
-      ];
-
-      for (const path of allRiskCandidates) {
-        if (risksSeen.has(path)) continue;
-        const r = detectPathRisk(path);
-        if (r) {
-          risks.push(r);
-          risksSeen.add(path);
-        }
-      }
-
-      for (const [path, count] of importerCounts) {
-        if (risksSeen.has(path)) continue;
-        if (count >= 10) {
-          risks.push({
-            level: "high",
-            file: path,
-            reason: `${count} files import this — high blast radius`,
-          });
-          risksSeen.add(path);
-        } else if (count >= 5) {
-          risks.push({
-            level: "medium",
-            file: path,
-            reason: `${count} files import this — medium blast radius`,
-          });
-          risksSeen.add(path);
-        }
-      }
-
-      // ── Phase 5: recommendedReads — entrypoints first, then likelyFiles ──
-
-      const readsSeen = new Set<string>();
-      const recommendedReads: RecommendedRead[] = [];
-      let priority = 1;
-
-      for (const f of entrypoints.slice(0, 2)) {
-        if (readsSeen.has(f.path)) continue;
-        recommendedReads.push({
-          path: f.path,
-          priority: priority++,
-          readPlan: OUTLINE_PLAN,
-          why: `${f.reason} — understand the flow before editing`,
-        });
-        readsSeen.add(f.path);
-      }
-
-      for (const f of likelyFiles) {
-        if (readsSeen.has(f.path)) continue;
-        const isHighRisk = risks.some(
-          (r) => r.file === f.path && r.level === "high",
-        );
-        recommendedReads.push({
-          path: f.path,
-          priority: priority++,
-          readPlan: f.readPlan,
-          why: isHighRisk
-            ? `${f.reason} — ⚠ high-risk file, read carefully before editing`
-            : f.reason,
-        });
-        readsSeen.add(f.path);
-      }
-
-      // ── Phase 6: assemble ContextPack ────────────────────────────────────
-
-      const packBase = { task, likelyFiles, entrypoints, symbols, risks, recommendedReads };
-      const summary = buildSummary(packBase);
-      const suggestedNextTools = buildNextTools(packBase);
-
-      const pack: ContextPack = { ...packBase, summary, suggestedNextTools };
-
-      return success(buildTextOutput(pack), {
-        projectId: resolvedProjectId,
-        available: true,
-        ...pack,
-      });
+      return buildLocalFallbackResponse("local", task, "local SQLite index");
     }),
   );
 }

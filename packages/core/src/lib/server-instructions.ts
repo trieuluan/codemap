@@ -7,19 +7,20 @@ You are working in a CodeMap-indexed repository.
 1. BEFORE ANY BROAD TASK WITH UNCLEAR FILES → call \`explore_task(task=<description>)\`.
 2. BEFORE READING FILES → call \`explore_task\` or \`search_codebase\`. Never read files blindly.
 3. BEFORE EDITING HIGH-BLAST FILES (blast_radius ≥ 10) → call \`find_related_files\` first.
-4. AFTER EDITS → call \`diff\` to verify scope, then \`reimport(wait=true)\` if index changed.
+4. AFTER EDITS → call \`diff\` to verify scope, and \`refresh_local_index\` if you need an immediate index refresh.
 
 ## TOOL ROUTING (quick reference)
 
 | Situation | Tool to call |
 |---|---|
-| New broad task | explore_task → get_file → get_file |
+| Repo overview / stats | get_project or get_project_map |
+| New broad task | explore_task → get_file |
 | "Which files to read?" | find_related_files |
 | Symbol / keyword lookup | search_codebase or symbol |
-| Impact analysis | symbol / symbol |
+| Impact analysis | symbol |
 | Read specific symbol body | get_file(include=["symbols"], symbol_names=[...]) |
 | Survey file structure | get_file(include=["outline"]) |
-| After edits | diff → reimport(wait=true) |
+| After edits | diff → refresh_local_index |
 
 ## HARD GATES — never skip
 
