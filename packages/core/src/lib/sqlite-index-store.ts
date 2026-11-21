@@ -1405,20 +1405,17 @@ export class SQLiteIndexStore {
     queryVector: Float32Array,
     limit = 10,
   ): Array<{ path: string; language: string | null; score: number }> {
-    const rows = this.db
-      .prepare(
-        "SELECT v.filePath, f.language, v.vector FROM file_vectors v LEFT JOIN files f ON f.path = v.filePath",
-      )
-      .all() as Array<{ filePath: string; language: string | null; vector: Uint8Array }>;
-
-    if (rows.length === 0) return [];
+    const stmt = this.db.prepare(
+      "SELECT v.filePath, f.language, v.vector FROM file_vectors v LEFT JOIN files f ON f.path = v.filePath",
+    );
 
     let qNorm = 0;
     for (let i = 0; i < queryVector.length; i++) qNorm += queryVector[i]! * queryVector[i]!;
     qNorm = Math.sqrt(qNorm) || 1;
 
     const scored: Array<{ path: string; language: string | null; score: number }> = [];
-    for (const r of rows) {
+    for (const row of stmt.iterate()) {
+      const r = row as { filePath: string; language: string | null; vector: Uint8Array };
       const vec = new Float32Array(
         r.vector.buffer,
         r.vector.byteOffset,

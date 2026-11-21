@@ -151,6 +151,7 @@ export async function warmLocalVectorIndex(
               embedded++;
             }
             store.upsertFileVectors(batchRows);
+            await new Promise((r) => setImmediate(r));
           }
           debugLog(`[LocalVector] Embedded ${embedded} files (${cachedCount} cached)`);
           return { embedded, cached: cachedCount, total: summaries.length };

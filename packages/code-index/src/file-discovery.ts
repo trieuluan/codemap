@@ -46,6 +46,13 @@ export const IGNORED_NAMES = new Set([
   "__pycache__",
   ".mypy_cache",
   ".pytest_cache",
+  "target",
+  ".build",
+  ".gradle",
+  ".dart_tool",
+  ".svelte-kit",
+  ".nuxt",
+  ".output",
 ]);
 
 // ponytail: removed lib/, dist/, build/ — these are gitignore's domain (lib/ is source in Ruby/Dart/Elixir)

@@ -66,9 +66,17 @@ export function registerGetProjectMapTool(server: McpServer) {
           .optional()
           .default(4)
           .describe("Maximum directory depth to expand (default: 4)."),
+        max_lines: z
+          .number()
+          .int()
+          .min(20)
+          .max(1000)
+          .optional()
+          .default(250)
+          .describe("Maximum output lines to keep token usage low (default: 250)."),
       },
     },
-    withToolError(async ({ folder, max_depth }) => {
+    withToolError(async ({ folder, max_depth, max_lines }) => {
       const { store } = await ensureLocalIndexWithSummary();
       const allPaths = store.getAllFilePaths();
 
@@ -90,11 +98,18 @@ export function registerGetProjectMapTool(server: McpServer) {
       if (prefix) lines.push(`${prefix}/`);
       renderTree(root, 1, max_depth, prefix ? "  " : "", lines);
 
+      const truncated = lines.length > max_lines;
+      const shownLines = truncated ? lines.slice(0, max_lines) : lines;
+      const footer = truncated
+        ? `\n... (${lines.length - max_lines} more lines omitted — pass folder="..." or higher max_lines)`
+        : "";
+
       const header = `Project map (${filtered.length} files${prefix ? ` under ${prefix}` : ""}, max_depth=${max_depth}):`;
-      return success(`${header}\n\n${lines.join("\n")}`, {
+      return success(`${header}\n\n${shownLines.join("\n")}${footer}`, {
         folder: prefix || null,
         fileCount: filtered.length,
         maxDepth: max_depth,
+        truncated,
       });
     }),
   );
