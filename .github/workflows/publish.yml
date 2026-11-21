@@ -49,12 +49,12 @@ jobs:
 
       - name: Publish packages
         run: |
-          pnpm --filter @codemap-ai/shared publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/code-index publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/core publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/runtime-node publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/tool-types publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/mcp publish --access public --no-git-checks --no-otp
-          pnpm --filter @codemap-ai/cli publish --access public --no-git-checks --no-otp
+          pnpm --filter @codemap-ai/shared publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/code-index publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/core publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/runtime-node publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/tool-types publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/mcp publish --access public --no-git-checks
+          pnpm --filter @codemap-ai/cli publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
