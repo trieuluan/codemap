@@ -1,3 +1,4 @@
+import { debugLog } from "./debug-log.js";
 import * as parcelWatcher from "@parcel/watcher";
 import { IGNORED_NAMES } from "@codemap-ai/code-index";
 
@@ -61,7 +62,7 @@ export class IndexWatcher {
       );
 
       this.isRunning = true;
-      console.log(
+      debugLog(
         `[IndexWatcher] Started watching ${this.config.workspaceRootPath}`,
       );
     } catch (error) {
@@ -90,7 +91,7 @@ export class IndexWatcher {
 
     this.isRunning = false;
     this.pendingEvents.clear();
-    console.log("[IndexWatcher] Stopped");
+    debugLog("[IndexWatcher] Stopped");
   }
 
   async restart(): Promise<void> {

@@ -1,3 +1,4 @@
+import { debugLog } from "./debug-log.js";
 import { IndexWatcher } from "./file-watcher.ts";
 import { SymbolDependencyGraph } from "./symbol-dependency.ts";
 import { WatchEventHandler } from "./watch-event-handler.ts";
@@ -30,7 +31,7 @@ export async function enableAutoIndexing(
 ): Promise<void> {
   if (_watcher) {
     if (_watcher.isActive()) {
-      console.log("[AutoIndexing] Already active");
+      debugLog("[AutoIndexing] Already active");
       return;
     }
     // Stale reference — watcher exists but stopped; clean up before restarting
@@ -49,7 +50,7 @@ export async function enableAutoIndexing(
     onFileChange: async (filePath: string) => {
       try {
         await refreshLocalFile(filePath, workspaceRootPath);
-        console.log(`[AutoIndexing] Reindexed: ${filePath}`);
+        debugLog(`[AutoIndexing] Reindexed: ${filePath}`);
       } catch (err) {
         console.error(`[AutoIndexing] Failed to reindex ${filePath}:`, err);
       }
@@ -57,7 +58,7 @@ export async function enableAutoIndexing(
     onBatchChanges: async (filePaths: string[]) => {
       try {
         await refreshLocalFiles(filePaths, workspaceRootPath);
-        console.log(`[AutoIndexing] Batch reindexed ${filePaths.length} files`);
+        debugLog(`[AutoIndexing] Batch reindexed ${filePaths.length} files`);
       } catch (err) {
         console.error(`[AutoIndexing] Batch reindex failed:`, err);
       }
@@ -85,7 +86,7 @@ export async function enableAutoIndexing(
   });
 
   await _watcher.start();
-  console.log("[AutoIndexing] Started for:", workspaceRootPath);
+  debugLog("[AutoIndexing] Started for:", workspaceRootPath);
 }
 
 /**
@@ -100,7 +101,7 @@ export async function disableAutoIndexing(): Promise<void> {
   _watcher = null;
   _dependencyGraph = null;
   _eventHandler = null;
-  console.log("[AutoIndexing] Stopped");
+  debugLog("[AutoIndexing] Stopped");
 }
 
 /**

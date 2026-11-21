@@ -1,3 +1,4 @@
+import { debugLog } from "./debug-log.js";
 import { SQLiteIndexStore } from "./sqlite-index-store.ts";
 import { SymbolDependencyGraph } from "./symbol-dependency.ts";
 import type { FileWatchEvent } from "./file-watcher.ts";
@@ -42,7 +43,7 @@ export class WatchEventHandler {
   }
 
   private async handleFileCreate(event: FileWatchEvent): Promise<void> {
-    console.log(`[WatchEventHandler] New file detected: ${event.relativePath}`);
+    debugLog(`[WatchEventHandler] New file detected: ${event.relativePath}`);
     await this.config.onReindexFile(event.relativePath);
     this.graph.updateFile(this.config.store, event.relativePath);
   }
@@ -59,7 +60,7 @@ export class WatchEventHandler {
 
     if (importers.size === 0) {
       // No dependents — just reindex the changed file
-      console.log(`[WatchEventHandler] File updated: ${filePath} (no dependents)`);
+      debugLog(`[WatchEventHandler] File updated: ${filePath} (no dependents)`);
       await this.config.onReindexFile(filePath);
       this.graph.updateFile(this.config.store, filePath);
       return;
@@ -79,13 +80,13 @@ export class WatchEventHandler {
       [...exportsAfter].some((name) => !exportsBefore.has(name));
 
     if (!exportsChanged) {
-      console.log(`[WatchEventHandler] File updated: ${filePath} (exports unchanged, skipping ${importers.size} dependents)`);
+      debugLog(`[WatchEventHandler] File updated: ${filePath} (exports unchanged, skipping ${importers.size} dependents)`);
       return;
     }
 
     // Exports changed — reindex dependent files
     const dependentFiles = Array.from(importers.keys());
-    console.log(`[WatchEventHandler] File updated: ${filePath} (exports changed, reindexing ${dependentFiles.length} dependents)`);
+    debugLog(`[WatchEventHandler] File updated: ${filePath} (exports changed, reindexing ${dependentFiles.length} dependents)`);
     await this.config.onBatchReindex(dependentFiles);
 
     for (const importer of dependentFiles) {
@@ -95,7 +96,7 @@ export class WatchEventHandler {
 
   private async handleFileDelete(event: FileWatchEvent): Promise<void> {
     const filePath = event.relativePath;
-    console.log(`[WatchEventHandler] File deleted: ${filePath}`);
+    debugLog(`[WatchEventHandler] File deleted: ${filePath}`);
 
     // Remove from index
     this.config.store.removeFileFromIndex(filePath);

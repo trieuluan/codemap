@@ -1,3 +1,4 @@
+import { debugLog } from "./debug-log.js";
 import type { SQLiteIndexStore } from "./sqlite-index-store.ts";
 
 export interface SymbolDependencyEdge {
@@ -68,7 +69,7 @@ export class SymbolDependencyGraph {
       }
     }
 
-    console.log(
+    debugLog(
       `[SymbolDependencyGraph] Built graph: ${this.edges.size} files with dependencies`,
     );
   }
