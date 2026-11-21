@@ -185,9 +185,9 @@ export const AGENT_WORKFLOW_SUMMARY = [
   "For known keywords, files, symbols, or exports, call search_codebase.",
   "For conceptual queries ('authentication flow', 'error handling') where exact names are unknown, call search_codebase(semantic=true).",
   "After you have a shortlist, call get_file for outlines, then get_file for specific content or symbols.",
-  "Use symbol/symbol for symbol impact analysis.",
+  "Use symbol(action='callers' | 'usages' | 'hierarchy') for symbol impact and inheritance analysis.",
   "Use diff after edits, then build/test as appropriate.",
-  "Call refresh_local_index after local edits; call reimport only when cloud/web indexing should refresh.",
+  "The local file watcher auto-updates the SQLite index; only call refresh_local_index if you switched branches or suspect stale data.",
   "Read required CodeMap Agent Pack skills before implementing gated work.",
 ];
 
@@ -197,9 +197,9 @@ export const AGENT_WORKFLOW_SEQUENCE = [
   "Related-file question: find_related_files(query/file_path/symbol_name) -> get_file -> get_file. Semantic signal is built in.",
   "Narrow lookup by name: search_codebase -> get_file(include=[outline] or [symbols]).",
   "Conceptual lookup (no exact name): search_codebase(semantic=true) -> get_file(include=[outline]).",
-  "Refactor/cleanup: symbol or symbol -> get_file(blast_radius if risky) -> diff.",
+  "Refactor/cleanup: symbol(action='callers' | 'hierarchy') -> get_file(blast_radius if risky) -> diff.",
   "Broad work: choose CodeMap exploration tools -> required skills -> design/plan gates -> implementation.",
-  "Verification: inspect diff, build/test, refresh_local_index, and decide whether cloud reimport is needed.",
+  "Verification: inspect diff and run relevant build/test checks.",
 ];
 
 export const SKILL_ROUTING_RULE_MARKDOWN = `# CodeMap Skill Routing
@@ -268,28 +268,29 @@ Choose the tool based on the shape of the question:
 4. \`search_codebase\` — use for known keywords, filenames, exports, or symbols. Pass \`semantic=true\` for conceptual queries where you do not know the exact symbol name (e.g. "authentication flow", "error handling logic").
 5. \`get_file\` — fetch outlines for several candidate files in one call. Use after \`explore_task\`, \`find_related_files\`, or \`search_codebase\`.
 6. \`get_file\` — read exact content only after you know what you need. Prefer \`include=["outline"]\` for map context and \`include=["symbols"]\` with \`symbol_names\` for function/class bodies.
-7. \`symbol\` / \`symbol\` — use for symbol impact analysis. Use \`symbol\` when the symbol's file is known.
-8. \`get_project_map\` — inspect folder structure when module layout is unclear.
+7. \`symbol\` — use \`action="context"\` for body + outline, \`action="callers"\` / \`"usages"\` for AST call-graph callers, and \`action="hierarchy"\` for extends/implements relationships.
+8. \`get_project_map\` — inspect folder structure (use \`folder\` and \`max_lines\` to keep output compact).
 9. \`diff\` — inspect uncommitted local changes (mode=working) or committed ref diffs (mode=ref).
 10. Raw Read / grep — fallback only when MCP cannot answer, such as unindexed files, dynamic string access, or complex regex searches.
 
 ## Quick Decisions
 
-- "Fix/investigate/implement" with unclear files -> \`explore_task\` (semantic runs automatically).
-- "Which files are related?" -> \`find_related_files\` (semantic signal built in).
+- "Fix/investigate/implement" with unclear files -> \`explore_task\` (local semantic + keyword).
+- "Which files are related?" -> \`find_related_files\` (imports + inheritance relationships).
 - Known symbol or filename -> \`search_codebase\`.
 - Conceptual query, no exact name -> \`search_codebase(semantic=true)\`.
-- Several candidate files -> \`get_file\`.
+- Several candidate files -> \`get_file(path=[...], include=["outline"])\` (batch up to 7).
 - Specific symbol body -> \`get_file(include=["symbols"], symbol_names=[...])\`.
-- Who calls/imports this? -> \`symbol\` or \`symbol\`.
-- After edits -> \`diff\`, build/test, then \`refresh_local_index\` when the local MCP index should refresh.
+- Who calls/imports this? -> \`symbol(action="callers" or "usages")\`.
+- Who implements/extends this? -> \`symbol(action="hierarchy")\`.
+- After edits -> \`diff\`, then build/test (watcher auto-updates the local index).
 `;
 
 export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 ## 1. Orient
 
-- The project-context resource is already loaded in your context — skip \`get_project\` and \`list_projects\` unless the user explicitly asks for project or account info.
+- The project-context resource is already loaded in your context — skip \`get_project\` unless the user explicitly asks for workspace stats.
 - Use \`explore_task\`, \`find_related_files\`, or \`search_codebase\` according to the task shape.
 
 ## 2. Read Deliberately
@@ -313,8 +314,8 @@ export const TASK_LIFECYCLE_RULE_MARKDOWN = `# CodeMap Agent Task Lifecycle
 
 ## 5. Refresh Index
 
-- Use \`refresh_local_index\` after local edits to refresh the MCP SQLite index without cloud access.
-- Use \`reimport\` only when the cloud index, web graph, or insights should refresh.
+- The background file watcher updates \`.codemap/local-index.db\` automatically on edits.
+- Call \`refresh_local_index\` only if you switched git branches or suspect stale index data.
 
 ## 6. Final Response
 
