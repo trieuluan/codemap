@@ -77,7 +77,10 @@ test("parseGoFile extracts structs, interfaces, functions, methods, imports, and
     "Go",
     `
 package main
-import "fmt"
+import (
+  "fmt"
+  "github.com/org/app/pkg/auth"
+)
 type Server struct { Port int }
 type Handler interface { Handle() }
 func (s *Server) Handle() { fmt.Println("ok") }
@@ -86,7 +89,7 @@ func main() { helper() }
   );
   const res = await parseWorkspaceFileSemantics({
     file,
-    filePathSet: new Set(["main.go"]),
+    filePathSet: new Set(["main.go", "pkg/auth/auth.go"]),
     projectImportId: "local",
     workspacePath: "/repo",
   });
@@ -96,7 +99,59 @@ func main() { helper() }
   assert.ok(names.includes("method:Handle"));
   assert.ok(names.includes("function:main"));
   assert.ok(res.imports.some((i) => i.moduleSpecifier === "fmt"));
+  assert.ok(res.imports.some((i) => i.targetPathText === "pkg/auth/auth.go"));
   assert.ok(res.calls.some((c) => c.calleeName === "Println"));
+});
+
+test("parsePythonFile, parseJavaFile, parseKotlinFile, parsePhpFile extract exports, calls, and relationships", async () => {
+  const py = await parseWorkspaceFileSemantics({
+    file: makeFile(
+      "service.py",
+      "Python",
+      "from .repo import Repo\nclass AuthService(BaseService):\n  def run(self):\n    helper()\n",
+    ),
+    filePathSet: new Set(["service.py", "repo.py"]),
+    projectImportId: "local",
+    workspacePath: "/repo",
+  });
+  assert.ok(py.exports.some((e) => e.exportName === "AuthService"));
+  assert.ok(py.relationships.some((r) => r.relationshipKind === "extends" && r.toSymbolName === "BaseService"));
+  assert.ok(py.calls.some((c) => c.calleeName === "helper"));
+
+  const java = await parseWorkspaceFileSemantics({
+    file: makeFile(
+      "App.java",
+      "Java",
+      "public class App extends BaseApp implements Runnable { public void run() { start(); } }",
+    ),
+    filePathSet: new Set(["App.java"]),
+    projectImportId: "local",
+    workspacePath: "/repo",
+  });
+  assert.ok(java.exports.some((e) => e.exportName === "App"));
+  assert.ok(java.relationships.some((r) => r.relationshipKind === "extends" && r.toSymbolName === "BaseApp"));
+  assert.ok(java.relationships.some((r) => r.relationshipKind === "implements" && r.toSymbolName === "Runnable"));
+  assert.ok(java.calls.some((c) => c.calleeName === "start"));
+
+  const kt = await parseWorkspaceFileSemantics({
+    file: makeFile("Main.kt", "Kotlin", "class Main { fun run() { boot() } }"),
+    filePathSet: new Set(["Main.kt"]),
+    projectImportId: "local",
+    workspacePath: "/repo",
+  });
+  assert.ok(kt.exports.some((e) => e.exportName === "Main"));
+  assert.ok(kt.calls.some((c) => c.calleeName === "boot"));
+
+  const php = await parseWorkspaceFileSemantics({
+    file: makeFile("App.php", "PHP", "<?php\nclass App extends BaseApp implements Runner { public function run() { boot(); } }"),
+    filePathSet: new Set(["App.php"]),
+    projectImportId: "local",
+    workspacePath: "/repo",
+  });
+  assert.ok(php.exports.some((e) => e.exportName === "App"));
+  assert.ok(php.relationships.some((r) => r.relationshipKind === "extends" && r.toSymbolName === "BaseApp"));
+  assert.ok(php.relationships.some((r) => r.relationshipKind === "implements" && r.toSymbolName === "Runner"));
+  assert.ok(php.calls.some((c) => c.calleeName === "boot"));
 });
 
 test("parseCCppFile extracts C/C++ structs, classes, functions, local includes, and calls", async () => {

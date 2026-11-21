@@ -12,8 +12,25 @@ function isGoExported(name: string): boolean {
   return /^[A-Z]/.test(name);
 }
 
+function resolveGoPackagePath(spec: string, filePathSet: Set<string>): string | null {
+  if (!spec.includes("/")) return null;
+  const parts = spec.split("/").filter(Boolean);
+  for (let start = 0; start < parts.length; start++) {
+    const suffix = parts.slice(start).join("/");
+    for (const candidate of filePathSet) {
+      if (!candidate.endsWith(".go") || candidate.endsWith("_test.go")) continue;
+      const dir = candidate.includes("/") ? candidate.slice(0, candidate.lastIndexOf("/")) : "";
+      if (dir === suffix || dir.endsWith(`/${suffix}`)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 export async function parseGoFile(
   file: WorkspaceFileCandidate,
+  filePathSet: Set<string>,
   projectImportId: string,
 ): Promise<ParsedWorkspaceSemantics> {
   const content = file.content ?? "";
@@ -98,6 +115,7 @@ export async function parseGoFile(
       const pathNode = node.childForFieldName("path");
       if (!pathNode) return;
       const spec = pathNode.text.replace(/^["`]|["`]$/g, "");
+      const resolved = resolveGoPackagePath(spec, filePathSet);
       addParsedImport({
         semantics,
         seenImports,
@@ -106,7 +124,8 @@ export async function parseGoFile(
         moduleSpecifier: spec,
         importKind: "import",
         node,
-        resolutionKind: "package",
+        resolutionKind: resolved ? "relative_path" : "package",
+        targetPathText: resolved,
         packageManager: "go",
       });
       return;

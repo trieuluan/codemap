@@ -55,6 +55,8 @@ function toLocalFile(
     imports: semantics.imports,
     importedBy: [],
     exports: semantics.exports,
+    calls: semantics.calls,
+    relationships: semantics.relationships,
   };
 }
 

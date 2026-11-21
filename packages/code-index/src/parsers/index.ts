@@ -53,7 +53,7 @@ export async function parseWorkspaceFileSemantics(input: {
     case "Rust":
       return parseRustFile(input.file, input.filePathSet, input.projectImportId);
     case "Go":
-      return parseGoFile(input.file, input.projectImportId);
+      return parseGoFile(input.file, input.filePathSet, input.projectImportId);
     case "C":
     case "C++":
       return parseCCppFile(input.file, input.filePathSet, input.projectImportId);

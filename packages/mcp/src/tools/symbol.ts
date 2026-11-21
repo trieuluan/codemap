@@ -177,19 +177,18 @@ function formatUsageLine(
   return `  ${usage.filePath}:${formatUsageRange(usage.range)} [${usage.confidence}/${label}]${snippet}`;
 }
 
-async function findSymbolUsagesLocal(symbolName: string) {
-  const { store } = await ensureLocalIndexWithSummary();
-  const search = store.search(symbolName, null);
-  const definitions = search.symbols.filter((s) => s.displayName === symbolName);
-  const targets = definitions.length > 0 ? definitions : search.symbols.slice(0, 5);
-
+async function scanImporterCallersFallback(
+  store: Awaited<ReturnType<typeof ensureLocalIndexWithSummary>>["store"],
+  symbolName: string,
+  targetFiles: string[],
+) {
   const callers: Array<{ filePath: string; calleeName: string; line: number; preview: string }> = [];
   const seenFiles = new Set<string>();
   const needle = new RegExp(`\\b${symbolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-  for (const def of targets) {
-    if (seenFiles.has(def.filePath)) continue;
-    seenFiles.add(def.filePath);
-    const parse = store.getFileParse(def.filePath);
+  for (const tf of targetFiles) {
+    if (seenFiles.has(tf)) continue;
+    seenFiles.add(tf);
+    const parse = store.getFileParse(tf);
     for (const ib of parse?.importedBy ?? []) {
       const content = store.getFileContent(ib.sourceFilePath)?.content;
       if (!content) continue;
@@ -200,29 +199,54 @@ async function findSymbolUsagesLocal(symbolName: string) {
             filePath: ib.sourceFilePath,
             calleeName: symbolName,
             line: i + 1,
-            preview: fileLines[i]!.trim().slice(0, 100),
+            preview: fileLines[i]!.trim().slice(0, 120),
           });
-          if (callers.length >= 30) break;
+          if (callers.length >= 30) return callers;
         }
       }
-      if (callers.length >= 30) break;
     }
   }
+  return callers;
+}
+
+async function findSymbolUsagesLocal(symbolName: string) {
+  const { store } = await ensureLocalIndexWithSummary();
+  const search = store.search(symbolName, null);
+  const definitions = search.symbols.filter((s) => s.displayName === symbolName);
+  const targets = definitions.length > 0 ? definitions : search.symbols.slice(0, 5);
+
+  const astCallers = store.findSymbolCallers(symbolName);
+  const callers =
+    astCallers.length > 0
+      ? astCallers
+      : await scanImporterCallersFallback(
+          store,
+          symbolName,
+          targets.map((d) => d.filePath),
+        );
+  const hierarchy = store.findSymbolRelationships(symbolName);
 
   const out: string[] = [
     `Symbol usages (local): ${symbolName}`,
     `Definitions (${targets.length}):`,
     ...targets.slice(0, 10).map((d) => `  ${d.filePath}:${d.startLine ?? "?"} [${d.symbolKind}] ${d.displayName}`),
     `Callers (${callers.length}):`,
-    ...callers.slice(0, 20).map((c) => `  ${c.filePath}:${c.line} -> ${c.calleeName}`),
+    ...callers.slice(0, 25).map((c) => `  ${c.filePath}:${c.line} -> ${c.calleeName}${c.preview ? ` | ${c.preview}` : ""}`),
+    ...(hierarchy.children.length > 0
+      ? [
+          `Implementers / Subclasses (${hierarchy.children.length}):`,
+          ...hierarchy.children.slice(0, 15).map((r) => `  ${r.filePath}: ${r.fromSymbolLocalKey.split(":").pop()} (${r.relationshipKind} ${r.toSymbolName})`),
+        ]
+      : []),
   ];
 
   return success(out.join("\n"), {
     symbolName,
     source: "local",
-    found: targets.length > 0 || callers.length > 0,
+    found: targets.length > 0 || callers.length > 0 || hierarchy.byFile.length > 0,
     definitions: targets,
     callers,
+    hierarchy,
   });
 }
 
@@ -230,36 +254,38 @@ async function findSymbolCallersLocal(symbolName: string, filePath?: string) {
   const { store } = await ensureLocalIndexWithSummary();
   if (!filePath) return findSymbolUsagesLocal(symbolName);
 
-  const parse = store.getFileParse(filePath);
-  const callers: Array<{ filePath: string; calleeName: string; line: number; preview: string }> = [];
-  const needle = new RegExp(`\\b${symbolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-  for (const ib of parse?.importedBy ?? []) {
-    const content = store.getFileContent(ib.sourceFilePath)?.content;
-    if (!content) continue;
-    const fileLines = content.split(/\r?\n/);
-    for (let i = 0; i < fileLines.length; i++) {
-      if (needle.test(fileLines[i]!)) {
-        callers.push({
-          filePath: ib.sourceFilePath,
-          calleeName: symbolName,
-          line: i + 1,
-          preview: fileLines[i]!.trim().slice(0, 100),
-        });
-        if (callers.length >= 30) break;
-      }
-    }
-    if (callers.length >= 30) break;
-  }
+  const astCallers = store.findSymbolCallers(symbolName, filePath);
+  const callers =
+    astCallers.length > 0
+      ? astCallers
+      : await scanImporterCallersFallback(store, symbolName, [filePath]);
 
   const out = [
     `Callers of ${symbolName} (${filePath}): ${callers.length}`,
-    ...callers.slice(0, 25).map((c) => `  ${c.filePath}:${c.line} -> ${c.calleeName}`),
+    ...callers.slice(0, 25).map((c) => `  ${c.filePath}:${c.line} -> ${c.calleeName}${c.preview ? ` | ${c.preview}` : ""}`),
   ];
   return success(out.join("\n"), {
     symbolName,
     filePath,
     source: "local",
     callers,
+  });
+}
+
+async function findSymbolHierarchyLocal(symbolName: string) {
+  const { store } = await ensureLocalIndexWithSummary();
+  const hierarchy = store.findSymbolRelationships(symbolName);
+  const out = [
+    `Symbol hierarchy for ${symbolName}:`,
+    `Extends / Implements (${hierarchy.parents.length}):`,
+    ...hierarchy.parents.map((p) => `  ${p.filePath}: ${p.relationshipKind} ${p.toSymbolName}`),
+    `Implementers / Subclasses (${hierarchy.children.length}):`,
+    ...hierarchy.children.map((c) => `  ${c.filePath}: ${c.fromSymbolLocalKey.split(":").pop()} (${c.relationshipKind} ${c.toSymbolName})`),
+  ];
+  return success(out.join("\n"), {
+    symbolName,
+    source: "local",
+    ...hierarchy,
   });
 }
 
@@ -285,9 +311,9 @@ export function registerSymbolTool(server: McpServer) {
       title: "Symbol",
       description:
         "Inspect a symbol from the local SQLite index. Default action=context reads one symbol body plus surrounding outline. " +
-        "Use action=usages or action=callers to find definitions/callers, or action=similar for name matches.",
+        "Use action=usages or action=callers for AST call-graph callers, action=hierarchy for extends/implements relationships, or action=similar for name matches.",
       inputSchema: {
-        action: z.enum(["context", "usages", "callers", "similar"]).optional().default("context").describe("Symbol action to perform."),
+        action: z.enum(["context", "usages", "callers", "hierarchy", "similar"]).optional().default("context").describe("Symbol action to perform."),
         symbol_name: z
           .string()
           .min(1)
@@ -317,6 +343,7 @@ export function registerSymbolTool(server: McpServer) {
     withToolError(async ({ action, symbol_name, file_path, context_lines, limit }) => {
       if (action === "usages") return findSymbolUsagesLocal(symbol_name);
       if (action === "callers") return findSymbolCallersLocal(symbol_name, file_path);
+      if (action === "hierarchy") return findSymbolHierarchyLocal(symbol_name);
       if (action === "similar") return findSimilarSymbolsLocal(symbol_name, limit);
 
       const { store, summary: localIndex } = await ensureLocalIndexWithSummary();

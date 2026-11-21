@@ -2,7 +2,7 @@ import path from "node:path";
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
-import { loadWasmLanguage, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
+import { loadWasmLanguage, walkTree, addParsedCall, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
 function getPythonParser() {
   return loadWasmLanguage("tree-sitter-python.wasm");
@@ -60,8 +60,11 @@ export async function parsePythonFile(
     const isMethod = !isClass && parentType === "block" && grandparentType === "class_definition";
     const kind = isClass ? "class" : isMethod ? "method" : "function";
 
+    const localKey = buildLocalSymbolKey(file.path, kind, displayName);
+    const isTopLevelPublic = !isMethod && !displayName.startsWith("_");
+
     semantics.symbols.push({
-      localKey: buildLocalSymbolKey(file.path, kind, displayName),
+      localKey,
       stableKey: buildStableSymbolKey(file.path, kind, displayName, line),
       displayName,
       kind,
@@ -69,13 +72,41 @@ export async function parsePythonFile(
       signature: content.split("\n")[startPos.row]?.trim() ?? null,
       returnType: null,
       doc: null,
-      isExported: true,
+      isExported: isTopLevelPublic,
       isDefaultExport: false,
       line,
       col,
       endLine: endPos.row + 1,
       endCol: endPos.column,
     });
+
+    if (isTopLevelPublic) {
+      semantics.exports.push({
+        exportName: displayName,
+        exportKind: "named",
+        line,
+        col,
+        endLine: endPos.row + 1,
+        endCol: endPos.column,
+        symbolLocalKey: localKey,
+      });
+    }
+
+    if (isClass) {
+      const superclasses = defCapture.node.childForFieldName("superclasses");
+      if (superclasses) {
+        for (let i = 0; i < superclasses.namedChildCount; i++) {
+          const base = superclasses.namedChild(i);
+          if (base && (base.type === "identifier" || base.type === "attribute")) {
+            semantics.relationships.push({
+              fromSymbolLocalKey: localKey,
+              toSymbolName: base.text,
+              relationshipKind: "extends",
+            });
+          }
+        }
+      }
+    }
   }
 
   // Extract imports: `import X` and `from X import Y`
@@ -198,6 +229,21 @@ export async function parsePythonFile(
       }
     }
   }
+
+  // Extract calls
+  const seenCalls = new Set<string>();
+  walkTree(tree.rootNode, (node) => {
+    if (node.type !== "call") return;
+    const fnNode = node.childForFieldName("function");
+    if (!fnNode) return;
+    if (fnNode.type === "identifier") {
+      addParsedCall(semantics, seenCalls, fnNode.text, fnNode);
+    } else if (fnNode.type === "attribute") {
+      const attr = fnNode.childForFieldName("attribute");
+      const obj = fnNode.childForFieldName("object");
+      if (attr) addParsedCall(semantics, seenCalls, attr.text, attr, obj?.text);
+    }
+  });
 
   return semantics;
 }

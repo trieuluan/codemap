@@ -75,7 +75,7 @@ export async function parseCCppFile(
         node.type === "enum_specifier" ? "enum"
         : node.type === "namespace_definition" ? "namespace"
         : "class";
-      addParsedSymbol({
+      const localKey = addParsedSymbol({
         semantics,
         seenSymbols,
         filePath: file.path,
@@ -85,6 +85,20 @@ export async function parseCCppFile(
         node,
         lines,
       });
+      if (localKey && (node.type === "class_specifier" || node.type === "struct_specifier")) {
+        const baseClause = node.namedChildren.find((c) => c.type === "base_class_clause");
+        if (baseClause) {
+          for (const child of baseClause.namedChildren) {
+            if (child.type === "type_identifier") {
+              semantics.relationships.push({
+                fromSymbolLocalKey: localKey,
+                toSymbolName: child.text,
+                relationshipKind: "extends",
+              });
+            }
+          }
+        }
+      }
       return;
     }
 

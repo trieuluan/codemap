@@ -1,7 +1,7 @@
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft, maskCommentsAndTemplateLiterals } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedSymbolDraft, type ParsedWorkspaceSemantics, type RepoSymbolKind } from "./types.js";
-import { loadWasmLanguage, type SyntaxNode as Node, type TreeSitterParser as Parser } from "./wasm-loader.js";
+import { addParsedCall, loadWasmLanguage, type SyntaxNode as Node, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
 function getJavaParser() {
   return loadWasmLanguage("tree-sitter-java.wasm");
@@ -28,10 +28,17 @@ export async function parseJavaFile(
   const lines = content.split(/\r?\n/);
   const seenSymbols = new Set<string>();
   const seenImports = new Set<string>();
+  const seenCalls = new Set<string>();
 
   walkJavaAst(tree.rootNode, (node) => {
     const line = node.startPosition.row + 1;
     const col = node.startPosition.column;
+    if (node.type === "method_invocation") {
+      const nameNode = node.childForFieldName("name");
+      const objNode = node.childForFieldName("object");
+      if (nameNode) addParsedCall(semantics, seenCalls, nameNode.text, nameNode, objNode?.text);
+      return;
+    }
     const packageName = parseJavaPackage(node.text);
     if (packageName) {
       addJavaSymbol(semantics, seenSymbols, file, "namespace", packageName, lines[node.startPosition.row] ?? node.text, line, col, node.endPosition.row + 1, node.endPosition.column);
@@ -59,6 +66,29 @@ export async function parseJavaFile(
       node.endPosition.column,
       findParentJavaSymbolLocalKey(node, file.path),
     );
+    if (symbol.kind === "class" || symbol.kind === "interface" || symbol.kind === "enum") {
+      const localKey = buildLocalSymbolKey(file.path, symbol.kind, symbol.displayName);
+      semantics.exports.push({
+        exportName: symbol.displayName,
+        exportKind: "named",
+        line,
+        col,
+        endLine: node.endPosition.row + 1,
+        endCol: node.endPosition.column,
+        symbolLocalKey: localKey,
+      });
+      const superMatch = node.text.match(/\bextends\s+([A-Za-z_][A-Za-z0-9_]*)/);
+      if (superMatch?.[1]) {
+        semantics.relationships.push({ fromSymbolLocalKey: localKey, toSymbolName: superMatch[1], relationshipKind: "extends" });
+      }
+      const implMatch = node.text.match(/\bimplements\s+([^{]+)/);
+      if (implMatch?.[1]) {
+        for (const iface of implMatch[1].split(",")) {
+          const clean = iface.trim().replace(/<.*$/, "");
+          if (clean) semantics.relationships.push({ fromSymbolLocalKey: localKey, toSymbolName: clean, relationshipKind: "implements" });
+        }
+      }
+    }
   });
 
   return semantics;

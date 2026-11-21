@@ -92,6 +92,13 @@ export function registerFindRelatedFilesTool(server: McpServer) {
           for (const ib of parsed.importedBy) {
             addCandidate(ib.sourceFilePath, 6, `imports ${anchor}`);
           }
+          for (const sym of parsed.symbols.slice(0, 15)) {
+            if (!sym.isExported) continue;
+            const rels = store.findSymbolRelationships(sym.displayName);
+            for (const c of rels.children) {
+              addCandidate(c.filePath, 5, `${c.relationshipKind} ${sym.displayName}`);
+            }
+          }
         }
 
         const anchorDir = path.posix.dirname(anchor);

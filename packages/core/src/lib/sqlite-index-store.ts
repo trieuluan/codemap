@@ -2,8 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import type {
+  ParsedCallDraft,
   ParsedExportDraft,
   ParsedImportDraft,
+  ParsedRelationshipDraft,
   ParsedSymbolDraft,
   WorkspaceFileCandidate,
 } from "@codemap-ai/code-index";
@@ -72,6 +74,8 @@ export interface LocalIndexedFile {
   imports: ParsedImportDraft[];
   importedBy: LocalImportedBy[];
   exports: ParsedExportDraft[];
+  calls?: ParsedCallDraft[];
+  relationships?: ParsedRelationshipDraft[];
 }
 
 export interface LocalFileParseResponse {
@@ -269,6 +273,29 @@ const SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_exports_filePath ON exports(filePath);
   CREATE INDEX IF NOT EXISTS idx_exports_exportName ON exports(lower(exportName));
+
+  CREATE TABLE IF NOT EXISTS symbol_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filePath TEXT NOT NULL,
+    calleeName TEXT NOT NULL,
+    namespaceName TEXT,
+    line INTEGER NOT NULL,
+    col INTEGER NOT NULL,
+    endCol INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_calls_filePath ON symbol_calls(filePath);
+  CREATE INDEX IF NOT EXISTS idx_calls_calleeName ON symbol_calls(calleeName);
+
+  CREATE TABLE IF NOT EXISTS symbol_relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filePath TEXT NOT NULL,
+    fromSymbolLocalKey TEXT NOT NULL,
+    toSymbolName TEXT NOT NULL,
+    relationshipKind TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_rel_filePath ON symbol_relationships(filePath);
+  CREATE INDEX IF NOT EXISTS idx_rel_from ON symbol_relationships(fromSymbolLocalKey);
+  CREATE INDEX IF NOT EXISTS idx_rel_to ON symbol_relationships(toSymbolName);
 `;
 
 const FTS_SCHEMA_SQL = `
@@ -423,6 +450,8 @@ export class SQLiteIndexStore {
     const delImports = this.db.prepare("DELETE FROM imports WHERE filePath = ?");
     const delImportedBy = this.db.prepare("DELETE FROM imported_by WHERE targetFilePath = ?");
     const delExports = this.db.prepare("DELETE FROM exports WHERE filePath = ?");
+    const delCalls = this.db.prepare("DELETE FROM symbol_calls WHERE filePath = ?");
+    const delRels = this.db.prepare("DELETE FROM symbol_relationships WHERE filePath = ?");
 
     try {
       this.db.exec("BEGIN");
@@ -432,6 +461,8 @@ export class SQLiteIndexStore {
       delImports.run(filePath);
       delImportedBy.run(filePath);
       delExports.run(filePath);
+      delCalls.run(filePath);
+      delRels.run(filePath);
       this.db.exec("COMMIT");
       return r.changes > 0;
     } catch (error) {
@@ -513,7 +544,7 @@ export class SQLiteIndexStore {
     this.db.exec("BEGIN");
     try {
       this.db.exec(
-        "DELETE FROM meta; DELETE FROM manifest; DELETE FROM files; DELETE FROM symbols; DELETE FROM imports; DELETE FROM imported_by; DELETE FROM exports;",
+        "DELETE FROM meta; DELETE FROM manifest; DELETE FROM files; DELETE FROM symbols; DELETE FROM imports; DELETE FROM imported_by; DELETE FROM exports; DELETE FROM symbol_calls; DELETE FROM symbol_relationships;",
       );
 
       const insertMeta = this.db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)");
@@ -541,6 +572,12 @@ export class SQLiteIndexStore {
       );
       const insertExport = this.db.prepare(
         "INSERT INTO exports(filePath, exportName, exportKind, symbolLocalKey, line, col, endLine, endCol) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      const insertCall = this.db.prepare(
+        "INSERT INTO symbol_calls(filePath, calleeName, namespaceName, line, col, endCol) VALUES(?, ?, ?, ?, ?, ?)",
+      );
+      const insertRel = this.db.prepare(
+        "INSERT INTO symbol_relationships(filePath, fromSymbolLocalKey, toSymbolName, relationshipKind) VALUES(?, ?, ?, ?)",
       );
 
       for (const file of files) {
@@ -579,6 +616,17 @@ export class SQLiteIndexStore {
             exp.line, exp.col, exp.endLine, exp.endCol,
           );
         }
+        for (const call of file.calls ?? []) {
+          insertCall.run(
+            file.path, call.calleeName, call.namespaceName ?? null,
+            call.line, call.col, call.endCol,
+          );
+        }
+        for (const rel of file.relationships ?? []) {
+          insertRel.run(
+            file.path, rel.fromSymbolLocalKey, rel.toSymbolName, rel.relationshipKind,
+          );
+        }
       }
 
       this.db.exec("COMMIT");
@@ -606,6 +654,8 @@ export class SQLiteIndexStore {
       this.db.prepare("DELETE FROM symbols WHERE filePath = ?").run(file.path);
       this.db.prepare("DELETE FROM imports WHERE filePath = ?").run(file.path);
       this.db.prepare("DELETE FROM exports WHERE filePath = ?").run(file.path);
+      this.db.prepare("DELETE FROM symbol_calls WHERE filePath = ?").run(file.path);
+      this.db.prepare("DELETE FROM symbol_relationships WHERE filePath = ?").run(file.path);
 
       // Delete imported_by entries where this file is the TARGET (other files import this file)
       // and where this file is the SOURCE (this file imports other files).
@@ -676,6 +726,25 @@ export class SQLiteIndexStore {
         );
       }
 
+      const insertCall = this.db.prepare(
+        "INSERT INTO symbol_calls(filePath, calleeName, namespaceName, line, col, endCol) VALUES(?, ?, ?, ?, ?, ?)",
+      );
+      for (const call of file.calls ?? []) {
+        insertCall.run(
+          file.path, call.calleeName, call.namespaceName ?? null,
+          call.line, call.col, call.endCol,
+        );
+      }
+
+      const insertRel = this.db.prepare(
+        "INSERT INTO symbol_relationships(filePath, fromSymbolLocalKey, toSymbolName, relationshipKind) VALUES(?, ?, ?, ?)",
+      );
+      for (const rel of file.relationships ?? []) {
+        insertRel.run(
+          file.path, rel.fromSymbolLocalKey, rel.toSymbolName, rel.relationshipKind,
+        );
+      }
+
       // Re-insert imported_by entries for this file (where other files import from this file)
       // These are derived from the imports table: for each import with targetPathText = file.path,
       // the importing file has an imported_by entry pointing to this file
@@ -725,6 +794,8 @@ export class SQLiteIndexStore {
         createStmt("DELETE FROM symbols WHERE filePath = ?").run(file.path);
         createStmt("DELETE FROM imports WHERE filePath = ?").run(file.path);
         createStmt("DELETE FROM exports WHERE filePath = ?").run(file.path);
+        createStmt("DELETE FROM symbol_calls WHERE filePath = ?").run(file.path);
+        createStmt("DELETE FROM symbol_relationships WHERE filePath = ?").run(file.path);
 
         // Delete imported_by entries where this file is involved
         if (!skipImportedByRebuild) {
@@ -792,6 +863,23 @@ export class SQLiteIndexStore {
           insertExport.run(
             file.path, exp.exportName, exp.exportKind, exp.symbolLocalKey ?? null,
             exp.line, exp.col, exp.endLine, exp.endCol,
+          );
+        }
+        const insertCall = createStmt(
+          "INSERT INTO symbol_calls(filePath, calleeName, namespaceName, line, col, endCol) VALUES(?, ?, ?, ?, ?, ?)",
+        );
+        for (const call of file.calls ?? []) {
+          insertCall.run(
+            file.path, call.calleeName, call.namespaceName ?? null,
+            call.line, call.col, call.endCol,
+          );
+        }
+        const insertRel = createStmt(
+          "INSERT INTO symbol_relationships(filePath, fromSymbolLocalKey, toSymbolName, relationshipKind) VALUES(?, ?, ?, ?)",
+        );
+        for (const rel of file.relationships ?? []) {
+          insertRel.run(
+            file.path, rel.fromSymbolLocalKey, rel.toSymbolName, rel.relationshipKind,
           );
         }
       }
@@ -1147,6 +1235,92 @@ export class SQLiteIndexStore {
     } catch {
       return false;
     }
+  }
+
+  findSymbolCallers(
+    symbolName: string,
+    filePath?: string,
+    limit = 40,
+  ): Array<{
+    filePath: string;
+    calleeName: string;
+    namespaceName: string | null;
+    line: number;
+    col: number;
+    preview: string | null;
+  }> {
+    const sql = filePath
+      ? `SELECT c.filePath, c.calleeName, c.namespaceName, c.line, c.col
+         FROM symbol_calls c
+         WHERE c.calleeName = ?
+           AND (c.filePath = ? OR EXISTS (
+             SELECT 1 FROM imported_by ib WHERE ib.targetFilePath = ? AND ib.sourceFilePath = c.filePath
+           ))
+         ORDER BY c.filePath, c.line
+         LIMIT ?`
+      : `SELECT filePath, calleeName, namespaceName, line, col
+         FROM symbol_calls
+         WHERE calleeName = ?
+         ORDER BY filePath, line
+         LIMIT ?`;
+
+    const rows = (filePath
+      ? this.db.prepare(sql).all(symbolName, filePath, filePath, limit)
+      : this.db.prepare(sql).all(symbolName, limit)) as Array<{
+      filePath: string;
+      calleeName: string;
+      namespaceName: string | null;
+      line: number;
+      col: number;
+    }>;
+
+    const lineCache = new Map<string, string[]>();
+    return rows.map((r) => {
+      let fileLines = lineCache.get(r.filePath);
+      if (!fileLines) {
+        const content = this.getFileContent(r.filePath)?.content;
+        fileLines = content ? content.split(/\r?\n/) : [];
+        lineCache.set(r.filePath, fileLines);
+      }
+      const preview = fileLines[r.line - 1]?.trim().slice(0, 120) ?? null;
+      return { ...r, preview };
+    });
+  }
+
+  findSymbolRelationships(symbolName: string): {
+    parents: Array<{ filePath: string; fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: string }>;
+    children: Array<{ filePath: string; fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: string }>;
+    byFile: Array<{ filePath: string; fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: string }>;
+  } {
+    const children = this.db
+      .prepare(
+        "SELECT filePath, fromSymbolLocalKey, toSymbolName, relationshipKind FROM symbol_relationships WHERE toSymbolName = ? ORDER BY filePath",
+      )
+      .all(symbolName) as Array<{ filePath: string; fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: string }>;
+
+    const parents = this.db
+      .prepare(
+        "SELECT filePath, fromSymbolLocalKey, toSymbolName, relationshipKind FROM symbol_relationships WHERE fromSymbolLocalKey LIKE ? ORDER BY filePath",
+      )
+      .all(`%:${symbolName}`) as Array<{ filePath: string; fromSymbolLocalKey: string; toSymbolName: string; relationshipKind: string }>;
+
+    return { parents, children, byFile: [...parents, ...children] };
+  }
+
+  getFileRelationships(filePath: string): Array<{
+    fromSymbolLocalKey: string;
+    toSymbolName: string;
+    relationshipKind: string;
+  }> {
+    return this.db
+      .prepare(
+        "SELECT fromSymbolLocalKey, toSymbolName, relationshipKind FROM symbol_relationships WHERE filePath = ? ORDER BY id",
+      )
+      .all(filePath) as Array<{
+      fromSymbolLocalKey: string;
+      toSymbolName: string;
+      relationshipKind: string;
+    }>;
   }
 
   close(): void {

@@ -1,7 +1,7 @@
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedWorkspaceSemantics } from "./types.js";
-import { loadWasmLanguage, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
+import { loadWasmLanguage, walkTree, addParsedCall, type TreeSitterLanguage as Language, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
 function getPhpParser() {
   return loadWasmLanguage("tree-sitter-php.wasm");
@@ -63,8 +63,9 @@ export async function parsePhpFile(
     const line = startPos.row + 1;
     const col = startPos.column;
 
+    const localKey = buildLocalSymbolKey(file.path, kind, displayName);
     semantics.symbols.push({
-      localKey: buildLocalSymbolKey(file.path, kind, displayName),
+      localKey,
       stableKey: buildStableSymbolKey(file.path, kind, displayName, line),
       displayName,
       kind,
@@ -79,11 +80,37 @@ export async function parsePhpFile(
       endLine: endPos.row + 1,
       endCol: endPos.column,
     });
+    if (kind !== "method") {
+      semantics.exports.push({
+        exportName: displayName,
+        exportKind: "named",
+        line,
+        col,
+        endLine: endPos.row + 1,
+        endCol: endPos.column,
+        symbolLocalKey: localKey,
+      });
+    }
+    if (kind === "class" || kind === "interface") {
+      for (const child of defCapture.node.namedChildren) {
+        if (child.type === "base_clause" || child.type === "class_interface_clause") {
+          const relKind = child.type === "base_clause" ? "extends" : "implements";
+          for (const target of child.namedChildren) {
+            if (target.type === "name" || target.type === "qualified_name") {
+              semantics.relationships.push({
+                fromSymbolLocalKey: localKey,
+                toSymbolName: target.text,
+                relationshipKind: relKind,
+              });
+            }
+          }
+        }
+      }
+    }
   }
 
   // Extract use statements and require/include
   const importQuery = language.query(`
-    (use_declaration (use_declarator (qualified_name) @name)) @use
     (namespace_use_declaration (namespace_use_clause (qualified_name) @name)) @use
     (require_expression (string) @path) @require
     (require_once_expression (string) @path) @require_once
@@ -133,6 +160,18 @@ export async function parsePhpFile(
       );
     }
   }
+
+  const seenCalls = new Set<string>();
+  walkTree(tree.rootNode, (node) => {
+    if (node.type === "function_call_expression") {
+      const fn = node.childForFieldName("function");
+      if (fn) addParsedCall(semantics, seenCalls, fn.text, fn);
+    } else if (node.type === "member_call_expression" || node.type === "scoped_call_expression") {
+      const name = node.childForFieldName("name");
+      const scope = node.childForFieldName("object") ?? node.childForFieldName("scope");
+      if (name) addParsedCall(semantics, seenCalls, name.text, name, scope?.text);
+    }
+  });
 
   return semantics;
 }

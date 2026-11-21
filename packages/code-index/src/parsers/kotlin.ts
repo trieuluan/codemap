@@ -1,7 +1,7 @@
 import type { WorkspaceFileCandidate } from "../file-discovery.js";
 import { buildImportLocalKey, buildLocalSymbolKey, buildStableSymbolKey, createExternalSymbolDraft, maskCommentsAndTemplateLiterals } from "./shared.js";
 import { EMPTY_SEMANTICS, type ParsedSymbolDraft, type ParsedWorkspaceSemantics, type RepoSymbolKind } from "./types.js";
-import { loadWasmLanguage, type SyntaxNode as Node, type TreeSitterParser as Parser } from "./wasm-loader.js";
+import { addParsedCall, loadWasmLanguage, type SyntaxNode as Node, type TreeSitterParser as Parser } from "./wasm-loader.js";
 
 function getKotlinParser() {
   return loadWasmLanguage("tree-sitter-kotlin.wasm");
@@ -28,10 +28,21 @@ export async function parseKotlinFile(
   const lines = content.split(/\r?\n/);
   const seenSymbols = new Set<string>();
   const seenImports = new Set<string>();
+  const seenCalls = new Set<string>();
 
   walkKotlinAst(tree.rootNode, (node) => {
     const line = node.startPosition.row + 1;
     const col = node.startPosition.column;
+    if (node.type === "call_expression") {
+      const fn = node.namedChild(0);
+      if (fn?.type === "simple_identifier") {
+        addParsedCall(semantics, seenCalls, fn.text, fn);
+      } else if (fn?.type === "navigation_expression") {
+        const suffix = fn.namedChildren[fn.namedChildCount - 1];
+        if (suffix) addParsedCall(semantics, seenCalls, suffix.text.replace(/^\./, ""), suffix);
+      }
+      return;
+    }
     const packageName = parseKotlinPackage(node.text);
     if (packageName) {
       addKotlinSymbol(semantics, seenSymbols, file, "namespace", packageName, lines[node.startPosition.row] ?? node.text, line, col, node.endPosition.row + 1, node.endPosition.column);
@@ -59,6 +70,18 @@ export async function parseKotlinFile(
       node.endPosition.column,
       findParentKotlinSymbolLocalKey(node, file.path),
     );
+    if (symbol.kind === "class" || symbol.kind === "interface" || symbol.kind === "enum" || symbol.kind === "function") {
+      const localKey = buildLocalSymbolKey(file.path, symbol.kind, symbol.displayName);
+      semantics.exports.push({
+        exportName: symbol.displayName,
+        exportKind: "named",
+        line,
+        col,
+        endLine: node.endPosition.row + 1,
+        endCol: node.endPosition.column,
+        symbolLocalKey: localKey,
+      });
+    }
   });
 
   return semantics;
