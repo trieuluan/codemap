@@ -48,20 +48,23 @@ async function runMcpServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Auto-start local index, file watcher, and background vector cache — fire-and-forget
-  ensureLocalIndex({ force: false })
-    .then((store) => {
-      const workspaceRootPath = store.getMeta()?.workspaceRootPath;
-      if (workspaceRootPath) {
-        enableAutoIndexing(store, workspaceRootPath).catch(() => {});
-      }
-      return warmLocalVectorIndex(store);
-    })
-    .catch(() => {
-      // Auto-start failure is non-fatal
-    });
-
-  await autoInjectRules(server, process.cwd());
+  // Defer background indexing and rule injection briefly so initialize + tools/list
+  // are answered immediately without event-loop contention (e.g. 12s client timeouts).
+  const bgTimer = setTimeout(() => {
+    autoInjectRules(server, process.cwd()).catch(() => {});
+    ensureLocalIndex({ force: false })
+      .then((store) => {
+        const workspaceRootPath = store.getMeta()?.workspaceRootPath;
+        if (workspaceRootPath) {
+          enableAutoIndexing(store, workspaceRootPath).catch(() => {});
+        }
+        return warmLocalVectorIndex(store);
+      })
+      .catch(() => {
+        // Auto-start failure is non-fatal
+      });
+  }, 1500);
+  bgTimer.unref();
 
   const shutdown = () => {
     process.exit(0);
